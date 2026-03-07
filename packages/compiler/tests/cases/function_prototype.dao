@@ -1,8 +1,0 @@
-function pow(x, y)
-
-external(C) function puts(str)
-
-function foo(x)
-
-function bar(x)
-

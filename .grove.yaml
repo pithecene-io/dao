@@ -1,0 +1,7 @@
+grove:
+  intent: "Programming language and compiler project for Dao: spec-first development of an indentation-significant systems-and-compute language with explicit modes/resources, staged frontend→HIR→MIR→LLVM architecture, narrow runtime, C ABI interop, and an eventual self-hosting compiler."
+  horizon: "perennial"
+  role: "language-infrastructure"
+  phase: "founding"
+  steward: "Andrew"
+  consolidation_interval_days: 60

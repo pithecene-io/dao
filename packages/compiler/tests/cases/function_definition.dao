@@ -1,5 +1,0 @@
-function double(x)
-  x * 2
-
-function distance_euclidean(p, q)
-  sqrt(pow(p-q, 2))

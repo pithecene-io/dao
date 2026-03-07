@@ -1,0 +1,97 @@
+# CONTRACT_SYNTAX_SURFACE.md
+
+## Purpose
+
+Defines the currently frozen syntax surface for Dao's early design phase.
+
+## Block Structure
+
+- Dao is indentation-significant.
+- `if`, `while`, and `for` introduce blocks with `:`.
+- Block-bodied functions introduce blocks by indentation alone.
+- `mode` and `resource` introduce semantic/resource blocks with `=>`.
+
+## Functions
+
+### Block-bodied form
+
+```dao
+fn read(ptr: *int32): int32
+    let value: int32
+    value
+```
+
+Rules:
+- no token follows the return type
+- the body begins on the next indented line
+
+### Expression-bodied form
+
+```dao
+fn add(a: int32, b: int32): int32 -> a + b
+```
+
+Rules:
+- `->` denotes a single yielded expression
+- expression-bodied forms do not open suites
+
+## Lambdas
+
+```dao
+|x| -> x + 1
+|a, b| -> a + b
+```
+
+Rules:
+- lambdas are expression-only
+- `->` in lambdas has the same meaning as in expression-bodied functions
+
+## Pipelines
+
+```dao
+data |> filter is_valid |> map normalize
+```
+
+Rules:
+- `|>` is left-associative
+- pipelines are first-class, not macro sugar
+
+## Non-Laws
+
+This contract does not yet freeze:
+- receiver declaration syntax
+- type declaration syntax beyond examples
+- pattern matching syntax
+- import alias syntax
+
+
+## Modes and Resources
+
+```dao
+mode unsafe =>
+    value = *ptr
+
+resource memory Search =>
+    let open = PriorityQueue[NodeId]()
+```
+
+Rules:
+- `mode <name> =>` introduces an execution/safety context
+- `resource <kind> <name> =>` introduces a resource-binding context
+- `=>` is reserved for semantic-context entry, not structural blocks
+
+## Arrow Taxonomy
+
+- `:` is used for type annotations and control-flow block introducers
+- `->` is used for expression-bodied functions and lambdas
+- `=>` is used only for `mode` and `resource` suites
+
+## Formal Grammar Placement
+
+The parser-facing grammar is maintained under `spec/grammar/`:
+
+- `spec/grammar/dao.ebnf`
+- `spec/grammar/dao.lex`
+- `spec/grammar/indentation_rules.md`
+
+This contract freezes the language-facing syntax intent. The grammar files carry the technical productions used to guide parser implementation.

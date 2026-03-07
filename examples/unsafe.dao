@@ -1,0 +1,7 @@
+fn read(ptr: *int32): int32
+    let value: int32
+
+    mode unsafe =>
+        value = *ptr
+
+    value

@@ -1,0 +1,188 @@
+# Dao surface grammar (early reference)
+# Parser-oriented but non-executable EBNF. Normative syntax intent is frozen by
+# docs/contracts/CONTRACT_SYNTAX_SURFACE.md.
+
+file :=
+    import* declaration*
+
+import :=
+    "import" module_path NEWLINE
+
+module_path :=
+    identifier ("." identifier)*
+
+
+declaration :=
+      function_decl
+    | type_decl
+
+# Placeholder: type declarations are intentionally not frozen beyond broad shape.
+type_decl :=
+    struct_decl
+  | alias_decl
+
+struct_decl :=
+    "struct" identifier ":" suite
+
+alias_decl :=
+    "type" identifier "=" type NEWLINE
+
+
+function_decl :=
+    "fn" identifier "(" params? ")" return_type? function_body
+
+return_type :=
+    ":" type
+
+function_body :=
+      NEWLINE INDENT statement+ DEDENT
+    | "->" expression NEWLINE
+
+params :=
+    param ("," param)*
+
+param :=
+    identifier ":" type
+
+
+suite :=
+    NEWLINE INDENT statement+ DEDENT
+
+statement :=
+      let_statement NEWLINE
+    | assignment NEWLINE
+    | if_statement
+    | while_statement
+    | for_statement
+    | mode_block
+    | resource_block
+    | return_statement NEWLINE
+    | expression NEWLINE
+
+let_statement :=
+    "let" identifier (":" type)? "=" expression
+
+assignment :=
+    lvalue "=" expression
+
+lvalue :=
+      identifier
+    | postfix_expr
+
+return_statement :=
+    "return" expression
+
+
+if_statement :=
+    "if" expression ":" suite ("else" ":" suite)?
+
+while_statement :=
+    "while" expression ":" suite
+
+for_statement :=
+    "for" pattern "in" expression ":" suite
+
+pattern :=
+    identifier
+
+
+mode_block :=
+    "mode" identifier "=>" suite
+
+resource_block :=
+    "resource" identifier identifier "=>" suite
+
+
+expression :=
+    pipe_expression
+
+pipe_expression :=
+    logical_or_expression ("|>" pipe_target)*
+
+pipe_target :=
+      application
+    | lambda
+
+logical_or_expression :=
+    logical_and_expression ("or" logical_and_expression)*
+
+logical_and_expression :=
+    equality_expression ("and" equality_expression)*
+
+# Comparison and arithmetic precedence are intentionally lightweight here.
+equality_expression :=
+    relational_expression (("==" | "!=") relational_expression)*
+
+relational_expression :=
+    additive_expression (("<" | ">" | "<=" | ">=") additive_expression)*
+
+additive_expression :=
+    multiplicative_expression (("+" | "-") multiplicative_expression)*
+
+multiplicative_expression :=
+    unary_expression (("*" | "/" | "%") unary_expression)*
+
+unary_expression :=
+      ("!" | "-" | "*" | "&") unary_expression
+    | application
+
+application :=
+    postfix_expr
+
+postfix_expr :=
+    primary (postfix_op)*
+
+postfix_op :=
+      "(" arguments? ")"
+    | "." identifier
+    | "[" expression "]"
+
+arguments :=
+    expression ("," expression)*
+
+primary :=
+      identifier
+    | literal
+    | lambda
+    | list_literal
+    | "(" expression ")"
+
+lambda :=
+    "|" lambda_params? "|" "->" expression
+
+lambda_params :=
+    identifier ("," identifier)*
+
+list_literal :=
+    "[" arguments? "]"
+
+
+literal :=
+      integer_literal
+    | float_literal
+    | string_literal
+    | "true"
+    | "false"
+
+
+# Types
+
+type :=
+      pointer_type
+    | named_type
+
+pointer_type :=
+    "*" type
+
+named_type :=
+    identifier ("[" type_list "]")?
+
+type_list :=
+    type ("," type)*
+
+
+# Lexical placeholders
+identifier := IDENT
+integer_literal := INT
+float_literal := FLOAT
+string_literal := STRING

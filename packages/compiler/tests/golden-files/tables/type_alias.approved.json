@@ -1,9 +1,0 @@
-{
-  "_filename": "type_alias.dao",
-  "metatables": [
-    "types",
-    {
-      "c_char": "int8"
-    }
-  ]
-}

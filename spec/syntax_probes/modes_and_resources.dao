@@ -1,0 +1,6 @@
+fn search(start: NodeId, goal: NodeId): List[NodeId]
+    resource memory Search =>
+        mode parallel =>
+            let frontier = PriorityQueue[NodeId]()
+            frontier.push(start)
+            [goal]

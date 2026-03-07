@@ -1,0 +1,14 @@
+fn heuristic(a: NodeId, b: NodeId): float64 -> 0.0
+
+fn a_star(g: Graph, start: NodeId, goal: NodeId): List[NodeId]
+    resource memory Search =>
+        let open = PriorityQueue[NodeId, float64]()
+        let came_from = Map[NodeId, NodeId]()
+
+        while open.not_empty:
+            let current = open.pop_min()
+
+            if current == goal:
+                return reconstruct_path(came_from, start, goal)
+
+        List[NodeId]()
