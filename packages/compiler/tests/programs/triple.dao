@@ -1,4 +1,0 @@
-function triple(x)
-  x * 3
-
-triple(7)

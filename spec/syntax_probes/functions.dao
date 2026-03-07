@@ -1,0 +1,9 @@
+fn add(a: int32, b: int32): int32 -> a + b
+
+fn read(ptr: *int32): int32
+    let value: int32 = 0
+
+    mode unsafe =>
+        value = *ptr
+
+    value

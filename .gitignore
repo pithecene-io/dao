@@ -1,16 +1,11 @@
-# clangd
-.cache/
+# Bonsai output
+ai/out/*
+!ai/out/.gitignore
 
-# CMake
-build/
-CMakeUserPresets.json
+# Baseline output
+ai/baselines/*.json
 
-# CTest
-Testing/
-
-# ApprovalTests
-*.received.*
-
-# daoc output
-*.o
-*.bin
+# OS/editor
+.DS_Store
+.vscode/
+.idea/

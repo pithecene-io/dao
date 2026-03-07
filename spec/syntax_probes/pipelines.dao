@@ -1,0 +1,4 @@
+fn positive_squares(xs: List[int32]): List[int32] ->
+    xs
+    |> filter |x| -> x > 0
+    |> map |x| -> x * x

@@ -1,9 +1,0 @@
-{
-  "_filename": "external_linkage.dao",
-  "metatables": [
-    "types",
-    {
-      "c_char": "int8"
-    }
-  ]
-}

@@ -1,0 +1,7 @@
+grove:
+  intent: "Dao is a modern systems and compute programming language with ML-inspired syntax, explicit execution contexts, and pipeline semantics, compiled via LLVM with a C++23 implementation."
+  horizon: "generational"
+  role: "infrastructure"
+  phase: "emerging"
+  steward: "Andrew"
+  consolidation_interval_days: 60

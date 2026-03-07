@@ -1,7 +1,0 @@
-if x < 3 then
-  puts("x is less than 3")
-
-if double(5) > 9 then
-  puts("10 is greater than 9")
-else
-  puts("unreachable")

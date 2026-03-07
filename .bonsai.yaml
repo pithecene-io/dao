@@ -1,0 +1,9 @@
+routing:
+  public_surface_globs:
+    - "spec/"
+    - "stdlib/"
+    - "runtime/"
+  structural_patterns:
+    - "compiler/"
+    - "docs/contracts/"
+    - "examples/"
