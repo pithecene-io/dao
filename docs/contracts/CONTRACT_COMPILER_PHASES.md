@@ -12,6 +12,7 @@ Dao is split into these primary implementation strata:
 - `compiler/ir/`
 - `compiler/backend/`
 - `compiler/driver/`
+- `compiler/analysis/`
 - `runtime/`
 
 ## Frontend Responsibilities
@@ -33,8 +34,12 @@ Required subroots:
 
 Expected next frontend subroots once implementation begins:
 - `compiler/frontend/resolve/`
-- `compiler/frontend/types/`
+- `compiler/frontend/types/` — type system representation (canonical
+  types, interning, comparison, printing)
+- `compiler/frontend/typecheck/` — semantic type-checking pass
 - `compiler/frontend/lower/`
+
+Dependency rule: `types/` must not depend on `typecheck/`.
 
 ## IR Responsibilities
 
@@ -95,6 +100,26 @@ Required subroots:
 - `runtime/memory/`
 - `runtime/modes/`
 - `runtime/gpu/`
+
+## Analysis Responsibilities
+
+`compiler/analysis/` owns compiler-produced semantic classification and
+tooling-facing analysis outputs:
+- semantic token streams
+- hover payloads
+- completion payloads
+- definition/reference lookup
+- document symbol trees
+- diagnostics surfacing for CLI, playground, and LSP
+
+`compiler/analysis/` consumes frontend and IR layers. It must not
+reimplement parsing, name resolution, or type checking.
+
+Dependency direction:
+- `compiler/analysis/` depends on `compiler/frontend/` (AST, resolve,
+  types, typecheck)
+- `tools/{playground,lsp}` depend on `compiler/analysis/`
+- `compiler/analysis/` must not depend on `tools/`
 
 ## Boundary Laws
 

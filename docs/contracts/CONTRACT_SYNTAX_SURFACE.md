@@ -56,6 +56,22 @@ Rules:
 - `|>` is left-associative
 - pipelines are first-class, not macro sugar
 
+## Let Bindings
+
+```dao
+let x: int32 = 42
+let y = compute()
+let value: int32
+```
+
+Rules:
+- `let name: T = expr` — typed with initializer
+- `let name = expr` — inferred type from initializer
+- `let name: T` — typed without initializer
+- `let name` without type or initializer is illegal
+- the uninitialized form requires an explicit type annotation
+- initialization semantics for the uninitialized form are not yet frozen
+
 ## Non-Laws
 
 This contract does not yet freeze:

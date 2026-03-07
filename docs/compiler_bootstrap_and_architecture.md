@@ -26,6 +26,7 @@ Preferred structure:
 - `compiler/frontend/diagnostics/`
 - `compiler/frontend/resolve/`
 - `compiler/frontend/types/`
+- `compiler/frontend/typecheck/`
 - `compiler/frontend/lower/`
 
 Rationale:
