@@ -46,7 +46,7 @@ Source-facing compiler pipeline.
 - `parser/` — parsing and surface grammar ingestion
 - `ast/` — syntax tree / declaration and expression representation
 - `diagnostics/` — spans, reporting, and source diagnostics plumbing
-- the intended next explicit roots are `resolve/`, `typecheck/`, and `lower/` rather than a monolithic semantic pass
+- the intended next explicit roots are `resolve/`, `types/`, `typecheck/`, and `lower/` rather than a monolithic semantic pass
 
 ### `compiler/ir/`
 

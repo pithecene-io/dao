@@ -22,6 +22,7 @@ Defines the allowed top-level ontology and major subroots for Dao.
 - `ir/`
 - `backend/`
 - `driver/`
+- `analysis/`
 
 ### Under `compiler/frontend/`
 - `lexer/`

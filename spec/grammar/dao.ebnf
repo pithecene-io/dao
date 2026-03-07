@@ -60,7 +60,10 @@ statement :=
     | expression NEWLINE
 
 let_statement :=
-    "let" identifier (":" type)? "=" expression
+    "let" identifier (
+        ":" type ("=" expression)?
+      | "=" expression
+    )
 
 assignment :=
     lvalue "=" expression
