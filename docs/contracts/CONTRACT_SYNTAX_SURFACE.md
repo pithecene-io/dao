@@ -67,9 +67,10 @@ let value: int32
 Rules:
 - `let name: T = expr` — typed with initializer
 - `let name = expr` — inferred type from initializer
-- `let name: T` — typed without initializer; zero/default-initialized
+- `let name: T` — typed without initializer
 - `let name` without type or initializer is illegal
 - the uninitialized form requires an explicit type annotation
+- initialization semantics for the uninitialized form are not yet frozen
 
 ## Non-Laws
 
