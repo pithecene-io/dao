@@ -26,9 +26,11 @@ for the Dao compiler project. It is subordinate to `CLAUDE.md` and
 - **Conan 2.x** in manifest mode
 - `conanfile.txt` initially; upgrade to `conanfile.py` if custom logic
   is needed
-- `conan.lock` committed for reproducible builds
 - Compiler profiles managed via Conan profiles
   (e.g. `profiles/clang-17-debug`, `profiles/gcc-13-release`)
+- One `conan.lock` per profile, committed under `locks/`
+  (e.g. `locks/clang-17-debug.lock`); lockfiles are
+  configuration-specific and must not be shared across profiles
 - LLVM is a system dependency found via `find_package`, not managed
   by Conan
 
@@ -48,7 +50,10 @@ for the Dao compiler project. It is subordinate to `CLAUDE.md` and
 ### CI
 
 - GitHub Actions
-- Pipeline: checkout, install clang 17 + Conan, cmake build, run tests
+- Pipeline: checkout, provision CMake >= 3.30, install clang 17 + Conan,
+  cmake build, run tests
+- CI must verify the CMake version satisfies the `cmake_minimum_required`
+  floor before building
 - Ubuntu only initially; macOS deferred
 
 ## Binary Architecture
@@ -85,8 +90,8 @@ Deliverables:
 - `CMakeLists.txt` (root) — top-level build with C++23 target
 - `CMakePresets.json` — presets for clang debug/release
 - `conanfile.txt` — declares boost-ext/ut 2.3.1
-- `conan.lock` — committed lockfile
 - `profiles/clang-17-debug` — Conan profile for primary dev
+- `locks/clang-17-debug.lock` — committed lockfile for primary profile
 - `.clang-format` — LLVM base + Dao overrides
 - `.clang-tidy` — strict modernize/performance/readability checks
 - `.gitignore` — updated for build/, Conan output
@@ -211,16 +216,54 @@ Exit criteria:
 - `daoc ast` produces readable output for all examples and probes
 - output is deterministic (suitable for golden-file testing)
 
-### Task 4 — Semantic Token Classification
+### Task 4 — Playground Integration (Structural)
+
+**Objective**: Bring up a minimal playground tied to the lexer and
+parser as early as possible, per the ROADMAP Phase 1.5 intent of
+"structural highlighting first, compiler-backed semantic highlighting
+as soon as frontend analysis exists."
+
+Deliverables:
+
+- `tools/playground/compiler_service/` — minimal HTTP service wrapping
+  the lexer and parser
+- Endpoints: `/lex`, `/parse`, `/diagnostics`
+- Playground frontend (stack TBD) showing:
+  - structural token highlighting (keyword, operator, literal
+    classification from the token stream)
+  - AST panel
+  - diagnostics panel
+- loads examples from `examples/`
+
+Playground stack decision is deferred to Task 4 execution. The service
+layer must consume compiler frontend output, not reimplement language
+logic.
+
+Prerequisites:
+
+- Tasks 1-3 complete
+- parser handles all syntax probes and examples
+
+Exit criteria:
+
+- paste Dao code into the playground and see structural coloring, AST,
+  and diagnostics
+- playground consumes compiler frontend, not bespoke regexes
+- examples load from the `examples/` directory
+
+### Task 5 — Semantic Token Classification
 
 **Objective**: Produce compiler-backed token classification per the
-taxonomy in `CONTRACT_LANGUAGE_TOOLING.md`.
+taxonomy in `CONTRACT_LANGUAGE_TOOLING.md`, and upgrade the playground
+from structural to semantic highlighting.
 
 Deliverables:
 
 - `compiler/analysis/semantic_tokens.h` / `semantic_tokens.cpp` —
   classification API
 - `daoc tokens <file>` subcommand
+- Playground upgraded: `/tokens` endpoint, semantic highlighting
+  replaces structural highlighting
 
 Approach:
 
@@ -235,38 +278,8 @@ Exit criteria:
 
 - all categories from the frozen taxonomy that are lexically or
   structurally determinable are classified
-- output is suitable for consumption by playground and future LSP
-
-### Task 5 — Playground Integration
-
-**Objective**: Connect the playground to the compiler frontend as a
-feedback loop for syntax, diagnostics, and highlighting.
-
-Deliverables:
-
-- `tools/playground/compiler_service/` — minimal HTTP service wrapping
-  compiler analysis
-- Endpoints: `/lex`, `/parse`, `/tokens`, `/diagnostics`
-- Playground frontend (stack TBD) showing:
-  - semantic token highlighting
-  - AST panel
-  - diagnostics panel
-- loads examples from `examples/`
-
-Playground stack decision is deferred to Task 5 execution. The service
-layer must consume `compiler/analysis/`, not reimplement language logic.
-
-Prerequisites:
-
-- Tasks 1-4 complete
-- parser handles all syntax probes and examples
-
-Exit criteria:
-
-- paste Dao code into the playground and see syntax coloring, AST,
-  and diagnostics
-- playground consumes compiler analysis, not bespoke regexes
-- examples load from the `examples/` directory
+- playground shows semantic highlighting
+- output is suitable for consumption by future LSP
 
 ## What Comes After
 
