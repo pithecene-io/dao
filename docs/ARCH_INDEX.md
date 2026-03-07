@@ -20,6 +20,7 @@ Contracts and explanatory material.
 - `ARCH_INDEX.md` — this file
 - `contracts/` — normative contracts for structure, syntax, execution contexts, compiler architecture, bootstrap/interop posture, and tooling boundaries
 - `ROADMAP.md` — staged implementation plan from frontend skeleton to self-hosting, tooling maturity, and GPU expansion
+- `IMPLEMENTATION_PLAN.md` — concrete task sequence, toolchain decisions, and delivery order for Tasks 0–5
 - `compiler_bootstrap_and_architecture.md` — explanatory notes on preferred compiler internals and staged bootstrap posture
 - `PLAYGROUND_ARCHITECTURE.md` — explanatory architecture for the playground as a first-class development surface and future web IDE
 - `IDE_AND_TOOLING.md` — explanatory posture for semantic tooling, LSP, and why some tooling decisions are contract-level while others stay freestanding
