@@ -1,0 +1,24 @@
+File
+  FunctionDecl search
+    Param start: NodeId
+    Param goal: NodeId
+    ReturnType: List[NodeId]
+    ResourceBlock memory Search
+      ModeBlock parallel
+        LetStatement frontier
+          CallExpr
+            Callee
+              IndexExpr
+                Identifier PriorityQueue
+                Indices
+                  Identifier NodeId
+        ExpressionStatement
+          CallExpr
+            Callee
+              FieldExpr .push
+                Identifier frontier
+            Args
+              Identifier start
+        ExpressionStatement
+          ListLiteral
+            Identifier goal

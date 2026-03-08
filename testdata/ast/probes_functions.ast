@@ -1,0 +1,23 @@
+File
+  FunctionDecl add
+    Param a: int32
+    Param b: int32
+    ReturnType: int32
+    ExprBody
+      BinaryExpr +
+        Identifier a
+        Identifier b
+  FunctionDecl read
+    Param ptr: *int32
+    ReturnType: int32
+    LetStatement value: int32
+      IntLiteral 0
+    ModeBlock unsafe
+      Assignment
+        Target
+          Identifier value
+        Value
+          UnaryExpr *
+            Identifier ptr
+    ExpressionStatement
+      Identifier value

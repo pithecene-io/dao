@@ -1,0 +1,59 @@
+File
+  FunctionDecl heuristic
+    Param a: NodeId
+    Param b: NodeId
+    ReturnType: float64
+    ExprBody
+      FloatLiteral 0.0
+  FunctionDecl a_star
+    Param g: Graph
+    Param start: NodeId
+    Param goal: NodeId
+    ReturnType: List[NodeId]
+    ResourceBlock memory Search
+      LetStatement open
+        CallExpr
+          Callee
+            IndexExpr
+              Identifier PriorityQueue
+              Indices
+                Identifier NodeId
+                Identifier float64
+      LetStatement came_from
+        CallExpr
+          Callee
+            IndexExpr
+              Identifier Map
+              Indices
+                Identifier NodeId
+                Identifier NodeId
+      WhileStatement
+        Condition
+          FieldExpr .not_empty
+            Identifier open
+        LetStatement current
+          CallExpr
+            Callee
+              FieldExpr .pop_min
+                Identifier open
+        IfStatement
+          Condition
+            BinaryExpr ==
+              Identifier current
+              Identifier goal
+          Then
+            ReturnStatement
+              CallExpr
+                Callee
+                  Identifier reconstruct_path
+                Args
+                  Identifier came_from
+                  Identifier start
+                  Identifier goal
+      ExpressionStatement
+        CallExpr
+          Callee
+            IndexExpr
+              Identifier List
+              Indices
+                Identifier NodeId
