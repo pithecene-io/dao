@@ -61,6 +61,9 @@ jobs:
       - name: Build
         run: cmake --build build/debug
 
+      - name: Run tests
+        run: ctest --test-dir build/debug --output-on-failure
+
       - name: Verify daoc runs
         run: ./build/debug/compiler/driver/daoc examples/hello.dao
 
