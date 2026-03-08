@@ -1,0 +1,281 @@
+#include "analysis/semantic_tokens.h"
+#include "frontend/lexer/lexer.h"
+#include "frontend/parser/parser.h"
+
+#include <boost/ut.hpp>
+
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <unordered_set>
+
+using namespace boost::ut;
+using namespace dao;
+
+namespace {
+
+auto read_file(const std::filesystem::path& path) -> std::string {
+  std::ifstream file(path);
+  return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+struct ClassifiedSource {
+  SourceBuffer source;
+  LexResult lex_result;
+  ParseResult parse_result;
+  std::vector<SemanticToken> tokens;
+};
+
+auto classify_source(const std::string& name, std::string contents) -> ClassifiedSource {
+  SourceBuffer source(name, std::move(contents));
+  auto lex_result = lex(source);
+  ParseResult parse_result;
+  if (lex_result.diagnostics.empty()) {
+    parse_result = parse(lex_result.tokens);
+  }
+  auto sem_tokens = classify_tokens(lex_result.tokens, parse_result.file);
+  return {std::move(source), std::move(lex_result), std::move(parse_result), std::move(sem_tokens)};
+}
+
+auto find_token(const std::vector<SemanticToken>& tokens, std::string_view kind)
+    -> const SemanticToken* {
+  for (const auto& tok : tokens) {
+    if (tok.kind == kind) {
+      return &tok;
+    }
+  }
+  return nullptr;
+}
+
+auto count_tokens(const std::vector<SemanticToken>& tokens, std::string_view kind) -> size_t {
+  size_t count = 0;
+  for (const auto& tok : tokens) {
+    if (tok.kind == kind) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+} // namespace
+
+// NOLINTBEGIN(readability-magic-numbers)
+
+suite keyword_classification = [] {
+  "keyword.fn is classified"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    0\n");
+    expect(find_token(result.tokens, "keyword.fn") != nullptr);
+  };
+
+  "keyword.let is classified"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    let x = 1\n    0\n");
+    expect(find_token(result.tokens, "keyword.let") != nullptr);
+  };
+
+  "keyword.if is classified"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    if true:\n        0\n    0\n");
+    expect(find_token(result.tokens, "keyword.if") != nullptr);
+  };
+
+  "keyword.return is classified"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    return 0\n");
+    expect(find_token(result.tokens, "keyword.return") != nullptr);
+  };
+
+  "keyword.import is classified"_test = [] {
+    auto result = classify_source("test.dao", "import foo\nfn main(): int32\n    0\n");
+    expect(find_token(result.tokens, "keyword.import") != nullptr);
+  };
+
+  "keyword.mode is classified"_test = [] {
+    auto result =
+        classify_source("test.dao", "fn main(): int32\n    mode unsafe =>\n        0\n    0\n");
+    expect(find_token(result.tokens, "keyword.mode") != nullptr);
+  };
+
+  "keyword.resource is classified"_test = [] {
+    auto result = classify_source(
+        "test.dao", "fn main(): int32\n    resource memory Pool =>\n        0\n    0\n");
+    expect(find_token(result.tokens, "keyword.resource") != nullptr);
+  };
+};
+
+suite literal_classification = [] {
+  "literal.number for integers"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    42\n");
+    expect(find_token(result.tokens, "literal.number") != nullptr);
+  };
+
+  "literal.string is classified"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    \"hello\"\n");
+    expect(find_token(result.tokens, "literal.string") != nullptr);
+  };
+};
+
+suite operator_classification = [] {
+  "operator.pipe is classified"_test = [] {
+    auto result =
+        classify_source("test.dao", "fn f(x: int32): int32 -> x\nfn g(): int32 -> 1 |> f\n");
+    expect(find_token(result.tokens, "operator.pipe") != nullptr);
+  };
+
+  "operator.arrow is classified"_test = [] {
+    auto result = classify_source("test.dao", "fn f(): int32 -> 0\n");
+    expect(find_token(result.tokens, "operator.arrow") != nullptr);
+  };
+
+  "operator.assignment is classified"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    let x = 1\n    0\n");
+    expect(find_token(result.tokens, "operator.assignment") != nullptr);
+  };
+};
+
+suite declaration_classification = [] {
+  "decl.function on function name"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    0\n");
+    expect(find_token(result.tokens, "decl.function") != nullptr);
+  };
+
+  "decl.type on struct name"_test = [] {
+    auto result = classify_source("test.dao", "struct Point:\n    let x: int32\n");
+    expect(find_token(result.tokens, "decl.type") != nullptr);
+  };
+
+  "decl.field on struct member"_test = [] {
+    auto result = classify_source("test.dao", "struct Point:\n    let x: int32\n");
+    expect(find_token(result.tokens, "decl.field") != nullptr);
+  };
+};
+
+suite type_classification = [] {
+  "type.builtin for int32"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    0\n");
+    expect(find_token(result.tokens, "type.builtin") != nullptr);
+  };
+
+  "type.nominal for user types"_test = [] {
+    auto result = classify_source("test.dao", "fn f(g: Graph): int32\n    0\n");
+    expect(find_token(result.tokens, "type.nominal") != nullptr);
+  };
+};
+
+suite variable_classification = [] {
+  "use.variable.param on function param"_test = [] {
+    auto result = classify_source("test.dao", "fn f(x: int32): int32\n    0\n");
+    expect(find_token(result.tokens, "use.variable.param") != nullptr);
+  };
+
+  "use.variable.local on let binding"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): int32\n    let x = 1\n    0\n");
+    expect(find_token(result.tokens, "use.variable.local") != nullptr);
+  };
+
+  "use.field on field access"_test = [] {
+    auto result = classify_source("test.dao", "fn f(p: Point): int32\n    p.x\n");
+    expect(find_token(result.tokens, "use.field") != nullptr);
+  };
+};
+
+suite mode_resource_classification = [] {
+  "mode.unsafe is classified"_test = [] {
+    auto result =
+        classify_source("test.dao", "fn main(): int32\n    mode unsafe =>\n        0\n    0\n");
+    expect(find_token(result.tokens, "mode.unsafe") != nullptr);
+  };
+
+  "resource.kind.memory is classified"_test = [] {
+    auto result = classify_source(
+        "test.dao", "fn main(): int32\n    resource memory Pool =>\n        0\n    0\n");
+    expect(find_token(result.tokens, "resource.kind.memory") != nullptr);
+  };
+
+  "resource.binding is classified"_test = [] {
+    auto result = classify_source(
+        "test.dao", "fn main(): int32\n    resource memory Pool =>\n        0\n    0\n");
+    expect(find_token(result.tokens, "resource.binding") != nullptr);
+  };
+};
+
+suite lambda_classification = [] {
+  "lambda.param is classified"_test = [] {
+    auto result =
+        classify_source("test.dao", "fn f(x: int32): int32 -> x\nfn g(): int32 -> 1 |> |x| -> x\n");
+    expect(find_token(result.tokens, "lambda.param") != nullptr);
+  };
+};
+
+suite punctuation_classification = [] {
+  "punctuation is classified"_test = [] {
+    auto result = classify_source("test.dao", "fn f(x: int32): int32\n    0\n");
+    expect(find_token(result.tokens, "punctuation") != nullptr);
+  };
+};
+
+suite sorted_output = [] {
+  "tokens are sorted by offset"_test = [] {
+    auto result = classify_source("test.dao",
+                                  "fn main(): int32\n"
+                                  "    let x = 1\n"
+                                  "    0\n");
+    for (size_t i = 1; i < result.tokens.size(); ++i) {
+      expect(result.tokens[i].span.offset >= result.tokens[i - 1].span.offset)
+          << "tokens not sorted at index " << i;
+    }
+  };
+};
+
+suite example_files = [] {
+  "all examples classify without crash"_test = [] {
+    auto root = std::filesystem::path(DAO_SOURCE_DIR);
+    auto examples_dir = root / "examples";
+    for (const auto& entry : std::filesystem::directory_iterator(examples_dir)) {
+      if (entry.path().extension() != ".dao") {
+        continue;
+      }
+      auto contents = read_file(entry.path());
+      auto result = classify_source(entry.path().filename().string(), std::move(contents));
+      // Every example should produce at least some semantic tokens.
+      expect(result.tokens.size() > 0u) << "no tokens for " << entry.path().filename().string();
+    }
+  };
+
+  "all syntax probes classify without crash"_test = [] {
+    auto root = std::filesystem::path(DAO_SOURCE_DIR);
+    auto probes_dir = root / "spec" / "syntax_probes";
+    for (const auto& entry : std::filesystem::directory_iterator(probes_dir)) {
+      if (entry.path().extension() != ".dao") {
+        continue;
+      }
+      auto contents = read_file(entry.path());
+      auto result = classify_source(entry.path().filename().string(), std::move(contents));
+      expect(result.tokens.size() > 0u) << "no tokens for " << entry.path().filename().string();
+    }
+  };
+};
+
+suite taxonomy_coverage = [] {
+  "all lexically determinable categories appear in hello.dao"_test = [] {
+    auto root = std::filesystem::path(DAO_SOURCE_DIR);
+    auto contents = read_file(root / "examples" / "hello.dao");
+    auto result = classify_source("hello.dao", std::move(contents));
+
+    std::unordered_set<std::string_view> categories;
+    for (const auto& tok : result.tokens) {
+      categories.insert(tok.kind);
+    }
+
+    // hello.dao has: fn, print("hello, dao"), 0, int32
+    expect(categories.contains("keyword.fn")) << "missing keyword.fn";
+    expect(categories.contains("decl.function")) << "missing decl.function";
+    expect(categories.contains("literal.number")) << "missing literal.number";
+    expect(categories.contains("literal.string")) << "missing literal.string";
+    expect(categories.contains("type.builtin")) << "missing type.builtin";
+    expect(categories.contains("punctuation")) << "missing punctuation";
+    expect(categories.contains("operator.context")) << "missing operator.context";
+  };
+};
+
+// NOLINTEND(readability-magic-numbers)
+
+auto main() -> int {
+} // NOLINT(readability-named-parameter)

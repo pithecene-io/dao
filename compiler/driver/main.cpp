@@ -1,3 +1,4 @@
+#include "analysis/semantic_tokens.h"
 #include "frontend/ast/ast_printer.h"
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser.h"
@@ -51,13 +52,13 @@ void cmd_lex(const std::filesystem::path& path) {
   }
 }
 
-struct ParsedFile {
+struct LexedFile {
   dao::SourceBuffer source;
-  dao::ParseResult parse_result;
+  dao::LexResult lex_result;
 };
 
-// Lex and parse a file, printing diagnostics on failure.
-auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
+// Lex a file, printing diagnostics on failure.
+auto lex_file(const std::filesystem::path& path) -> LexedFile {
   auto contents = read_file(path);
   dao::SourceBuffer source(path.filename().string(), std::move(contents));
   auto lex_result = dao::lex(source);
@@ -71,18 +72,32 @@ auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
     std::exit(EXIT_FAILURE);
   }
 
-  auto parse_result = dao::parse(lex_result.tokens);
+  return {.source = std::move(source), .lex_result = std::move(lex_result)};
+}
+
+struct ParsedFile {
+  dao::SourceBuffer source;
+  dao::LexResult lex_result;
+  dao::ParseResult parse_result;
+};
+
+// Lex and parse a file, printing diagnostics on failure.
+auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
+  auto lexed = lex_file(path);
+  auto parse_result = dao::parse(lexed.lex_result.tokens);
 
   if (!parse_result.diagnostics.empty()) {
     for (const auto& diag : parse_result.diagnostics) {
-      auto loc = source.line_col(diag.span.offset);
+      auto loc = lexed.source.line_col(diag.span.offset);
       std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
                 << ": error: " << diag.message << "\n";
     }
     std::exit(EXIT_FAILURE);
   }
 
-  return {.source = std::move(source), .parse_result = std::move(parse_result)};
+  return {.source = std::move(lexed.source),
+          .lex_result = std::move(lexed.lex_result),
+          .parse_result = std::move(parse_result)};
 }
 
 // Debug-only parse diagnostic dump. Output format is not stable.
@@ -91,6 +106,18 @@ void cmd_parse(const std::filesystem::path& path) {
   if (result.parse_result.file != nullptr) {
     std::cout << "File: " << result.parse_result.file->imports().size() << " imports, "
               << result.parse_result.file->declarations().size() << " declarations\n";
+  }
+}
+
+// Emit semantic token classification. Output is deterministic.
+void cmd_tokens(const std::filesystem::path& path) {
+  auto result = lex_and_parse(path);
+  auto sem_tokens = dao::classify_tokens(result.lex_result.tokens, result.parse_result.file);
+
+  for (const auto& tok : sem_tokens) {
+    auto loc = result.source.line_col(tok.span.offset);
+    auto text = result.source.text(tok.span);
+    std::cout << loc.line << ":" << loc.col << " " << tok.kind << " \"" << text << "\"\n";
   }
 }
 
@@ -107,7 +134,7 @@ void cmd_ast(const std::filesystem::path& path) {
 auto main(int argc, char* argv[]) -> int {
   if (argc < 2) {
     std::cerr << "usage: daoc <command> <file>\n";
-    std::cerr << "commands: lex, parse, ast\n";
+    std::cerr << "commands: lex, parse, ast, tokens\n";
     return EXIT_FAILURE;
   }
 
@@ -140,6 +167,21 @@ auto main(int argc, char* argv[]) -> int {
       return EXIT_FAILURE;
     }
     cmd_parse(parse_path);
+    return EXIT_SUCCESS;
+  }
+
+  // daoc tokens <file>
+  if (arg1 == "tokens") {
+    if (argc < 3) {
+      std::cerr << "usage: daoc tokens <file>\n";
+      return EXIT_FAILURE;
+    }
+    std::filesystem::path tokens_path(argv[2]);
+    if (!std::filesystem::exists(tokens_path)) {
+      std::cerr << "error: file not found: " << tokens_path << "\n";
+      return EXIT_FAILURE;
+    }
+    cmd_tokens(tokens_path);
     return EXIT_SUCCESS;
   }
 

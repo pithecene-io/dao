@@ -152,12 +152,17 @@ main {
   padding: 0 12px;
 }
 
-/* Token highlight classes applied via decorations */
+/* Semantic token highlight classes — mapped from CONTRACT_LANGUAGE_TOOLING.md taxonomy */
 .dao-keyword { color: #cba6f7; }
+.dao-decl { color: #89b4fa; font-weight: 600; }
+.dao-type { color: #f9e2af; }
+.dao-variable { color: #cdd6f4; }
+.dao-field { color: #94e2d5; }
+.dao-module { color: #74c7ec; }
+.dao-mode { color: #f38ba8; font-style: italic; }
+.dao-resource { color: #fab387; font-style: italic; }
+.dao-lambda-param { color: #f5c2e7; }
 .dao-literal-number { color: #fab387; }
 .dao-literal-string { color: #a6e3a1; }
-.dao-literal-bool { color: #fab387; }
 .dao-operator { color: #89dceb; }
 .dao-punctuation { color: #6c7086; }
-.dao-identifier { color: #cdd6f4; }
-.dao-error { color: #f38ba8; text-decoration: wavy underline; }
