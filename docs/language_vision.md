@@ -55,6 +55,16 @@ These are official but not compiler-coupled. They follow the same module
 conventions as third-party code. A package graduating from first-party
 to stdlib (or being removed) is a semver event.
 
+### Early dogfooding targets
+
+A strong web framework and wire protocol support are priority
+dogfooding surfaces. Getting `net::http`, `web`, and `json` to
+production quality early exercises the full stack — stdlib primitives,
+first-party package conventions, module system, error handling, and
+concurrency — under real workload pressure. If Dao cannot build a
+competitive web server from its own libraries, the platform story is
+not credible.
+
 ## Module and Namespace System
 
 - `::` is the namespace/module path separator
