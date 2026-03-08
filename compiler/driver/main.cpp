@@ -113,7 +113,15 @@ void cmd_parse(const std::filesystem::path& path) {
 // Emit semantic token classification. Output is deterministic.
 void cmd_tokens(const std::filesystem::path& path) {
   auto result = lex_and_parse(path);
-  auto sem_tokens = dao::classify_tokens(result.lex_result.tokens, result.parse_result.file);
+
+  // Run name resolution for resolve-driven classifications.
+  dao::ResolveResult resolve_result;
+  if (result.parse_result.file != nullptr) {
+    resolve_result = dao::resolve(*result.parse_result.file);
+  }
+
+  auto sem_tokens =
+      dao::classify_tokens(result.lex_result.tokens, result.parse_result.file, &resolve_result);
 
   for (const auto& tok : sem_tokens) {
     auto loc = result.source.line_col(tok.span.offset);

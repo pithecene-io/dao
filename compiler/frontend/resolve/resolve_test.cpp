@@ -120,6 +120,14 @@ suite resolve_basic = [] {
     auto callee_offset = find_offset(result, "callee", 0); // first occurrence is the call
     expect(use_resolves_to(result, callee_offset, SymbolKind::Function));
   };
+
+  "qualified name rejects non-module leading segment"_test = [] {
+    auto result = resolve_source("test",
+                                 "fn foo(): int32 -> 0\n"
+                                 "fn main(): int32\n"
+                                 "    foo::bar()");
+    expect(has_diagnostic_containing(result.resolve_result, "'foo' is not a module"));
+  };
 };
 
 suite resolve_scoping = [] {
@@ -203,6 +211,12 @@ suite resolve_duplicates = [] {
                                  "    let a: int32 = 2\n"
                                  "    a");
     expect(has_diagnostic_containing(result.resolve_result, "duplicate declaration 'a'"));
+  };
+
+  "duplicate lambda parameters"_test = [] {
+    auto result = resolve_source("test",
+                                 "fn foo(): int32 -> |x, x| -> x");
+    expect(has_diagnostic_containing(result.resolve_result, "duplicate parameter 'x'"));
   };
 };
 

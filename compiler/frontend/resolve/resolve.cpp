@@ -386,22 +386,26 @@ private:
         break;
       }
 
-      // Resolve first segment against the scope chain.
+      // Resolve first segment against the scope chain — must be a
+      // module/import binding per TASK_6_RESOLVE.md.
       auto first_seg = qn.segments().front();
+      auto seg_len = static_cast<uint32_t>(first_seg.size());
+      Span seg_span{.offset = expr.span().offset, .length = seg_len};
       auto* sym = scope->lookup(first_seg);
 
-      if (sym != nullptr) {
+      if (sym == nullptr) {
+        diagnostics_.push_back(Diagnostic::error(
+            seg_span,
+            "unknown name '" + std::string(first_seg) + "'"));
+      } else if (sym->kind != SymbolKind::Module) {
+        diagnostics_.push_back(Diagnostic::error(
+            seg_span,
+            "'" + std::string(first_seg) + "' is not a module"));
+      } else {
         // Record the first segment's resolution.
         uses_[expr.span().offset] = sym;
         // Trailing segments are unresolvable in Task 6 (no cross-file
         // module resolution) — left without entries in the uses table.
-      } else {
-        // Compute the span for the first segment only.
-        auto seg_len = static_cast<uint32_t>(first_seg.size());
-        Span seg_span{.offset = expr.span().offset, .length = seg_len};
-        diagnostics_.push_back(Diagnostic::error(
-            seg_span,
-            "unknown name '" + std::string(first_seg) + "'"));
       }
       break;
     }
@@ -450,8 +454,14 @@ private:
       // Create a block scope for the lambda body.
       auto* lam_scope = ctx_.make_scope(ScopeKind::Block, scope);
       for (const auto& [name, span] : lam.params()) {
-        auto* sym = ctx_.make_symbol(SymbolKind::LambdaParam, name, span, &lam);
-        lam_scope->declare(name, sym);
+        if (lam_scope->lookup_local(name) != nullptr) {
+          diagnostics_.push_back(Diagnostic::error(
+              span,
+              "duplicate parameter '" + std::string(name) + "'"));
+        } else {
+          auto* sym = ctx_.make_symbol(SymbolKind::LambdaParam, name, span, &lam);
+          lam_scope->declare(name, sym);
+        }
       }
       resolve_expr(*lam.body(), lam_scope);
       break;
@@ -496,9 +506,12 @@ private:
         }
       } else {
         // Multi-segment type: resolve leading segment as module reference.
+        // Only Module symbols are valid as leading segments of qualified
+        // type paths — other kinds are silently ignored (type-position
+        // references are not diagnosed for unknown names).
         auto first_seg = path.segments.front();
         auto* sym = scope->lookup(first_seg);
-        if (sym != nullptr) {
+        if (sym != nullptr && sym->kind == SymbolKind::Module) {
           uses_[path.span.offset] = sym;
         }
         // Trailing segments are unresolvable without cross-file resolution.
