@@ -38,27 +38,28 @@ enum class TokenKind : std::uint8_t {
   KwOr,
 
   // Operators
-  Colon,    // :
-  Arrow,    // ->
-  FatArrow, // =>
-  Eq,       // =
-  EqEq,     // ==
-  BangEq,   // !=
-  Lt,       // <
-  LtEq,     // <=
-  Gt,       // >
-  GtEq,     // >=
-  Plus,     // +
-  Minus,    // -
-  Star,     // *
-  Slash,    // /
-  Percent,  // %
-  Amp,      // &
-  Bang,     // !
-  Dot,      // .
-  Comma,    // ,
-  Pipe,     // |
-  PipeGt,   // |>
+  Colon,      // :
+  ColonColon, // ::
+  Arrow,      // ->
+  FatArrow,   // =>
+  Eq,         // =
+  EqEq,       // ==
+  BangEq,     // !=
+  Lt,         // <
+  LtEq,       // <=
+  Gt,         // >
+  GtEq,       // >=
+  Plus,       // +
+  Minus,      // -
+  Star,       // *
+  Slash,      // /
+  Percent,    // %
+  Amp,        // &
+  Bang,       // !
+  Dot,        // .
+  Comma,      // ,
+  Pipe,       // |
+  PipeGt,     // |>
 
   // Delimiters
   LParen,   // (

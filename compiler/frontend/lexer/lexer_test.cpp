@@ -76,35 +76,57 @@ suite keyword_tests = [] {
 
 suite operator_tests = [] {
   "all operators recognized"_test = [] {
-    auto output = lex_string(": -> => = == != < <= > >= + - * / % & ! . , | |>\n");
+    auto output = lex_string(": :: -> => = == != < <= > >= + - * / % & ! . , | |>\n");
     auto kinds = std::vector<TokenKind>{};
     for (const auto& tok : output.result.tokens) {
       if (tok.kind != TokenKind::Newline && tok.kind != TokenKind::Eof) {
         kinds.push_back(tok.kind);
       }
     }
-    expect(kinds.size() == 21_u);
+    expect(kinds.size() == 22_u);
     expect(kinds[0] == TokenKind::Colon);
-    expect(kinds[1] == TokenKind::Arrow);
-    expect(kinds[2] == TokenKind::FatArrow);
-    expect(kinds[3] == TokenKind::Eq);
-    expect(kinds[4] == TokenKind::EqEq);
-    expect(kinds[5] == TokenKind::BangEq);
-    expect(kinds[6] == TokenKind::Lt);
-    expect(kinds[7] == TokenKind::LtEq);
-    expect(kinds[8] == TokenKind::Gt);
-    expect(kinds[9] == TokenKind::GtEq);
-    expect(kinds[10] == TokenKind::Plus);
-    expect(kinds[11] == TokenKind::Minus);
-    expect(kinds[12] == TokenKind::Star);
-    expect(kinds[13] == TokenKind::Slash);
-    expect(kinds[14] == TokenKind::Percent);
-    expect(kinds[15] == TokenKind::Amp);
-    expect(kinds[16] == TokenKind::Bang);
-    expect(kinds[17] == TokenKind::Dot);
-    expect(kinds[18] == TokenKind::Comma);
-    expect(kinds[19] == TokenKind::Pipe);
-    expect(kinds[20] == TokenKind::PipeGt);
+    expect(kinds[1] == TokenKind::ColonColon);
+    expect(kinds[2] == TokenKind::Arrow);
+    expect(kinds[3] == TokenKind::FatArrow);
+    expect(kinds[4] == TokenKind::Eq);
+    expect(kinds[5] == TokenKind::EqEq);
+    expect(kinds[6] == TokenKind::BangEq);
+    expect(kinds[7] == TokenKind::Lt);
+    expect(kinds[8] == TokenKind::LtEq);
+    expect(kinds[9] == TokenKind::Gt);
+    expect(kinds[10] == TokenKind::GtEq);
+    expect(kinds[11] == TokenKind::Plus);
+    expect(kinds[12] == TokenKind::Minus);
+    expect(kinds[13] == TokenKind::Star);
+    expect(kinds[14] == TokenKind::Slash);
+    expect(kinds[15] == TokenKind::Percent);
+    expect(kinds[16] == TokenKind::Amp);
+    expect(kinds[17] == TokenKind::Bang);
+    expect(kinds[18] == TokenKind::Dot);
+    expect(kinds[19] == TokenKind::Comma);
+    expect(kinds[20] == TokenKind::Pipe);
+    expect(kinds[21] == TokenKind::PipeGt);
+  };
+
+  "colon vs coloncolon disambiguation"_test = [] {
+    auto output = lex_string("x: int32\nnet::http::get\n");
+    auto kinds = std::vector<TokenKind>{};
+    for (const auto& tok : output.result.tokens) {
+      if (tok.kind != TokenKind::Newline && tok.kind != TokenKind::Eof &&
+          tok.kind != TokenKind::Indent && tok.kind != TokenKind::Dedent) {
+        kinds.push_back(tok.kind);
+      }
+    }
+    // x : int32 net :: http :: get
+    expect(kinds.size() == 8_u);
+    expect(kinds[0] == TokenKind::Identifier); // x
+    expect(kinds[1] == TokenKind::Colon);      // :
+    expect(kinds[2] == TokenKind::Identifier); // int32
+    expect(kinds[3] == TokenKind::Identifier); // net
+    expect(kinds[4] == TokenKind::ColonColon); // ::
+    expect(kinds[5] == TokenKind::Identifier); // http
+    expect(kinds[6] == TokenKind::ColonColon); // ::
+    expect(kinds[7] == TokenKind::Identifier); // get
   };
 
   "delimiters"_test = [] {

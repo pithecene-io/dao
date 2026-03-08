@@ -14,11 +14,18 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install LLVM/Clang
+        env:
+          LLVM_VERSION: 21
         run: |
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo add-apt-repository "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs) main"
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/llvm-snapshot.asc > /dev/null
+          codename=$(lsb_release -cs)
+          echo "deb http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-${LLVM_VERSION} main" | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
-          sudo apt-get install -y clang clang-format clang-tidy
+          sudo apt-get install -y clang-${LLVM_VERSION} clang-format-${LLVM_VERSION} clang-tidy-${LLVM_VERSION}
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${LLVM_VERSION} 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${LLVM_VERSION} 100
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-${LLVM_VERSION} 100
+          sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${LLVM_VERSION} 100
 
       - name: Install CMake
         uses: lukka/get-cmake@latest
@@ -37,12 +44,14 @@ jobs:
           echo "CMake version $cmake_version satisfies >= 3.30"
 
       - name: Install Conan
-        run: pip install conan
+        run: |
+          pip install conan
+          conan profile detect
 
       - name: Detect Clang version
         id: clang
         run: |
-          version=$(clang++ --version | grep -oP 'clang version \K\d+')
+          version=$(clang++-21 --version | grep -oP 'clang version \K\d+')
           echo "major=$version" >> "$GITHUB_OUTPUT"
           echo "Detected clang major version: $version"
 
@@ -52,7 +61,9 @@ jobs:
             --output-folder=build/debug \
             --build=missing \
             -pr profiles/clang-21-debug \
+            -pr:b profiles/clang-21-debug \
             -s compiler.version=${{ steps.clang.outputs.major }} \
+            -s:b compiler.version=${{ steps.clang.outputs.major }} \
             --lockfile=locks/clang-21-debug.lock
 
       - name: Configure

@@ -9,7 +9,7 @@ import :=
     "import" module_path NEWLINE
 
 module_path :=
-    identifier ("." identifier)*
+    identifier ("::" identifier)*
 
 
 declaration :=
@@ -144,11 +144,14 @@ arguments :=
     expression ("," expression)*
 
 primary :=
-      identifier
+      qualified_name
     | literal
     | lambda
     | list_literal
     | "(" expression ")"
+
+qualified_name :=
+    identifier ("::" identifier)*
 
 lambda :=
     "|" lambda_params? "|" "->" expression
@@ -178,7 +181,7 @@ pointer_type :=
     "*" type
 
 named_type :=
-    identifier ("[" type_list "]")?
+    qualified_name ("[" type_list "]")?
 
 type_list :=
     type ("," type)*

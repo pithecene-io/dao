@@ -21,6 +21,7 @@ Reserved keywords:
 
 Reserved punctuation/operators:
 - :
+- ::
 - ->
 - =>
 - =

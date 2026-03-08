@@ -25,6 +25,7 @@ Contracts and explanatory material.
 - `PLAYGROUND_ARCHITECTURE.md` — explanatory architecture for the playground as a first-class development surface and future web IDE
 - `IDE_AND_TOOLING.md` — explanatory posture for semantic tooling, LSP, and why some tooling decisions are contract-level while others stay freestanding
 - `COMPILER_SERVICE_API.md` — explanatory shared analysis payloads for CLI, playground, and LSP
+- `language_vision.md` — explanatory design doctrine, stdlib posture, module/namespace design, and GPU strategy
 
 ## `spec/`
 

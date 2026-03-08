@@ -82,6 +82,7 @@ classify at least the following categories:
 - `operator.arrow`
 - `operator.context`
 - `operator.assignment`
+- `operator.namespace`
 - `punctuation`
 
 ### Lambda / pipeline support

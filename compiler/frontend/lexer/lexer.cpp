@@ -42,6 +42,8 @@ auto token_kind_name(TokenKind kind) -> const char* {
     return "KwOr";
   case TokenKind::Colon:
     return "Colon";
+  case TokenKind::ColonColon:
+    return "ColonColon";
   case TokenKind::Arrow:
     return "Arrow";
   case TokenKind::FatArrow:
@@ -289,7 +291,12 @@ private:
 
     switch (cur) {
     case ':':
-      emit(TokenKind::Colon, start, 1);
+      if (peek() == ':') {
+        ++pos_;
+        emit(TokenKind::ColonColon, start, 2);
+      } else {
+        emit(TokenKind::Colon, start, 1);
+      }
       return;
     case '+':
       emit(TokenKind::Plus, start, 1);
