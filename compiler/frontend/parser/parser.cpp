@@ -1,0 +1,861 @@
+#include "frontend/parser/parser.h"
+
+#include <string>
+
+namespace dao {
+
+namespace {
+
+// NOLINTBEGIN(readability-identifier-length)
+class ParserImpl {
+public:
+  explicit ParserImpl(const std::vector<Token>& tokens) : tokens_(tokens) {
+  }
+
+  auto run() -> ParseResult {
+    auto* file = parse_file();
+    return {.context = std::move(ctx_), .file = file, .diagnostics = std::move(diagnostics_)};
+  }
+
+private:
+  const std::vector<Token>& tokens_;
+  uint32_t pos_ = 0;
+  AstContext ctx_;
+  std::vector<Diagnostic> diagnostics_;
+  bool in_pipe_target_ = false;
+
+  // -----------------------------------------------------------------------
+  // Token access
+  // -----------------------------------------------------------------------
+
+  [[nodiscard]] auto peek() const -> const Token& {
+    return tokens_[pos_];
+  }
+
+  [[nodiscard]] auto peek_kind() const -> TokenKind {
+    return tokens_[pos_].kind;
+  }
+
+  [[nodiscard]] auto at_end() const -> bool {
+    return peek_kind() == TokenKind::Eof;
+  }
+
+  auto advance() -> const Token& {
+    const auto& tok = tokens_[pos_];
+    if (!at_end()) {
+      ++pos_;
+    }
+    return tok;
+  }
+
+  auto consume(TokenKind kind) -> const Token& {
+    if (peek_kind() != kind) {
+      error("expected " + std::string(token_kind_name(kind)) + ", got " +
+            std::string(token_kind_name(peek_kind())));
+    }
+    return advance();
+  }
+
+  auto match(TokenKind kind) -> bool {
+    if (peek_kind() == kind) {
+      advance();
+      return true;
+    }
+    return false;
+  }
+
+  void skip_newlines() {
+    while (peek_kind() == TokenKind::Newline) {
+      advance();
+    }
+  }
+
+  void error(const std::string& message) {
+    diagnostics_.push_back(Diagnostic::error(peek().span, message));
+  }
+
+  // -----------------------------------------------------------------------
+  // File
+  // -----------------------------------------------------------------------
+
+  auto parse_file() -> FileNode* {
+    skip_newlines();
+    Span file_span = peek().span;
+
+    std::vector<AstNode*> imports;
+    while (peek_kind() == TokenKind::KwImport) {
+      imports.push_back(parse_import());
+      skip_newlines();
+    }
+
+    std::vector<Decl*> declarations;
+    while (!at_end()) {
+      skip_newlines();
+      if (at_end()) {
+        break;
+      }
+      auto* decl = parse_declaration();
+      if (decl != nullptr) {
+        declarations.push_back(decl);
+      }
+      skip_newlines();
+    }
+
+    Span total = {.offset = file_span.offset, .length = peek().span.offset - file_span.offset};
+    return ctx_.alloc<FileNode>(total, std::move(imports), std::move(declarations));
+  }
+
+  // -----------------------------------------------------------------------
+  // Import
+  // -----------------------------------------------------------------------
+
+  auto parse_import() -> ImportNode* {
+    const auto& kw = consume(TokenKind::KwImport);
+    auto path = parse_module_path();
+    consume(TokenKind::Newline);
+    Span span = {.offset = kw.span.offset,
+                 .length = (path.span.offset + path.span.length) - kw.span.offset};
+    return ctx_.alloc<ImportNode>(span, std::move(path));
+  }
+
+  auto parse_module_path() -> QualifiedPath {
+    QualifiedPath path;
+    const auto& first = consume(TokenKind::Identifier);
+    path.segments.push_back(first.text);
+    path.span = first.span;
+
+    while (peek_kind() == TokenKind::ColonColon) {
+      advance(); // ::
+      const auto& seg = consume(TokenKind::Identifier);
+      path.segments.push_back(seg.text);
+      path.span.length = (seg.span.offset + seg.span.length) - path.span.offset;
+    }
+
+    return path;
+  }
+
+  // -----------------------------------------------------------------------
+  // Declarations
+  // -----------------------------------------------------------------------
+
+  auto parse_declaration() -> Decl* {
+    switch (peek_kind()) {
+    case TokenKind::KwFn:
+      return parse_function_decl();
+    case TokenKind::KwStruct:
+      return parse_struct_decl();
+    case TokenKind::KwType:
+      return parse_alias_decl();
+    default:
+      error("expected declaration (fn, struct, or type)");
+      advance(); // skip problematic token
+      return nullptr;
+    }
+  }
+
+  auto parse_function_decl() -> FunctionDeclNode* {
+    const auto& kw = consume(TokenKind::KwFn);
+    const auto& name_tok = consume(TokenKind::Identifier);
+
+    consume(TokenKind::LParen);
+    auto params = parse_params();
+    consume(TokenKind::RParen);
+
+    TypeNode* return_type = nullptr;
+    if (peek_kind() == TokenKind::Colon) {
+      advance(); // :
+      return_type = parse_type();
+    }
+
+    std::vector<Stmt*> body;
+    Expr* expr_body = nullptr;
+
+    if (peek_kind() == TokenKind::Arrow) {
+      // Expression-bodied: -> expression NEWLINE
+      advance(); // ->
+      expr_body = parse_expression();
+      // The trailing newline may have been consumed by pipe continuation.
+      match(TokenKind::Newline);
+    } else {
+      // Block-bodied: NEWLINE INDENT statement+ DEDENT
+      consume(TokenKind::Newline);
+      consume(TokenKind::Indent);
+      body = parse_statement_list();
+      consume(TokenKind::Dedent);
+    }
+
+    Span span = span_from(kw.span);
+    return ctx_.alloc<FunctionDeclNode>(span,
+                                        name_tok.text,
+                                        name_tok.span,
+                                        std::move(params),
+                                        return_type,
+                                        std::move(body),
+                                        expr_body);
+  }
+
+  auto parse_params() -> std::vector<Param> {
+    std::vector<Param> params;
+    if (peek_kind() == TokenKind::RParen) {
+      return params;
+    }
+    params.push_back(parse_param());
+    while (peek_kind() == TokenKind::Comma) {
+      advance(); // ,
+      params.push_back(parse_param());
+    }
+    return params;
+  }
+
+  auto parse_param() -> Param {
+    const auto& name_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::Colon);
+    auto* type = parse_type();
+    return {.name = name_tok.text, .name_span = name_tok.span, .type = type};
+  }
+
+  auto parse_struct_decl() -> StructDeclNode* {
+    const auto& kw = consume(TokenKind::KwStruct);
+    const auto& name_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::Colon);
+    auto members = parse_suite();
+    Span span = span_from(kw.span);
+    return ctx_.alloc<StructDeclNode>(span, name_tok.text, name_tok.span, std::move(members));
+  }
+
+  auto parse_alias_decl() -> AliasDeclNode* {
+    const auto& kw = consume(TokenKind::KwType);
+    const auto& name_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::Eq);
+    auto* type = parse_type();
+    consume(TokenKind::Newline);
+    Span span = span_from(kw.span);
+    return ctx_.alloc<AliasDeclNode>(span, name_tok.text, name_tok.span, type);
+  }
+
+  // -----------------------------------------------------------------------
+  // Suites and statements
+  // -----------------------------------------------------------------------
+
+  auto parse_suite() -> std::vector<Stmt*> {
+    consume(TokenKind::Newline);
+    consume(TokenKind::Indent);
+    auto stmts = parse_statement_list();
+    consume(TokenKind::Dedent);
+    return stmts;
+  }
+
+  auto parse_statement_list() -> std::vector<Stmt*> {
+    std::vector<Stmt*> stmts;
+    while (peek_kind() != TokenKind::Dedent && peek_kind() != TokenKind::Eof) {
+      skip_newlines();
+      if (peek_kind() == TokenKind::Dedent || peek_kind() == TokenKind::Eof) {
+        break;
+      }
+      auto* stmt = parse_statement();
+      if (stmt != nullptr) {
+        stmts.push_back(stmt);
+      }
+    }
+    return stmts;
+  }
+
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+  auto parse_statement() -> Stmt* {
+    switch (peek_kind()) {
+    case TokenKind::KwLet:
+      return parse_let_statement();
+    case TokenKind::KwIf:
+      return parse_if_statement();
+    case TokenKind::KwWhile:
+      return parse_while_statement();
+    case TokenKind::KwFor:
+      return parse_for_statement();
+    case TokenKind::KwMode:
+      return parse_mode_block();
+    case TokenKind::KwResource:
+      return parse_resource_block();
+    case TokenKind::KwReturn:
+      return parse_return_statement();
+    default:
+      break;
+    }
+
+    // Expression or assignment.
+    auto* expr = parse_expression();
+    if (expr == nullptr) {
+      advance();
+      return nullptr;
+    }
+
+    // Check for assignment: expr = expr
+    if (peek_kind() == TokenKind::Eq) {
+      // Validate LHS is a legal assignment target.
+      if (expr->kind() != NodeKind::Identifier && expr->kind() != NodeKind::FieldExpr &&
+          expr->kind() != NodeKind::IndexExpr) {
+        error("invalid assignment target");
+      }
+      advance(); // =
+      auto* value = parse_expression();
+      // Trailing newline may have been consumed by pipe continuation.
+      match(TokenKind::Newline);
+      Span span = {.offset = expr->span().offset,
+                   .length = (value->span().offset + value->span().length) - expr->span().offset};
+      return ctx_.alloc<AssignmentNode>(span, expr, value);
+    }
+
+    // Trailing newline may have been consumed by pipe continuation.
+    match(TokenKind::Newline);
+    return ctx_.alloc<ExpressionStatementNode>(expr->span(), expr);
+  }
+
+  auto parse_let_statement() -> LetStatementNode* {
+    const auto& kw = consume(TokenKind::KwLet);
+    const auto& name_tok = consume(TokenKind::Identifier);
+
+    TypeNode* type = nullptr;
+    Expr* init = nullptr;
+
+    if (peek_kind() == TokenKind::Colon) {
+      advance(); // :
+      type = parse_type();
+      if (peek_kind() == TokenKind::Eq) {
+        advance(); // =
+        init = parse_expression();
+      }
+    } else if (peek_kind() == TokenKind::Eq) {
+      advance(); // =
+      init = parse_expression();
+    } else {
+      error("expected ':' or '=' after let binding name");
+    }
+
+    // Trailing newline may have been consumed by pipe continuation.
+    match(TokenKind::Newline);
+    Span span = span_from(kw.span);
+    return ctx_.alloc<LetStatementNode>(span, name_tok.text, name_tok.span, type, init);
+  }
+
+  auto parse_if_statement() -> IfStatementNode* {
+    const auto& kw = consume(TokenKind::KwIf);
+    auto* condition = parse_expression();
+    consume(TokenKind::Colon);
+    auto then_body = parse_suite();
+
+    std::vector<Stmt*> else_body;
+    if (peek_kind() == TokenKind::KwElse) {
+      advance(); // else
+      consume(TokenKind::Colon);
+      else_body = parse_suite();
+    }
+
+    Span span = span_from(kw.span);
+    return ctx_.alloc<IfStatementNode>(span, condition, std::move(then_body), std::move(else_body));
+  }
+
+  auto parse_while_statement() -> WhileStatementNode* {
+    const auto& kw = consume(TokenKind::KwWhile);
+    auto* condition = parse_expression();
+    consume(TokenKind::Colon);
+    auto body = parse_suite();
+    Span span = span_from(kw.span);
+    return ctx_.alloc<WhileStatementNode>(span, condition, std::move(body));
+  }
+
+  auto parse_for_statement() -> ForStatementNode* {
+    const auto& kw = consume(TokenKind::KwFor);
+    const auto& var_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::KwIn);
+    auto* iterable = parse_expression();
+    consume(TokenKind::Colon);
+    auto body = parse_suite();
+    Span span = span_from(kw.span);
+    return ctx_.alloc<ForStatementNode>(
+        span, var_tok.text, var_tok.span, iterable, std::move(body));
+  }
+
+  auto parse_mode_block() -> ModeBlockNode* {
+    const auto& kw = consume(TokenKind::KwMode);
+    const auto& name_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::FatArrow);
+    auto body = parse_suite();
+    Span span = span_from(kw.span);
+    return ctx_.alloc<ModeBlockNode>(span, name_tok.text, name_tok.span, std::move(body));
+  }
+
+  auto parse_resource_block() -> ResourceBlockNode* {
+    const auto& kw = consume(TokenKind::KwResource);
+    const auto& kind_tok = consume(TokenKind::Identifier);
+    const auto& name_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::FatArrow);
+    auto body = parse_suite();
+    Span span = span_from(kw.span);
+    return ctx_.alloc<ResourceBlockNode>(
+        span, kind_tok.text, kind_tok.span, name_tok.text, name_tok.span, std::move(body));
+  }
+
+  auto parse_return_statement() -> ReturnStatementNode* {
+    const auto& kw = consume(TokenKind::KwReturn);
+    auto* value = parse_expression();
+    // Trailing newline may have been consumed by pipe continuation.
+    match(TokenKind::Newline);
+    Span span = span_from(kw.span);
+    return ctx_.alloc<ReturnStatementNode>(span, value);
+  }
+
+  // -----------------------------------------------------------------------
+  // Expressions — precedence climbing
+  // -----------------------------------------------------------------------
+
+  auto parse_expression() -> Expr* {
+    return parse_pipe_expression();
+  }
+
+  auto parse_pipe_expression() -> Expr* {
+    auto* left = parse_logical_or();
+
+    // Track whether we consumed an INDENT for pipe continuation so we
+    // can consume the matching DEDENT when the chain ends.
+    int pipe_indents = 0;
+
+    while (is_pipe_continuation()) {
+      // Consume whitespace tokens before |>.
+      if (peek_kind() == TokenKind::Newline) {
+        advance();
+      }
+      if (peek_kind() == TokenKind::Indent) {
+        advance();
+        pipe_indents++;
+      }
+      advance(); // |>
+      Expr* right = nullptr;
+      if (peek_kind() == TokenKind::Pipe) {
+        right = parse_lambda();
+      } else {
+        in_pipe_target_ = true;
+        right = parse_application();
+        in_pipe_target_ = false;
+      }
+      Span span = {.offset = left->span().offset,
+                   .length = (right->span().offset + right->span().length) - left->span().offset};
+      left = ctx_.alloc<PipeExprNode>(span, left, right);
+    }
+
+    // Consume matching DEDENTs for pipe continuation indents.
+    for (int i = 0; i < pipe_indents; ++i) {
+      // There may be a Newline before DEDENT.
+      if (peek_kind() == TokenKind::Newline) {
+        advance();
+      }
+      if (peek_kind() == TokenKind::Dedent) {
+        advance();
+      }
+    }
+
+    return left;
+  }
+
+  [[nodiscard]] auto is_pipe_continuation() const -> bool {
+    if (peek_kind() == TokenKind::PipeGt) {
+      return true;
+    }
+    // Check for newline (optionally followed by indent) then |>.
+    uint32_t look = pos_;
+    if (look < tokens_.size() && tokens_[look].kind == TokenKind::Newline) {
+      ++look;
+    } else {
+      return false;
+    }
+    if (look < tokens_.size() && tokens_[look].kind == TokenKind::Indent) {
+      ++look;
+    }
+    return look < tokens_.size() && tokens_[look].kind == TokenKind::PipeGt;
+  }
+
+  auto parse_logical_or() -> Expr* {
+    auto* left = parse_logical_and();
+    while (peek_kind() == TokenKind::KwOr) {
+      advance();
+      auto* right = parse_logical_and();
+      left = make_binary(BinaryOp::Or, left, right);
+    }
+    return left;
+  }
+
+  auto parse_logical_and() -> Expr* {
+    auto* left = parse_equality();
+    while (peek_kind() == TokenKind::KwAnd) {
+      advance();
+      auto* right = parse_equality();
+      left = make_binary(BinaryOp::And, left, right);
+    }
+    return left;
+  }
+
+  auto parse_equality() -> Expr* {
+    auto* left = parse_relational();
+    while (peek_kind() == TokenKind::EqEq || peek_kind() == TokenKind::BangEq) {
+      auto op = peek_kind() == TokenKind::EqEq ? BinaryOp::EqEq : BinaryOp::BangEq;
+      advance();
+      auto* right = parse_relational();
+      left = make_binary(op, left, right);
+    }
+    return left;
+  }
+
+  auto parse_relational() -> Expr* {
+    auto* left = parse_additive();
+    while (peek_kind() == TokenKind::Lt || peek_kind() == TokenKind::Gt ||
+           peek_kind() == TokenKind::LtEq || peek_kind() == TokenKind::GtEq) {
+      BinaryOp op{};
+      switch (peek_kind()) {
+      case TokenKind::Lt:
+        op = BinaryOp::Lt;
+        break;
+      case TokenKind::Gt:
+        op = BinaryOp::Gt;
+        break;
+      case TokenKind::LtEq:
+        op = BinaryOp::LtEq;
+        break;
+      case TokenKind::GtEq:
+        op = BinaryOp::GtEq;
+        break;
+      default:
+        break;
+      }
+      advance();
+      auto* right = parse_additive();
+      left = make_binary(op, left, right);
+    }
+    return left;
+  }
+
+  auto parse_additive() -> Expr* {
+    auto* left = parse_multiplicative();
+    while (peek_kind() == TokenKind::Plus || peek_kind() == TokenKind::Minus) {
+      auto op = peek_kind() == TokenKind::Plus ? BinaryOp::Add : BinaryOp::Sub;
+      advance();
+      auto* right = parse_multiplicative();
+      left = make_binary(op, left, right);
+    }
+    return left;
+  }
+
+  auto parse_multiplicative() -> Expr* {
+    auto* left = parse_unary();
+    while (peek_kind() == TokenKind::Star || peek_kind() == TokenKind::Slash ||
+           peek_kind() == TokenKind::Percent) {
+      BinaryOp op{};
+      switch (peek_kind()) {
+      case TokenKind::Star:
+        op = BinaryOp::Mul;
+        break;
+      case TokenKind::Slash:
+        op = BinaryOp::Div;
+        break;
+      case TokenKind::Percent:
+        op = BinaryOp::Mod;
+        break;
+      default:
+        break;
+      }
+      advance();
+      auto* right = parse_unary();
+      left = make_binary(op, left, right);
+    }
+    return left;
+  }
+
+  auto parse_unary() -> Expr* {
+    if (peek_kind() == TokenKind::Bang || peek_kind() == TokenKind::Minus ||
+        peek_kind() == TokenKind::Star || peek_kind() == TokenKind::Amp) {
+      const auto& op_tok = advance();
+      UnaryOp op{};
+      switch (op_tok.kind) {
+      case TokenKind::Bang:
+        op = UnaryOp::Not;
+        break;
+      case TokenKind::Minus:
+        op = UnaryOp::Negate;
+        break;
+      case TokenKind::Star:
+        op = UnaryOp::Deref;
+        break;
+      case TokenKind::Amp:
+        op = UnaryOp::AddrOf;
+        break;
+      default:
+        break;
+      }
+      auto* operand = parse_unary();
+      Span span = {.offset = op_tok.span.offset,
+                   .length =
+                       (operand->span().offset + operand->span().length) - op_tok.span.offset};
+      return ctx_.alloc<UnaryExprNode>(span, op, operand);
+    }
+    return parse_application();
+  }
+
+  auto parse_application() -> Expr* {
+    auto* callee = parse_postfix();
+
+    // In pipe target position, a bare identifier/qualified-name followed
+    // by another primary (lambda or identifier) is juxtaposition application:
+    //   xs |> filter |x| -> x > 0    →  filter(|x| -> x > 0)
+    //   xs |> filter is_valid         →  filter(is_valid)
+    if (in_pipe_target_ && is_pipe_argument_start()) {
+      std::vector<Expr*> args;
+      while (is_pipe_argument_start()) {
+        if (peek_kind() == TokenKind::Pipe) {
+          args.push_back(parse_lambda());
+        } else {
+          args.push_back(parse_postfix());
+        }
+      }
+      Span span = {.offset = callee->span().offset,
+                   .length = (args.back()->span().offset + args.back()->span().length) -
+                             callee->span().offset};
+      return ctx_.alloc<CallExprNode>(span, callee, std::move(args));
+    }
+
+    return callee;
+  }
+
+  [[nodiscard]] auto is_pipe_argument_start() const -> bool {
+    auto kind = peek_kind();
+    return kind == TokenKind::Pipe || kind == TokenKind::Identifier ||
+           kind == TokenKind::IntLiteral || kind == TokenKind::FloatLiteral ||
+           kind == TokenKind::StringLiteral || kind == TokenKind::KwTrue ||
+           kind == TokenKind::KwFalse;
+  }
+
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+  auto parse_postfix() -> Expr* {
+    auto* expr = parse_primary();
+
+    while (true) {
+      if (peek_kind() == TokenKind::LParen) {
+        // Call: expr(args)
+        advance(); // (
+        std::vector<Expr*> args;
+        if (peek_kind() != TokenKind::RParen) {
+          args.push_back(parse_expression());
+          while (peek_kind() == TokenKind::Comma) {
+            advance();
+            args.push_back(parse_expression());
+          }
+        }
+        const auto& rparen = consume(TokenKind::RParen);
+        Span span = {.offset = expr->span().offset,
+                     .length = (rparen.span.offset + rparen.span.length) - expr->span().offset};
+        expr = ctx_.alloc<CallExprNode>(span, expr, std::move(args));
+      } else if (peek_kind() == TokenKind::Dot) {
+        // Field access: expr.field
+        advance(); // .
+        const auto& field_tok = consume(TokenKind::Identifier);
+        Span span = {.offset = expr->span().offset,
+                     .length =
+                         (field_tok.span.offset + field_tok.span.length) - expr->span().offset};
+        expr = ctx_.alloc<FieldExprNode>(span, expr, field_tok.text, field_tok.span);
+      } else if (peek_kind() == TokenKind::LBracket) {
+        // Index or type-parameter application: expr[args]
+        advance(); // [
+        std::vector<Expr*> indices;
+        indices.push_back(parse_expression());
+        while (peek_kind() == TokenKind::Comma) {
+          advance();
+          indices.push_back(parse_expression());
+        }
+        const auto& rbracket = consume(TokenKind::RBracket);
+        Span span = {.offset = expr->span().offset,
+                     .length = (rbracket.span.offset + rbracket.span.length) - expr->span().offset};
+        expr = ctx_.alloc<IndexExprNode>(span, expr, std::move(indices));
+      } else {
+        break;
+      }
+    }
+
+    return expr;
+  }
+
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+  auto parse_primary() -> Expr* {
+    switch (peek_kind()) {
+    case TokenKind::IntLiteral: {
+      const auto& tok = advance();
+      return ctx_.alloc<IntLiteralNode>(tok.span, tok.text);
+    }
+    case TokenKind::FloatLiteral: {
+      const auto& tok = advance();
+      return ctx_.alloc<FloatLiteralNode>(tok.span, tok.text);
+    }
+    case TokenKind::StringLiteral: {
+      const auto& tok = advance();
+      return ctx_.alloc<StringLiteralNode>(tok.span, tok.text);
+    }
+    case TokenKind::KwTrue: {
+      const auto& tok = advance();
+      return ctx_.alloc<BoolLiteralNode>(tok.span, true);
+    }
+    case TokenKind::KwFalse: {
+      const auto& tok = advance();
+      return ctx_.alloc<BoolLiteralNode>(tok.span, false);
+    }
+    case TokenKind::LParen: {
+      advance(); // (
+      auto* expr = parse_expression();
+      consume(TokenKind::RParen);
+      return expr;
+    }
+    case TokenKind::LBracket:
+      return parse_list_literal();
+    case TokenKind::Pipe:
+      return parse_lambda();
+    case TokenKind::Identifier:
+      return parse_qualified_name_or_identifier();
+    default:
+      error("expected expression");
+      const auto& tok = advance();
+      // Return an error placeholder.
+      return ctx_.alloc<IdentifierNode>(tok.span, tok.text);
+    }
+  }
+
+  auto parse_list_literal() -> Expr* {
+    const auto& lbracket = advance(); // [
+    std::vector<Expr*> elements;
+    if (peek_kind() != TokenKind::RBracket) {
+      elements.push_back(parse_expression());
+      while (peek_kind() == TokenKind::Comma) {
+        advance();
+        elements.push_back(parse_expression());
+      }
+    }
+    const auto& rbracket = consume(TokenKind::RBracket);
+    Span span = {.offset = lbracket.span.offset,
+                 .length = (rbracket.span.offset + rbracket.span.length) - lbracket.span.offset};
+    return ctx_.alloc<ListLiteralNode>(span, std::move(elements));
+  }
+
+  auto parse_lambda() -> Expr* {
+    const auto& open_pipe = consume(TokenKind::Pipe);
+    std::vector<std::pair<std::string_view, Span>> params;
+    if (peek_kind() != TokenKind::Pipe) {
+      const auto& first = consume(TokenKind::Identifier);
+      params.emplace_back(first.text, first.span);
+      while (peek_kind() == TokenKind::Comma) {
+        advance();
+        const auto& param = consume(TokenKind::Identifier);
+        params.emplace_back(param.text, param.span);
+      }
+    }
+    consume(TokenKind::Pipe);
+    consume(TokenKind::Arrow);
+    auto* body = parse_expression();
+    Span span = {.offset = open_pipe.span.offset,
+                 .length = (body->span().offset + body->span().length) - open_pipe.span.offset};
+    return ctx_.alloc<LambdaNode>(span, std::move(params), body);
+  }
+
+  auto parse_qualified_name_or_identifier() -> Expr* {
+    const auto& first = consume(TokenKind::Identifier);
+    if (peek_kind() != TokenKind::ColonColon) {
+      return ctx_.alloc<IdentifierNode>(first.span, first.text);
+    }
+
+    // Qualified name: ident :: ident (:: ident)*
+    std::vector<std::string_view> segments;
+    segments.push_back(first.text);
+    Span span = first.span;
+
+    while (peek_kind() == TokenKind::ColonColon) {
+      advance(); // ::
+      const auto& seg = consume(TokenKind::Identifier);
+      segments.push_back(seg.text);
+      span.length = (seg.span.offset + seg.span.length) - span.offset;
+    }
+
+    return ctx_.alloc<QualifiedNameNode>(span, std::move(segments));
+  }
+
+  // -----------------------------------------------------------------------
+  // Types
+  // -----------------------------------------------------------------------
+
+  auto parse_type() -> TypeNode* {
+    if (peek_kind() == TokenKind::Star) {
+      const auto& star = advance();
+      auto* pointee = parse_type();
+      Span span = {.offset = star.span.offset,
+                   .length = (pointee->span().offset + pointee->span().length) - star.span.offset};
+      return ctx_.alloc<PointerTypeNode>(span, pointee);
+    }
+
+    return parse_named_type();
+  }
+
+  auto parse_named_type() -> NamedTypeNode* {
+    auto path = parse_type_path();
+
+    std::vector<TypeNode*> type_args;
+    if (peek_kind() == TokenKind::LBracket) {
+      advance(); // [
+      type_args.push_back(parse_type());
+      while (peek_kind() == TokenKind::Comma) {
+        advance();
+        type_args.push_back(parse_type());
+      }
+      const auto& rbracket = consume(TokenKind::RBracket);
+      path.span.length = (rbracket.span.offset + rbracket.span.length) - path.span.offset;
+    }
+
+    return ctx_.alloc<NamedTypeNode>(path.span, std::move(path), std::move(type_args));
+  }
+
+  auto parse_type_path() -> QualifiedPath {
+    QualifiedPath path;
+    const auto& first = consume(TokenKind::Identifier);
+    path.segments.push_back(first.text);
+    path.span = first.span;
+
+    while (peek_kind() == TokenKind::ColonColon) {
+      advance(); // ::
+      const auto& seg = consume(TokenKind::Identifier);
+      path.segments.push_back(seg.text);
+      path.span.length = (seg.span.offset + seg.span.length) - path.span.offset;
+    }
+
+    return path;
+  }
+
+  // -----------------------------------------------------------------------
+  // Helpers
+  // -----------------------------------------------------------------------
+
+  auto make_binary(BinaryOp op, Expr* left, Expr* right) -> BinaryExprNode* {
+    Span span = {.offset = left->span().offset,
+                 .length = (right->span().offset + right->span().length) - left->span().offset};
+    return ctx_.alloc<BinaryExprNode>(span, op, left, right);
+  }
+
+  auto span_from(Span start) -> Span {
+    // Span from start to the token just before current position.
+    if (pos_ > 0) {
+      const auto& prev = tokens_[pos_ - 1];
+      return {.offset = start.offset,
+              .length = (prev.span.offset + prev.span.length) - start.offset};
+    }
+    return start;
+  }
+};
+// NOLINTEND(readability-identifier-length)
+
+} // namespace
+
+auto parse(const std::vector<Token>& tokens) -> ParseResult {
+  ParserImpl parser(tokens);
+  return parser.run();
+}
+
+} // namespace dao
