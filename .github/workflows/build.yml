@@ -39,16 +39,13 @@ jobs:
       - name: Install Conan
         run: pip install conan
 
-      - name: Detect Conan profile
-        run: conan profile detect --force
-
       - name: Install dependencies
         run: |
           conan install . \
             --output-folder=build/debug \
             --build=missing \
-            -s build_type=Debug \
-            -s compiler.cppstd=23
+            -pr profiles/clang-21-debug \
+            --lockfile=locks/clang-21-debug.lock
 
       - name: Configure
         run: cmake --preset debug
@@ -57,9 +54,7 @@ jobs:
         run: cmake --build build/debug
 
       - name: Verify daoc runs
-        run: |
-          echo "fn main() -> int:" > /tmp/test.dao
-          ./build/debug/compiler/driver/daoc /tmp/test.dao
+        run: ./build/debug/compiler/driver/daoc examples/hello.dao
 
       - name: Check formatting
         run: |
