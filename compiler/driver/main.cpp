@@ -18,6 +18,8 @@ auto read_file(const std::filesystem::path& path) -> std::string {
   return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
+// Debug-only token dump. Output format is not stable and must not be
+// relied upon by tests, tooling, or documentation.
 void cmd_lex(const std::filesystem::path& path) {
   auto contents = read_file(path);
   dao::SourceBuffer source(path.filename().string(), std::move(contents));
