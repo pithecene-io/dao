@@ -44,12 +44,14 @@ jobs:
           echo "CMake version $cmake_version satisfies >= 3.30"
 
       - name: Install Conan
-        run: pip install conan
+        run: |
+          pip install conan
+          conan profile detect
 
       - name: Detect Clang version
         id: clang
         run: |
-          version=$(clang++ --version | grep -oP 'clang version \K\d+')
+          version=$(clang++-21 --version | grep -oP 'clang version \K\d+')
           echo "major=$version" >> "$GITHUB_OUTPUT"
           echo "Detected clang major version: $version"
 
@@ -59,7 +61,9 @@ jobs:
             --output-folder=build/debug \
             --build=missing \
             -pr profiles/clang-21-debug \
+            -pr:b profiles/clang-21-debug \
             -s compiler.version=${{ steps.clang.outputs.major }} \
+            -s:b compiler.version=${{ steps.clang.outputs.major }} \
             --lockfile=locks/clang-21-debug.lock
 
       - name: Configure
