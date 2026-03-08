@@ -61,8 +61,7 @@ suite ast_golden_tests = [] {
     std::filesystem::path root(DAO_SOURCE_DIR);
     auto golden_dir = root / "testdata" / "ast";
 
-    for (const auto& entry :
-         std::filesystem::directory_iterator(root / "spec" / "syntax_probes")) {
+    for (const auto& entry : std::filesystem::directory_iterator(root / "spec" / "syntax_probes")) {
       if (entry.path().extension() != ".dao") {
         continue;
       }
