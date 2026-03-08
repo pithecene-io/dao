@@ -100,13 +100,15 @@ Rules:
 
 ```dao
 import net::http
-net::http::get(url)
+http::get(url)
 ```
 
 Rules:
 - `::` is the namespace/module path separator
 - `.` is for runtime member access on values
 - these two are not interchangeable
+- `import a::b` binds the last segment `b` as the local name; qualified
+  references use `b::member` not the full import path
 
 ## Arrow Taxonomy
 

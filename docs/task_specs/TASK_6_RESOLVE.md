@@ -145,9 +145,15 @@ classifier already applies to `QualifiedPath` and
   resolution yet) and are left unresolved.
 - **Type references** — resolve named type paths against the scope
   chain. Single-segment types check both builtin types and user-declared
-  types. Multi-segment type paths resolve the leading segments as
+  types (structs, aliases). If the name is not found, **no diagnostic
+  is emitted** — the type reference is left unresolved and continues to
+  receive its structural classification (`type.builtin` or
+  `type.nominal`) from the semantic token classifier. This is the
+  intended short-term posture: unknown nominal types are allowed
+  unresolved placeholders until stdlib and cross-file module resolution
+  exist. Multi-segment type paths resolve the leading segments as
   module references; the final segment is classified structurally
-  (type.builtin or type.nominal) as it is today.
+  as it is today.
 - **Import declarations** — bind the **last segment** of the import
   path as a `SymbolKind::Module` symbol in the file scope. For
   `import net::http`, this binds `http`. Subsequent qualified name
@@ -184,6 +190,24 @@ classifier already applies to `QualifiedPath` and
   lookup yet — fields are just declarations, not references).
 - **Lambda params**: visible only in the lambda body expression.
 
+### Namespace model
+
+Dao uses a **single unified namespace** per scope. A `struct Foo` and
+`fn Foo` in the same scope are a duplicate-declaration error. The scope
+lookup `declarations[name]` returns at most one symbol regardless of
+whether the lookup occurs in type position or value position.
+
+This means:
+- Type-position lookups do not filter by symbol kind. If `Foo` resolves
+  to a `SymbolKind::Function`, the resolver still records the binding
+  (type *compatibility* checking is Task 8's job, not Task 6's).
+- Value-position lookups similarly do not filter. If `x` resolves to a
+  `SymbolKind::Type`, the binding is recorded and downstream passes
+  decide validity.
+
+This matches languages like Rust and Go where type names and value names
+share a single namespace at module scope.
+
 ### Builtin types
 
 The resolver pre-populates the file scope with builtin type symbols:
@@ -198,7 +222,7 @@ The resolver emits the following diagnostics:
 
 | Diagnostic | Condition |
 |---|---|
-| `unknown name 'x'` | identifier reference with no binding in scope chain |
+| `unknown name 'x'` | value-position identifier reference with no binding in scope chain (type-position references are not diagnosed — see Type references above) |
 | `duplicate declaration 'x'` | two declarations with the same name in the same scope |
 | `duplicate parameter 'x'` | two parameters with the same name in one function |
 | `duplicate top-level declaration 'x'` | two file-scope declarations with the same name |
@@ -258,7 +282,9 @@ Diagnostics:
 ## Exit Criteria
 
 - All `examples/*.dao` and `spec/syntax_probes/*.dao` files resolve
-  without spurious diagnostics.
+  without spurious diagnostics. Undeclared nominal types (e.g.
+  `NodeId`, `List`, `Map`) do not produce diagnostics because
+  type-position references are not diagnosed in Task 6.
 - Unresolved identifiers produce clear, stable diagnostics.
 - Duplicate declaration diagnostics fire for obvious conflicts.
 - `daoc resolve <file>` produces a readable symbol dump.
