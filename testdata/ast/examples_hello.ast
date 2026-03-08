@@ -1,4 +1,9 @@
 File
+  FunctionDecl print
+    Param msg: string
+    ReturnType: void
+    ExpressionStatement
+      IntLiteral 0
   FunctionDecl main
     ReturnType: int32
     ExpressionStatement

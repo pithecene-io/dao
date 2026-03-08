@@ -35,6 +35,10 @@ public:
     return scopes_.back().get();
   }
 
+  auto symbols() const -> const std::vector<std::unique_ptr<Symbol>>& {
+    return symbols_;
+  }
+
 private:
   std::vector<std::unique_ptr<Symbol>> symbols_;
   std::vector<std::unique_ptr<Scope>> scopes_;

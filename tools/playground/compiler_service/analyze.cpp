@@ -100,6 +100,18 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
   ResolveResult resolve_result;
   if (diagnostics.empty() && parse_result.file != nullptr) {
     resolve_result = resolve(*parse_result.file);
+
+    for (const auto& diag : resolve_result.diagnostics) {
+      auto loc = source.line_col(diag.span.offset);
+      diagnostics.push_back({
+          {"severity", "error"},
+          {"offset", diag.span.offset},
+          {"length", diag.span.length},
+          {"line", loc.line},
+          {"col", loc.col},
+          {"message", diag.message},
+      });
+    }
   }
 
   nlohmann::json semantic_tokens_json = nlohmann::json::array();

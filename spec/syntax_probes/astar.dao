@@ -1,3 +1,11 @@
+type NodeId = int32
+type Graph = int32
+type List = int32
+type PriorityQueue = int32
+type Map = int32
+
+fn reconstruct_path(came_from: int32, start: int32, goal: int32): int32 -> 0
+
 fn heuristic(a: NodeId, b: NodeId): float64 -> 0.0
 
 fn a_star(g: Graph, start: NodeId, goal: NodeId): List[NodeId]

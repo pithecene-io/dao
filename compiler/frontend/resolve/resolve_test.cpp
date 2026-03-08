@@ -104,13 +104,11 @@ suite resolve_basic = [] {
     expect(use_resolves_to(result, val_use_offset, SymbolKind::Local));
   };
 
-  "unknown identifier does not produce diagnostic"_test = [] {
-    // In Task 6, unknown value-position identifiers are silently
-    // unresolved (no stdlib/cross-file resolution yet).
+  "unknown identifier produces diagnostic"_test = [] {
     auto result = resolve_source("test",
                                  "fn foo(): int32\n"
                                  "    unknown_var");
-    expect(result.resolve_result.diagnostics.empty());
+    expect(has_diagnostic_containing(result.resolve_result, "unknown name 'unknown_var'"));
   };
 
   "forward reference to function"_test = [] {
@@ -131,11 +129,8 @@ suite resolve_scoping = [] {
                                  "    let a: int32 = b\n"
                                  "    let b: int32 = 0\n"
                                  "    a");
-    // 'b' is used before its let declaration. In Task 6, unknown
-    // identifiers are silently unresolved, so no diagnostic fires.
-    // But 'b' should NOT be in the uses table at the point of
-    // "let a = b" because it hasn't been declared yet.
-    expect(result.resolve_result.diagnostics.empty());
+    // 'b' is used before its let declaration — produces unknown name.
+    expect(has_diagnostic_containing(result.resolve_result, "unknown name 'b'"));
     auto b_use_offset = find_offset(result, "b", 0); // first 'b' in the initializer
     auto it = result.resolve_result.uses.find(b_use_offset);
     expect(it == result.resolve_result.uses.end()) << "b should not resolve before its declaration";
@@ -265,12 +260,11 @@ suite resolve_imports = [] {
     expect(use_resolves_to(result, http_offset, SymbolKind::Module));
   };
 
-  "unresolved first segment of qualified name produces no diagnostic"_test = [] {
-    // Unknown qualified names are silently unresolved in Task 6.
+  "unresolved first segment of qualified name produces diagnostic"_test = [] {
     auto result = resolve_source("test",
                                  "fn foo(): int32\n"
                                  "    unknown::get()");
-    expect(result.resolve_result.diagnostics.empty());
+    expect(has_diagnostic_containing(result.resolve_result, "unknown name 'unknown'"));
   };
 };
 

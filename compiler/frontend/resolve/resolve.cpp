@@ -368,11 +368,11 @@ private:
       auto* sym = scope->lookup(ident.name());
       if (sym != nullptr) {
         uses_[expr.span().offset] = sym;
+      } else {
+        diagnostics_.push_back(Diagnostic::error(
+            expr.span(),
+            "unknown name '" + std::string(ident.name()) + "'"));
       }
-      // No diagnostic for unresolved identifiers in Task 6: stdlib,
-      // cross-file imports, and builtins (print, filter, map, etc.)
-      // are not yet available. The spec's exit criteria require the
-      // corpus to resolve without spurious diagnostics.
       break;
     }
     case NodeKind::QualifiedName: {
@@ -390,8 +390,14 @@ private:
         uses_[expr.span().offset] = sym;
         // Trailing segments are unresolvable in Task 6 (no cross-file
         // module resolution) — left without entries in the uses table.
+      } else {
+        // Compute the span for the first segment only.
+        auto seg_len = static_cast<uint32_t>(first_seg.size());
+        Span seg_span{.offset = expr.span().offset, .length = seg_len};
+        diagnostics_.push_back(Diagnostic::error(
+            seg_span,
+            "unknown name '" + std::string(first_seg) + "'"));
       }
-      // No diagnostic for unresolved qualified names — see above.
       break;
     }
     case NodeKind::BinaryExpr: {

@@ -1,3 +1,7 @@
+type NodeId = int32
+type List = int32
+type PriorityQueue = int32
+
 fn search(start: NodeId, goal: NodeId): List[NodeId]
     resource memory Search =>
         mode parallel =>

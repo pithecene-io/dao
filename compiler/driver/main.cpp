@@ -131,8 +131,19 @@ void cmd_resolve(const std::filesystem::path& path) {
 
   auto resolve_result = dao::resolve(*result.parse_result.file);
 
-  // Print symbols.
+  // Print declared symbols.
   std::cout << "Symbols:\n";
+  for (const auto& sym : resolve_result.context.symbols()) {
+    std::cout << "  " << dao::symbol_kind_name(sym->kind) << " " << sym->name;
+    if (sym->decl_span.length > 0) {
+      auto decl_loc = result.source.line_col(sym->decl_span.offset);
+      std::cout << " [" << decl_loc.line << ":" << decl_loc.col << "]";
+    }
+    std::cout << "\n";
+  }
+
+  // Print uses (resolved references).
+  std::cout << "\nUses:\n";
   for (const auto& [offset, sym] : resolve_result.uses) {
     auto loc = result.source.line_col(offset);
     std::cout << "  " << loc.line << ":" << loc.col << " "
