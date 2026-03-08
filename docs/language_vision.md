@@ -33,14 +33,14 @@ and distributed independently.
 
 ### stdlib (ships with compiler)
 
-Core types, numeric primitives, and minimal runtime support. This is the
-floor — programs that import nothing beyond `stdlib` must still compile
-and link.
+Core types, numeric primitives, IO, and minimal runtime support. This is
+the floor — programs that import nothing beyond `stdlib` must still
+compile and link. Foundational modules include `core`, `io`, and
+`numerics`.
 
 ### First-party packages (batteries-included, separately versioned)
 
 Dao provides a curated set of first-party packages covering common needs:
-- `io` — file/stream I/O
 - `net` — sockets, DNS, low-level networking
 - `net::http` — HTTP client/server
 - `sync` — concurrency primitives
