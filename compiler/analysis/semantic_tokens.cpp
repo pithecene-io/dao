@@ -205,10 +205,15 @@ private:
   // --- Imports ---
 
   void visit_import(const ImportNode& node) {
-    // All segments of an import path are module references.
+    // Leading segments of an import path are module references.
+    // The last segment is the binding site — classified as decl.module.
     auto spans = segment_spans(node.path());
-    for (const auto& [seg, span] : spans) {
-      classify(span, "use.module");
+    for (size_t i = 0; i < spans.size(); ++i) {
+      if (i + 1 < spans.size()) {
+        classify(spans[i].second, "use.module");
+      } else {
+        classify(spans[i].second, "decl.module");
+      }
     }
   }
 
@@ -498,7 +503,27 @@ private:
 // Public API
 // ---------------------------------------------------------------------------
 
-auto classify_tokens(const std::vector<Token>& tokens, const FileNode* file)
+// Map a resolved symbol kind to a semantic token category for use sites.
+auto resolve_use_category(SymbolKind kind) -> std::string_view {
+  switch (kind) {
+  case SymbolKind::Function:
+    return "use.function";
+  case SymbolKind::Param:
+    return "use.variable.param";
+  case SymbolKind::Local:
+    return "use.variable.local";
+  case SymbolKind::Module:
+    return "use.module";
+  case SymbolKind::LambdaParam:
+    return "use.variable.param"; // reuse param category for lambda params
+  default:
+    return "";
+  }
+}
+
+auto classify_tokens(const std::vector<Token>& tokens,
+                     const FileNode* file,
+                     const ResolveResult* resolve_result)
     -> std::vector<SemanticToken> {
   // Step 1: Collect structural classifications from AST.
   AstClassifier::SpanMap ast_map;
@@ -508,7 +533,8 @@ auto classify_tokens(const std::vector<Token>& tokens, const FileNode* file)
     ast_map = classifier.classifications();
   }
 
-  // Step 2: Walk tokens, preferring AST classification over lexical.
+  // Step 2: Walk tokens, preferring AST classification over lexical,
+  // with resolve-driven classifications filling in identifier gaps.
   std::vector<SemanticToken> result;
   result.reserve(tokens.size());
 
@@ -527,13 +553,24 @@ auto classify_tokens(const std::vector<Token>& tokens, const FileNode* file)
       continue;
     }
 
+    // Check resolve-driven classification for identifiers.
+    if (resolve_result != nullptr && tok.kind == TokenKind::Identifier) {
+      auto res_it = resolve_result->uses.find(tok.span.offset);
+      if (res_it != resolve_result->uses.end()) {
+        auto category = resolve_use_category(res_it->second->kind);
+        if (!category.empty()) {
+          result.push_back({.span = tok.span, .kind = category});
+          continue;
+        }
+      }
+    }
+
     // Fall back to lexical classification.
     auto category = lexical_category(tok.kind);
     if (!category.empty()) {
       result.push_back({.span = tok.span, .kind = category});
     }
-    // Identifiers with no AST classification are omitted — they need
-    // name resolution to distinguish use.function from use.variable.local.
+    // Identifiers with no classification are omitted.
   }
 
   return result;

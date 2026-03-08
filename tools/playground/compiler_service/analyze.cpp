@@ -5,6 +5,7 @@
 #include "frontend/ast/ast_printer.h"
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser.h"
+#include "frontend/resolve/resolve.h"
 
 #include <nlohmann/json.hpp>
 
@@ -95,9 +96,16 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
   // Produce semantic token classification only when there are no
   // diagnostics — matches CLI behavior where daoc tokens exits on
   // lex or parse errors.
+  // Run name resolution when parse succeeded without errors.
+  ResolveResult resolve_result;
+  if (diagnostics.empty() && parse_result.file != nullptr) {
+    resolve_result = resolve(*parse_result.file);
+  }
+
   nlohmann::json semantic_tokens_json = nlohmann::json::array();
   if (diagnostics.empty() && parse_result.file != nullptr) {
-    auto sem_tokens = classify_tokens(lex_result.tokens, parse_result.file);
+    auto sem_tokens =
+        classify_tokens(lex_result.tokens, parse_result.file, &resolve_result);
     for (const auto& stok : sem_tokens) {
       auto loc = source.line_col(stok.span.offset);
       semantic_tokens_json.push_back({

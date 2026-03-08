@@ -4,6 +4,7 @@
 #include "frontend/ast/ast.h"
 #include "frontend/diagnostics/source.h"
 #include "frontend/lexer/token.h"
+#include "frontend/resolve/resolve.h"
 
 #include <string_view>
 #include <vector>
@@ -24,11 +25,14 @@ struct SemanticToken {
 /// parameters, mode/resource names). Structural classifications take
 /// priority over lexical ones for the same span.
 ///
-/// Tokens that cannot be classified at this stage (e.g. identifiers
-/// whose role depends on name resolution) are omitted from the result.
+/// When a ResolveResult is provided, identifiers that resolved to
+/// symbols gain resolve-driven classifications (use.variable.param,
+/// use.variable.local, use.function, use.module, decl.module).
 ///
 /// The returned vector is sorted by span offset.
-auto classify_tokens(const std::vector<Token>& tokens, const FileNode* file)
+auto classify_tokens(const std::vector<Token>& tokens,
+                     const FileNode* file,
+                     const ResolveResult* resolve_result = nullptr)
     -> std::vector<SemanticToken>;
 
 } // namespace dao

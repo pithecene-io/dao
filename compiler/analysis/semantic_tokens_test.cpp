@@ -184,8 +184,8 @@ suite module_classification = [] {
     auto result = classify_source("test.dao", "import net::http\nfn main(): int32\n    0\n");
     expect(find_token_at(result, "use.module", "net") != nullptr)
         << "first import segment should be use.module";
-    expect(find_token_at(result, "use.module", "http") != nullptr)
-        << "second import segment should be use.module";
+    expect(find_token_at(result, "decl.module", "http") != nullptr)
+        << "last import segment should be decl.module";
   };
 
   "use.module on qualified name expression"_test = [] {

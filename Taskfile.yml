@@ -89,3 +89,9 @@ tasks:
     deps: [build]
     cmds:
       - "{{.BUILD_DIR}}/compiler/driver/daoc tokens {{.CLI_ARGS}}"
+
+  resolve:
+    desc: "Run daoc resolve on a file (usage: task resolve -- file.dao)"
+    deps: [build]
+    cmds:
+      - "{{.BUILD_DIR}}/compiler/driver/daoc resolve {{.CLI_ARGS}}"

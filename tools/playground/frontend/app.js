@@ -34,8 +34,9 @@ function semanticKindToClass(kind) {
   if (kind.startsWith("decl.")) return "dao-decl";
   if (kind.startsWith("type.")) return "dao-type";
   if (kind.startsWith("use.variable.")) return "dao-variable";
+  if (kind === "use.function") return "dao-decl";
   if (kind === "use.field") return "dao-field";
-  if (kind === "use.module") return "dao-module";
+  if (kind === "use.module" || kind === "decl.module") return "dao-module";
   if (kind.startsWith("mode.")) return "dao-mode";
   if (kind.startsWith("resource.")) return "dao-resource";
   if (kind === "lambda.param") return "dao-lambda-param";
