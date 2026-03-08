@@ -1,4 +1,16 @@
 File
+  AliasDecl NodeId = int32
+  AliasDecl Graph = int32
+  AliasDecl List = int32
+  AliasDecl PriorityQueue = int32
+  AliasDecl Map = int32
+  FunctionDecl reconstruct_path
+    Param came_from: int32
+    Param start: int32
+    Param goal: int32
+    ReturnType: int32
+    ExprBody
+      IntLiteral 0
   FunctionDecl heuristic
     Param a: NodeId
     Param b: NodeId

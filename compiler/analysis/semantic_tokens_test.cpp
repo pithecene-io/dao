@@ -1,6 +1,7 @@
 #include "analysis/semantic_tokens.h"
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser.h"
+#include "frontend/resolve/resolve.h"
 
 #include <boost/ut.hpp>
 
@@ -23,9 +24,11 @@ struct ClassifiedSource {
   SourceBuffer source;
   LexResult lex_result;
   ParseResult parse_result;
+  ResolveResult resolve_result;
   std::vector<SemanticToken> tokens;
 };
 
+// Classify without resolver (structural + lexical only).
 auto classify_source(const std::string& name, std::string contents) -> ClassifiedSource {
   SourceBuffer source(name, std::move(contents));
   auto lex_result = lex(source);
@@ -34,7 +37,24 @@ auto classify_source(const std::string& name, std::string contents) -> Classifie
     parse_result = parse(lex_result.tokens);
   }
   auto sem_tokens = classify_tokens(lex_result.tokens, parse_result.file);
-  return {std::move(source), std::move(lex_result), std::move(parse_result), std::move(sem_tokens)};
+  return {std::move(source), std::move(lex_result), std::move(parse_result), {}, std::move(sem_tokens)};
+}
+
+// Classify with resolver (structural + resolve-driven + lexical).
+auto classify_source_resolved(const std::string& name, std::string contents) -> ClassifiedSource {
+  SourceBuffer source(name, std::move(contents));
+  auto lex_result = lex(source);
+  ParseResult parse_result;
+  ResolveResult resolve_result;
+  if (lex_result.diagnostics.empty()) {
+    parse_result = parse(lex_result.tokens);
+    if (parse_result.file != nullptr) {
+      resolve_result = resolve(*parse_result.file);
+    }
+  }
+  auto sem_tokens = classify_tokens(lex_result.tokens, parse_result.file, &resolve_result);
+  return {std::move(source), std::move(lex_result), std::move(parse_result),
+          std::move(resolve_result), std::move(sem_tokens)};
 }
 
 auto find_token(const std::vector<SemanticToken>& tokens, std::string_view kind)
@@ -184,17 +204,18 @@ suite module_classification = [] {
     auto result = classify_source("test.dao", "import net::http\nfn main(): int32\n    0\n");
     expect(find_token_at(result, "use.module", "net") != nullptr)
         << "first import segment should be use.module";
-    expect(find_token_at(result, "use.module", "http") != nullptr)
-        << "second import segment should be use.module";
+    expect(find_token_at(result, "decl.module", "http") != nullptr)
+        << "last import segment should be decl.module";
   };
 
   "use.module on qualified name expression"_test = [] {
-    auto result = classify_source(
-        "test.dao", "import net::http\nfn main(): int32\n    net::http::get\n    0\n");
-    expect(find_token_at(result, "use.module", "net") != nullptr)
-        << "leading segment should be use.module";
+    // Qualified name expression leading segments require the resolver
+    // to classify — structural AST classification is not authoritative
+    // for expression-position qualified names.
+    auto result = classify_source_resolved(
+        "test.dao", "import net::http\nfn main(): int32\n    http::get\n    0\n");
     expect(find_token_at(result, "use.module", "http") != nullptr)
-        << "middle segment should be use.module";
+        << "leading segment should be use.module";
   };
 };
 

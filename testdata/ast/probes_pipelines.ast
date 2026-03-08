@@ -1,4 +1,15 @@
 File
+  AliasDecl List = int32
+  FunctionDecl filter
+    Param pred: int32
+    ReturnType: int32
+    ExprBody
+      IntLiteral 0
+  FunctionDecl map
+    Param f: int32
+    ReturnType: int32
+    ExprBody
+      IntLiteral 0
   FunctionDecl positive_squares
     Param xs: List[int32]
     ReturnType: List[int32]

@@ -1,3 +1,8 @@
+type List = int32
+
+fn filter(pred: int32): int32 -> 0
+fn map(f: int32): int32 -> 0
+
 fn positive_squares(xs: List[int32]): List[int32] -> xs
     |> filter |x| -> x > 0
     |> map |x| -> x * x
