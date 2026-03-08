@@ -94,9 +94,13 @@ struct ResolveResult {
 
 For a qualified name like `http::get`, the resolver computes
 per-segment spans (offset + length for each identifier token) and
-stores separate entries: `offset("http") → Module symbol`,
-`offset("get") → Function symbol` (if resolvable). This matches
-the per-token granularity the semantic token classifier needs.
+stores an entry for each segment it can resolve. In Task 6, only the
+first segment resolves (against the scope chain): `offset("http") →
+Module symbol`. The trailing segment `get` is **not resolvable** in
+Task 6 because imported module contents are opaque — it requires
+cross-file module member lookup, which is out of scope. This matches
+the per-token granularity the semantic token classifier needs;
+unresolved segments simply produce no entry.
 
 The `uses` table does **not** mutate the AST. Per-segment span
 computation reuses the same offset arithmetic the semantic token
@@ -259,8 +263,12 @@ Diagnostics:
 - Duplicate declaration diagnostics fire for obvious conflicts.
 - `daoc resolve <file>` produces a readable symbol dump.
 - Semantic tokens include `use.variable.param`, `use.variable.local`,
-  `use.function`, and `use.module` for resolved references, and
-  `decl.module` for import binding sites.
+  `use.function` (unqualified calls to file-scope functions),
+  `use.module` (first segment of qualified names resolving to an
+  import binding), and `decl.module` (import binding sites).
+  Qualified member references (e.g. `http::get`) do not produce
+  `use.function` for the trailing segment until cross-file module
+  resolution exists.
 - The playground shows resolve-upgraded semantic highlighting.
 - Tests cover: scope nesting, forward references at file level,
   duplicate detection, lambda param scoping, for-loop variable
