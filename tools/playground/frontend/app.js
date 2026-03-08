@@ -27,16 +27,24 @@ const DEBOUNCE_MS = 300;
 // Token decoration plugin
 // ---------------------------------------------------------------------------
 
-const categoryToClass = {
-  "keyword": "dao-keyword",
-  "literal.number": "dao-literal-number",
-  "literal.string": "dao-literal-string",
-  "literal.bool": "dao-literal-bool",
-  "operator": "dao-operator",
-  "punctuation": "dao-punctuation",
-  "identifier": "dao-identifier",
-  "error": "dao-error",
-};
+// Map semantic token kinds from CONTRACT_LANGUAGE_TOOLING.md to CSS classes.
+// Prefix groups share a class so highlighting degrades gracefully.
+function semanticKindToClass(kind) {
+  if (kind.startsWith("keyword.")) return "dao-keyword";
+  if (kind.startsWith("decl.")) return "dao-decl";
+  if (kind.startsWith("type.")) return "dao-type";
+  if (kind.startsWith("use.variable.")) return "dao-variable";
+  if (kind === "use.field") return "dao-field";
+  if (kind === "use.module") return "dao-module";
+  if (kind.startsWith("mode.")) return "dao-mode";
+  if (kind.startsWith("resource.")) return "dao-resource";
+  if (kind === "lambda.param") return "dao-lambda-param";
+  if (kind === "literal.number") return "dao-literal-number";
+  if (kind === "literal.string") return "dao-literal-string";
+  if (kind.startsWith("operator.")) return "dao-operator";
+  if (kind === "punctuation") return "dao-punctuation";
+  return null;
+}
 
 function buildDecorations(view) {
   const decorations = [];
@@ -47,7 +55,7 @@ function buildDecorations(view) {
     const to = tok.offset + tok.length;
     if (from >= docLength || to > docLength || from >= to) continue;
 
-    const cls = categoryToClass[tok.category];
+    const cls = semanticKindToClass(tok.kind);
     if (!cls) continue;
 
     decorations.push(
@@ -129,8 +137,8 @@ async function doAnalyze() {
     // while we were parsing the response body.
     if (seq !== analyzeSeq) return;
 
-    // Update tokens and refresh decorations.
-    currentTokens = data.tokens || [];
+    // Update tokens with semantic classification and refresh decorations.
+    currentTokens = data.semanticTokens || [];
     // Force decoration rebuild by dispatching empty transaction.
     editor.dispatch({});
 

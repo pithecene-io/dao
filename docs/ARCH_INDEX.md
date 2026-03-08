@@ -76,6 +76,9 @@ Shared analysis APIs that expose semantic tokens, diagnostics, hover,
 completion, definitions, references, and document symbol payloads to the
 CLI, playground, and LSP.
 
+- `semantic_tokens.h` / `semantic_tokens.cpp` — token classification per
+  the frozen taxonomy in `CONTRACT_LANGUAGE_TOOLING.md`
+
 ## `runtime/`
 
 Execution support for lowered programs.

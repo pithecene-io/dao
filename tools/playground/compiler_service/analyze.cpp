@@ -1,6 +1,7 @@
 #include "analyze.h"
 #include "token_category.h"
 
+#include "analysis/semantic_tokens.h"
 #include "frontend/ast/ast_printer.h"
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser.h"
@@ -67,8 +68,9 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
 
   // Only parse if lexing succeeded — matches CLI behavior.
   std::string ast_text;
+  ParseResult parse_result;
   if (lex_result.diagnostics.empty()) {
-    auto parse_result = parse(lex_result.tokens);
+    parse_result = parse(lex_result.tokens);
 
     for (const auto& diag : parse_result.diagnostics) {
       auto loc = source.line_col(diag.span.offset);
@@ -90,8 +92,27 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     }
   }
 
+  // Produce semantic token classification only when there are no
+  // diagnostics — matches CLI behavior where daoc tokens exits on
+  // lex or parse errors.
+  nlohmann::json semantic_tokens_json = nlohmann::json::array();
+  if (diagnostics.empty() && parse_result.file != nullptr) {
+    auto sem_tokens = classify_tokens(lex_result.tokens, parse_result.file);
+    for (const auto& stok : sem_tokens) {
+      auto loc = source.line_col(stok.span.offset);
+      semantic_tokens_json.push_back({
+          {"kind", stok.kind},
+          {"offset", stok.span.offset},
+          {"length", stok.span.length},
+          {"line", loc.line},
+          {"col", loc.col},
+      });
+    }
+  }
+
   nlohmann::json response = {
       {"tokens", tokens},
+      {"semanticTokens", semantic_tokens_json},
       {"ast", ast_text},
       {"diagnostics", diagnostics},
   };

@@ -9,5 +9,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 enable_testing()
 
 add_subdirectory(compiler/frontend)
+add_subdirectory(compiler/analysis)
 add_subdirectory(compiler/driver)
 add_subdirectory(tools/playground)
