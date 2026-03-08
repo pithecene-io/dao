@@ -1,0 +1,6 @@
+[requires]
+boost-ext-ut/2.3.1
+
+[generators]
+CMakeDeps
+CMakeToolchain
