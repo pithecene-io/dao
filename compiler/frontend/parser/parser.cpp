@@ -290,15 +290,22 @@ private:
 
     // Check for assignment: expr = expr
     if (peek_kind() == TokenKind::Eq) {
+      // Validate LHS is a legal assignment target.
+      if (expr->kind() != NodeKind::Identifier && expr->kind() != NodeKind::FieldExpr &&
+          expr->kind() != NodeKind::IndexExpr) {
+        error("invalid assignment target");
+      }
       advance(); // =
       auto* value = parse_expression();
-      consume(TokenKind::Newline);
+      // Trailing newline may have been consumed by pipe continuation.
+      match(TokenKind::Newline);
       Span span = {.offset = expr->span().offset,
                    .length = (value->span().offset + value->span().length) - expr->span().offset};
       return ctx_.alloc<AssignmentNode>(span, expr, value);
     }
 
-    consume(TokenKind::Newline);
+    // Trailing newline may have been consumed by pipe continuation.
+    match(TokenKind::Newline);
     return ctx_.alloc<ExpressionStatementNode>(expr->span(), expr);
   }
 
@@ -323,7 +330,8 @@ private:
       error("expected ':' or '=' after let binding name");
     }
 
-    consume(TokenKind::Newline);
+    // Trailing newline may have been consumed by pipe continuation.
+    match(TokenKind::Newline);
     Span span = span_from(kw.span);
     return ctx_.alloc<LetStatementNode>(span, name_tok.text, name_tok.span, type, init);
   }
@@ -389,7 +397,8 @@ private:
   auto parse_return_statement() -> ReturnStatementNode* {
     const auto& kw = consume(TokenKind::KwReturn);
     auto* value = parse_expression();
-    consume(TokenKind::Newline);
+    // Trailing newline may have been consumed by pipe continuation.
+    match(TokenKind::Newline);
     Span span = span_from(kw.span);
     return ctx_.alloc<ReturnStatementNode>(span, value);
   }

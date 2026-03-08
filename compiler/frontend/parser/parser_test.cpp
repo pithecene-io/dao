@@ -271,6 +271,15 @@ suite pipe_tests = [] {
     expect(outer->kind() == NodeKind::PipeExpr);
     expect(outer->left()->kind() == NodeKind::PipeExpr);
   };
+
+  "multi-line pipe in suite"_test = [] {
+    auto output = parse_string("fn f(): int32\n    xs\n        |> map |x| -> x\n    0\n");
+    expect(output.parse_result.diagnostics.empty()) << "multi-line pipe in suite";
+    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
+    expect(fn->body().size() == 2_u) << "pipe expr + trailing 0";
+    auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
+    expect(expr_stmt->expr()->kind() == NodeKind::PipeExpr);
+  };
 };
 
 suite mode_resource_tests = [] {
@@ -362,6 +371,19 @@ suite assignment_tests = [] {
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* assign = static_cast<AssignmentNode*>(fn->body()[0]);
     expect(assign->target()->kind() == NodeKind::FieldExpr);
+  };
+
+  "index assignment"_test = [] {
+    auto output = parse_string("fn f(): int32\n    a[0] = 42\n");
+    expect(output.parse_result.diagnostics.empty());
+    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
+    auto* assign = static_cast<AssignmentNode*>(fn->body()[0]);
+    expect(assign->target()->kind() == NodeKind::IndexExpr);
+  };
+
+  "invalid assignment target"_test = [] {
+    auto output = parse_string("fn f(): int32\n    1 = 2\n");
+    expect(!output.parse_result.diagnostics.empty()) << "should reject invalid LHS";
   };
 };
 

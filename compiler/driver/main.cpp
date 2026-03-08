@@ -55,6 +55,16 @@ void cmd_parse(const std::filesystem::path& path) {
   auto contents = read_file(path);
   dao::SourceBuffer source(path.filename().string(), std::move(contents));
   auto lex_result = dao::lex(source);
+
+  if (!lex_result.diagnostics.empty()) {
+    for (const auto& diag : lex_result.diagnostics) {
+      auto loc = source.line_col(diag.span.offset);
+      std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+                << ": error: " << diag.message << "\n";
+    }
+    std::exit(EXIT_FAILURE);
+  }
+
   auto parse_result = dao::parse(lex_result.tokens);
 
   if (parse_result.file != nullptr) {
