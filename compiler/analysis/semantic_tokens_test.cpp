@@ -47,6 +47,16 @@ auto find_token(const std::vector<SemanticToken>& tokens, std::string_view kind)
   return nullptr;
 }
 
+auto find_token_at(const ClassifiedSource& result, std::string_view kind, std::string_view text)
+    -> const SemanticToken* {
+  for (const auto& tok : result.tokens) {
+    if (tok.kind == kind && result.source.text(tok.span) == text) {
+      return &tok;
+    }
+  }
+  return nullptr;
+}
+
 auto count_tokens(const std::vector<SemanticToken>& tokens, std::string_view kind) -> size_t {
   size_t count = 0;
   for (const auto& tok : tokens) {
@@ -156,6 +166,35 @@ suite type_classification = [] {
   "type.nominal for user types"_test = [] {
     auto result = classify_source("test.dao", "fn f(g: Graph): int32\n    0\n");
     expect(find_token(result.tokens, "type.nominal") != nullptr);
+  };
+
+  "qualified type classifies final segment as type.nominal"_test = [] {
+    auto result = classify_source("test.dao", "fn f(g: net::graph::Graph): int32\n    0\n");
+    expect(find_token_at(result, "type.nominal", "Graph") != nullptr)
+        << "final segment should be type.nominal";
+    expect(find_token_at(result, "use.module", "net") != nullptr)
+        << "leading segment should be use.module";
+    expect(find_token_at(result, "use.module", "graph") != nullptr)
+        << "middle segment should be use.module";
+  };
+};
+
+suite module_classification = [] {
+  "use.module on import path segments"_test = [] {
+    auto result = classify_source("test.dao", "import net::http\nfn main(): int32\n    0\n");
+    expect(find_token_at(result, "use.module", "net") != nullptr)
+        << "first import segment should be use.module";
+    expect(find_token_at(result, "use.module", "http") != nullptr)
+        << "second import segment should be use.module";
+  };
+
+  "use.module on qualified name expression"_test = [] {
+    auto result = classify_source(
+        "test.dao", "import net::http\nfn main(): int32\n    net::http::get\n    0\n");
+    expect(find_token_at(result, "use.module", "net") != nullptr)
+        << "leading segment should be use.module";
+    expect(find_token_at(result, "use.module", "http") != nullptr)
+        << "middle segment should be use.module";
   };
 };
 

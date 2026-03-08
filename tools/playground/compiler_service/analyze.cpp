@@ -92,18 +92,22 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     }
   }
 
-  // Produce semantic token classification (AST + lexical).
-  auto sem_tokens = classify_tokens(lex_result.tokens, parse_result.file);
+  // Produce semantic token classification only when there are no
+  // diagnostics — matches CLI behavior where daoc tokens exits on
+  // lex or parse errors.
   nlohmann::json semantic_tokens_json = nlohmann::json::array();
-  for (const auto& stok : sem_tokens) {
-    auto loc = source.line_col(stok.span.offset);
-    semantic_tokens_json.push_back({
-        {"kind", stok.kind},
-        {"offset", stok.span.offset},
-        {"length", stok.span.length},
-        {"line", loc.line},
-        {"col", loc.col},
-    });
+  if (diagnostics.empty() && parse_result.file != nullptr) {
+    auto sem_tokens = classify_tokens(lex_result.tokens, parse_result.file);
+    for (const auto& stok : sem_tokens) {
+      auto loc = source.line_col(stok.span.offset);
+      semantic_tokens_json.push_back({
+          {"kind", stok.kind},
+          {"offset", stok.span.offset},
+          {"length", stok.span.length},
+          {"line", loc.line},
+          {"col", loc.col},
+      });
+    }
   }
 
   nlohmann::json response = {

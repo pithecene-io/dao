@@ -173,13 +173,42 @@ private:
     map_[span.offset] = kind;
   }
 
+  // --- Qualified path helpers ---
+
+  // Compute per-segment spans from a QualifiedPath. Segments are
+  // separated by "::" (2 characters) in the source.
+  static auto segment_spans(const QualifiedPath& path)
+      -> std::vector<std::pair<std::string_view, Span>> {
+    std::vector<std::pair<std::string_view, Span>> result;
+    uint32_t offset = path.span.offset;
+    for (const auto& seg : path.segments) {
+      auto len = static_cast<uint32_t>(seg.size());
+      result.emplace_back(seg, Span{.offset = offset, .length = len});
+      offset += len + 2; // skip "::" separator
+    }
+    return result;
+  }
+
+  // Classify all segments in a qualified path: leading segments are
+  // use.module, the trailing segment gets the given category.
+  void classify_qualified(const QualifiedPath& path, std::string_view tail_category) {
+    auto spans = segment_spans(path);
+    for (size_t i = 0; i < spans.size(); ++i) {
+      if (i + 1 < spans.size()) {
+        classify(spans[i].second, "use.module");
+      } else {
+        classify(spans[i].second, tail_category);
+      }
+    }
+  }
+
   // --- Imports ---
 
   void visit_import(const ImportNode& node) {
-    // Qualified path segments in an import are module references.
-    for (size_t i = 0; i + 1 < node.path().segments.size(); ++i) {
-      // Module path segments — we don't have individual spans per segment,
-      // so we skip for now. The import keyword is classified lexically.
+    // All segments of an import path are module references.
+    auto spans = segment_spans(node.path());
+    for (const auto& [seg, span] : spans) {
+      classify(span, "use.module");
     }
   }
 
@@ -406,9 +435,23 @@ private:
       }
       break;
     }
+    case NodeKind::QualifiedName: {
+      // Leading segments are modules; the trailing segment cannot be
+      // further classified without name resolution, so it is omitted.
+      const auto& qn = static_cast<const QualifiedNameNode&>(expr);
+      if (qn.segments().size() > 1) {
+        // Compute per-segment spans from the expression span.
+        uint32_t offset = expr.span().offset;
+        for (size_t i = 0; i + 1 < qn.segments().size(); ++i) {
+          auto len = static_cast<uint32_t>(qn.segments()[i].size());
+          classify(Span{.offset = offset, .length = len}, "use.module");
+          offset += len + 2; // skip "::"
+        }
+      }
+      break;
+    }
     // Terminals — no structural classification needed.
     case NodeKind::Identifier:
-    case NodeKind::QualifiedName:
     case NodeKind::IntLiteral:
     case NodeKind::FloatLiteral:
     case NodeKind::StringLiteral:
@@ -425,12 +468,12 @@ private:
     switch (type.kind()) {
     case NodeKind::NamedType: {
       const auto& named = static_cast<const NamedTypeNode&>(type);
-      // Classify the type name as builtin or nominal.
-      // Use the last segment of the qualified path as the name.
+      // Classify the type name: leading segments are use.module,
+      // the final segment is type.builtin or type.nominal.
       if (!named.name().segments.empty()) {
         auto type_name = named.name().segments.back();
         auto category = is_builtin_type(type_name) ? "type.builtin" : "type.nominal";
-        classify(named.name().span, category);
+        classify_qualified(named.name(), category);
       }
       for (const auto* arg : named.type_args()) {
         visit_type(*arg);
