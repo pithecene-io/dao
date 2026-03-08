@@ -117,7 +117,7 @@ void cmd_tokens(const std::filesystem::path& path) {
   for (const auto& tok : sem_tokens) {
     auto loc = result.source.line_col(tok.span.offset);
     auto text = result.source.text(tok.span);
-    std::cout << loc.line << ":" << loc.col << " " << tok.kind << " \"" << text << "\"\n";
+    std::cout << loc.line << ":" << loc.col << " " << tok.kind << " " << text << "\n";
   }
 }
 

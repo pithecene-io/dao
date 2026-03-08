@@ -199,14 +199,17 @@ suite module_classification = [] {
 };
 
 suite variable_classification = [] {
-  "use.variable.param on function param"_test = [] {
+  "param binder is not classified as use.variable.param"_test = [] {
+    // Parameter binders are declaration sites. use.variable.param is
+    // for references, which require name resolution (Task 6).
     auto result = classify_source("test.dao", "fn f(x: int32): int32\n    0\n");
-    expect(find_token(result.tokens, "use.variable.param") != nullptr);
+    expect(find_token(result.tokens, "use.variable.param") == nullptr);
   };
 
-  "use.variable.local on let binding"_test = [] {
+  "let binder is not classified as use.variable.local"_test = [] {
+    // Let binders are declaration sites — same reasoning as params.
     auto result = classify_source("test.dao", "fn main(): int32\n    let x = 1\n    0\n");
-    expect(find_token(result.tokens, "use.variable.local") != nullptr);
+    expect(find_token(result.tokens, "use.variable.local") == nullptr);
   };
 
   "use.field on field access"_test = [] {

@@ -234,7 +234,9 @@ private:
     classify(fn.name_span(), "decl.function");
 
     for (const auto& param : fn.params()) {
-      classify(param.name_span, "use.variable.param");
+      // Parameter binders are declaration sites, not uses. The frozen
+      // taxonomy has use.variable.param but no decl.variable.param.
+      // Omit until name resolution can classify actual references.
       if (param.type != nullptr) {
         visit_type(*param.type);
       }
@@ -287,10 +289,9 @@ private:
     switch (stmt.kind()) {
     case NodeKind::LetStatement: {
       const auto& let_stmt = static_cast<const LetStatementNode&>(stmt);
-      // Let bindings outside structs are local variables.
-      // We don't have a use.variable.local.decl category, so we
-      // classify the name as use.variable.local (closest match).
-      classify(let_stmt.name_span(), "use.variable.local");
+      // Let binders are declaration sites, not uses. The frozen
+      // taxonomy has use.variable.local but no decl.variable.local.
+      // Omit until name resolution can classify actual references.
       if (let_stmt.type() != nullptr) {
         visit_type(*let_stmt.type());
       }
@@ -326,7 +327,7 @@ private:
     }
     case NodeKind::ForStatement: {
       const auto& for_stmt = static_cast<const ForStatementNode&>(stmt);
-      classify(for_stmt.var_span(), "use.variable.local");
+      // For-loop binders are declaration sites — omit like let binders.
       visit_expr(*for_stmt.iterable());
       for (const auto* s : for_stmt.body()) {
         visit_stmt(*s);
