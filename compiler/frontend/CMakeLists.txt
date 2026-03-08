@@ -1,5 +1,6 @@
 add_library(dao_frontend STATIC
   ast/ast.cpp
+  ast/ast_printer.cpp
   lexer/lexer.cpp
   parser/parser.cpp
 )
@@ -31,6 +32,17 @@ target_compile_definitions(parser_test PRIVATE
   DAO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
+add_executable(ast_printer_test
+  ast/ast_printer_test.cpp
+)
+
+target_link_libraries(ast_printer_test PRIVATE dao_frontend Boost::ut)
+
+target_compile_definitions(ast_printer_test PRIVATE
+  DAO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 include(CTest)
 add_test(NAME lexer_test COMMAND lexer_test)
 add_test(NAME parser_test COMMAND parser_test)
+add_test(NAME ast_printer_test COMMAND ast_printer_test)
