@@ -103,7 +103,7 @@ Deliverables:
 Exit criteria:
 
 - `cmake --build build` succeeds
-- `./build/daoc <file>` reads a file and exits cleanly
+- the `daoc` binary produced by the build reads a file and exits cleanly
 - `clang-format` and `clang-tidy` pass on all source
 - CI runs green on push
 
@@ -225,9 +225,9 @@ as soon as frontend analysis exists."
 
 Deliverables:
 
-- `tools/playground/compiler_service/` — minimal HTTP service wrapping
-  the lexer and parser
-- Endpoints: `/lex`, `/parse`, `/diagnostics`
+- `tools/playground/compiler_service/` — minimal service wrapping the
+  lexer and parser; transport (in-process, HTTP, or IPC) is decided at
+  execution time per `docs/COMPILER_SERVICE_API.md`
 - Playground frontend (stack TBD) showing:
   - structural token highlighting (keyword, operator, literal
     classification from the token stream)
@@ -270,8 +270,9 @@ Approach:
 - lexical tokens (keywords, operators, literals, punctuation) are
   classifiable immediately from the token stream
 - declaration/use distinction and type vs. function classification
-  require AST — classify what is available, leave unknowns as
-  `identifier` until resolution exists
+  require AST — classify what is available from lexical and
+  structural context; tokens that cannot yet be classified are omitted
+  from the semantic token stream until resolution exists
 - this layer does not reimplement parsing; it consumes the frontend
 
 Exit criteria:
