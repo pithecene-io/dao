@@ -1,0 +1,269 @@
+#include "frontend/lexer/lexer.h"
+
+#define BOOST_UT_DISABLE_MODULE
+#include <boost/ut.hpp>
+
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <string>
+
+namespace {
+
+using namespace boost::ut;
+using namespace dao;
+
+auto read_file(const std::filesystem::path& path) -> std::string {
+  std::ifstream file(path);
+  return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+// Holds both the source buffer and lex result so string_view tokens
+// remain valid for the lifetime of the returned object.
+struct LexOutput {
+  std::unique_ptr<SourceBuffer> source;
+  LexResult result;
+};
+
+auto lex_string(std::string_view src) -> LexOutput {
+  auto source = std::make_unique<SourceBuffer>("<test>", std::string(src));
+  auto result = lex(*source);
+  return {.source = std::move(source), .result = std::move(result)};
+}
+
+auto count_kind(const std::vector<Token>& tokens, TokenKind kind) -> int {
+  int count = 0;
+  for (const auto& tok : tokens) {
+    if (tok.kind == kind) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+// NOLINTBEGIN(readability-function-cognitive-complexity,readability-magic-numbers,modernize-use-trailing-return-type)
+
+suite keyword_tests = [] {
+  "all keywords recognized"_test = [] {
+    auto output = lex_string("import fn struct type let if else while for in return mode resource "
+                             "true false and or\n");
+    auto kinds = std::vector<TokenKind>{};
+    for (const auto& tok : output.result.tokens) {
+      if (tok.kind != TokenKind::Newline && tok.kind != TokenKind::Eof) {
+        kinds.push_back(tok.kind);
+      }
+    }
+    expect(kinds.size() == 17_u);
+    expect(kinds[0] == TokenKind::KwImport);
+    expect(kinds[1] == TokenKind::KwFn);
+    expect(kinds[2] == TokenKind::KwStruct);
+    expect(kinds[3] == TokenKind::KwType);
+    expect(kinds[4] == TokenKind::KwLet);
+    expect(kinds[5] == TokenKind::KwIf);
+    expect(kinds[6] == TokenKind::KwElse);
+    expect(kinds[7] == TokenKind::KwWhile);
+    expect(kinds[8] == TokenKind::KwFor);
+    expect(kinds[9] == TokenKind::KwIn);
+    expect(kinds[10] == TokenKind::KwReturn);
+    expect(kinds[11] == TokenKind::KwMode);
+    expect(kinds[12] == TokenKind::KwResource);
+    expect(kinds[13] == TokenKind::KwTrue);
+    expect(kinds[14] == TokenKind::KwFalse);
+    expect(kinds[15] == TokenKind::KwAnd);
+    expect(kinds[16] == TokenKind::KwOr);
+  };
+};
+
+suite operator_tests = [] {
+  "all operators recognized"_test = [] {
+    auto output = lex_string(": -> => = == != < <= > >= + - * / % & ! . , | |>\n");
+    auto kinds = std::vector<TokenKind>{};
+    for (const auto& tok : output.result.tokens) {
+      if (tok.kind != TokenKind::Newline && tok.kind != TokenKind::Eof) {
+        kinds.push_back(tok.kind);
+      }
+    }
+    expect(kinds.size() == 21_u);
+    expect(kinds[0] == TokenKind::Colon);
+    expect(kinds[1] == TokenKind::Arrow);
+    expect(kinds[2] == TokenKind::FatArrow);
+    expect(kinds[3] == TokenKind::Eq);
+    expect(kinds[4] == TokenKind::EqEq);
+    expect(kinds[5] == TokenKind::BangEq);
+    expect(kinds[6] == TokenKind::Lt);
+    expect(kinds[7] == TokenKind::LtEq);
+    expect(kinds[8] == TokenKind::Gt);
+    expect(kinds[9] == TokenKind::GtEq);
+    expect(kinds[10] == TokenKind::Plus);
+    expect(kinds[11] == TokenKind::Minus);
+    expect(kinds[12] == TokenKind::Star);
+    expect(kinds[13] == TokenKind::Slash);
+    expect(kinds[14] == TokenKind::Percent);
+    expect(kinds[15] == TokenKind::Amp);
+    expect(kinds[16] == TokenKind::Bang);
+    expect(kinds[17] == TokenKind::Dot);
+    expect(kinds[18] == TokenKind::Comma);
+    expect(kinds[19] == TokenKind::Pipe);
+    expect(kinds[20] == TokenKind::PipeGt);
+  };
+
+  "delimiters"_test = [] {
+    auto output = lex_string("( ) [ ]\n");
+    auto kinds = std::vector<TokenKind>{};
+    for (const auto& tok : output.result.tokens) {
+      if (tok.kind != TokenKind::Newline && tok.kind != TokenKind::Eof) {
+        kinds.push_back(tok.kind);
+      }
+    }
+    expect(kinds.size() == 4_u);
+    expect(kinds[0] == TokenKind::LParen);
+    expect(kinds[1] == TokenKind::RParen);
+    expect(kinds[2] == TokenKind::LBracket);
+    expect(kinds[3] == TokenKind::RBracket);
+  };
+};
+
+suite literal_tests = [] {
+  "integer literals"_test = [] {
+    auto output = lex_string("0 42 12345\n");
+    auto kinds = std::vector<TokenKind>{};
+    for (const auto& tok : output.result.tokens) {
+      if (tok.kind == TokenKind::IntLiteral) {
+        kinds.push_back(tok.kind);
+      }
+    }
+    expect(kinds.size() == 3_u);
+  };
+
+  "float literals"_test = [] {
+    auto output = lex_string("0.0 3.14 100.5\n");
+    auto kinds = std::vector<TokenKind>{};
+    for (const auto& tok : output.result.tokens) {
+      if (tok.kind == TokenKind::FloatLiteral) {
+        kinds.push_back(tok.kind);
+      }
+    }
+    expect(kinds.size() == 3_u);
+  };
+
+  "string literals"_test = [] {
+    auto output = lex_string(R"("hello" "world" "escaped\"quote")"
+                             "\n");
+    int count = count_kind(output.result.tokens, TokenKind::StringLiteral);
+    expect(count == 3_i);
+  };
+};
+
+suite identifier_tests = [] {
+  "identifiers not confused with keywords"_test = [] {
+    auto output = lex_string("foo bar _baz import_thing fn2\n");
+    auto ids = std::vector<std::string_view>{};
+    for (const auto& tok : output.result.tokens) {
+      if (tok.kind == TokenKind::Identifier) {
+        ids.push_back(tok.text);
+      }
+    }
+    expect(ids.size() == 5_u);
+    expect(ids[0] == "foo");
+    expect(ids[1] == "bar");
+    expect(ids[2] == "_baz");
+    expect(ids[3] == "import_thing");
+    expect(ids[4] == "fn2");
+  };
+};
+
+suite indentation_tests = [] {
+  "simple indent dedent"_test = [] {
+    auto output = lex_string("fn main(): int32\n    0\n");
+    int indents = count_kind(output.result.tokens, TokenKind::Indent);
+    int dedents = count_kind(output.result.tokens, TokenKind::Dedent);
+    expect(indents == dedents) << "INDENT/DEDENT must be balanced";
+    expect(indents == 1_i);
+  };
+
+  "nested indentation"_test = [] {
+    auto output = lex_string("fn f(): int32\n    if true:\n        0\n    1\n");
+    int indents = count_kind(output.result.tokens, TokenKind::Indent);
+    int dedents = count_kind(output.result.tokens, TokenKind::Dedent);
+    expect(indents == dedents) << "INDENT/DEDENT must be balanced";
+    expect(indents == 2_i);
+  };
+
+  "blank lines do not affect indentation"_test = [] {
+    auto output = lex_string("fn f(): int32\n    let x: int32\n\n    x\n");
+    int indents = count_kind(output.result.tokens, TokenKind::Indent);
+    int dedents = count_kind(output.result.tokens, TokenKind::Dedent);
+    expect(indents == dedents) << "INDENT/DEDENT must be balanced";
+    expect(output.result.diagnostics.empty()) << "no errors expected";
+  };
+
+  "tabs rejected"_test = [] {
+    auto output = lex_string("fn f(): int32\n\t0\n");
+    expect(!output.result.diagnostics.empty()) << "tabs must produce a diagnostic";
+  };
+
+  "paren depth suppresses indent"_test = [] {
+    auto output = lex_string("let x = foo(\n    1,\n    2\n)\n");
+    int indents = count_kind(output.result.tokens, TokenKind::Indent);
+    expect(indents == 0_i) << "no INDENT inside parens";
+  };
+};
+
+suite span_tests = [] {
+  "token spans are accurate"_test = [] {
+    auto output = lex_string("fn add\n");
+    // fn at offset 0, length 2
+    expect(output.result.tokens[0].kind == TokenKind::KwFn);
+    expect(output.result.tokens[0].span.offset == 0_u);
+    expect(output.result.tokens[0].span.length == 2_u);
+    // add at offset 3, length 3
+    expect(output.result.tokens[1].kind == TokenKind::Identifier);
+    expect(output.result.tokens[1].span.offset == 3_u);
+    expect(output.result.tokens[1].span.length == 3_u);
+  };
+};
+
+suite file_tests = [] {
+  "examples lex without error"_test = [] {
+    std::filesystem::path root(DAO_SOURCE_DIR);
+    for (const auto& entry : std::filesystem::directory_iterator(root / "examples")) {
+      if (entry.path().extension() == ".dao") {
+        auto contents = read_file(entry.path());
+        SourceBuffer buf(entry.path().filename().string(), contents);
+        auto result = lex(buf);
+        expect(result.diagnostics.empty()) << "errors in " << entry.path().filename().string();
+
+        // Verify INDENT/DEDENT balance.
+        int indents = count_kind(result.tokens, TokenKind::Indent);
+        int dedents = count_kind(result.tokens, TokenKind::Dedent);
+        expect(indents == dedents)
+            << "unbalanced INDENT/DEDENT in " << entry.path().filename().string();
+      }
+    }
+  };
+
+  "syntax probes lex without error"_test = [] {
+    std::filesystem::path root(DAO_SOURCE_DIR);
+    for (const auto& entry : std::filesystem::directory_iterator(root / "spec" / "syntax_probes")) {
+      if (entry.path().extension() == ".dao") {
+        auto contents = read_file(entry.path());
+        SourceBuffer buf(entry.path().filename().string(), contents);
+        auto result = lex(buf);
+        expect(result.diagnostics.empty()) << "errors in " << entry.path().filename().string();
+
+        // Verify INDENT/DEDENT balance.
+        int indents = count_kind(result.tokens, TokenKind::Indent);
+        int dedents = count_kind(result.tokens, TokenKind::Dedent);
+        expect(indents == dedents)
+            << "unbalanced INDENT/DEDENT in " << entry.path().filename().string();
+      }
+    }
+  };
+};
+
+// NOLINTEND(readability-function-cognitive-complexity,readability-magic-numbers,modernize-use-trailing-return-type)
+
+} // namespace
+
+auto main() -> int {
+} // NOLINT(readability-named-parameter)
