@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -59,7 +60,21 @@ auto main(int argc, char* argv[]) -> int {
   // NOLINTEND(modernize-use-trailing-return-type)
 
   // Serve frontend static files.
+  auto index_path = frontend_dir / "index.html";
   svr.set_mount_point("/", frontend_dir.string());
+
+  // Explicit root handler to prevent any redirect behavior.
+  // NOLINTNEXTLINE(modernize-use-trailing-return-type)
+  svr.Get("/", [index_path](const httplib::Request& /*req*/, httplib::Response& res) {
+    std::ifstream file(index_path);
+    if (!file) {
+      res.status = 500; // NOLINT(readability-magic-numbers)
+      res.set_content("index.html not found", "text/plain");
+      return;
+    }
+    std::string body{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    res.set_content(body, "text/html");
+  });
 
   std::cout << "Dao playground: http://localhost:" << port << "\n";
   std::cout << "  frontend: " << frontend_dir << "\n";

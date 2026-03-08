@@ -65,26 +65,29 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     });
   }
 
-  // Parse and collect AST + parse diagnostics.
+  // Only parse if lexing succeeded — matches CLI behavior.
   std::string ast_text;
-  auto parse_result = parse(lex_result.tokens);
+  if (lex_result.diagnostics.empty()) {
+    auto parse_result = parse(lex_result.tokens);
 
-  if (parse_result.file != nullptr) {
-    std::ostringstream ast_out;
-    print_ast(ast_out, *parse_result.file);
-    ast_text = ast_out.str();
-  }
+    for (const auto& diag : parse_result.diagnostics) {
+      auto loc = source.line_col(diag.span.offset);
+      diagnostics.push_back({
+          {"severity", "error"},
+          {"offset", diag.span.offset},
+          {"length", diag.span.length},
+          {"line", loc.line},
+          {"col", loc.col},
+          {"message", diag.message},
+      });
+    }
 
-  for (const auto& diag : parse_result.diagnostics) {
-    auto loc = source.line_col(diag.span.offset);
-    diagnostics.push_back({
-        {"severity", "error"},
-        {"offset", diag.span.offset},
-        {"length", diag.span.length},
-        {"line", loc.line},
-        {"col", loc.col},
-        {"message", diag.message},
-    });
+    // Only emit AST when there are no diagnostics at all.
+    if (diagnostics.empty() && parse_result.file != nullptr) {
+      std::ostringstream ast_out;
+      print_ast(ast_out, *parse_result.file);
+      ast_text = ast_out.str();
+    }
   }
 
   nlohmann::json response = {

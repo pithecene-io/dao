@@ -18,6 +18,7 @@ import {
 
 let currentTokens = [];
 let analyzeTimer = null;
+let analyzeSeq = 0;
 const DEBOUNCE_MS = 300;
 
 // ---------------------------------------------------------------------------
@@ -107,6 +108,7 @@ function scheduleAnalyze() {
 
 async function doAnalyze() {
   const source = editor.state.doc.toString();
+  const seq = ++analyzeSeq;
 
   try {
     const resp = await fetch("/api/analyze", {
@@ -115,8 +117,15 @@ async function doAnalyze() {
       body: JSON.stringify({ source }),
     });
 
+    // Discard stale responses — a newer request has been issued.
+    if (seq !== analyzeSeq) return;
+
     if (!resp.ok) return;
     const data = await resp.json();
+
+    // Double-check after await: another request may have started
+    // while we were parsing the response body.
+    if (seq !== analyzeSeq) return;
 
     // Update tokens and refresh decorations.
     currentTokens = data.tokens || [];
