@@ -1,5 +1,7 @@
 [requires]
 boost-ext-ut/2.3.1
+cpp-httplib/0.18.3
+nlohmann_json/3.11.3
 
 [generators]
 CMakeDeps

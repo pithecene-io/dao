@@ -12,6 +12,8 @@ Normative behavior lives in `CLAUDE.md` and `docs/contracts/`.
 | `README.md` | Project overview |
 | `.bonsai.yaml` | Repo-local Bonsai routing hints |
 | `.grove.yaml` | Grove project metadata and consolidation hints |
+| `.mise.toml` | mise tool version pins (task runner) |
+| `Taskfile.yml` | Task runner commands (build, test, playground, etc.) |
 
 ## `docs/`
 
@@ -104,6 +106,8 @@ Fixtures and golden inputs/outputs for future parser/compiler tests.
 Developer-surface tooling built on compiler analysis.
 
 - `playground/` — first-class web playground and future web-IDE surface
+  - `compiler_service/` — HTTP server wrapping the compiler frontend (cpp-httplib + nlohmann/json)
+  - `frontend/` — vanilla HTML/CSS/JS with CodeMirror 6 for structural token highlighting, AST panel, and diagnostics panel
 - `lsp/` — Language Server Protocol implementation
 - `formatter/` — reserved canonical formatter root
 - `diagnostics/` — presentation and diagnostics tooling experiments

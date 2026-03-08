@@ -1,0 +1,85 @@
+version: "3"
+
+vars:
+  BUILD_DIR: build/debug
+  PROFILE: profiles/clang-21-debug
+
+tasks:
+  deps:
+    desc: Install Conan dependencies
+    cmds:
+      - >-
+        conan install .
+        -pr {{.PROFILE}}
+        -pr:b {{.PROFILE}}
+        --build=missing
+        -of {{.BUILD_DIR}}
+    sources:
+      - conanfile.txt
+      - "{{.PROFILE}}"
+    generates:
+      - "{{.BUILD_DIR}}/conan_toolchain.cmake"
+
+  configure:
+    desc: Configure CMake
+    deps: [deps]
+    cmds:
+      - cmake --preset debug
+    sources:
+      - CMakeLists.txt
+      - compiler/**/CMakeLists.txt
+      - tools/**/CMakeLists.txt
+    generates:
+      - "{{.BUILD_DIR}}/Makefile"
+
+  build:
+    desc: Build all targets
+    deps: [configure]
+    cmds:
+      - cmake --build {{.BUILD_DIR}}
+
+  test:
+    desc: Run all tests
+    deps: [build]
+    cmds:
+      - ctest --test-dir {{.BUILD_DIR}} --output-on-failure
+
+  playground:
+    desc: Start the playground server (http://localhost:8090)
+    deps: [build]
+    cmds:
+      - "{{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground {{.CLI_ARGS}}"
+
+  format:
+    desc: Run clang-format on all source files
+    cmds:
+      - find compiler tools -name '*.cpp' -o -name '*.h' | xargs clang-format -i
+
+  format-check:
+    desc: Check clang-format without modifying files
+    cmds:
+      - find compiler tools -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror
+
+  lint:
+    desc: Run clang-tidy on all source files
+    deps: [configure]
+    cmds:
+      - find compiler tools -name '*.cpp' | xargs clang-tidy -p {{.BUILD_DIR}}
+
+  lex:
+    desc: "Run daoc lex on a file (usage: task lex -- file.dao)"
+    deps: [build]
+    cmds:
+      - "{{.BUILD_DIR}}/compiler/driver/daoc lex {{.CLI_ARGS}}"
+
+  parse:
+    desc: "Run daoc parse on a file (usage: task parse -- file.dao)"
+    deps: [build]
+    cmds:
+      - "{{.BUILD_DIR}}/compiler/driver/daoc parse {{.CLI_ARGS}}"
+
+  ast:
+    desc: "Run daoc ast on a file (usage: task ast -- file.dao)"
+    deps: [build]
+    cmds:
+      - "{{.BUILD_DIR}}/compiler/driver/daoc ast {{.CLI_ARGS}}"

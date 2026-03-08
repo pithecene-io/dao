@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dao Playground</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Dao Playground</h1>
+    <div class="controls">
+      <select id="example-select">
+        <option value="">— load example —</option>
+      </select>
+    </div>
+  </header>
+  <main>
+    <div id="editor-panel">
+      <div class="panel-header">Source</div>
+      <div id="editor-container"></div>
+    </div>
+    <div id="right-panels">
+      <div id="ast-panel">
+        <div class="panel-header">AST</div>
+        <pre id="ast-output"></pre>
+      </div>
+      <div id="diagnostics-panel">
+        <div class="panel-header">Diagnostics</div>
+        <div id="diagnostics-output"></div>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

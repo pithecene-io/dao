@@ -1,0 +1,163 @@
+:root {
+  --bg: #1e1e2e;
+  --bg-panel: #181825;
+  --bg-header: #11111b;
+  --fg: #cdd6f4;
+  --fg-dim: #6c7086;
+  --border: #313244;
+  --accent: #89b4fa;
+  --error: #f38ba8;
+  --green: #a6e3a1;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  background: var(--bg);
+  color: var(--fg);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  background: var(--bg-header);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+
+header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+select {
+  background: var(--bg-panel);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+
+#editor-panel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  min-height: 0;
+}
+
+#editor-container {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+#right-panels {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#ast-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  min-height: 0;
+}
+
+#diagnostics-panel {
+  flex: 0 0 auto;
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  background: var(--bg-header);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+
+#ast-output {
+  flex: 1;
+  padding: 12px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+  min-height: 0;
+}
+
+#diagnostics-output {
+  flex: 1;
+  padding: 8px 12px;
+  overflow: auto;
+  font-size: 13px;
+}
+
+.diagnostic {
+  padding: 4px 0;
+  color: var(--error);
+}
+
+.diagnostic .location {
+  color: var(--fg-dim);
+  margin-right: 8px;
+}
+
+.no-diagnostics {
+  color: var(--green);
+  font-style: italic;
+}
+
+/* CodeMirror theme overrides */
+.cm-editor {
+  height: 100%;
+  font-size: 14px;
+}
+
+.cm-editor .cm-scroller {
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+.cm-editor .cm-content {
+  padding: 12px 0;
+}
+
+.cm-editor .cm-line {
+  padding: 0 12px;
+}
+
+/* Token highlight classes applied via decorations */
+.dao-keyword { color: #cba6f7; }
+.dao-literal-number { color: #fab387; }
+.dao-literal-string { color: #a6e3a1; }
+.dao-literal-bool { color: #fab387; }
+.dao-operator { color: #89dceb; }
+.dao-punctuation { color: #6c7086; }
+.dao-identifier { color: #cdd6f4; }
+.dao-error { color: #f38ba8; text-decoration: wavy underline; }
