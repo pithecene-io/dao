@@ -1,6 +1,8 @@
 {
     "version": "0.5",
     "requires": [
+        "nlohmann_json/3.11.3#45828be26eb619a2e04ca517bb7b828d%1701220705.259",
+        "cpp-httplib/0.18.3#ad62795f35f0fecaea1fd4bdb7b949f0%1748426309.372",
         "boost-ext-ut/2.3.1#e0a2761f845926e65a8aee07e3995ed5%1749912869.147"
     ],
     "build_requires": [

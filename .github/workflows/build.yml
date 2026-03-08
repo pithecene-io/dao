@@ -80,8 +80,8 @@ jobs:
 
       - name: Check formatting
         run: |
-          find compiler -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror
+          find compiler tools -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror
 
       - name: Run clang-tidy
         run: |
-          find compiler -name '*.cpp' | xargs clang-tidy -p build/debug
+          find compiler tools -name '*.cpp' | xargs clang-tidy -p build/debug
