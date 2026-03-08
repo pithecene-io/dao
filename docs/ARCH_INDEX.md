@@ -12,6 +12,8 @@ Normative behavior lives in `CLAUDE.md` and `docs/contracts/`.
 | `README.md` | Project overview |
 | `.bonsai.yaml` | Repo-local Bonsai routing hints |
 | `.grove.yaml` | Grove project metadata and consolidation hints |
+| `.mise.toml` | mise tool version pins (task runner) |
+| `Taskfile.yml` | Task runner commands (build, test, playground, etc.) |
 
 ## `docs/`
 
