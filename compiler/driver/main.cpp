@@ -28,7 +28,11 @@ void cmd_lex(const std::filesystem::path& path) {
     std::cout << loc.line << ":" << loc.col << " " << dao::token_kind_name(tok.kind);
     if (!tok.text.empty() && tok.kind != dao::TokenKind::Newline &&
         tok.kind != dao::TokenKind::Eof) {
-      std::cout << " \"" << tok.text << "\"";
+      if (tok.kind == dao::TokenKind::StringLiteral) {
+        std::cout << " " << tok.text;
+      } else {
+        std::cout << " \"" << tok.text << "\"";
+      }
     }
     std::cout << "\n";
   }

@@ -63,7 +63,7 @@ private:
   void build_line_index() {
     line_offsets_.push_back(0);
     for (uint32_t i = 0; i < contents_.size(); ++i) {
-      if (contents_[i] == '\n' && i + 1 < contents_.size()) {
+      if (contents_[i] == '\n') {
         line_offsets_.push_back(i + 1);
       }
     }
