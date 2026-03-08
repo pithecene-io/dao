@@ -15,11 +15,11 @@ Long-term north star: lightweight web-based IDE.
 # from repo root, after cmake build:
 build/debug/tools/playground/compiler_service/dao_playground
 
-# open http://localhost:8080
+# open http://localhost:8090
 ```
 
 Options:
-- `--port N` — listen port (default 8080)
+- `--port N` — listen port (default 8090)
 - `--root DIR` — repository root (default: compile-time `DAO_SOURCE_DIR`)
 
 ## Architecture

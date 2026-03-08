@@ -45,7 +45,7 @@ tasks:
       - ctest --test-dir {{.BUILD_DIR}} --output-on-failure
 
   playground:
-    desc: Start the playground server (http://localhost:8080)
+    desc: Start the playground server (http://localhost:8090)
     deps: [build]
     cmds:
       - "{{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground {{.CLI_ARGS}}"

@@ -1,16 +1,18 @@
+// All esm.sh imports pin @codemirror/state and @codemirror/view via ?deps
+// so that only one instance of each package is loaded at runtime.
+// Without this, instanceof checks inside CodeMirror break.
 import {
-  EditorView,
   basicSetup,
-} from "https://esm.sh/@codemirror/basic-setup@0.20.0";
-import { EditorState } from "https://esm.sh/@codemirror/state@6.5.2";
+} from "https://esm.sh/codemirror@6.0.2?deps=@codemirror/state@6.5.4,@codemirror/view@6.39.16";
+import { EditorState } from "https://esm.sh/@codemirror/state@6.5.4";
 import {
   Decoration,
+  EditorView,
   ViewPlugin,
-  WidgetType,
-} from "https://esm.sh/@codemirror/view@6.36.5";
+} from "https://esm.sh/@codemirror/view@6.39.16";
 import {
   oneDark,
-} from "https://esm.sh/@codemirror/theme-one-dark@6.1.2";
+} from "https://esm.sh/@codemirror/theme-one-dark@6.1.3?deps=@codemirror/state@6.5.4,@codemirror/view@6.39.16";
 
 // ---------------------------------------------------------------------------
 // State

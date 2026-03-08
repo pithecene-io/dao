@@ -20,7 +20,7 @@ auto find_repo_root() -> std::filesystem::path {
 } // namespace
 
 auto main(int argc, char* argv[]) -> int {
-  int port = 8080; // NOLINT(readability-magic-numbers)
+  int port = 8090; // NOLINT(readability-magic-numbers)
   auto root = find_repo_root();
 
   // Simple arg parsing: --port N and --root DIR
