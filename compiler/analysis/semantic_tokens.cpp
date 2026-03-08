@@ -441,21 +441,13 @@ private:
       }
       break;
     }
-    case NodeKind::QualifiedName: {
-      // Leading segments are modules; the trailing segment cannot be
-      // further classified without name resolution, so it is omitted.
-      const auto& qn = static_cast<const QualifiedNameNode&>(expr);
-      if (qn.segments().size() > 1) {
-        // Compute per-segment spans from the expression span.
-        uint32_t offset = expr.span().offset;
-        for (size_t i = 0; i + 1 < qn.segments().size(); ++i) {
-          auto len = static_cast<uint32_t>(qn.segments()[i].size());
-          classify(Span{.offset = offset, .length = len}, "use.module");
-          offset += len + 2; // skip "::"
-        }
-      }
+    case NodeKind::QualifiedName:
+      // Leading segment classification is deferred to the resolver
+      // (which validates that it is actually a module binding). When
+      // no resolver is available, these segments receive no
+      // classification — the structural walker cannot be authoritative
+      // about whether a leading segment is a module.
       break;
-    }
     // Terminals — no structural classification needed.
     case NodeKind::Identifier:
     case NodeKind::IntLiteral:
@@ -546,14 +538,10 @@ auto classify_tokens(const std::vector<Token>& tokens,
       continue;
     }
 
-    // Check AST classification first.
-    auto it = ast_map.find(tok.span.offset);
-    if (it != ast_map.end()) {
-      result.push_back({.span = tok.span, .kind = it->second});
-      continue;
-    }
-
-    // Check resolve-driven classification for identifiers.
+    // For identifiers when a resolve result is available, check
+    // resolve first — it gives authoritative use-site classification
+    // that overrides structural guesses (e.g., QualifiedName leading
+    // segments that the AST walker speculatively marks as use.module).
     if (resolve_result != nullptr && tok.kind == TokenKind::Identifier) {
       auto res_it = resolve_result->uses.find(tok.span.offset);
       if (res_it != resolve_result->uses.end()) {
@@ -563,6 +551,16 @@ auto classify_tokens(const std::vector<Token>& tokens,
           continue;
         }
       }
+      // Not in uses table — fall through to AST classification
+      // (covers declaration-site identifiers like decl.function,
+      // decl.type, lambda.param, etc.).
+    }
+
+    // Check AST structural classification.
+    auto it = ast_map.find(tok.span.offset);
+    if (it != ast_map.end()) {
+      result.push_back({.span = tok.span, .kind = it->second});
+      continue;
     }
 
     // Fall back to lexical classification.
