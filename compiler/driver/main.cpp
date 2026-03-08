@@ -67,11 +67,6 @@ void cmd_parse(const std::filesystem::path& path) {
 
   auto parse_result = dao::parse(lex_result.tokens);
 
-  if (parse_result.file != nullptr) {
-    std::cout << "File: " << parse_result.file->imports().size() << " imports, "
-              << parse_result.file->declarations().size() << " declarations\n";
-  }
-
   if (!parse_result.diagnostics.empty()) {
     for (const auto& diag : parse_result.diagnostics) {
       auto loc = source.line_col(diag.span.offset);
@@ -79,6 +74,11 @@ void cmd_parse(const std::filesystem::path& path) {
                 << ": error: " << diag.message << "\n";
     }
     std::exit(EXIT_FAILURE);
+  }
+
+  if (parse_result.file != nullptr) {
+    std::cout << "File: " << parse_result.file->imports().size() << " imports, "
+              << parse_result.file->declarations().size() << " declarations\n";
   }
 }
 
