@@ -96,9 +96,22 @@ Rules:
 - `resource <kind> <name> =>` introduces a resource-binding context
 - `=>` is reserved for semantic-context entry, not structural blocks
 
+## Namespace Qualification
+
+```dao
+import net::http
+net::http::get(url)
+```
+
+Rules:
+- `::` is the namespace/module path separator
+- `.` is for runtime member access on values
+- these two are not interchangeable
+
 ## Arrow Taxonomy
 
 - `:` is used for type annotations and control-flow block introducers
+- `::` is used for namespace and module path qualification
 - `->` is used for expression-bodied functions and lambdas
 - `=>` is used only for `mode` and `resource` suites
 
