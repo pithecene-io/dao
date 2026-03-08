@@ -1,4 +1,5 @@
 #include "frontend/lexer/lexer.h"
+#include "frontend/parser/parser.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -49,12 +50,34 @@ void cmd_lex(const std::filesystem::path& path) {
   }
 }
 
+// Debug-only parse diagnostic dump. Output format is not stable.
+void cmd_parse(const std::filesystem::path& path) {
+  auto contents = read_file(path);
+  dao::SourceBuffer source(path.filename().string(), std::move(contents));
+  auto lex_result = dao::lex(source);
+  auto parse_result = dao::parse(lex_result.tokens);
+
+  if (parse_result.file != nullptr) {
+    std::cout << "File: " << parse_result.file->imports().size() << " imports, "
+              << parse_result.file->declarations().size() << " declarations\n";
+  }
+
+  if (!parse_result.diagnostics.empty()) {
+    for (const auto& diag : parse_result.diagnostics) {
+      auto loc = source.line_col(diag.span.offset);
+      std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+                << ": error: " << diag.message << "\n";
+    }
+    std::exit(EXIT_FAILURE);
+  }
+}
+
 } // namespace
 
 auto main(int argc, char* argv[]) -> int {
   if (argc < 2) {
     std::cerr << "usage: daoc <command> <file>\n";
-    std::cerr << "commands: lex\n";
+    std::cerr << "commands: lex, parse\n";
     return EXIT_FAILURE;
   }
 
@@ -72,6 +95,21 @@ auto main(int argc, char* argv[]) -> int {
       return EXIT_FAILURE;
     }
     cmd_lex(path);
+    return EXIT_SUCCESS;
+  }
+
+  // daoc parse <file>
+  if (arg1 == "parse") {
+    if (argc < 3) {
+      std::cerr << "usage: daoc parse <file>\n";
+      return EXIT_FAILURE;
+    }
+    std::filesystem::path parse_path(argv[2]);
+    if (!std::filesystem::exists(parse_path)) {
+      std::cerr << "error: file not found: " << parse_path << "\n";
+      return EXIT_FAILURE;
+    }
+    cmd_parse(parse_path);
     return EXIT_SUCCESS;
   }
 

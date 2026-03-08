@@ -1,5 +1,7 @@
 add_library(dao_frontend STATIC
+  ast/ast.cpp
   lexer/lexer.cpp
+  parser/parser.cpp
 )
 
 target_include_directories(dao_frontend PUBLIC
@@ -19,5 +21,16 @@ target_compile_definitions(lexer_test PRIVATE
   DAO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
+add_executable(parser_test
+  parser/parser_test.cpp
+)
+
+target_link_libraries(parser_test PRIVATE dao_frontend Boost::ut)
+
+target_compile_definitions(parser_test PRIVATE
+  DAO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 include(CTest)
 add_test(NAME lexer_test COMMAND lexer_test)
+add_test(NAME parser_test COMMAND parser_test)
