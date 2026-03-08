@@ -79,19 +79,29 @@ enum class ScopeKind {
 
 ### Resolution Result
 
-A side table mapping identifier/qualified-name nodes to their resolved
-symbols:
+A side table mapping individual token spans to their resolved symbols.
+The key is a span offset, and there may be **multiple entries per AST
+node** — notably, qualified names and qualified type paths produce one
+entry per resolved segment:
 
 ```
 struct ResolveResult {
   ResolveContext context;     // arena owning all Symbols and Scopes
-  map<uint32_t, Symbol*> uses;  // node span offset -> resolved Symbol*
+  map<uint32_t, Symbol*> uses;  // token span offset -> resolved Symbol*
   vector<Diagnostic> diagnostics;
 };
 ```
 
-The `uses` table maps by span offset (consistent with the semantic
-token classifier's existing approach). It does **not** mutate the AST.
+For a qualified name like `http::get`, the resolver computes
+per-segment spans (offset + length for each identifier token) and
+stores separate entries: `offset("http") → Module symbol`,
+`offset("get") → Function symbol` (if resolvable). This matches
+the per-token granularity the semantic token classifier needs.
+
+The `uses` table does **not** mutate the AST. Per-segment span
+computation reuses the same offset arithmetic the semantic token
+classifier already applies to `QualifiedPath` and
+`QualifiedNameNode`.
 
 ## Deliverables
 
@@ -125,15 +135,26 @@ token classifier's existing approach). It does **not** mutate the AST.
 - **Identifier expressions** — look up the identifier name in the scope
   chain. If found, record `use → symbol` in the side table.
 - **Qualified name expressions** — resolve the first segment in the
-  scope chain (must be a module/import binding). Remaining segments are
-  unresolved at this stage (they need module contents, which we don't
-  have yet).
+  scope chain (must be a module/import binding). Record the resolved
+  segment in the `uses` table at its computed span offset. Remaining
+  segments cannot be resolved without module contents (no cross-file
+  resolution yet) and are left unresolved.
 - **Type references** — resolve named type paths against the scope
   chain. Single-segment types check both builtin types and user-declared
-  types. Qualified type paths resolve the leading module segments.
-- **Import declarations** — register the final segment (or entire path)
-  as a module binding in the file scope. The imported module contents
-  are not resolved (no cross-file resolution yet).
+  types. Multi-segment type paths resolve the leading segments as
+  module references; the final segment is classified structurally
+  (type.builtin or type.nominal) as it is today.
+- **Import declarations** — bind the **last segment** of the import
+  path as a `SymbolKind::Module` symbol in the file scope. For
+  `import net::http`, this binds `http`. Subsequent qualified name
+  expressions like `http::get` resolve their first segment `http`
+  against this binding. The imported module's contents are opaque
+  until cross-file resolution exists.
+
+  This is the only composable rule: the binding name matches the
+  first segment of qualified references. Alternative designs (binding
+  the root, or binding the full path) are explicitly rejected because
+  they don't compose with single-segment scope lookup.
 
 ### Scope nesting
 
@@ -190,12 +211,19 @@ With resolve results available, the semantic token classifier gains:
 | `use.variable.local` | reference to a `SymbolKind::Local` |
 | `use.function` | reference to a `SymbolKind::Function` |
 | `use.module` | reference to a `SymbolKind::Module` |
+| `decl.module` | import binding site (last segment of import path) |
 
 The classifier's existing structural classifications (keywords,
 literals, operators, `decl.function`, `decl.type`, `decl.field`,
 `type.builtin`, `type.nominal`, `mode.*`, `resource.*`, `lambda.param`)
 remain unchanged. The resolve-driven classifications fill in the
 gaps that were previously omitted.
+
+`decl.module` is produced at the import declaration site — the last
+segment of the import path is both the binding name and the
+declaration span. Leading segments of the import path remain
+classified as `use.module` structurally (they are module path
+references, not the binding being introduced).
 
 When no resolve result is available (e.g., source has errors), the
 classifier degrades to structural-only mode (current behavior).
@@ -231,7 +259,8 @@ Diagnostics:
 - Duplicate declaration diagnostics fire for obvious conflicts.
 - `daoc resolve <file>` produces a readable symbol dump.
 - Semantic tokens include `use.variable.param`, `use.variable.local`,
-  and `use.function` for resolved references.
+  `use.function`, and `use.module` for resolved references, and
+  `decl.module` for import binding sites.
 - The playground shows resolve-upgraded semantic highlighting.
 - Tests cover: scope nesting, forward references at file level,
   duplicate detection, lambda param scoping, for-loop variable
