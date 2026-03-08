@@ -93,12 +93,13 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     }
   }
 
-  // Produce semantic token classification only when there are no
-  // diagnostics — matches CLI behavior where daoc tokens exits on
-  // lex or parse errors.
-  // Run name resolution when parse succeeded without errors.
+  // Run name resolution when lex/parse succeeded without errors.
+  // Resolve diagnostics are surfaced to the user but do NOT gate
+  // semantic token classification — partial resolve results still
+  // improve highlighting for the tokens that did resolve.
   ResolveResult resolve_result;
-  if (diagnostics.empty() && parse_result.file != nullptr) {
+  bool lex_parse_clean = diagnostics.empty() && parse_result.file != nullptr;
+  if (lex_parse_clean) {
     resolve_result = resolve(*parse_result.file);
 
     for (const auto& diag : resolve_result.diagnostics) {
@@ -114,8 +115,11 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     }
   }
 
+  // Produce semantic token classification when lex/parse succeeded.
+  // Resolve diagnostics do not suppress tokens — classify_tokens()
+  // gracefully handles partial resolve results.
   nlohmann::json semantic_tokens_json = nlohmann::json::array();
-  if (diagnostics.empty() && parse_result.file != nullptr) {
+  if (lex_parse_clean) {
     auto sem_tokens =
         classify_tokens(lex_result.tokens, parse_result.file, &resolve_result);
     for (const auto& stok : sem_tokens) {

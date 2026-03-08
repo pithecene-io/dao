@@ -109,12 +109,13 @@ private:
     }
     Span binding_span{.offset = offset, .length = binding_len};
 
-    auto* sym = ctx_.make_symbol(SymbolKind::Module, binding_name, binding_span, &node);
-
-    if (!file_scope_->declare(binding_name, sym)) {
+    if (file_scope_->lookup_local(binding_name) != nullptr) {
       diagnostics_.push_back(Diagnostic::error(
           binding_span,
           "duplicate top-level declaration '" + std::string(binding_name) + "'"));
+    } else {
+      auto* sym = ctx_.make_symbol(SymbolKind::Module, binding_name, binding_span, &node);
+      file_scope_->declare(binding_name, sym);
     }
   }
 
@@ -149,12 +150,13 @@ private:
       return;
     }
 
-    auto* sym = ctx_.make_symbol(kind, name, name_span, &decl);
-
-    if (!file_scope_->declare(name, sym)) {
+    if (file_scope_->lookup_local(name) != nullptr) {
       diagnostics_.push_back(Diagnostic::error(
           name_span,
           "duplicate top-level declaration '" + std::string(name) + "'"));
+    } else {
+      auto* sym = ctx_.make_symbol(kind, name, name_span, &decl);
+      file_scope_->declare(name, sym);
     }
   }
 
@@ -187,12 +189,13 @@ private:
 
     // Declare parameters.
     for (const auto& param : fn.params()) {
-      auto* sym = ctx_.make_symbol(SymbolKind::Param, param.name, param.name_span, &fn);
-
-      if (!fn_scope->declare(param.name, sym)) {
+      if (fn_scope->lookup_local(param.name) != nullptr) {
         diagnostics_.push_back(Diagnostic::error(
             param.name_span,
             "duplicate parameter '" + std::string(param.name) + "'"));
+      } else {
+        auto* sym = ctx_.make_symbol(SymbolKind::Param, param.name, param.name_span, &fn);
+        fn_scope->declare(param.name, sym);
       }
 
       // Resolve parameter type (type-position, no diagnostic on unknown).
@@ -225,13 +228,14 @@ private:
     for (const auto* member : st.members()) {
       if (member->kind() == NodeKind::LetStatement) {
         const auto& let_stmt = static_cast<const LetStatementNode&>(*member);
-        auto* sym =
-            ctx_.make_symbol(SymbolKind::Field, let_stmt.name(), let_stmt.name_span(), &let_stmt);
-
-        if (!struct_scope->declare(let_stmt.name(), sym)) {
+        if (struct_scope->lookup_local(let_stmt.name()) != nullptr) {
           diagnostics_.push_back(Diagnostic::error(
               let_stmt.name_span(),
               "duplicate declaration '" + std::string(let_stmt.name()) + "'"));
+        } else {
+          auto* sym =
+              ctx_.make_symbol(SymbolKind::Field, let_stmt.name(), let_stmt.name_span(), &let_stmt);
+          struct_scope->declare(let_stmt.name(), sym);
         }
 
         if (let_stmt.type() != nullptr) {
@@ -266,13 +270,14 @@ private:
       }
 
       // Declare the local variable (visible after this point).
-      auto* sym =
-          ctx_.make_symbol(SymbolKind::Local, let_stmt.name(), let_stmt.name_span(), &let_stmt);
-
-      if (!scope->declare(let_stmt.name(), sym)) {
+      if (scope->lookup_local(let_stmt.name()) != nullptr) {
         diagnostics_.push_back(Diagnostic::error(
             let_stmt.name_span(),
             "duplicate declaration '" + std::string(let_stmt.name()) + "'"));
+      } else {
+        auto* sym =
+            ctx_.make_symbol(SymbolKind::Local, let_stmt.name(), let_stmt.name_span(), &let_stmt);
+        scope->declare(let_stmt.name(), sym);
       }
       break;
     }
