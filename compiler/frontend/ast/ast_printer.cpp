@@ -286,6 +286,9 @@ private:
   }
 
   void print_expr_stmt(const ExpressionStatementNode& node) {
+    indent();
+    out_ << "ExpressionStatement\n";
+    Scope scope(depth_);
     print_expr(*node.expr());
   }
 

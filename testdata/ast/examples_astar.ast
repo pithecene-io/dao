@@ -50,9 +50,10 @@ File
                   Identifier came_from
                   Identifier start
                   Identifier goal
-      CallExpr
-        Callee
-          IndexExpr
-            Identifier List
-            Indices
-              Identifier NodeId
+      ExpressionStatement
+        CallExpr
+          Callee
+            IndexExpr
+              Identifier List
+              Indices
+                Identifier NodeId

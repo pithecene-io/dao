@@ -12,11 +12,13 @@ File
                 Identifier PriorityQueue
                 Indices
                   Identifier NodeId
-        CallExpr
-          Callee
-            FieldExpr .push
-              Identifier frontier
-          Args
-            Identifier start
-        ListLiteral
-          Identifier goal
+        ExpressionStatement
+          CallExpr
+            Callee
+              FieldExpr .push
+                Identifier frontier
+            Args
+              Identifier start
+        ExpressionStatement
+          ListLiteral
+            Identifier goal

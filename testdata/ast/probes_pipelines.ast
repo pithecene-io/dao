@@ -2,22 +2,23 @@ File
   FunctionDecl positive_squares
     Param xs: List[int32]
     ReturnType: List[int32]
-    PipeExpr
-      Identifier xs
-      CallExpr
-        Callee
-          Identifier filter
-        Args
-          Lambda x
-            PipeExpr
-              BinaryExpr >
-                Identifier x
-                IntLiteral 0
-              CallExpr
-                Callee
-                  Identifier map
-                Args
-                  Lambda x
-                    BinaryExpr *
-                      Identifier x
-                      Identifier x
+    ExpressionStatement
+      PipeExpr
+        Identifier xs
+        CallExpr
+          Callee
+            Identifier filter
+          Args
+            Lambda x
+              PipeExpr
+                BinaryExpr >
+                  Identifier x
+                  IntLiteral 0
+                CallExpr
+                  Callee
+                    Identifier map
+                  Args
+                    Lambda x
+                      BinaryExpr *
+                        Identifier x
+                        Identifier x

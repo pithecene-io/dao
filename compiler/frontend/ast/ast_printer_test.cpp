@@ -45,6 +45,8 @@ suite ast_golden_tests = [] {
         continue;
       }
       auto golden_path = golden_dir / ("examples_" + entry.path().stem().string() + ".ast");
+      expect(std::filesystem::exists(golden_path))
+          << "missing golden file for " << entry.path().filename().string();
       if (!std::filesystem::exists(golden_path)) {
         continue;
       }
@@ -65,6 +67,8 @@ suite ast_golden_tests = [] {
         continue;
       }
       auto golden_path = golden_dir / ("probes_" + entry.path().stem().string() + ".ast");
+      expect(std::filesystem::exists(golden_path))
+          << "missing golden file for " << entry.path().filename().string();
       if (!std::filesystem::exists(golden_path)) {
         continue;
       }

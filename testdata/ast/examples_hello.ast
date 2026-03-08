@@ -1,9 +1,11 @@
 File
   FunctionDecl main
     ReturnType: int32
-    CallExpr
-      Callee
-        Identifier print
-      Args
-        StringLiteral "hello, dao"
-    IntLiteral 0
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "hello, dao"
+    ExpressionStatement
+      IntLiteral 0
