@@ -1,0 +1,73 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM/Clang
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs) main"
+          sudo apt-get update
+          sudo apt-get install -y clang clang-format clang-tidy
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.30"
+
+      - name: Verify CMake version
+        run: |
+          cmake_version=$(cmake --version | head -1 | grep -oP '\d+\.\d+')
+          major=$(echo "$cmake_version" | cut -d. -f1)
+          minor=$(echo "$cmake_version" | cut -d. -f2)
+          if [ "$major" -lt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -lt 30 ]; }; then
+            echo "CMake version $cmake_version does not meet minimum 3.30"
+            exit 1
+          fi
+          echo "CMake version $cmake_version satisfies >= 3.30"
+
+      - name: Install Conan
+        run: pip install conan
+
+      - name: Detect Clang version
+        id: clang
+        run: |
+          version=$(clang++ --version | grep -oP 'clang version \K\d+')
+          echo "major=$version" >> "$GITHUB_OUTPUT"
+          echo "Detected clang major version: $version"
+
+      - name: Install dependencies
+        run: |
+          conan install . \
+            --output-folder=build/debug \
+            --build=missing \
+            -pr profiles/clang-21-debug \
+            -s compiler.version=${{ steps.clang.outputs.major }} \
+            --lockfile=locks/clang-21-debug.lock
+
+      - name: Configure
+        run: cmake --preset debug
+
+      - name: Build
+        run: cmake --build build/debug
+
+      - name: Verify daoc runs
+        run: ./build/debug/compiler/driver/daoc examples/hello.dao
+
+      - name: Check formatting
+        run: |
+          find compiler -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror
+
+      - name: Run clang-tidy
+        run: |
+          find compiler -name '*.cpp' | xargs clang-tidy -p build/debug

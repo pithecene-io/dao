@@ -1,0 +1,11 @@
+{
+    "version": "0.5",
+    "requires": [
+        "boost-ext-ut/2.3.1#e0a2761f845926e65a8aee07e3995ed5%1749912869.147"
+    ],
+    "build_requires": [
+        "cmake/3.31.11#f325c933f618a1fcebc1e1c0babfd1ba%1769622857.944"
+    ],
+    "python_requires": [],
+    "config_requires": []
+}

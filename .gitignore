@@ -5,6 +5,12 @@ ai/out/*
 # Baseline output
 ai/baselines/*.json
 
+# Build
+build/
+
+# Conan
+CMakeUserPresets.json
+
 # OS/editor
 .DS_Store
 .vscode/
