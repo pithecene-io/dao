@@ -1,16 +1,16 @@
-type NodeId = int32
-type Graph = int32
-type List = int32
-type PriorityQueue = int32
-type Map = int32
+type NodeId = i32
+type Graph = i32
+type List = i32
+type PriorityQueue = i32
+type Map = i32
 
-fn reconstruct_path(came_from: int32, start: int32, goal: int32): int32 -> 0
+fn reconstruct_path(came_from: i32, start: i32, goal: i32): i32 -> 0
 
-fn heuristic(a: NodeId, b: NodeId): float64 -> 0.0
+fn heuristic(a: NodeId, b: NodeId): f64 -> 0.0
 
 fn a_star(g: Graph, start: NodeId, goal: NodeId): List[NodeId]
     resource memory Search =>
-        let open = PriorityQueue[NodeId, float64]()
+        let open = PriorityQueue[NodeId, f64]()
         let came_from = Map[NodeId, NodeId]()
 
         while open.not_empty:

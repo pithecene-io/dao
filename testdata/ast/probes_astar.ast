@@ -1,20 +1,20 @@
 File
-  AliasDecl NodeId = int32
-  AliasDecl Graph = int32
-  AliasDecl List = int32
-  AliasDecl PriorityQueue = int32
-  AliasDecl Map = int32
+  AliasDecl NodeId = i32
+  AliasDecl Graph = i32
+  AliasDecl List = i32
+  AliasDecl PriorityQueue = i32
+  AliasDecl Map = i32
   FunctionDecl reconstruct_path
-    Param came_from: int32
-    Param start: int32
-    Param goal: int32
-    ReturnType: int32
+    Param came_from: i32
+    Param start: i32
+    Param goal: i32
+    ReturnType: i32
     ExprBody
       IntLiteral 0
   FunctionDecl heuristic
     Param a: NodeId
     Param b: NodeId
-    ReturnType: float64
+    ReturnType: f64
     ExprBody
       FloatLiteral 0.0
   FunctionDecl a_star
@@ -30,7 +30,7 @@ File
               Identifier PriorityQueue
               Indices
                 Identifier NodeId
-                Identifier float64
+                Identifier f64
       LetStatement came_from
         CallExpr
           Callee

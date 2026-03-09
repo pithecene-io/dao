@@ -14,18 +14,18 @@ namespace {
 // ---------------------------------------------------------------------------
 
 auto is_builtin_type(std::string_view name) -> bool {
-  // Core numeric and primitive types.
+  // Builtin scalar types and compiler-known predeclared types.
   static constexpr std::string_view builtins[] = {
-      "int8",
-      "int16",
-      "int32",
-      "int64",
-      "uint8",
-      "uint16",
-      "uint32",
-      "uint64",
-      "float32",
-      "float64",
+      "i8",
+      "i16",
+      "i32",
+      "i64",
+      "u8",
+      "u16",
+      "u32",
+      "u64",
+      "f32",
+      "f64",
       "bool",
       "string",
       "void",

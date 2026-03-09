@@ -1,7 +1,7 @@
 File
-  AliasDecl NodeId = int32
-  AliasDecl List = int32
-  AliasDecl PriorityQueue = int32
+  AliasDecl NodeId = i32
+  AliasDecl List = i32
+  AliasDecl PriorityQueue = i32
   FunctionDecl search
     Param start: NodeId
     Param goal: NodeId

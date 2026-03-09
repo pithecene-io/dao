@@ -84,7 +84,7 @@ auto find_offset(const ResolvedSource& result, const std::string& text, size_t n
 
 suite resolve_basic = [] {
   "simple identifier resolves to param"_test = [] {
-    auto result = resolve_source("test", "fn foo(x: int32): int32 -> x");
+    auto result = resolve_source("test", "fn foo(x: i32): i32 -> x");
     expect(result.resolve_result.diagnostics.empty());
 
     // 'x' at position of the expression body should resolve to Param
@@ -94,8 +94,8 @@ suite resolve_basic = [] {
 
   "simple identifier resolves to local"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(): int32\n"
-                                 "    let value: int32 = 42\n"
+                                 "fn foo(): i32\n"
+                                 "    let value: i32 = 42\n"
                                  "    value");
     expect(result.resolve_result.diagnostics.empty());
 
@@ -106,15 +106,15 @@ suite resolve_basic = [] {
 
   "unknown identifier produces diagnostic"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(): int32\n"
+                                 "fn foo(): i32\n"
                                  "    unknown_var");
     expect(has_diagnostic_containing(result.resolve_result, "unknown name 'unknown_var'"));
   };
 
   "forward reference to function"_test = [] {
     auto result = resolve_source("test",
-                                 "fn caller(): int32 -> callee()\n"
-                                 "fn callee(): int32 -> 0");
+                                 "fn caller(): i32 -> callee()\n"
+                                 "fn callee(): i32 -> 0");
     expect(result.resolve_result.diagnostics.empty());
 
     auto callee_offset = find_offset(result, "callee", 0); // first occurrence is the call
@@ -123,8 +123,8 @@ suite resolve_basic = [] {
 
   "qualified name rejects non-module leading segment"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(): int32 -> 0\n"
-                                 "fn main(): int32\n"
+                                 "fn foo(): i32 -> 0\n"
+                                 "fn main(): i32\n"
                                  "    foo::bar()");
     expect(has_diagnostic_containing(result.resolve_result, "'foo' is not a module"));
   };
@@ -133,9 +133,9 @@ suite resolve_basic = [] {
 suite resolve_scoping = [] {
   "let binding not visible before declaration"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(): int32\n"
-                                 "    let a: int32 = b\n"
-                                 "    let b: int32 = 0\n"
+                                 "fn foo(): i32\n"
+                                 "    let a: i32 = b\n"
+                                 "    let b: i32 = 0\n"
                                  "    a");
     // 'b' is used before its let declaration — produces unknown name.
     expect(has_diagnostic_containing(result.resolve_result, "unknown name 'b'"));
@@ -146,9 +146,9 @@ suite resolve_scoping = [] {
 
   "if block creates new scope"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(x: int32): int32\n"
+                                 "fn foo(x: i32): i32\n"
                                  "    if x > 0:\n"
-                                 "        let inner: int32 = 1\n"
+                                 "        let inner: i32 = 1\n"
                                  "        inner\n"
                                  "    x");
     // 'inner' should resolve inside the if block, 'x' outside
@@ -157,7 +157,7 @@ suite resolve_scoping = [] {
 
   "for loop variable scoped to body"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(xs: int32): int32\n"
+                                 "fn foo(xs: i32): i32\n"
                                  "    for item in xs:\n"
                                  "        item\n"
                                  "    0");
@@ -170,7 +170,7 @@ suite resolve_scoping = [] {
 
   "lambda param scoped to lambda body"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(x: int32): int32 -> |y| -> y + x");
+                                 "fn foo(x: i32): i32 -> |y| -> y + x");
     expect(result.resolve_result.diagnostics.empty());
 
     // 'y' in the body should resolve to LambdaParam
@@ -180,8 +180,8 @@ suite resolve_scoping = [] {
 
   "nested scopes shadow outer"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(x: int32): int32\n"
-                                 "    let x: int32 = 42\n"
+                                 "fn foo(x: i32): i32\n"
+                                 "    let x: i32 = 42\n"
                                  "    x");
     // The inner 'x' shadows the parameter — no error, resolves to Local
     expect(result.resolve_result.diagnostics.empty());
@@ -193,46 +193,46 @@ suite resolve_scoping = [] {
 suite resolve_duplicates = [] {
   "duplicate top-level functions"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(): int32 -> 0\n"
-                                 "fn foo(): int32 -> 1");
+                                 "fn foo(): i32 -> 0\n"
+                                 "fn foo(): i32 -> 1");
     expect(has_diagnostic_containing(result.resolve_result, "duplicate top-level declaration 'foo'"));
   };
 
   "duplicate parameters"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(x: int32, x: int32): int32 -> x");
+                                 "fn foo(x: i32, x: i32): i32 -> x");
     expect(has_diagnostic_containing(result.resolve_result, "duplicate parameter 'x'"));
   };
 
   "duplicate let in same scope"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(): int32\n"
-                                 "    let a: int32 = 1\n"
-                                 "    let a: int32 = 2\n"
+                                 "fn foo(): i32\n"
+                                 "    let a: i32 = 1\n"
+                                 "    let a: i32 = 2\n"
                                  "    a");
     expect(has_diagnostic_containing(result.resolve_result, "duplicate declaration 'a'"));
   };
 
   "duplicate lambda parameters"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(): int32 -> |x, x| -> x");
+                                 "fn foo(): i32 -> |x, x| -> x");
     expect(has_diagnostic_containing(result.resolve_result, "duplicate parameter 'x'"));
   };
 };
 
 suite resolve_types = [] {
   "builtin type resolves"_test = [] {
-    auto result = resolve_source("test", "fn foo(x: int32): int32 -> x");
+    auto result = resolve_source("test", "fn foo(x: i32): i32 -> x");
     expect(result.resolve_result.diagnostics.empty());
 
-    // int32 in param type should resolve to Builtin
-    // The first 'int32' in "x: int32" — find its offset
-    auto int32_offset = find_offset(result, "int32", 0);
+    // i32 in param type should resolve to Builtin
+    // The first 'i32' in "x: i32" — find its offset
+    auto int32_offset = find_offset(result, "i32", 0);
     expect(use_resolves_to(result, int32_offset, SymbolKind::Builtin));
   };
 
   "unknown nominal type does NOT produce diagnostic"_test = [] {
-    auto result = resolve_source("test", "fn foo(x: NodeId): int32 -> 0");
+    auto result = resolve_source("test", "fn foo(x: NodeId): i32 -> 0");
     // NodeId is unknown but type-position references are not diagnosed
     expect(result.resolve_result.diagnostics.empty());
   };
@@ -240,9 +240,9 @@ suite resolve_types = [] {
   "user-declared type resolves"_test = [] {
     auto result = resolve_source("test",
                                  "struct Point:\n"
-                                 "    let x: int32\n"
-                                 "    let y: int32\n"
-                                 "fn foo(p: Point): int32 -> 0");
+                                 "    let x: i32\n"
+                                 "    let y: i32\n"
+                                 "fn foo(p: Point): i32 -> 0");
     expect(result.resolve_result.diagnostics.empty());
 
     auto point_offset = find_offset(result, "Point", 1); // second 'Point' is the type use
@@ -254,7 +254,7 @@ suite resolve_imports = [] {
   "import binds last segment"_test = [] {
     auto result = resolve_source("test",
                                  "import net::http\n"
-                                 "fn foo(): int32 -> 0");
+                                 "fn foo(): i32 -> 0");
     expect(result.resolve_result.diagnostics.empty());
 
     // 'http' should be declared as a Module symbol
@@ -265,7 +265,7 @@ suite resolve_imports = [] {
   "qualified name first segment resolves to module"_test = [] {
     auto result = resolve_source("test",
                                  "import net::http\n"
-                                 "fn foo(): int32\n"
+                                 "fn foo(): i32\n"
                                  "    http::get()");
     expect(result.resolve_result.diagnostics.empty());
 
@@ -276,7 +276,7 @@ suite resolve_imports = [] {
 
   "unresolved first segment of qualified name produces diagnostic"_test = [] {
     auto result = resolve_source("test",
-                                 "fn foo(): int32\n"
+                                 "fn foo(): i32\n"
                                  "    unknown::get()");
     expect(has_diagnostic_containing(result.resolve_result, "unknown name 'unknown'"));
   };
@@ -286,16 +286,16 @@ suite resolve_struct = [] {
   "struct fields declared"_test = [] {
     auto result = resolve_source("test",
                                  "struct Point:\n"
-                                 "    let x: int32\n"
-                                 "    let y: int32");
+                                 "    let x: i32\n"
+                                 "    let y: i32");
     expect(result.resolve_result.diagnostics.empty());
   };
 
   "duplicate struct field"_test = [] {
     auto result = resolve_source("test",
                                  "struct Point:\n"
-                                 "    let x: int32\n"
-                                 "    let x: int32");
+                                 "    let x: i32\n"
+                                 "    let x: i32");
     expect(has_diagnostic_containing(result.resolve_result, "duplicate declaration 'x'"));
   };
 };

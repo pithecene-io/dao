@@ -93,51 +93,51 @@ auto count_tokens(const std::vector<SemanticToken>& tokens, std::string_view kin
 
 suite keyword_classification = [] {
   "keyword.fn is classified"_test = [] {
-    auto result = classify_source("test.dao", "fn main(): int32\n    0\n");
+    auto result = classify_source("test.dao", "fn main(): i32\n    0\n");
     expect(find_token(result.tokens, "keyword.fn") != nullptr);
   };
 
   "keyword.let is classified"_test = [] {
-    auto result = classify_source("test.dao", "fn main(): int32\n    let x = 1\n    0\n");
+    auto result = classify_source("test.dao", "fn main(): i32\n    let x = 1\n    0\n");
     expect(find_token(result.tokens, "keyword.let") != nullptr);
   };
 
   "keyword.if is classified"_test = [] {
-    auto result = classify_source("test.dao", "fn main(): int32\n    if true:\n        0\n    0\n");
+    auto result = classify_source("test.dao", "fn main(): i32\n    if true:\n        0\n    0\n");
     expect(find_token(result.tokens, "keyword.if") != nullptr);
   };
 
   "keyword.return is classified"_test = [] {
-    auto result = classify_source("test.dao", "fn main(): int32\n    return 0\n");
+    auto result = classify_source("test.dao", "fn main(): i32\n    return 0\n");
     expect(find_token(result.tokens, "keyword.return") != nullptr);
   };
 
   "keyword.import is classified"_test = [] {
-    auto result = classify_source("test.dao", "import foo\nfn main(): int32\n    0\n");
+    auto result = classify_source("test.dao", "import foo\nfn main(): i32\n    0\n");
     expect(find_token(result.tokens, "keyword.import") != nullptr);
   };
 
   "keyword.mode is classified"_test = [] {
     auto result =
-        classify_source("test.dao", "fn main(): int32\n    mode unsafe =>\n        0\n    0\n");
+        classify_source("test.dao", "fn main(): i32\n    mode unsafe =>\n        0\n    0\n");
     expect(find_token(result.tokens, "keyword.mode") != nullptr);
   };
 
   "keyword.resource is classified"_test = [] {
     auto result = classify_source(
-        "test.dao", "fn main(): int32\n    resource memory Pool =>\n        0\n    0\n");
+        "test.dao", "fn main(): i32\n    resource memory Pool =>\n        0\n    0\n");
     expect(find_token(result.tokens, "keyword.resource") != nullptr);
   };
 };
 
 suite literal_classification = [] {
   "literal.number for integers"_test = [] {
-    auto result = classify_source("test.dao", "fn main(): int32\n    42\n");
+    auto result = classify_source("test.dao", "fn main(): i32\n    42\n");
     expect(find_token(result.tokens, "literal.number") != nullptr);
   };
 
   "literal.string is classified"_test = [] {
-    auto result = classify_source("test.dao", "fn main(): int32\n    \"hello\"\n");
+    auto result = classify_source("test.dao", "fn main(): i32\n    \"hello\"\n");
     expect(find_token(result.tokens, "literal.string") != nullptr);
   };
 };
@@ -145,51 +145,51 @@ suite literal_classification = [] {
 suite operator_classification = [] {
   "operator.pipe is classified"_test = [] {
     auto result =
-        classify_source("test.dao", "fn f(x: int32): int32 -> x\nfn g(): int32 -> 1 |> f\n");
+        classify_source("test.dao", "fn f(x: i32): i32 -> x\nfn g(): i32 -> 1 |> f\n");
     expect(find_token(result.tokens, "operator.pipe") != nullptr);
   };
 
   "operator.arrow is classified"_test = [] {
-    auto result = classify_source("test.dao", "fn f(): int32 -> 0\n");
+    auto result = classify_source("test.dao", "fn f(): i32 -> 0\n");
     expect(find_token(result.tokens, "operator.arrow") != nullptr);
   };
 
   "operator.assignment is classified"_test = [] {
-    auto result = classify_source("test.dao", "fn main(): int32\n    let x = 1\n    0\n");
+    auto result = classify_source("test.dao", "fn main(): i32\n    let x = 1\n    0\n");
     expect(find_token(result.tokens, "operator.assignment") != nullptr);
   };
 };
 
 suite declaration_classification = [] {
   "decl.function on function name"_test = [] {
-    auto result = classify_source("test.dao", "fn main(): int32\n    0\n");
+    auto result = classify_source("test.dao", "fn main(): i32\n    0\n");
     expect(find_token(result.tokens, "decl.function") != nullptr);
   };
 
   "decl.type on struct name"_test = [] {
-    auto result = classify_source("test.dao", "struct Point:\n    let x: int32\n");
+    auto result = classify_source("test.dao", "struct Point:\n    let x: i32\n");
     expect(find_token(result.tokens, "decl.type") != nullptr);
   };
 
   "decl.field on struct member"_test = [] {
-    auto result = classify_source("test.dao", "struct Point:\n    let x: int32\n");
+    auto result = classify_source("test.dao", "struct Point:\n    let x: i32\n");
     expect(find_token(result.tokens, "decl.field") != nullptr);
   };
 };
 
 suite type_classification = [] {
-  "type.builtin for int32"_test = [] {
-    auto result = classify_source("test.dao", "fn main(): int32\n    0\n");
+  "type.builtin for i32"_test = [] {
+    auto result = classify_source("test.dao", "fn main(): i32\n    0\n");
     expect(find_token(result.tokens, "type.builtin") != nullptr);
   };
 
   "type.nominal for user types"_test = [] {
-    auto result = classify_source("test.dao", "fn f(g: Graph): int32\n    0\n");
+    auto result = classify_source("test.dao", "fn f(g: Graph): i32\n    0\n");
     expect(find_token(result.tokens, "type.nominal") != nullptr);
   };
 
   "qualified type classifies final segment as type.nominal"_test = [] {
-    auto result = classify_source("test.dao", "fn f(g: net::graph::Graph): int32\n    0\n");
+    auto result = classify_source("test.dao", "fn f(g: net::graph::Graph): i32\n    0\n");
     expect(find_token_at(result, "type.nominal", "Graph") != nullptr)
         << "final segment should be type.nominal";
     expect(find_token_at(result, "use.module", "net") != nullptr)
@@ -201,7 +201,7 @@ suite type_classification = [] {
 
 suite module_classification = [] {
   "use.module on import path segments"_test = [] {
-    auto result = classify_source("test.dao", "import net::http\nfn main(): int32\n    0\n");
+    auto result = classify_source("test.dao", "import net::http\nfn main(): i32\n    0\n");
     expect(find_token_at(result, "use.module", "net") != nullptr)
         << "first import segment should be use.module";
     expect(find_token_at(result, "decl.module", "http") != nullptr)
@@ -213,7 +213,7 @@ suite module_classification = [] {
     // to classify — structural AST classification is not authoritative
     // for expression-position qualified names.
     auto result = classify_source_resolved(
-        "test.dao", "import net::http\nfn main(): int32\n    http::get\n    0\n");
+        "test.dao", "import net::http\nfn main(): i32\n    http::get\n    0\n");
     expect(find_token_at(result, "use.module", "http") != nullptr)
         << "leading segment should be use.module";
   };
@@ -223,18 +223,18 @@ suite variable_classification = [] {
   "param binder is not classified as use.variable.param"_test = [] {
     // Parameter binders are declaration sites. use.variable.param is
     // for references, which require name resolution (Task 6).
-    auto result = classify_source("test.dao", "fn f(x: int32): int32\n    0\n");
+    auto result = classify_source("test.dao", "fn f(x: i32): i32\n    0\n");
     expect(find_token(result.tokens, "use.variable.param") == nullptr);
   };
 
   "let binder is not classified as use.variable.local"_test = [] {
     // Let binders are declaration sites — same reasoning as params.
-    auto result = classify_source("test.dao", "fn main(): int32\n    let x = 1\n    0\n");
+    auto result = classify_source("test.dao", "fn main(): i32\n    let x = 1\n    0\n");
     expect(find_token(result.tokens, "use.variable.local") == nullptr);
   };
 
   "use.field on field access"_test = [] {
-    auto result = classify_source("test.dao", "fn f(p: Point): int32\n    p.x\n");
+    auto result = classify_source("test.dao", "fn f(p: Point): i32\n    p.x\n");
     expect(find_token(result.tokens, "use.field") != nullptr);
   };
 };
@@ -242,19 +242,19 @@ suite variable_classification = [] {
 suite mode_resource_classification = [] {
   "mode.unsafe is classified"_test = [] {
     auto result =
-        classify_source("test.dao", "fn main(): int32\n    mode unsafe =>\n        0\n    0\n");
+        classify_source("test.dao", "fn main(): i32\n    mode unsafe =>\n        0\n    0\n");
     expect(find_token(result.tokens, "mode.unsafe") != nullptr);
   };
 
   "resource.kind.memory is classified"_test = [] {
     auto result = classify_source(
-        "test.dao", "fn main(): int32\n    resource memory Pool =>\n        0\n    0\n");
+        "test.dao", "fn main(): i32\n    resource memory Pool =>\n        0\n    0\n");
     expect(find_token(result.tokens, "resource.kind.memory") != nullptr);
   };
 
   "resource.binding is classified"_test = [] {
     auto result = classify_source(
-        "test.dao", "fn main(): int32\n    resource memory Pool =>\n        0\n    0\n");
+        "test.dao", "fn main(): i32\n    resource memory Pool =>\n        0\n    0\n");
     expect(find_token(result.tokens, "resource.binding") != nullptr);
   };
 };
@@ -262,14 +262,14 @@ suite mode_resource_classification = [] {
 suite lambda_classification = [] {
   "lambda.param is classified"_test = [] {
     auto result =
-        classify_source("test.dao", "fn f(x: int32): int32 -> x\nfn g(): int32 -> 1 |> |x| -> x\n");
+        classify_source("test.dao", "fn f(x: i32): i32 -> x\nfn g(): i32 -> 1 |> |x| -> x\n");
     expect(find_token(result.tokens, "lambda.param") != nullptr);
   };
 };
 
 suite punctuation_classification = [] {
   "punctuation is classified"_test = [] {
-    auto result = classify_source("test.dao", "fn f(x: int32): int32\n    0\n");
+    auto result = classify_source("test.dao", "fn f(x: i32): i32\n    0\n");
     expect(find_token(result.tokens, "punctuation") != nullptr);
   };
 };
@@ -277,7 +277,7 @@ suite punctuation_classification = [] {
 suite sorted_output = [] {
   "tokens are sorted by offset"_test = [] {
     auto result = classify_source("test.dao",
-                                  "fn main(): int32\n"
+                                  "fn main(): i32\n"
                                   "    let x = 1\n"
                                   "    0\n");
     for (size_t i = 1; i < result.tokens.size(); ++i) {
@@ -327,7 +327,7 @@ suite taxonomy_coverage = [] {
       categories.insert(tok.kind);
     }
 
-    // hello.dao has: fn, print("hello, dao"), 0, int32
+    // hello.dao has: fn, print("hello, dao"), 0, i32
     expect(categories.contains("keyword.fn")) << "missing keyword.fn";
     expect(categories.contains("decl.function")) << "missing decl.function";
     expect(categories.contains("literal.number")) << "missing literal.number";

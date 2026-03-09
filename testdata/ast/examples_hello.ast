@@ -5,7 +5,7 @@ File
     ExpressionStatement
       IntLiteral 0
   FunctionDecl main
-    ReturnType: int32
+    ReturnType: i32
     ExpressionStatement
       CallExpr
         Callee

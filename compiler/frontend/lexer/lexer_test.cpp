@@ -109,7 +109,7 @@ suite operator_tests = [] {
   };
 
   "colon vs coloncolon disambiguation"_test = [] {
-    auto output = lex_string("x: int32\nnet::http::get\n");
+    auto output = lex_string("x: i32\nnet::http::get\n");
     auto kinds = std::vector<TokenKind>{};
     for (const auto& tok : output.result.tokens) {
       if (tok.kind != TokenKind::Newline && tok.kind != TokenKind::Eof &&
@@ -117,11 +117,11 @@ suite operator_tests = [] {
         kinds.push_back(tok.kind);
       }
     }
-    // x : int32 net :: http :: get
+    // x : i32 net :: http :: get
     expect(kinds.size() == 8_u);
     expect(kinds[0] == TokenKind::Identifier); // x
     expect(kinds[1] == TokenKind::Colon);      // :
-    expect(kinds[2] == TokenKind::Identifier); // int32
+    expect(kinds[2] == TokenKind::Identifier); // i32
     expect(kinds[3] == TokenKind::Identifier); // net
     expect(kinds[4] == TokenKind::ColonColon); // ::
     expect(kinds[5] == TokenKind::Identifier); // http
@@ -196,7 +196,7 @@ suite identifier_tests = [] {
 
 suite indentation_tests = [] {
   "simple indent dedent"_test = [] {
-    auto output = lex_string("fn main(): int32\n    0\n");
+    auto output = lex_string("fn main(): i32\n    0\n");
     int indents = count_kind(output.result.tokens, TokenKind::Indent);
     int dedents = count_kind(output.result.tokens, TokenKind::Dedent);
     expect(indents == dedents) << "INDENT/DEDENT must be balanced";
@@ -204,7 +204,7 @@ suite indentation_tests = [] {
   };
 
   "nested indentation"_test = [] {
-    auto output = lex_string("fn f(): int32\n    if true:\n        0\n    1\n");
+    auto output = lex_string("fn f(): i32\n    if true:\n        0\n    1\n");
     int indents = count_kind(output.result.tokens, TokenKind::Indent);
     int dedents = count_kind(output.result.tokens, TokenKind::Dedent);
     expect(indents == dedents) << "INDENT/DEDENT must be balanced";
@@ -212,7 +212,7 @@ suite indentation_tests = [] {
   };
 
   "blank lines do not affect indentation"_test = [] {
-    auto output = lex_string("fn f(): int32\n    let x: int32\n\n    x\n");
+    auto output = lex_string("fn f(): i32\n    let x: i32\n\n    x\n");
     int indents = count_kind(output.result.tokens, TokenKind::Indent);
     int dedents = count_kind(output.result.tokens, TokenKind::Dedent);
     expect(indents == dedents) << "INDENT/DEDENT must be balanced";
@@ -220,7 +220,7 @@ suite indentation_tests = [] {
   };
 
   "tabs rejected"_test = [] {
-    auto output = lex_string("fn f(): int32\n\t0\n");
+    auto output = lex_string("fn f(): i32\n\t0\n");
     expect(!output.result.diagnostics.empty()) << "tabs must produce a diagnostic";
   };
 

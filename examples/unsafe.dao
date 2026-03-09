@@ -1,5 +1,5 @@
-fn read(ptr: *int32): int32
-    let value: int32
+fn read(ptr: *i32): i32
+    let value: i32
 
     mode unsafe =>
         value = *ptr

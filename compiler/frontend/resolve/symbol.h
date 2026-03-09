@@ -16,7 +16,7 @@ enum class SymbolKind : std::uint8_t {
   Local,       // let binding or for-loop variable
   Field,       // struct member
   Module,      // import binding
-  Builtin,     // built-in type (int32, float64, etc.)
+  Builtin,     // built-in type (i32, f64, etc.)
   LambdaParam, // lambda |x| parameter
 };
 

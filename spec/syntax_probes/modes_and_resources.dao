@@ -1,6 +1,6 @@
-type NodeId = int32
-type List = int32
-type PriorityQueue = int32
+type NodeId = i32
+type List = i32
+type PriorityQueue = i32
 
 fn search(start: NodeId, goal: NodeId): List[NodeId]
     resource memory Search =>
