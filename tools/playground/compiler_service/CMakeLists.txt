@@ -9,6 +9,7 @@ add_executable(dao_playground
 
 target_link_libraries(dao_playground PRIVATE
   dao_analysis
+  dao_ir
   dao_frontend
   httplib::httplib
   nlohmann_json::nlohmann_json

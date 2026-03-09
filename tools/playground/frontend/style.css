@@ -76,7 +76,7 @@ main {
   min-height: 0;
 }
 
-#ast-panel {
+#ir-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -102,14 +102,48 @@ main {
   border-bottom: 1px solid var(--border);
 }
 
-#ast-output {
-  flex: 1;
+.panel-tabs {
+  background: var(--bg-header);
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-tabs .tab {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.panel-tabs .tab:hover {
+  color: var(--fg);
+}
+
+.panel-tabs .tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tab-content {
+  display: none;
   padding: 12px;
   overflow: auto;
   font-size: 13px;
   line-height: 1.5;
   white-space: pre;
   min-height: 0;
+}
+
+.tab-content.active {
+  display: block;
+  flex: 1;
 }
 
 #diagnostics-output {
