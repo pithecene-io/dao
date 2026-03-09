@@ -15,3 +15,7 @@ CMakeUserPresets.json
 .DS_Store
 .vscode/
 .idea/
+
+# Tool caches
+.cache/
+.task/
