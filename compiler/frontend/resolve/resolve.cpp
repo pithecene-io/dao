@@ -21,6 +21,8 @@ auto symbol_kind_name(SymbolKind kind) -> const char* {
     return "Module";
   case SymbolKind::Builtin:
     return "Builtin";
+  case SymbolKind::Predeclared:
+    return "Predeclared";
   case SymbolKind::LambdaParam:
     return "LambdaParam";
   }
@@ -34,8 +36,16 @@ namespace {
 // ---------------------------------------------------------------------------
 
 constexpr std::string_view kBuiltinTypes[] = {
-    "int8",  "int16",   "int32",   "int64",   "uint8",  "uint16", "uint32",
-    "uint64", "float32", "float64", "bool",    "string", "void",
+    "i8",  "i16", "i32", "i64", "u8",   "u16",
+    "u32", "u64", "f32", "f64", "bool",
+};
+
+// Predeclared named types — not builtin scalars, but compiler-known
+// so that examples work without imports. See
+// CONTRACT_TYPE_SYSTEM_FOUNDATIONS.md §5.
+constexpr std::string_view kPredeclaredTypes[] = {
+    "string",
+    "void",
 };
 
 // ---------------------------------------------------------------------------
@@ -73,6 +83,10 @@ private:
   void populate_builtins() {
     for (auto name : kBuiltinTypes) {
       auto* sym = ctx_.make_symbol(SymbolKind::Builtin, name, Span{}, nullptr);
+      file_scope_->declare(name, sym);
+    }
+    for (auto name : kPredeclaredTypes) {
+      auto* sym = ctx_.make_symbol(SymbolKind::Predeclared, name, Span{}, nullptr);
       file_scope_->declare(name, sym);
     }
   }

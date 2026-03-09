@@ -1,18 +1,18 @@
 File
-  AliasDecl List = int32
+  AliasDecl List = i32
   FunctionDecl filter
-    Param pred: int32
-    ReturnType: int32
+    Param pred: i32
+    ReturnType: i32
     ExprBody
       IntLiteral 0
   FunctionDecl map
-    Param f: int32
-    ReturnType: int32
+    Param f: i32
+    ReturnType: i32
     ExprBody
       IntLiteral 0
   FunctionDecl positive_squares
-    Param xs: List[int32]
-    ReturnType: List[int32]
+    Param xs: List[i32]
+    ReturnType: List[i32]
     ExprBody
       PipeExpr
         Identifier xs

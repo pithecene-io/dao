@@ -86,7 +86,7 @@ const tokenHighlighter = ViewPlugin.fromClass(
 // Editor setup
 // ---------------------------------------------------------------------------
 
-const defaultSource = `fn main(): int32
+const defaultSource = `fn main(): i32
     print("hello, dao")
     0
 `;

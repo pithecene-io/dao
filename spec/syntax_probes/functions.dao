@@ -1,7 +1,7 @@
-fn add(a: int32, b: int32): int32 -> a + b
+fn add(a: i32, b: i32): i32 -> a + b
 
-fn read(ptr: *int32): int32
-    let value: int32 = 0
+fn read(ptr: *i32): i32
+    let value: i32 = 0
 
     mode unsafe =>
         value = *ptr

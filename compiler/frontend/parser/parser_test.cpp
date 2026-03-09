@@ -48,7 +48,7 @@ auto parse_file(const std::filesystem::path& path) -> ParseOutput {
 
 suite function_tests = [] {
   "expression-bodied function"_test = [] {
-    auto output = parse_string("fn add(a: int32, b: int32): int32 -> a + b\n");
+    auto output = parse_string("fn add(a: i32, b: i32): i32 -> a + b\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     auto* file = output.parse_result.file;
     expect(file != nullptr);
@@ -67,7 +67,7 @@ suite function_tests = [] {
   };
 
   "block-bodied function"_test = [] {
-    auto output = parse_string("fn main(): int32\n    0\n");
+    auto output = parse_string("fn main(): i32\n    0\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     auto* file = output.parse_result.file;
     expect(file->declarations().size() == 1_u);
@@ -79,7 +79,7 @@ suite function_tests = [] {
   };
 
   "no-param function"_test = [] {
-    auto output = parse_string("fn greet(): int32 -> 0\n");
+    auto output = parse_string("fn greet(): i32 -> 0\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     expect(fn->params().empty());
@@ -88,7 +88,7 @@ suite function_tests = [] {
 
 suite let_tests = [] {
   "let with type and initializer"_test = [] {
-    auto output = parse_string("fn f(): int32\n    let x: int32 = 42\n    x\n");
+    auto output = parse_string("fn f(): i32\n    let x: i32 = 42\n    x\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     expect(fn->body().size() == 2_u);
@@ -101,7 +101,7 @@ suite let_tests = [] {
   };
 
   "let with type only"_test = [] {
-    auto output = parse_string("fn f(): int32\n    let x: int32\n    x\n");
+    auto output = parse_string("fn f(): i32\n    let x: i32\n    x\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* let_stmt = static_cast<LetStatementNode*>(fn->body()[0]);
@@ -110,7 +110,7 @@ suite let_tests = [] {
   };
 
   "let with initializer only"_test = [] {
-    auto output = parse_string("fn f(): int32\n    let x = 42\n    x\n");
+    auto output = parse_string("fn f(): i32\n    let x = 42\n    x\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* let_stmt = static_cast<LetStatementNode*>(fn->body()[0]);
@@ -121,7 +121,7 @@ suite let_tests = [] {
 
 suite control_flow_tests = [] {
   "if statement"_test = [] {
-    auto output = parse_string("fn f(): int32\n    if true:\n        0\n    1\n");
+    auto output = parse_string("fn f(): i32\n    if true:\n        0\n    1\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* if_stmt = static_cast<IfStatementNode*>(fn->body()[0]);
@@ -132,7 +132,7 @@ suite control_flow_tests = [] {
   };
 
   "if-else statement"_test = [] {
-    auto output = parse_string("fn f(): int32\n    if true:\n        0\n    else:\n        1\n");
+    auto output = parse_string("fn f(): i32\n    if true:\n        0\n    else:\n        1\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* if_stmt = static_cast<IfStatementNode*>(fn->body()[0]);
@@ -141,7 +141,7 @@ suite control_flow_tests = [] {
   };
 
   "while statement"_test = [] {
-    auto output = parse_string("fn f(): int32\n    while true:\n        0\n    1\n");
+    auto output = parse_string("fn f(): i32\n    while true:\n        0\n    1\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* while_stmt = static_cast<WhileStatementNode*>(fn->body()[0]);
@@ -150,7 +150,7 @@ suite control_flow_tests = [] {
   };
 
   "for statement"_test = [] {
-    auto output = parse_string("fn f(): int32\n    for i in items:\n        i\n    0\n");
+    auto output = parse_string("fn f(): i32\n    for i in items:\n        i\n    0\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* for_stmt = static_cast<ForStatementNode*>(fn->body()[0]);
@@ -161,7 +161,7 @@ suite control_flow_tests = [] {
 
 suite expression_tests = [] {
   "binary operators"_test = [] {
-    auto output = parse_string("fn f(): int32 -> 1 + 2 * 3\n");
+    auto output = parse_string("fn f(): i32 -> 1 + 2 * 3\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     // Should be BinaryExpr(+, 1, BinaryExpr(*, 2, 3)) — * binds tighter than +
@@ -175,7 +175,7 @@ suite expression_tests = [] {
   };
 
   "unary operators"_test = [] {
-    auto output = parse_string("fn f(p: *int32): int32 -> *p\n");
+    auto output = parse_string("fn f(p: *i32): i32 -> *p\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* deref = static_cast<UnaryExprNode*>(fn->expr_body());
@@ -184,7 +184,7 @@ suite expression_tests = [] {
   };
 
   "function call"_test = [] {
-    auto output = parse_string("fn f(): int32\n    foo(1, 2)\n");
+    auto output = parse_string("fn f(): i32\n    foo(1, 2)\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
@@ -194,7 +194,7 @@ suite expression_tests = [] {
   };
 
   "field access"_test = [] {
-    auto output = parse_string("fn f(): int32\n    x.y.z\n");
+    auto output = parse_string("fn f(): i32\n    x.y.z\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
@@ -206,7 +206,7 @@ suite expression_tests = [] {
   };
 
   "index expression"_test = [] {
-    auto output = parse_string("fn f(): int32\n    a[0]\n");
+    auto output = parse_string("fn f(): i32\n    a[0]\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
@@ -216,7 +216,7 @@ suite expression_tests = [] {
   };
 
   "multi-arg bracket"_test = [] {
-    auto output = parse_string("fn f(): int32\n    Map[int32, string]()\n");
+    auto output = parse_string("fn f(): i32\n    Map[i32, string]()\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
@@ -227,7 +227,7 @@ suite expression_tests = [] {
   };
 
   "comparison operators"_test = [] {
-    auto output = parse_string("fn f(): int32 -> 1 == 2\n");
+    auto output = parse_string("fn f(): i32 -> 1 == 2\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* eq = static_cast<BinaryExprNode*>(fn->expr_body());
@@ -235,7 +235,7 @@ suite expression_tests = [] {
   };
 
   "logical operators"_test = [] {
-    auto output = parse_string("fn f(): int32 -> true and false or true\n");
+    auto output = parse_string("fn f(): i32 -> true and false or true\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     // or binds less tightly than and: or(and(true, false), true)
@@ -248,12 +248,12 @@ suite expression_tests = [] {
 
 suite lambda_tests = [] {
   "simple lambda"_test = [] {
-    auto output = parse_string("fn f(): int32 -> |x| -> x + 1\n");
+    auto output = parse_string("fn f(): i32 -> |x| -> x + 1\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
   };
 
   "lambda in pipe"_test = [] {
-    auto output = parse_string("fn f(): int32\n    xs |> map |x| -> x * x\n");
+    auto output = parse_string("fn f(): i32\n    xs |> map |x| -> x * x\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
@@ -263,7 +263,7 @@ suite lambda_tests = [] {
 
 suite pipe_tests = [] {
   "simple pipe"_test = [] {
-    auto output = parse_string("fn f(): int32\n    x |> foo |> bar\n");
+    auto output = parse_string("fn f(): i32\n    x |> foo |> bar\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
@@ -273,7 +273,7 @@ suite pipe_tests = [] {
   };
 
   "multi-line pipe in suite"_test = [] {
-    auto output = parse_string("fn f(): int32\n    xs\n        |> map |x| -> x\n    0\n");
+    auto output = parse_string("fn f(): i32\n    xs\n        |> map |x| -> x\n    0\n");
     expect(output.parse_result.diagnostics.empty()) << "multi-line pipe in suite";
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     expect(fn->body().size() == 2_u) << "pipe expr + trailing 0";
@@ -284,7 +284,7 @@ suite pipe_tests = [] {
 
 suite mode_resource_tests = [] {
   "mode block"_test = [] {
-    auto output = parse_string("fn f(): int32\n    mode unsafe =>\n        0\n    1\n");
+    auto output = parse_string("fn f(): i32\n    mode unsafe =>\n        0\n    1\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* mode = static_cast<ModeBlockNode*>(fn->body()[0]);
@@ -294,7 +294,7 @@ suite mode_resource_tests = [] {
   };
 
   "resource block"_test = [] {
-    auto output = parse_string("fn f(): int32\n    resource memory Search =>\n        0\n    1\n");
+    auto output = parse_string("fn f(): i32\n    resource memory Search =>\n        0\n    1\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* res = static_cast<ResourceBlockNode*>(fn->body()[0]);
@@ -307,7 +307,7 @@ suite mode_resource_tests = [] {
 
 suite type_tests = [] {
   "pointer type"_test = [] {
-    auto output = parse_string("fn f(p: *int32): int32 -> 0\n");
+    auto output = parse_string("fn f(p: *i32): i32 -> 0\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* param_type = fn->params()[0].type;
@@ -315,7 +315,7 @@ suite type_tests = [] {
   };
 
   "parameterized type"_test = [] {
-    auto output = parse_string("fn f(): List[int32] -> []\n");
+    auto output = parse_string("fn f(): List[i32] -> []\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* ret = static_cast<NamedTypeNode*>(fn->return_type());
@@ -326,7 +326,7 @@ suite type_tests = [] {
   };
 
   "multi-param type"_test = [] {
-    auto output = parse_string("fn f(): Map[int32, string] -> []\n");
+    auto output = parse_string("fn f(): Map[i32, string] -> []\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* ret = static_cast<NamedTypeNode*>(fn->return_type());
@@ -336,7 +336,7 @@ suite type_tests = [] {
 
 suite import_tests = [] {
   "simple import"_test = [] {
-    auto output = parse_string("import foo\nfn f(): int32 -> 0\n");
+    auto output = parse_string("import foo\nfn f(): i32 -> 0\n");
     expect(output.parse_result.diagnostics.empty());
     expect(output.parse_result.file->imports().size() == 1_u);
     auto* imp = static_cast<ImportNode*>(output.parse_result.file->imports()[0]);
@@ -345,7 +345,7 @@ suite import_tests = [] {
   };
 
   "qualified import"_test = [] {
-    auto output = parse_string("import net::http\nfn f(): int32 -> 0\n");
+    auto output = parse_string("import net::http\nfn f(): i32 -> 0\n");
     expect(output.parse_result.diagnostics.empty());
     auto* imp = static_cast<ImportNode*>(output.parse_result.file->imports()[0]);
     expect(imp->path().segments.size() == 2_u);
@@ -356,7 +356,7 @@ suite import_tests = [] {
 
 suite assignment_tests = [] {
   "simple assignment"_test = [] {
-    auto output = parse_string("fn f(): int32\n    x = 42\n");
+    auto output = parse_string("fn f(): i32\n    x = 42\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* assign = static_cast<AssignmentNode*>(fn->body()[0]);
@@ -366,7 +366,7 @@ suite assignment_tests = [] {
   };
 
   "field assignment"_test = [] {
-    auto output = parse_string("fn f(): int32\n    x.y = 42\n");
+    auto output = parse_string("fn f(): i32\n    x.y = 42\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* assign = static_cast<AssignmentNode*>(fn->body()[0]);
@@ -374,7 +374,7 @@ suite assignment_tests = [] {
   };
 
   "index assignment"_test = [] {
-    auto output = parse_string("fn f(): int32\n    a[0] = 42\n");
+    auto output = parse_string("fn f(): i32\n    a[0] = 42\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* assign = static_cast<AssignmentNode*>(fn->body()[0]);
@@ -382,14 +382,14 @@ suite assignment_tests = [] {
   };
 
   "invalid assignment target"_test = [] {
-    auto output = parse_string("fn f(): int32\n    1 = 2\n");
+    auto output = parse_string("fn f(): i32\n    1 = 2\n");
     expect(!output.parse_result.diagnostics.empty()) << "should reject invalid LHS";
   };
 };
 
 suite return_tests = [] {
   "return statement"_test = [] {
-    auto output = parse_string("fn f(): int32\n    return 42\n");
+    auto output = parse_string("fn f(): i32\n    return 42\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* ret = static_cast<ReturnStatementNode*>(fn->body()[0]);
@@ -428,7 +428,7 @@ suite file_tests = [] {
 
 suite qualified_name_tests = [] {
   "qualified name in expression"_test = [] {
-    auto output = parse_string("fn f(): int32\n    Foo::bar()\n");
+    auto output = parse_string("fn f(): i32\n    Foo::bar()\n");
     expect(output.parse_result.diagnostics.empty());
     auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
     auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
