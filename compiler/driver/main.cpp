@@ -3,6 +3,8 @@
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser.h"
 #include "frontend/resolve/resolve.h"
+#include "frontend/typecheck/type_checker.h"
+#include "frontend/types/type_context.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -176,6 +178,45 @@ void cmd_resolve(const std::filesystem::path& path) {
   }
 }
 
+// Run type checking and print diagnostics.
+void cmd_check(const std::filesystem::path& path) {
+  auto result = lex_and_parse(path);
+  if (result.parse_result.file == nullptr) {
+    return;
+  }
+
+  auto resolve_result = dao::resolve(*result.parse_result.file);
+
+  // Print resolve diagnostics.
+  for (const auto& diag : resolve_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
+  }
+
+  dao::TypeContext types;
+  auto check_result =
+      dao::typecheck(*result.parse_result.file, resolve_result, types);
+
+  bool has_errors = !resolve_result.diagnostics.empty();
+
+  for (const auto& diag : check_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    auto severity = diag.severity == dao::Severity::Error ? "error" : "warning";
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": " << severity << ": " << diag.message << "\n";
+    if (diag.severity == dao::Severity::Error) {
+      has_errors = true;
+    }
+  }
+
+  if (has_errors) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  std::cout << "ok\n";
+}
+
 // Pretty-print AST. Output is deterministic and suitable for golden-file testing.
 void cmd_ast(const std::filesystem::path& path) {
   auto result = lex_and_parse(path);
@@ -189,7 +230,7 @@ void cmd_ast(const std::filesystem::path& path) {
 auto main(int argc, char* argv[]) -> int {
   if (argc < 2) {
     std::cerr << "usage: daoc <command> <file>\n";
-    std::cerr << "commands: lex, parse, ast, tokens, resolve\n";
+    std::cerr << "commands: lex, parse, ast, tokens, resolve, check\n";
     return EXIT_FAILURE;
   }
 
@@ -252,6 +293,21 @@ auto main(int argc, char* argv[]) -> int {
       return EXIT_FAILURE;
     }
     cmd_resolve(resolve_path);
+    return EXIT_SUCCESS;
+  }
+
+  // daoc check <file>
+  if (arg1 == "check") {
+    if (argc < 3) {
+      std::cerr << "usage: daoc check <file>\n";
+      return EXIT_FAILURE;
+    }
+    std::filesystem::path check_path(argv[2]);
+    if (!std::filesystem::exists(check_path)) {
+      std::cerr << "error: file not found: " << check_path << "\n";
+      return EXIT_FAILURE;
+    }
+    cmd_check(check_path);
     return EXIT_SUCCESS;
   }
 
