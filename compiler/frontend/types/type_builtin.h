@@ -19,10 +19,9 @@ enum class BuiltinKind : std::uint8_t {
   F32,
   F64,
   Bool,
-  Void, // compiler-internal return type, not a user-facing scalar
 };
 
-inline constexpr std::uint8_t kBuiltinKindCount = 12;
+inline constexpr std::uint8_t kBuiltinKindCount = 11;
 
 auto builtin_kind_name(BuiltinKind kind) -> const char*;
 auto builtin_kind_from_name(std::string_view name) -> std::optional<BuiltinKind>;

@@ -39,14 +39,41 @@ suite type_builtin = [] {
     expect(ctx.i32() == ctx.i32());
     expect(ctx.f64() == ctx.f64());
     expect(ctx.bool_type() == ctx.bool_type());
-    expect(ctx.void_type() == ctx.void_type());
   };
 
   "different builtins are distinct"_test = [] {
     TypeContext ctx;
     expect(ctx.i32() != ctx.f64());
     expect(ctx.i32() != ctx.u32());
-    expect(ctx.bool_type() != ctx.void_type());
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Void type (not a builtin scalar)
+// ---------------------------------------------------------------------------
+
+suite type_void = [] {
+  "void_type is non-null and has Void kind"_test = [] {
+    TypeContext ctx;
+    auto* v = ctx.void_type();
+    expect(v != nullptr);
+    expect(v->kind() == TypeKind::Void);
+  };
+
+  "void_type is a singleton"_test = [] {
+    TypeContext ctx;
+    expect(ctx.void_type() == ctx.void_type());
+  };
+
+  "void is distinct from builtins"_test = [] {
+    TypeContext ctx;
+    // void_type() returns const TypeVoid*, builtins return const TypeBuiltin*.
+    // Compare as const Type* to verify distinct identity.
+    const Type* v = ctx.void_type();
+    const Type* i = ctx.i32();
+    const Type* b = ctx.bool_type();
+    expect(v != i);
+    expect(v != b);
   };
 };
 
@@ -297,6 +324,7 @@ suite type_printer = [] {
 suite type_utilities = [] {
   "type_kind_name covers all kinds"_test = [] {
     expect(std::string_view(type_kind_name(TypeKind::Builtin)) == "Builtin");
+    expect(std::string_view(type_kind_name(TypeKind::Void)) == "Void");
     expect(std::string_view(type_kind_name(TypeKind::Pointer)) == "Pointer");
     expect(std::string_view(type_kind_name(TypeKind::Function)) == "Function");
     expect(std::string_view(type_kind_name(TypeKind::Named)) == "Named");
@@ -317,6 +345,7 @@ suite type_utilities = [] {
 
   "builtin_kind_from_name returns nullopt for unknown"_test = [] {
     expect(!builtin_kind_from_name("string").has_value());
+    expect(!builtin_kind_from_name("void").has_value()) << "void is not a builtin scalar";
     expect(!builtin_kind_from_name("int").has_value());
     expect(!builtin_kind_from_name("").has_value());
   };

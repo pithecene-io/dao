@@ -7,6 +7,7 @@ namespace dao {
 
 enum class TypeKind : std::uint8_t {
   Builtin,
+  Void, // compiler-internal return type, not a builtin scalar
   Pointer,
   Function,
   Named,

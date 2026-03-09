@@ -49,6 +49,17 @@ private:
   BuiltinKind builtin_;
 };
 
+// Void — compiler-internal return type. Not a builtin scalar.
+// See CONTRACT_TYPE_SYSTEM_FOUNDATIONS.md §5.
+class TypeVoid : public Type {
+public:
+  TypeVoid() : Type(TypeKind::Void) {}
+
+  static auto classof(const Type* t) -> bool {
+    return t->kind() == TypeKind::Void;
+  }
+};
+
 class TypePointer : public Type {
 public:
   explicit TypePointer(const Type* pointee)

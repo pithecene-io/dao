@@ -9,6 +9,8 @@ auto type_kind_name(TypeKind kind) -> const char* {
   switch (kind) {
   case TypeKind::Builtin:
     return "Builtin";
+  case TypeKind::Void:
+    return "Void";
   case TypeKind::Pointer:
     return "Pointer";
   case TypeKind::Function:
@@ -49,8 +51,6 @@ auto builtin_kind_name(BuiltinKind kind) -> const char* {
     return "f64";
   case BuiltinKind::Bool:
     return "bool";
-  case BuiltinKind::Void:
-    return "void";
   }
   return "unknown";
 }
@@ -67,7 +67,6 @@ auto builtin_kind_from_name(std::string_view name) -> std::optional<BuiltinKind>
   if (name == "f32") return BuiltinKind::F32;
   if (name == "f64") return BuiltinKind::F64;
   if (name == "bool") return BuiltinKind::Bool;
-  if (name == "void") return BuiltinKind::Void;
   return std::nullopt;
 }
 

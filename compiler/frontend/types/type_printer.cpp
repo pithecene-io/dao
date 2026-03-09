@@ -18,6 +18,9 @@ void print_type(std::ostream& out, const Type* type) {
     out << builtin_kind_name(b->builtin());
     break;
   }
+  case TypeKind::Void:
+    out << "void";
+    break;
   case TypeKind::Pointer: {
     const auto* p = static_cast<const TypePointer*>(type);
     out << '*';
