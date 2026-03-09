@@ -28,6 +28,9 @@ Defines the allowed top-level ontology and major subroots for Dao.
 - `lexer/`
 - `parser/`
 - `ast/`
+- `resolve/`
+- `types/`
+- `typecheck/`
 - `diagnostics/`
 
 ### Under `compiler/ir/`
