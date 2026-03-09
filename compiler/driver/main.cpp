@@ -318,7 +318,7 @@ void cmd_mir(const std::filesystem::path& path) {
   }
 
   dao::MirContext mir_ctx;
-  auto mir_result = dao::build_mir(*hir_result.module, mir_ctx);
+  auto mir_result = dao::build_mir(*hir_result.module, mir_ctx, types);
 
   for (const auto& diag : mir_result.diagnostics) {
     auto loc = result.source.line_col(diag.span.offset);

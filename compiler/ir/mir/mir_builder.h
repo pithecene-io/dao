@@ -2,6 +2,7 @@
 #define DAO_IR_MIR_MIR_BUILDER_H
 
 #include "frontend/diagnostics/diagnostic.h"
+#include "frontend/types/type_context.h"
 #include "ir/hir/hir.h"
 #include "ir/mir/mir.h"
 #include "ir/mir/mir_context.h"
@@ -26,12 +27,13 @@ struct MirBuildResult {
 
 class MirBuilder {
 public:
-  explicit MirBuilder(MirContext& ctx);
+  MirBuilder(MirContext& ctx, TypeContext& types);
 
   auto build(const HirModule& module) -> MirBuildResult;
 
 private:
   MirContext& ctx_;
+  TypeContext& types_;
   std::vector<Diagnostic> diagnostics_;
 
   // --- Per-function state (reset for each function) ---
@@ -40,6 +42,14 @@ private:
   uint32_t next_value_id_ = 0;
   uint32_t next_block_id_ = 0;
   std::unordered_map<const Symbol*, LocalId> symbol_to_local_;
+
+  // Active mode/resource region stack for exit-on-return.
+  struct ActiveRegion {
+    MirInstKind exit_kind; // ModeExit or ResourceExit
+    HirModeKind mode_kind; // valid only for ModeExit
+    Span span;
+  };
+  std::vector<ActiveRegion> active_regions_;
 
   // --- Function lowering ---
   auto lower_function(const HirFunction& fn) -> MirFunction*;
@@ -69,6 +79,8 @@ private:
   void switch_to_block(MirBlock* block);
   [[nodiscard]] auto block_terminated() const -> bool;
 
+  void emit_region_exits(Span span);
+
   void error(Span span, std::string message);
 };
 
@@ -76,7 +88,8 @@ private:
 // Top-level entry point.
 // ---------------------------------------------------------------------------
 
-auto build_mir(const HirModule& module, MirContext& ctx) -> MirBuildResult;
+auto build_mir(const HirModule& module, MirContext& ctx,
+               TypeContext& types) -> MirBuildResult;
 
 } // namespace dao
 

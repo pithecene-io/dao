@@ -10,7 +10,8 @@ namespace dao {
 // Construction
 // ---------------------------------------------------------------------------
 
-MirBuilder::MirBuilder(MirContext& ctx) : ctx_(ctx) {}
+MirBuilder::MirBuilder(MirContext& ctx, TypeContext& types)
+    : ctx_(ctx), types_(types) {}
 
 // ---------------------------------------------------------------------------
 // Top-level
@@ -50,6 +51,7 @@ auto MirBuilder::lower_function(const HirFunction& fn) -> MirFunction* {
   next_value_id_ = 0;
   next_block_id_ = 0;
   symbol_to_local_.clear();
+  active_regions_.clear();
 
   // Create parameter locals.
   for (const auto& param : fn.params()) {
@@ -249,9 +251,11 @@ void MirBuilder::lower_for(const HirFor& hir_for) {
   emit(init);
   auto iter_val = init->result;
 
-  // Declare loop variable.
+  // Declare loop variable with iterable's element type.
+  // Until element-type extraction exists, use iterable's own type.
+  const Type* var_type = hir_for.iterable()->type();
   auto var_local =
-      declare_local(hir_for.var_symbol(), nullptr, hir_for.span());
+      declare_local(hir_for.var_symbol(), var_type, hir_for.span());
 
   auto* cond_bb = fresh_block();
   auto* body_bb = fresh_block();
@@ -269,7 +273,7 @@ void MirBuilder::lower_for(const HirFor& hir_for) {
   auto* has_next = ctx_.alloc<MirInst>();
   has_next->kind = MirInstKind::IterHasNext;
   has_next->result = fresh_value();
-  has_next->type = nullptr; // bool semantically
+  has_next->type = types_.bool_type();
   has_next->span = hir_for.span();
   has_next->iter_operand = iter_val;
   emit(has_next);
@@ -287,7 +291,7 @@ void MirBuilder::lower_for(const HirFor& hir_for) {
   auto* next = ctx_.alloc<MirInst>();
   next->kind = MirInstKind::IterNext;
   next->result = fresh_value();
-  next->type = nullptr;
+  next->type = var_type;
   next->span = hir_for.span();
   next->iter_operand = iter_val;
   emit(next);
@@ -315,12 +319,21 @@ void MirBuilder::lower_for(const HirFor& hir_for) {
 }
 
 void MirBuilder::lower_return(const HirReturn& ret) {
+  // Emit value before region exits so the value is computed inside the region.
+  MirValueId ret_val;
+  bool has_val = ret.value() != nullptr;
+  if (has_val) {
+    ret_val = lower_expr_value(*ret.value());
+  }
+
+  // Exit all active mode/resource regions in reverse order.
+  emit_region_exits(ret.span());
+
   auto* mir_ret = ctx_.alloc<MirInst>();
   mir_ret->kind = MirInstKind::Return;
   mir_ret->span = ret.span();
-
-  if (ret.value() != nullptr) {
-    mir_ret->return_value = lower_expr_value(*ret.value());
+  if (has_val) {
+    mir_ret->return_value = ret_val;
     mir_ret->has_return_value = true;
   }
 
@@ -339,9 +352,16 @@ void MirBuilder::lower_mode(const HirMode& mode) {
   enter->region_name = mode.mode_name();
   emit(enter);
 
+  active_regions_.push_back(
+      {.exit_kind = MirInstKind::ModeExit,
+       .mode_kind = mode.mode(),
+       .span = mode.span()});
+
   for (const auto* stmt : mode.body()) {
     lower_stmt(*stmt);
   }
+
+  active_regions_.pop_back();
 
   if (!block_terminated()) {
     auto* exit = ctx_.alloc<MirInst>();
@@ -360,9 +380,16 @@ void MirBuilder::lower_resource(const HirResource& res) {
   enter->region_name = res.resource_name();
   emit(enter);
 
+  active_regions_.push_back(
+      {.exit_kind = MirInstKind::ResourceExit,
+       .mode_kind = {},
+       .span = res.span()});
+
   for (const auto* stmt : res.body()) {
     lower_stmt(*stmt);
   }
+
+  active_regions_.pop_back();
 
   if (!block_terminated()) {
     auto* exit = ctx_.alloc<MirInst>();
@@ -768,6 +795,19 @@ auto MirBuilder::block_terminated() const -> bool {
   return is_terminator(current_block_->insts.back()->kind);
 }
 
+void MirBuilder::emit_region_exits(Span span) {
+  for (auto it = active_regions_.rbegin(); it != active_regions_.rend();
+       ++it) {
+    auto* exit_inst = ctx_.alloc<MirInst>();
+    exit_inst->kind = it->exit_kind;
+    exit_inst->span = span;
+    if (it->exit_kind == MirInstKind::ModeExit) {
+      exit_inst->mode_kind = it->mode_kind;
+    }
+    emit(exit_inst);
+  }
+}
+
 void MirBuilder::error(Span span, std::string message) {
   diagnostics_.push_back(Diagnostic::error(span, std::move(message)));
 }
@@ -776,8 +816,9 @@ void MirBuilder::error(Span span, std::string message) {
 // Free-function entry point
 // ---------------------------------------------------------------------------
 
-auto build_mir(const HirModule& module, MirContext& ctx) -> MirBuildResult {
-  MirBuilder builder(ctx);
+auto build_mir(const HirModule& module, MirContext& ctx,
+               TypeContext& types) -> MirBuildResult {
+  MirBuilder builder(ctx, types);
   return builder.build(module);
 }
 
