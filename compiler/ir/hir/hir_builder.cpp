@@ -325,7 +325,7 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
     }
     for (size_t i = 0; i < lam->params().size(); ++i) {
       const auto& [name, span] = lam->params()[i];
-      const auto* param_sym = find_symbol_at_use(span.offset);
+      const auto* param_sym = find_symbol_at_decl(span.offset);
       const Type* param_type = nullptr;
       if (fn_type != nullptr && i < fn_type->param_types().size()) {
         param_type = fn_type->param_types()[i];

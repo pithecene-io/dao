@@ -205,14 +205,23 @@ suite hir_pipe = [] {
 // ---------------------------------------------------------------------------
 
 suite hir_lambda = [] {
-  "lambda preserved as first-class node"_test = [] {
+  // NOTE: the parser does not yet support fn(...) -> T as a type syntax,
+  // so lambdas cannot currently pass type checking in a call context.
+  // This test verifies structural lowering: the HIR builder produces a
+  // Lambda node with resolved parameter symbols even without a typed
+  // function context.  The type checker emits a diagnostic, but the
+  // builder still lowers the surrounding AST that parsed successfully.
+  "lambda structural lowering"_test = [] {
+    // A pipe with a lambda parses but the lambda fails type checking.
+    // The builder still runs and produces a Lambda HIR node.
     HirTestPipeline p(
-        "fn apply(f: fn(i32) -> i32, x: i32): i32 -> f(x)\n"
         "fn main(): i32\n"
-        "    return apply(|x| -> x + 1, 5)\n");
+        "    return 5 |> |x| -> x + 1\n");
     auto dump = p.dump();
     expect(contains(dump, "Lambda")) << dump;
     expect(contains(dump, "Body")) << dump;
+    // Lambda param 'x' should have a resolved LambdaParam symbol.
+    expect(contains(dump, "Param x")) << dump;
   };
 };
 
