@@ -133,7 +133,6 @@ main {
 
 .tab-content {
   display: none;
-  flex: 1;
   padding: 12px;
   overflow: auto;
   font-size: 13px;
@@ -144,6 +143,7 @@ main {
 
 .tab-content.active {
   display: block;
+  flex: 1;
 }
 
 #diagnostics-output {
