@@ -59,7 +59,8 @@ Source-facing compiler pipeline.
 - `diagnostics/` — spans, reporting, and source diagnostics plumbing
 - `resolve/` — name resolution: scope chain, symbol binding, and identifier resolution
 - `types/` — canonical semantic type universe: type kinds, interning, context, printing
-- the intended next explicit roots are `typecheck/` and `lower/` rather than a monolithic semantic pass
+- `typecheck/` — first type-checking pass: side-table typing, assignability, expression/statement validation, diagnostics
+- the intended next explicit root is `lower/` rather than a monolithic semantic pass
 
 ### `compiler/ir/`
 

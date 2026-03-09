@@ -31,9 +31,9 @@ Defines the allowed top-level ontology and major subroots for Dao.
 - `resolve/`
 - `diagnostics/`
 - `types/`
+- `typecheck/`
 
 Expected next subroots once implementation begins:
-- `typecheck/`
 - `lower/`
 
 ### Under `compiler/ir/`

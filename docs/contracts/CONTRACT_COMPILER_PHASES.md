@@ -35,8 +35,9 @@ Required subroots:
 - `compiler/frontend/types/` — canonical semantic type universe
   (types, interning, comparison, printing)
 
-Expected next frontend subroots once implementation begins:
 - `compiler/frontend/typecheck/` — semantic type-checking pass
+
+Expected next frontend subroots once implementation begins:
 - `compiler/frontend/lower/`
 
 Dependency rules:

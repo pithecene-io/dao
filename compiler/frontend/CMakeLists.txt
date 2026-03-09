@@ -7,6 +7,8 @@ add_library(dao_frontend STATIC
   types/type.cpp
   types/type_context.cpp
   types/type_printer.cpp
+  typecheck/type_checker.cpp
+  typecheck/type_conversion.cpp
 )
 
 target_include_directories(dao_frontend PUBLIC
@@ -72,3 +74,15 @@ add_test(NAME parser_test COMMAND parser_test)
 add_test(NAME ast_printer_test COMMAND ast_printer_test)
 add_test(NAME resolve_test COMMAND resolve_test)
 add_test(NAME type_test COMMAND type_test)
+
+add_executable(typecheck_test
+  typecheck/typecheck_test.cpp
+)
+
+target_link_libraries(typecheck_test PRIVATE dao_frontend Boost::ut)
+
+target_compile_definitions(typecheck_test PRIVATE
+  DAO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+add_test(NAME typecheck_test COMMAND typecheck_test)
