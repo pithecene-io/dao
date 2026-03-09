@@ -16,8 +16,8 @@ Defines the currently frozen syntax surface for Dao's early design phase.
 ### Block-bodied form
 
 ```dao
-fn read(ptr: *i32): i32
-    let value: i32
+fn read(ptr: *int32): int32
+    let value: int32
     value
 ```
 
@@ -28,7 +28,7 @@ Rules:
 ### Expression-bodied form
 
 ```dao
-fn add(a: i32, b: i32): i32 -> a + b
+fn add(a: int32, b: int32): int32 -> a + b
 ```
 
 Rules:
@@ -59,9 +59,9 @@ Rules:
 ## Let Bindings
 
 ```dao
-let x: i32 = 42
+let x: int32 = 42
 let y = compute()
-let value: i32
+let value: int32
 ```
 
 Rules:
