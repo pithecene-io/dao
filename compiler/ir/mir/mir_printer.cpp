@@ -126,6 +126,13 @@ private:
            << "[%" << inst.access_index.id << "]";
       break;
 
+    case MirInstKind::FnRef:
+      out_ << "fn_ref";
+      if (inst.fn_symbol != nullptr) {
+        out_ << " " << inst.fn_symbol->name;
+      }
+      break;
+
     case MirInstKind::Call:
       out_ << "call %" << inst.callee.id << "(";
       if (inst.call_args != nullptr) {

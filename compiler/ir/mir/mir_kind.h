@@ -25,6 +25,9 @@ enum class MirInstKind : std::uint8_t {
   FieldAccess,
   IndexAccess,
 
+  // Function reference (direct reference to a named function symbol)
+  FnRef,
+
   // Calls
   Call,
 

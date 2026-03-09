@@ -15,6 +15,7 @@ auto mir_inst_kind_name(MirInstKind kind) -> const char* {
   case MirInstKind::AddrOf:         return "addr_of";
   case MirInstKind::FieldAccess:    return "field";
   case MirInstKind::IndexAccess:    return "index";
+  case MirInstKind::FnRef:          return "fn_ref";
   case MirInstKind::Call:           return "call";
   case MirInstKind::IterInit:       return "iter_init";
   case MirInstKind::IterHasNext:    return "iter_has_next";

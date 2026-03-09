@@ -155,9 +155,19 @@ void MirBuilder::lower_if(const HirIf& hir_if) {
   auto cond_val = lower_expr_value(*hir_if.condition());
 
   auto* then_bb = fresh_block();
-  auto* merge_bb = fresh_block();
-  auto* else_bb =
-      hir_if.else_body().empty() ? merge_bb : fresh_block();
+  bool has_else = !hir_if.else_body().empty();
+  auto* else_bb = has_else ? fresh_block() : nullptr;
+
+  // Defer merge_bb — only create if a branch falls through.
+  MirBlock* merge_bb = nullptr;
+
+  // Emit cond_br. If no else, the false branch targets a merge block
+  // that we create now (it's guaranteed to be reachable since there's
+  // no else to terminate).
+  if (!has_else) {
+    merge_bb = fresh_block();
+    else_bb = merge_bb;
+  }
 
   auto* cond_br = ctx_.alloc<MirInst>();
   cond_br->kind = MirInstKind::CondBr;
@@ -172,7 +182,11 @@ void MirBuilder::lower_if(const HirIf& hir_if) {
   for (const auto* stmt : hir_if.then_body()) {
     lower_stmt(*stmt);
   }
-  if (!block_terminated()) {
+  bool then_terminated = block_terminated();
+  if (!then_terminated) {
+    if (merge_bb == nullptr) {
+      merge_bb = fresh_block();
+    }
     auto* br = ctx_.alloc<MirInst>();
     br->kind = MirInstKind::Br;
     br->br_target = merge_bb->id;
@@ -181,12 +195,17 @@ void MirBuilder::lower_if(const HirIf& hir_if) {
   }
 
   // Else block.
-  if (!hir_if.else_body().empty()) {
+  bool else_terminated = false;
+  if (has_else) {
     switch_to_block(else_bb);
     for (const auto* stmt : hir_if.else_body()) {
       lower_stmt(*stmt);
     }
-    if (!block_terminated()) {
+    else_terminated = block_terminated();
+    if (!else_terminated) {
+      if (merge_bb == nullptr) {
+        merge_bb = fresh_block();
+      }
       auto* br = ctx_.alloc<MirInst>();
       br->kind = MirInstKind::Br;
       br->br_target = merge_bb->id;
@@ -195,7 +214,13 @@ void MirBuilder::lower_if(const HirIf& hir_if) {
     }
   }
 
-  switch_to_block(merge_bb);
+  if (merge_bb != nullptr) {
+    switch_to_block(merge_bb);
+  } else {
+    // Both branches terminated; no merge block needed.
+    // Set current_block_ to nullptr — subsequent code is dead.
+    current_block_ = nullptr;
+  }
 }
 
 void MirBuilder::lower_while(const HirWhile& hir_while) {
@@ -471,20 +496,15 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
         return load->result;
       }
     }
-    // Function reference or unresolved — emit as a constant-like load.
-    // For function symbols, we still need a value to pass as callee.
-    auto* load = ctx_.alloc<MirInst>();
-    load->kind = MirInstKind::Load;
-    load->result = fresh_value();
-    load->type = expr.type();
-    load->span = expr.span();
-    load->place = ctx_.alloc<MirPlace>();
-    // Use a sentinel local for function references.
-    auto fn_local =
-        declare_local(ref.symbol(), expr.type(), expr.span());
-    load->place->local = fn_local;
-    emit(load);
-    return load->result;
+    // Function reference — emit FnRef to produce a callable value.
+    auto* fn_ref = ctx_.alloc<MirInst>();
+    fn_ref->kind = MirInstKind::FnRef;
+    fn_ref->result = fresh_value();
+    fn_ref->type = expr.type();
+    fn_ref->span = expr.span();
+    fn_ref->fn_symbol = ref.symbol();
+    emit(fn_ref);
+    return fn_ref->result;
   }
 
   case HirKind::Unary: {

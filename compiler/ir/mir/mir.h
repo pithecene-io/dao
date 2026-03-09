@@ -99,6 +99,9 @@ struct MirInst {
   std::string_view access_field;
   MirValueId access_index;
 
+  // --- Function reference ---
+  const Symbol* fn_symbol = nullptr; // for FnRef
+
   // --- Call ---
   MirValueId callee;
   std::vector<MirValueId>* call_args = nullptr; // arena-allocated

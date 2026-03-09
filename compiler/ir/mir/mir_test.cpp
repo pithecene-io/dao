@@ -88,13 +88,29 @@ suite mir_if = [] {
     expect(contains(dump, "binary >")) << dump;
   };
 
-  "if-else lowers to three blocks"_test = [] {
+  "if-else with both returns has no merge block"_test = [] {
     MirTestPipeline pipe(
         "fn test(x: i32): i32\n"
         "    if x > 0:\n"
         "        return 1\n"
         "    else:\n"
         "        return 0\n");
+    auto dump = pipe.dump();
+    expect(contains(dump, "cond_br")) << dump;
+    expect(contains(dump, "bb1:")) << dump;  // then
+    expect(contains(dump, "bb2:")) << dump;  // else
+    expect(!contains(dump, "bb3:")) << dump; // no dangling merge
+  };
+
+  "if-else with fallthrough has merge block"_test = [] {
+    MirTestPipeline pipe(
+        "fn test(x: i32): i32\n"
+        "    let r: i32 = 0\n"
+        "    if x > 0:\n"
+        "        r = 1\n"
+        "    else:\n"
+        "        r = 2\n"
+        "    return r\n");
     auto dump = pipe.dump();
     expect(contains(dump, "cond_br")) << dump;
     expect(contains(dump, "bb1:")) << dump; // then
