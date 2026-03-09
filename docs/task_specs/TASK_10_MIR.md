@@ -361,11 +361,12 @@ Lower to:
 * initializer evaluation if present
 * store/init into that slot if needed
 
-If uninitialized-but-typed locals are currently legal via zero/default
-initialization semantics, MIR should represent that explicitly:
-
-* either via default-init instruction
-* or via guaranteed local initialization lowering
+If a `let x: T` without initializer reaches MIR, represent the local
+declaration explicitly but do not commit to a runtime value model
+(zero-init, default-init, poison, etc.). Initialization semantics for
+uninitialized typed locals are not yet frozen in the syntax contract.
+MIR should preserve the construct faithfully and defer the runtime
+behavior decision to a future contract update.
 
 ### 17.3 Assignment
 
@@ -502,7 +503,8 @@ Required coverage:
 ### Data flow
 
 * let with initializer
-* let with explicit type and no initializer
+* let with explicit type and no initializer (structural representation
+  only — do not assert initialization value semantics until frozen)
 * assignment
 * arithmetic expressions
 * call argument evaluation

@@ -312,7 +312,9 @@ Recommended initial strategy:
 * materialize a runtime-compatible handle/pointer value at use sites
 
 The exact runtime-facing string ABI may remain narrow for now, but it
-must be explicit and consistent.
+must be explicit and consistent. Per CONTRACT_BOOTSTRAP_AND_INTEROP.md,
+the initial foreign interop target is the C ABI. String lowering and
+any runtime-facing seams must use C-compatible calling conventions.
 
 ## 15. Runtime hooks
 
@@ -330,6 +332,9 @@ If runtime hooks are needed:
 
 * define them explicitly
 * isolate them behind `llvm_runtime_hooks.*`
+* use the C ABI for all runtime-facing call boundaries, per
+  CONTRACT_BOOTSTRAP_AND_INTEROP.md
+* keep the runtime call surface narrow and documented
 * do not scatter ad hoc intrinsic-like calls throughout lowering code
 
 ## 16. Lowering of Dao-specific execution semantics
