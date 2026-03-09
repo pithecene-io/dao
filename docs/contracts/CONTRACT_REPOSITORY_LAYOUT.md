@@ -30,9 +30,9 @@ Defines the allowed top-level ontology and major subroots for Dao.
 - `ast/`
 - `resolve/`
 - `diagnostics/`
+- `types/`
 
 Expected next subroots once implementation begins:
-- `types/`
 - `typecheck/`
 - `lower/`
 
