@@ -52,7 +52,8 @@ Source-facing compiler pipeline.
 - `ast/` — syntax tree / declaration and expression representation
 - `diagnostics/` — spans, reporting, and source diagnostics plumbing
 - `resolve/` — name resolution: scope chain, symbol binding, and identifier resolution
-- the intended next explicit roots are `types/`, `typecheck/`, and `lower/` rather than a monolithic semantic pass
+- `types/` — canonical semantic type universe: type kinds, interning, context, printing
+- the intended next explicit roots are `typecheck/` and `lower/` rather than a monolithic semantic pass
 
 ### `compiler/ir/`
 

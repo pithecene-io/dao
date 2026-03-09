@@ -30,16 +30,19 @@ Required subroots:
 - `compiler/frontend/lexer/`
 - `compiler/frontend/parser/`
 - `compiler/frontend/ast/`
+- `compiler/frontend/resolve/` — name resolution and scope analysis
 - `compiler/frontend/diagnostics/`
 
 Expected next frontend subroots once implementation begins:
-- `compiler/frontend/resolve/`
-- `compiler/frontend/types/` — type system representation (canonical
-  types, interning, comparison, printing)
+- `compiler/frontend/types/` — canonical semantic type universe
+  (types, interning, comparison, printing)
 - `compiler/frontend/typecheck/` — semantic type-checking pass
 - `compiler/frontend/lower/`
 
-Dependency rule: `types/` must not depend on `typecheck/`.
+Dependency rules:
+- `types/` must not depend on `typecheck/`
+- `typecheck/` consumes syntax, resolution, and semantic types to
+  validate programs
 
 ## IR Responsibilities
 
