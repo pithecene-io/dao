@@ -2,11 +2,10 @@
 #define DAO_FRONTEND_TYPES_TYPE_CONTEXT_H
 
 #include "frontend/types/type.h"
+#include "support/arena.h"
 
 #include <array>
 #include <cstdint>
-#include <functional>
-#include <ranges>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -42,7 +41,10 @@ public:
   auto f32() -> const TypeBuiltin* { return builtin(BuiltinKind::F32); }
   auto f64() -> const TypeBuiltin* { return builtin(BuiltinKind::F64); }
   auto bool_type() -> const TypeBuiltin* { return builtin(BuiltinKind::Bool); }
-  auto void_type() -> const TypeBuiltin* { return builtin(BuiltinKind::Void); }
+
+  // Void is a compiler-internal return type, not a builtin scalar.
+  // See CONTRACT_TYPE_SYSTEM_FOUNDATIONS.md §5.
+  auto void_type() -> const TypeVoid*;
 
   // --- Interned constructors (return canonical pointer) ---
 
@@ -66,34 +68,12 @@ public:
                  std::vector<EnumVariant> variants) -> const TypeEnum*;
 
 private:
-  // --- Arena allocator ---
-
-  static constexpr size_t kBlockSize = 4096;
-
-  struct Block {
-    char data[kBlockSize]; // NOLINT(modernize-avoid-c-arrays)
-  };
-
-  std::vector<Block*> blocks_;
-  size_t offset_ = kBlockSize;
-  std::vector<std::function<void()>> dtors_;
-
-  auto allocate(size_t size, size_t align) -> void*;
-
-  template <typename T, typename... Args> auto alloc(Args&&... args) -> T* {
-    void* mem = allocate(sizeof(T), alignof(T));
-    auto* ptr = new (mem) T(std::forward<Args>(args)...);
-    if constexpr (!std::is_trivially_destructible_v<T>) {
-      dtors_.push_back([ptr]() { ptr->~T(); }); // NOLINT(modernize-use-trailing-return-type)
-    }
-    return ptr;
-  }
-
-  void destroy();
+  Arena arena_;
 
   // --- Interning maps ---
 
   std::array<const TypeBuiltin*, kBuiltinKindCount> builtins_{};
+  const TypeVoid* void_ = nullptr;
 
   std::unordered_map<const Type*, const TypePointer*> pointer_map_;
 

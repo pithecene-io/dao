@@ -43,6 +43,12 @@ Reference language material.
 
 Compiler implementation roots only.
 
+### `compiler/support/`
+
+Shared low-level utilities used across compiler subsystems.
+
+- `arena.h` — bump allocator with destructor tracking for compiler-owned object graphs
+
 ### `compiler/frontend/`
 
 Source-facing compiler pipeline.
