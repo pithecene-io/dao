@@ -291,6 +291,41 @@ suite typecheck_negative = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Type aliases
+// ---------------------------------------------------------------------------
+
+suite type_alias = [] {
+  "alias resolves to underlying type"_test = [] {
+    auto result = check_source(
+        "type NodeId = i32\n"
+        "fn test(a: NodeId): NodeId -> a\n");
+    expect(result.diagnostics.empty()) << "alias param should typecheck";
+  };
+
+  "alias-to-alias chains resolve"_test = [] {
+    auto result = check_source(
+        "type NodeId = i32\n"
+        "type MyNode = NodeId\n"
+        "fn test(a: MyNode): i32 -> a\n");
+    expect(result.diagnostics.empty()) << "chained alias should typecheck";
+  };
+
+  "alias used in return type"_test = [] {
+    auto result = check_source(
+        "type Score = f64\n"
+        "fn test(): Score -> 0.0\n");
+    expect(result.diagnostics.empty()) << "alias return type should typecheck";
+  };
+
+  "alias type mismatch still caught"_test = [] {
+    auto result = check_source(
+        "type NodeId = i32\n"
+        "fn test(a: NodeId): bool -> a\n");
+    expect(has_error_containing(result, "does not match return type"));
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)

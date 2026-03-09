@@ -276,6 +276,24 @@ void TypeChecker::register_declarations(const FileNode& file) {
       break;
     }
 
+    case NodeKind::AliasDecl: {
+      const auto* alias = static_cast<const AliasDeclNode*>(decl);
+      auto decl_it = decl_symbols_.find(alias->name_span().offset);
+      if (decl_it == decl_symbols_.end()) {
+        break;
+      }
+      const auto* sym = decl_it->second;
+
+      // Resolve the aliased type and cache it so later lookups of the
+      // alias name transparently return the underlying type.
+      const auto* aliased_type = resolve_type_node(alias->type());
+      if (aliased_type != nullptr) {
+        symbol_types_[sym] = aliased_type;
+        typed_.set_decl_type(alias, aliased_type);
+      }
+      break;
+    }
+
     default:
       break;
     }
