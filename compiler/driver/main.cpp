@@ -5,6 +5,9 @@
 #include "frontend/resolve/resolve.h"
 #include "frontend/typecheck/type_checker.h"
 #include "frontend/types/type_context.h"
+#include "ir/hir/hir_builder.h"
+#include "ir/hir/hir_context.h"
+#include "ir/hir/hir_printer.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -217,6 +220,57 @@ void cmd_check(const std::filesystem::path& path) {
   std::cout << "ok\n";
 }
 
+// Build and print HIR. Output is deterministic.
+void cmd_hir(const std::filesystem::path& path) {
+  auto result = lex_and_parse(path);
+  if (result.parse_result.file == nullptr) {
+    return;
+  }
+
+  auto resolve_result = dao::resolve(*result.parse_result.file);
+
+  // Print resolve diagnostics.
+  for (const auto& diag : resolve_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
+  }
+
+  dao::TypeContext types;
+  auto check_result =
+      dao::typecheck(*result.parse_result.file, resolve_result, types);
+
+  bool has_errors = !resolve_result.diagnostics.empty();
+
+  for (const auto& diag : check_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    auto severity = diag.severity == dao::Severity::Error ? "error" : "warning";
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": " << severity << ": " << diag.message << "\n";
+    if (diag.severity == dao::Severity::Error) {
+      has_errors = true;
+    }
+  }
+
+  if (has_errors) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  dao::HirContext hir_ctx;
+  auto hir_result = dao::build_hir(*result.parse_result.file, resolve_result,
+                                   check_result, hir_ctx);
+
+  for (const auto& diag : hir_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
+  }
+
+  if (hir_result.module != nullptr) {
+    dao::print_hir(std::cout, *hir_result.module);
+  }
+}
+
 // Pretty-print AST. Output is deterministic and suitable for golden-file testing.
 void cmd_ast(const std::filesystem::path& path) {
   auto result = lex_and_parse(path);
@@ -230,7 +284,7 @@ void cmd_ast(const std::filesystem::path& path) {
 auto main(int argc, char* argv[]) -> int {
   if (argc < 2) {
     std::cerr << "usage: daoc <command> <file>\n";
-    std::cerr << "commands: lex, parse, ast, tokens, resolve, check\n";
+    std::cerr << "commands: lex, parse, ast, tokens, resolve, check, hir\n";
     return EXIT_FAILURE;
   }
 
@@ -308,6 +362,21 @@ auto main(int argc, char* argv[]) -> int {
       return EXIT_FAILURE;
     }
     cmd_check(check_path);
+    return EXIT_SUCCESS;
+  }
+
+  // daoc hir <file>
+  if (arg1 == "hir") {
+    if (argc < 3) {
+      std::cerr << "usage: daoc hir <file>\n";
+      return EXIT_FAILURE;
+    }
+    std::filesystem::path hir_path(argv[2]);
+    if (!std::filesystem::exists(hir_path)) {
+      std::cerr << "error: file not found: " << hir_path << "\n";
+      return EXIT_FAILURE;
+    }
+    cmd_hir(hir_path);
     return EXIT_SUCCESS;
   }
 

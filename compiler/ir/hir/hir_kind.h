@@ -1,0 +1,50 @@
+#ifndef DAO_IR_HIR_HIR_KIND_H
+#define DAO_IR_HIR_HIR_KIND_H
+
+#include <cstdint>
+
+namespace dao {
+
+// ---------------------------------------------------------------------------
+// HIR node kind tags.
+// ---------------------------------------------------------------------------
+
+enum class HirKind : std::uint8_t {
+  // Module
+  Module,
+
+  // Declarations
+  Function,
+  StructDecl,
+
+  // Statements
+  Let,
+  Assign,
+  If,
+  While,
+  For,
+  Return,
+  ExprStmt,
+  Mode,
+  Resource,
+
+  // Expressions
+  IntLiteral,
+  FloatLiteral,
+  StringLiteral,
+  BoolLiteral,
+  SymbolRef,
+  Unary,
+  Binary,
+  Call,
+  Field,
+  Index,
+  Pipe,
+  Lambda,
+};
+
+auto hir_kind_name(HirKind kind) -> const char*;
+
+} // namespace dao
+
+#endif // DAO_IR_HIR_HIR_KIND_H
