@@ -809,7 +809,12 @@ void MirBuilder::switch_to_block(MirBlock* block) {
 }
 
 auto MirBuilder::block_terminated() const -> bool {
-  if (current_block_ == nullptr || current_block_->insts.empty()) {
+  // nullptr means all paths already terminated (e.g. both if branches
+  // returned). Treat as terminated so subsequent dead code is skipped.
+  if (current_block_ == nullptr) {
+    return true;
+  }
+  if (current_block_->insts.empty()) {
     return false;
   }
   return is_terminator(current_block_->insts.back()->kind);
