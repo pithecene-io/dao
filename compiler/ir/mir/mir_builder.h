@@ -1,0 +1,99 @@
+#ifndef DAO_IR_MIR_MIR_BUILDER_H
+#define DAO_IR_MIR_MIR_BUILDER_H
+
+#include "frontend/diagnostics/diagnostic.h"
+#include "frontend/types/type_context.h"
+#include "ir/hir/hir.h"
+#include "ir/mir/mir.h"
+#include "ir/mir/mir_context.h"
+
+#include <unordered_map>
+#include <vector>
+
+namespace dao {
+
+// ---------------------------------------------------------------------------
+// MirBuildResult — output of MIR construction.
+// ---------------------------------------------------------------------------
+
+struct MirBuildResult {
+  MirModule* module = nullptr;
+  std::vector<Diagnostic> diagnostics;
+};
+
+// ---------------------------------------------------------------------------
+// MirBuilder — lowers HIR into MIR.
+// ---------------------------------------------------------------------------
+
+class MirBuilder {
+public:
+  MirBuilder(MirContext& ctx, TypeContext& types);
+
+  auto build(const HirModule& module) -> MirBuildResult;
+
+private:
+  MirContext& ctx_;
+  TypeContext& types_;
+  std::vector<Diagnostic> diagnostics_;
+
+  // --- Module-level state ---
+  MirModule* current_module_ = nullptr;
+
+  // --- Per-function state (reset for each function) ---
+  MirFunction* current_fn_ = nullptr;
+  MirBlock* current_block_ = nullptr;
+  uint32_t next_value_id_ = 0;
+  uint32_t next_block_id_ = 0;
+  std::unordered_map<const Symbol*, LocalId> symbol_to_local_;
+
+  // Active mode/resource region stack for exit-on-return.
+  struct ActiveRegion {
+    MirInstKind exit_kind; // ModeExit or ResourceExit
+    HirModeKind mode_kind; // valid only for ModeExit
+    Span span;
+  };
+  std::vector<ActiveRegion> active_regions_;
+
+  // --- Function lowering ---
+  auto lower_function(const HirFunction& fn) -> MirFunction*;
+
+  // --- Statement lowering ---
+  void lower_stmt(const HirStmt& stmt);
+  void lower_let(const HirLet& let_stmt);
+  void lower_assign(const HirAssign& assign);
+  void lower_if(const HirIf& hir_if);
+  void lower_while(const HirWhile& hir_while);
+  void lower_for(const HirFor& hir_for);
+  void lower_return(const HirReturn& ret);
+  void lower_expr_stmt(const HirExprStmt& expr_stmt);
+  void lower_mode(const HirMode& mode);
+  void lower_resource(const HirResource& res);
+
+  // --- Expression lowering ---
+  auto lower_expr_value(const HirExpr& expr) -> MirValueId;
+  auto lower_expr_place(const HirExpr& expr) -> MirPlace;
+
+  // --- Helpers ---
+  auto fresh_value() -> MirValueId;
+  auto fresh_block() -> MirBlock*;
+  auto declare_local(const Symbol* sym, const Type* type, Span span,
+                     bool is_param = false) -> LocalId;
+  void emit(MirInst* inst);
+  void switch_to_block(MirBlock* block);
+  [[nodiscard]] auto block_terminated() const -> bool;
+
+  void emit_region_exits(Span span);
+
+  void error(Span span, std::string message);
+};
+
+// ---------------------------------------------------------------------------
+// Top-level entry point.
+// ---------------------------------------------------------------------------
+
+auto build_mir(const HirModule& module, MirContext& ctx,
+               TypeContext& types) -> MirBuildResult;
+
+} // namespace dao
+
+#endif // DAO_IR_MIR_MIR_BUILDER_H

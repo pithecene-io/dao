@@ -67,7 +67,7 @@ Source-facing compiler pipeline.
 Compiler-internal target-agnostic representations.
 
 - `hir/` — typed, symbol-linked HIR: arena-owned node hierarchy, AST-to-HIR builder, and debug printer
-- `mir/` — mid-level IR with explicit control flow and lowering prep
+- `mir/` — basic-block MIR with typed instructions, place/value distinction, HIR-to-MIR builder, and debug printer
 
 ### `compiler/backend/`
 

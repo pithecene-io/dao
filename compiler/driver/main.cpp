@@ -8,6 +8,9 @@
 #include "ir/hir/hir_builder.h"
 #include "ir/hir/hir_context.h"
 #include "ir/hir/hir_printer.h"
+#include "ir/mir/mir_builder.h"
+#include "ir/mir/mir_context.h"
+#include "ir/mir/mir_printer.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -271,6 +274,63 @@ void cmd_hir(const std::filesystem::path& path) {
   }
 }
 
+// Build and print MIR. Output is deterministic.
+void cmd_mir(const std::filesystem::path& path) {
+  auto result = lex_and_parse(path);
+  if (result.parse_result.file == nullptr) {
+    return;
+  }
+
+  auto resolve_result = dao::resolve(*result.parse_result.file);
+
+  for (const auto& diag : resolve_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
+  }
+
+  dao::TypeContext types;
+  auto check_result =
+      dao::typecheck(*result.parse_result.file, resolve_result, types);
+
+  bool has_errors = !resolve_result.diagnostics.empty();
+
+  for (const auto& diag : check_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    auto severity = diag.severity == dao::Severity::Error ? "error" : "warning";
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": " << severity << ": " << diag.message << "\n";
+    if (diag.severity == dao::Severity::Error) {
+      has_errors = true;
+    }
+  }
+
+  if (has_errors) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  dao::HirContext hir_ctx;
+  auto hir_result = dao::build_hir(*result.parse_result.file, resolve_result,
+                                   check_result, hir_ctx);
+
+  if (hir_result.module == nullptr) {
+    return;
+  }
+
+  dao::MirContext mir_ctx;
+  auto mir_result = dao::build_mir(*hir_result.module, mir_ctx, types);
+
+  for (const auto& diag : mir_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
+  }
+
+  if (mir_result.module != nullptr) {
+    dao::print_mir(std::cout, *mir_result.module);
+  }
+}
+
 // Pretty-print AST. Output is deterministic and suitable for golden-file testing.
 void cmd_ast(const std::filesystem::path& path) {
   auto result = lex_and_parse(path);
@@ -284,7 +344,7 @@ void cmd_ast(const std::filesystem::path& path) {
 auto main(int argc, char* argv[]) -> int {
   if (argc < 2) {
     std::cerr << "usage: daoc <command> <file>\n";
-    std::cerr << "commands: lex, parse, ast, tokens, resolve, check, hir\n";
+    std::cerr << "commands: lex, parse, ast, tokens, resolve, check, hir, mir\n";
     return EXIT_FAILURE;
   }
 
@@ -377,6 +437,21 @@ auto main(int argc, char* argv[]) -> int {
       return EXIT_FAILURE;
     }
     cmd_hir(hir_path);
+    return EXIT_SUCCESS;
+  }
+
+  // daoc mir <file>
+  if (arg1 == "mir") {
+    if (argc < 3) {
+      std::cerr << "usage: daoc mir <file>\n";
+      return EXIT_FAILURE;
+    }
+    std::filesystem::path mir_path(argv[2]);
+    if (!std::filesystem::exists(mir_path)) {
+      std::cerr << "error: file not found: " << mir_path << "\n";
+      return EXIT_FAILURE;
+    }
+    cmd_mir(mir_path);
     return EXIT_SUCCESS;
   }
 
