@@ -318,6 +318,13 @@ suite type_alias = [] {
     expect(result.diagnostics.empty()) << "alias return type should typecheck";
   };
 
+  "forward-declared alias resolves"_test = [] {
+    auto result = check_source(
+        "fn test(a: NodeId): NodeId -> a\n"
+        "type NodeId = i32\n");
+    expect(result.diagnostics.empty()) << "forward alias should typecheck";
+  };
+
   "alias type mismatch still caught"_test = [] {
     auto result = check_source(
         "type NodeId = i32\n"
