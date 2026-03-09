@@ -36,6 +36,9 @@ private:
   TypeContext& types_;
   std::vector<Diagnostic> diagnostics_;
 
+  // --- Module-level state ---
+  MirModule* current_module_ = nullptr;
+
   // --- Per-function state (reset for each function) ---
   MirFunction* current_fn_ = nullptr;
   MirBlock* current_block_ = nullptr;

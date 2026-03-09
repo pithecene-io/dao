@@ -20,6 +20,7 @@ MirBuilder::MirBuilder(MirContext& ctx, TypeContext& types)
 auto MirBuilder::build(const HirModule& module) -> MirBuildResult {
   auto* mir_mod = ctx_.alloc<MirModule>();
   mir_mod->span = module.span();
+  current_module_ = mir_mod;
 
   for (const auto* decl : module.declarations()) {
     if (decl->kind() == HirKind::Function) {
@@ -639,9 +640,14 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
   case HirKind::Lambda: {
     const auto& lam = static_cast<const HirLambda&>(expr);
 
-    // Conservative: lower lambda body as a nested MirFunction.
+    // Lower lambda body as a nested MirFunction registered on the module.
     auto* lam_fn = ctx_.alloc<MirFunction>();
     lam_fn->span = expr.span();
+    // Derive return type from body expression type when available.
+    if (lam.body() != nullptr && lam.body()->type() != nullptr) {
+      lam_fn->return_type = lam.body()->type();
+    }
+    // Lambda symbol is typically nullptr; symbol field stays null.
 
     // Save and reset builder state.
     auto* saved_fn = current_fn_;
@@ -688,6 +694,11 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
     next_value_id_ = saved_value_id;
     next_block_id_ = saved_block_id;
     symbol_to_local_ = std::move(saved_locals);
+
+    // Register lambda function on the module so printers and backends see it.
+    if (current_module_ != nullptr) {
+      current_module_->functions.push_back(lam_fn);
+    }
 
     auto* inst = ctx_.alloc<MirInst>();
     inst->kind = MirInstKind::Lambda;
