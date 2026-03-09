@@ -21,6 +21,8 @@ auto symbol_kind_name(SymbolKind kind) -> const char* {
     return "Module";
   case SymbolKind::Builtin:
     return "Builtin";
+  case SymbolKind::Predeclared:
+    return "Predeclared";
   case SymbolKind::LambdaParam:
     return "LambdaParam";
   }
@@ -84,7 +86,7 @@ private:
       file_scope_->declare(name, sym);
     }
     for (auto name : kPredeclaredTypes) {
-      auto* sym = ctx_.make_symbol(SymbolKind::Builtin, name, Span{}, nullptr);
+      auto* sym = ctx_.make_symbol(SymbolKind::Predeclared, name, Span{}, nullptr);
       file_scope_->declare(name, sym);
     }
   }

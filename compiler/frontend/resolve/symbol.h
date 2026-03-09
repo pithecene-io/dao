@@ -16,8 +16,9 @@ enum class SymbolKind : std::uint8_t {
   Local,       // let binding or for-loop variable
   Field,       // struct member
   Module,      // import binding
-  Builtin,     // built-in type (i32, f64, etc.)
-  LambdaParam, // lambda |x| parameter
+  Builtin,      // built-in scalar type (i32, f64, bool)
+  Predeclared,  // compiler-known predeclared named type (string, void)
+  LambdaParam,  // lambda |x| parameter
 };
 
 auto symbol_kind_name(SymbolKind kind) -> const char*;

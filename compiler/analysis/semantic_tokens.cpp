@@ -14,7 +14,9 @@ namespace {
 // ---------------------------------------------------------------------------
 
 auto is_builtin_type(std::string_view name) -> bool {
-  // Builtin scalar types and compiler-known predeclared types.
+  // Builtin scalar types only — predeclared named types (string, void)
+  // are classified as type.nominal, not type.builtin.
+  // See CONTRACT_TYPE_SYSTEM_FOUNDATIONS.md §5.
   static constexpr std::string_view builtins[] = {
       "i8",
       "i16",
@@ -27,8 +29,6 @@ auto is_builtin_type(std::string_view name) -> bool {
       "f32",
       "f64",
       "bool",
-      "string",
-      "void",
   };
   for (auto b : builtins) {
     if (name == b) {
@@ -508,6 +508,9 @@ auto resolve_use_category(SymbolKind kind) -> std::string_view {
     return "use.module";
   case SymbolKind::LambdaParam:
     return "use.variable.param"; // reuse param category for lambda params
+  case SymbolKind::Builtin:
+  case SymbolKind::Predeclared:
+    return ""; // type-position symbols — classified by visit_type(), not here
   default:
     return "";
   }
