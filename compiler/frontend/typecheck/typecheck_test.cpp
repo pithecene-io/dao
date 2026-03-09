@@ -49,6 +49,40 @@ auto is_ok(const TypeCheckResult& result) -> bool {
   return true;
 }
 
+/// Owns all pipeline state so typed results remain valid.
+struct TypecheckPipeline {
+  SourceBuffer source;
+  LexResult lex_result;
+  ParseResult parse_result;
+  ResolveResult resolve_result;
+  TypeContext types;
+  TypeCheckResult check_result;
+
+  explicit TypecheckPipeline(const std::string& src)
+      : source("test.dao", std::string(src)),
+        lex_result(lex(source)),
+        parse_result(parse(lex_result.tokens)) {
+    if (parse_result.file != nullptr) {
+      resolve_result = resolve(*parse_result.file);
+      check_result = typecheck(*parse_result.file, resolve_result, types);
+    }
+  }
+
+  /// Look up the function type registered for the first FunctionDecl.
+  [[nodiscard]] auto first_fn_type() const -> const Type* {
+    if (parse_result.file == nullptr) {
+      return nullptr;
+    }
+    for (const auto* decl : parse_result.file->declarations()) {
+      if (decl->kind() == NodeKind::FunctionDecl) {
+        return check_result.typed.decl_type(
+            static_cast<const Decl*>(decl));
+      }
+    }
+    return nullptr;
+  }
+};
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -287,6 +321,61 @@ suite typecheck_negative = [] {
 
   "expression-body type mismatch"_test = [] {
     auto result = check_source("fn bad(): i32 -> true\n");
+    expect(has_error_containing(result, "does not match return type"));
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Type aliases
+// ---------------------------------------------------------------------------
+
+suite type_alias = [] {
+  "alias resolves to underlying type"_test = [] {
+    auto result = check_source(
+        "type NodeId = i32\n"
+        "fn test(a: NodeId): NodeId -> a\n");
+    expect(result.diagnostics.empty()) << "alias param should typecheck";
+  };
+
+  "alias-to-alias chains resolve"_test = [] {
+    auto result = check_source(
+        "type NodeId = i32\n"
+        "type MyNode = NodeId\n"
+        "fn test(a: MyNode): i32 -> a\n");
+    expect(result.diagnostics.empty()) << "chained alias should typecheck";
+  };
+
+  "alias used in return type"_test = [] {
+    auto result = check_source(
+        "type Score = f64\n"
+        "fn test(): Score -> 0.0\n");
+    expect(result.diagnostics.empty()) << "alias return type should typecheck";
+  };
+
+  "forward-declared alias resolves with typed fn signature"_test = [] {
+    TypecheckPipeline pipe(
+        "fn test(a: NodeId): NodeId -> a\n"
+        "type NodeId = i32\n");
+    expect(pipe.check_result.diagnostics.empty())
+        << "forward alias should typecheck";
+    const auto* fn_type = pipe.first_fn_type();
+    expect(fn_type != nullptr) << "function type must be populated";
+    if (fn_type != nullptr) {
+      expect(fn_type->kind() == TypeKind::Function)
+          << "must be function type";
+      const auto* ft = static_cast<const TypeFunction*>(fn_type);
+      expect(ft->param_types().size() == 1_ul);
+      expect(ft->param_types()[0] != nullptr)
+          << "param type must not be null";
+      expect(ft->param_types()[0]->kind() == TypeKind::Builtin)
+          << "alias param must resolve to builtin";
+    }
+  };
+
+  "alias type mismatch still caught"_test = [] {
+    auto result = check_source(
+        "type NodeId = i32\n"
+        "fn test(a: NodeId): bool -> a\n");
     expect(has_error_containing(result, "does not match return type"));
   };
 };

@@ -217,6 +217,29 @@ auto TypeChecker::resolve_symbol_type_for_type_decl(const Symbol* sym) -> const 
 // ---------------------------------------------------------------------------
 
 void TypeChecker::register_declarations(const FileNode& file) {
+  // Pass 1a: register type aliases first so that functions and structs
+  // can reference them regardless of source order.
+  for (const auto* decl : file.declarations()) {
+    if (decl->kind() != NodeKind::AliasDecl) {
+      continue;
+    }
+    const auto* alias = static_cast<const AliasDeclNode*>(decl);
+    auto decl_it = decl_symbols_.find(alias->name_span().offset);
+    if (decl_it == decl_symbols_.end()) {
+      continue;
+    }
+    const auto* sym = decl_it->second;
+
+    // Resolve the aliased type and cache it so later lookups of the
+    // alias name transparently return the underlying type.
+    const auto* aliased_type = resolve_type_node(alias->type());
+    if (aliased_type != nullptr) {
+      symbol_types_[sym] = aliased_type;
+      typed_.set_decl_type(alias, aliased_type);
+    }
+  }
+
+  // Pass 1b: register functions and structs, which may reference aliases.
   for (const auto* decl : file.declarations()) {
     switch (decl->kind()) {
     case NodeKind::FunctionDecl: {
