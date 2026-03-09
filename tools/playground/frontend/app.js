@@ -86,9 +86,11 @@ const tokenHighlighter = ViewPlugin.fromClass(
 // Editor setup
 // ---------------------------------------------------------------------------
 
-const defaultSource = `fn main(): i32
-    print("hello, dao")
-    0
+const defaultSource = `fn add(a: i32, b: i32): i32 -> a + b
+
+fn main(): i32
+    let x: i32 = add(1, 2)
+    return x
 `;
 
 const editor = new EditorView({
