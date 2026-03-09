@@ -143,8 +143,10 @@ async function doAnalyze() {
     // Force decoration rebuild by dispatching empty transaction.
     editor.dispatch({});
 
-    // Update AST panel.
+    // Update IR panels.
     document.getElementById("ast-output").textContent = data.ast || "";
+    document.getElementById("hir-output").textContent = data.hir || "";
+    document.getElementById("mir-output").textContent = data.mir || "";
 
     // Update diagnostics panel.
     renderDiagnostics(data.diagnostics || []);
@@ -217,6 +219,23 @@ async function loadExamples() {
     console.error("failed to load example list:", err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Tab switching
+// ---------------------------------------------------------------------------
+
+document.querySelector(".panel-tabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".tab");
+  if (!tab) return;
+  const target = tab.dataset.tab;
+
+  document.querySelectorAll(".panel-tabs .tab").forEach((t) =>
+    t.classList.toggle("active", t === tab)
+  );
+  document.querySelectorAll("#ir-panel .tab-content").forEach((c) =>
+    c.classList.toggle("active", c.id === `${target}-output`)
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Init

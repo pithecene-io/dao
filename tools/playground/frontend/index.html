@@ -21,9 +21,15 @@
       <div id="editor-container"></div>
     </div>
     <div id="right-panels">
-      <div id="ast-panel">
-        <div class="panel-header">AST</div>
-        <pre id="ast-output"></pre>
+      <div id="ir-panel">
+        <div class="panel-tabs">
+          <button class="tab active" data-tab="ast">AST</button>
+          <button class="tab" data-tab="hir">HIR</button>
+          <button class="tab" data-tab="mir">MIR</button>
+        </div>
+        <pre id="ast-output" class="tab-content active"></pre>
+        <pre id="hir-output" class="tab-content"></pre>
+        <pre id="mir-output" class="tab-content"></pre>
       </div>
       <div id="diagnostics-panel">
         <div class="panel-header">Diagnostics</div>

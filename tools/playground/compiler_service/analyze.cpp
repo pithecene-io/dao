@@ -6,6 +6,14 @@
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser.h"
 #include "frontend/resolve/resolve.h"
+#include "frontend/typecheck/type_checker.h"
+#include "frontend/types/type_context.h"
+#include "ir/hir/hir_builder.h"
+#include "ir/hir/hir_context.h"
+#include "ir/hir/hir_printer.h"
+#include "ir/mir/mir_builder.h"
+#include "ir/mir/mir_context.h"
+#include "ir/mir/mir_printer.h"
 
 #include <nlohmann/json.hpp>
 
@@ -134,10 +142,87 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     }
   }
 
+  // Run type checking, HIR, and MIR when lex/parse/resolve succeeded
+  // without errors. Typecheck warnings are surfaced but do not gate IR.
+  std::string hir_text;
+  std::string mir_text;
+  TypeContext types;
+  bool resolve_clean =
+      lex_parse_clean && resolve_result.diagnostics.empty();
+  if (resolve_clean) {
+    auto check_result =
+        typecheck(*parse_result.file, resolve_result, types);
+
+    bool has_errors = false;
+    for (const auto& diag : check_result.diagnostics) {
+      auto loc = source.line_col(diag.span.offset);
+      diagnostics.push_back({
+          {"severity",
+           diag.severity == Severity::Error ? "error" : "warning"},
+          {"offset", diag.span.offset},
+          {"length", diag.span.length},
+          {"line", loc.line},
+          {"col", loc.col},
+          {"message", diag.message},
+      });
+      if (diag.severity == Severity::Error) {
+        has_errors = true;
+      }
+    }
+
+    if (!has_errors) {
+      HirContext hir_ctx;
+      auto hir_result = build_hir(*parse_result.file, resolve_result,
+                                  check_result, hir_ctx);
+
+      for (const auto& diag : hir_result.diagnostics) {
+        auto loc = source.line_col(diag.span.offset);
+        diagnostics.push_back({
+            {"severity", "error"},
+            {"offset", diag.span.offset},
+            {"length", diag.span.length},
+            {"line", loc.line},
+            {"col", loc.col},
+            {"message", diag.message},
+        });
+      }
+
+      if (hir_result.module != nullptr) {
+        std::ostringstream hir_out;
+        print_hir(hir_out, *hir_result.module);
+        hir_text = hir_out.str();
+
+        MirContext mir_ctx;
+        auto mir_result =
+            build_mir(*hir_result.module, mir_ctx, types);
+
+        for (const auto& diag : mir_result.diagnostics) {
+          auto loc = source.line_col(diag.span.offset);
+          diagnostics.push_back({
+              {"severity", "error"},
+              {"offset", diag.span.offset},
+              {"length", diag.span.length},
+              {"line", loc.line},
+              {"col", loc.col},
+              {"message", diag.message},
+          });
+        }
+
+        if (mir_result.module != nullptr) {
+          std::ostringstream mir_out;
+          print_mir(mir_out, *mir_result.module);
+          mir_text = mir_out.str();
+        }
+      }
+    }
+  }
+
   nlohmann::json response = {
       {"tokens", tokens},
       {"semanticTokens", semantic_tokens_json},
       {"ast", ast_text},
+      {"hir", hir_text},
+      {"mir", mir_text},
       {"diagnostics", diagnostics},
   };
 
