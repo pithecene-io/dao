@@ -19,4 +19,4 @@ fn a_star(g: Graph, start: NodeId, goal: NodeId): List[NodeId]
             if current == goal:
                 return reconstruct_path(came_from, start, goal)
 
-        List[NodeId]()
+        return List[NodeId]()

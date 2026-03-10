@@ -396,7 +396,12 @@ private:
 
   auto parse_return_statement() -> ReturnStatementNode* {
     const auto& kw = consume(TokenKind::KwReturn);
-    auto* value = parse_expression();
+    Expr* value = nullptr;
+    if (peek_kind() != TokenKind::Newline &&
+        peek_kind() != TokenKind::Dedent &&
+        peek_kind() != TokenKind::Eof) {
+      value = parse_expression();
+    }
     // Trailing newline may have been consumed by pipe continuation.
     match(TokenKind::Newline);
     Span span = span_from(kw.span);

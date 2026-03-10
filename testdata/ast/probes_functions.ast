@@ -19,5 +19,5 @@ File
         Value
           UnaryExpr *
             Identifier ptr
-    ExpressionStatement
+    ReturnStatement
       Identifier value

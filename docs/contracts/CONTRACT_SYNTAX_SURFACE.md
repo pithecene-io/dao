@@ -18,12 +18,13 @@ Defines the currently frozen syntax surface for Dao's early design phase.
 ```dao
 fn read(ptr: *i32): i32
     let value: i32
-    value
+    return value
 ```
 
 Rules:
 - no token follows the return type
 - the body begins on the next indented line
+- `return` is always required; there is no implicit tail-expression return
 
 ### Expression-bodied form
 

@@ -62,7 +62,7 @@ File
                   Identifier came_from
                   Identifier start
                   Identifier goal
-      ExpressionStatement
+      ReturnStatement
         CallExpr
           Callee
             IndexExpr

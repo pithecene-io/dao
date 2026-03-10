@@ -4,6 +4,6 @@ fn filter(pred: i32): i32 -> 0
 fn map(f: i32): i32 -> 0
 
 fn positive_squares(xs: List[i32]): List[i32]
-    xs
+    return xs
     |> filter |x| -> x > 0
     |> map |x| -> x * x

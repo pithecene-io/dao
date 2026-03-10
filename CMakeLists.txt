@@ -10,6 +10,7 @@ enable_testing()
 
 add_subdirectory(compiler/frontend)
 add_subdirectory(compiler/ir)
+add_subdirectory(compiler/backend)
 add_subdirectory(compiler/analysis)
 add_subdirectory(compiler/driver)
 add_subdirectory(tools/playground)

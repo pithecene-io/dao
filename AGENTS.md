@@ -35,6 +35,16 @@ The current frozen surface assumptions are:
 Agents must not introduce alternate spellings for these without an
 explicit syntax revision task.
 
+## Dependency Discipline
+
+- All dependencies are managed via **Conan 2.x** in manifest mode
+  (`conanfile.txt` or `conanfile.py`).
+- Agents must **never** install, suggest, or attempt to install system
+  packages (e.g. via `zypper`, `apt`, `dnf`, `brew`, or any other
+  system package manager). No exceptions.
+- If a dependency is not available in Conan, escalate — do not
+  work around it with system packages.
+
 ## Repository Discipline
 
 - `docs/contracts/` contains binding contracts only

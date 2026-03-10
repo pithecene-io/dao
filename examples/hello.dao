@@ -1,6 +1,6 @@
 fn print(msg: string): void
-    0
+    return
 
 fn main(): i32
     print("hello, dao")
-    0
+    return 0

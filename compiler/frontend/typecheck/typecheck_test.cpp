@@ -213,10 +213,15 @@ suite typecheck_control_flow = [] {
 // ---------------------------------------------------------------------------
 
 suite typecheck_void = [] {
-  // NOTE: bare "return" (without expression) is not yet supported by the
-  // parser. When it is, add:
-  //   "void function with bare return" — should typecheck cleanly
-  //   "bare return in non-void function" — should error
+  "void function with bare return"_test = [] {
+    auto result = check_source("fn noop(): void\n    return\n");
+    expect(is_ok(result));
+  };
+
+  "bare return in non-void function"_test = [] {
+    auto result = check_source("fn bad(): i32\n    return\n");
+    expect(has_error_containing(result, "bare return"));
+  };
 
   "void function without explicit return"_test = [] {
     auto result = check_source("fn noop(): void\n    let x = 1\n");
@@ -301,9 +306,6 @@ suite typecheck_negative = [] {
         "    *p\n");
     expect(has_error_containing(result, "mode unsafe"));
   };
-
-  // "bare return in non-void function" — deferred: parser does not yet
-  // support bare return.
 
   "logical not on non-bool"_test = [] {
     auto result = check_source("fn bad(): bool -> !42\n");
