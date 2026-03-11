@@ -54,33 +54,29 @@ auto HirBuilder::lower_decl(const Decl* decl) -> HirDecl* {
   }
 }
 
-auto HirBuilder::lower_function(const FunctionDeclNode* fn) -> HirFunction* {
+auto HirBuilder::lower_function(const FunctionDeclNode* fn) -> HirDecl* {
   const auto* sym = find_symbol_at_decl(fn->name_span().offset);
 
   // Build params.
   std::vector<HirParam> hir_params;
-  for (const auto& p : fn->params()) {
-    const auto* param_sym = find_symbol_at_decl(p.name_span.offset);
+  for (const auto& param : fn->params()) {
+    const auto* param_sym = find_symbol_at_decl(param.name_span.offset);
     const Type* param_type = nullptr;
 
-    // Get type from typed results via decl type or symbol cache.
     if (param_sym != nullptr) {
-      // Look up from the typed side tables — the type checker cached
-      // param types in the symbol_types_ map. We can derive it from
-      // the function's TypeFunction.
       const auto* fn_type_raw = typed_.typed.decl_type(fn);
       if (fn_type_raw != nullptr &&
           fn_type_raw->kind() == TypeKind::Function) {
         const auto* fn_type =
             static_cast<const TypeFunction*>(fn_type_raw);
-        auto idx = static_cast<size_t>(&p - fn->params().data());
+        auto idx = static_cast<size_t>(&param - fn->params().data());
         if (idx < fn_type->param_types().size()) {
           param_type = fn_type->param_types()[idx];
         }
       }
     }
 
-    hir_params.push_back({param_sym, param_type, p.name_span});
+    hir_params.push_back({param_sym, param_type, param.name_span});
   }
 
   // Return type.
@@ -97,19 +93,21 @@ auto HirBuilder::lower_function(const FunctionDeclNode* fn) -> HirFunction* {
   } else if (fn->is_expr_bodied()) {
     auto* expr = lower_expr(fn->expr_body());
     if (expr != nullptr) {
-      auto* ret = ctx_.alloc<HirReturn>(fn->expr_body()->span(), expr);
+      auto* ret = ctx_.alloc<HirStmt>(fn->expr_body()->span(),
+                                       HirReturn{expr});
       hir_body.push_back(ret);
     }
   } else {
     hir_body = lower_body(fn->body());
   }
 
-  return ctx_.alloc<HirFunction>(fn->span(), sym, std::move(hir_params),
-                                 ret_type, std::move(hir_body),
-                                 fn->is_extern());
+  return ctx_.alloc<HirDecl>(
+      fn->span(),
+      HirFunction{sym, std::move(hir_params), ret_type,
+                  std::move(hir_body), fn->is_extern()});
 }
 
-auto HirBuilder::lower_class(const ClassDeclNode* st) -> HirClassDecl* {
+auto HirBuilder::lower_class(const ClassDeclNode* st) -> HirDecl* {
   const auto* sym = find_symbol_at_decl(st->name_span().offset);
 
   const TypeStruct* struct_type = nullptr;
@@ -118,7 +116,7 @@ auto HirBuilder::lower_class(const ClassDeclNode* st) -> HirClassDecl* {
     struct_type = static_cast<const TypeStruct*>(decl_type);
   }
 
-  return ctx_.alloc<HirClassDecl>(st->span(), sym, struct_type);
+  return ctx_.alloc<HirDecl>(st->span(), HirClassDecl{sym, struct_type});
 }
 
 // ---------------------------------------------------------------------------
@@ -137,108 +135,103 @@ auto HirBuilder::lower_body(const std::vector<Stmt*>& body)
   return result;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto HirBuilder::lower_stmt(const Stmt* stmt) -> HirStmt* {
   switch (stmt->kind()) {
-  case NodeKind::LetStatement:
-    return lower_let(static_cast<const LetStatementNode*>(stmt));
-  case NodeKind::Assignment:
-    return lower_assignment(static_cast<const AssignmentNode*>(stmt));
-  case NodeKind::IfStatement:
-    return lower_if(static_cast<const IfStatementNode*>(stmt));
-  case NodeKind::WhileStatement:
-    return lower_while(static_cast<const WhileStatementNode*>(stmt));
-  case NodeKind::ForStatement:
-    return lower_for(static_cast<const ForStatementNode*>(stmt));
-  case NodeKind::ModeBlock:
-    return lower_mode(static_cast<const ModeBlockNode*>(stmt));
-  case NodeKind::ResourceBlock:
-    return lower_resource(static_cast<const ResourceBlockNode*>(stmt));
-  case NodeKind::ReturnStatement:
-    return lower_return(static_cast<const ReturnStatementNode*>(stmt));
-  case NodeKind::ExpressionStatement:
-    return lower_expr_stmt(
-        static_cast<const ExpressionStatementNode*>(stmt));
+  case NodeKind::LetStatement: {
+    const auto* let = static_cast<const LetStatementNode*>(stmt);
+    const auto* sym = find_symbol_at_decl(let->name_span().offset);
+    const auto* type = typed_.typed.local_type(let);
+    HirExpr* init = nullptr;
+    if (let->initializer() != nullptr) {
+      init = lower_expr(let->initializer());
+    }
+    return ctx_.alloc<HirStmt>(let->span(), HirLet{sym, type, init});
+  }
+
+  case NodeKind::Assignment: {
+    const auto* assign = static_cast<const AssignmentNode*>(stmt);
+    auto* target = lower_expr(assign->target());
+    auto* value = lower_expr(assign->value());
+    return ctx_.alloc<HirStmt>(assign->span(), HirAssign{target, value});
+  }
+
+  case NodeKind::IfStatement: {
+    const auto* ifn = static_cast<const IfStatementNode*>(stmt);
+    auto* cond = lower_expr(ifn->condition());
+    auto then_body = lower_body(ifn->then_body());
+    auto else_body = lower_body(ifn->else_body());
+    return ctx_.alloc<HirStmt>(
+        ifn->span(),
+        HirIf{cond, std::move(then_body), std::move(else_body)});
+  }
+
+  case NodeKind::WhileStatement: {
+    const auto* wh = static_cast<const WhileStatementNode*>(stmt);
+    auto* cond = lower_expr(wh->condition());
+    auto body = lower_body(wh->body());
+    return ctx_.alloc<HirStmt>(wh->span(),
+                                HirWhile{cond, std::move(body)});
+  }
+
+  case NodeKind::ForStatement: {
+    const auto* fo = static_cast<const ForStatementNode*>(stmt);
+    const auto* var_sym = find_symbol_at_decl(fo->var_span().offset);
+    auto* iterable = lower_expr(fo->iterable());
+    auto body = lower_body(fo->body());
+    return ctx_.alloc<HirStmt>(
+        fo->span(), HirFor{var_sym, iterable, std::move(body)});
+  }
+
+  case NodeKind::ModeBlock: {
+    const auto* mb = static_cast<const ModeBlockNode*>(stmt);
+    auto mode = hir_mode_kind_from_name(mb->mode_name());
+    auto body = lower_body(mb->body());
+    return ctx_.alloc<HirStmt>(
+        mb->span(), HirMode{mode, mb->mode_name(), std::move(body)});
+  }
+
+  case NodeKind::ResourceBlock: {
+    const auto* rb = static_cast<const ResourceBlockNode*>(stmt);
+    auto body = lower_body(rb->body());
+    return ctx_.alloc<HirStmt>(
+        rb->span(),
+        HirResource{rb->resource_kind(), rb->resource_name(),
+                    std::move(body)});
+  }
+
+  case NodeKind::ReturnStatement: {
+    const auto* ret = static_cast<const ReturnStatementNode*>(stmt);
+    HirExpr* value = nullptr;
+    if (ret->value() != nullptr) {
+      value = lower_expr(ret->value());
+    }
+    return ctx_.alloc<HirStmt>(ret->span(), HirReturn{value});
+  }
+
+  case NodeKind::ExpressionStatement: {
+    const auto* es = static_cast<const ExpressionStatementNode*>(stmt);
+    auto* expr = lower_expr(es->expr());
+    return ctx_.alloc<HirStmt>(es->span(), HirExprStmt{expr});
+  }
+
   default:
     return nullptr;
   }
-}
-
-auto HirBuilder::lower_let(const LetStatementNode* let) -> HirLet* {
-  const auto* sym = find_symbol_at_decl(let->name_span().offset);
-  const auto* type = typed_.typed.local_type(let);
-
-  HirExpr* init = nullptr;
-  if (let->initializer() != nullptr) {
-    init = lower_expr(let->initializer());
-  }
-
-  return ctx_.alloc<HirLet>(let->span(), sym, type, init);
-}
-
-auto HirBuilder::lower_assignment(const AssignmentNode* assign) -> HirAssign* {
-  auto* target = lower_expr(assign->target());
-  auto* value = lower_expr(assign->value());
-  return ctx_.alloc<HirAssign>(assign->span(), target, value);
-}
-
-auto HirBuilder::lower_if(const IfStatementNode* ifn) -> HirIf* {
-  auto* cond = lower_expr(ifn->condition());
-  auto then_body = lower_body(ifn->then_body());
-  auto else_body = lower_body(ifn->else_body());
-  return ctx_.alloc<HirIf>(ifn->span(), cond, std::move(then_body),
-                           std::move(else_body));
-}
-
-auto HirBuilder::lower_while(const WhileStatementNode* wh) -> HirWhile* {
-  auto* cond = lower_expr(wh->condition());
-  auto body = lower_body(wh->body());
-  return ctx_.alloc<HirWhile>(wh->span(), cond, std::move(body));
-}
-
-auto HirBuilder::lower_for(const ForStatementNode* fo) -> HirFor* {
-  const auto* var_sym = find_symbol_at_decl(fo->var_span().offset);
-  auto* iterable = lower_expr(fo->iterable());
-  auto body = lower_body(fo->body());
-  return ctx_.alloc<HirFor>(fo->span(), var_sym, iterable, std::move(body));
-}
-
-auto HirBuilder::lower_mode(const ModeBlockNode* mb) -> HirMode* {
-  auto mode = hir_mode_kind_from_name(mb->mode_name());
-  auto body = lower_body(mb->body());
-  return ctx_.alloc<HirMode>(mb->span(), mode, mb->mode_name(),
-                             std::move(body));
-}
-
-auto HirBuilder::lower_resource(const ResourceBlockNode* rb) -> HirResource* {
-  auto body = lower_body(rb->body());
-  return ctx_.alloc<HirResource>(rb->span(), rb->resource_kind(),
-                                 rb->resource_name(), std::move(body));
-}
-
-auto HirBuilder::lower_return(const ReturnStatementNode* ret) -> HirReturn* {
-  HirExpr* value = nullptr;
-  if (ret->value() != nullptr) {
-    value = lower_expr(ret->value());
-  }
-  return ctx_.alloc<HirReturn>(ret->span(), value);
-}
-
-auto HirBuilder::lower_expr_stmt(const ExpressionStatementNode* es)
-    -> HirExprStmt* {
-  auto* expr = lower_expr(es->expr());
-  return ctx_.alloc<HirExprStmt>(es->span(), expr);
 }
 
 // ---------------------------------------------------------------------------
 // Expression lowering
 // ---------------------------------------------------------------------------
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
   if (expr == nullptr) {
     return nullptr;
   }
 
   const auto* type = expr_type(expr);
+  auto span = expr->span();
 
   switch (expr->kind()) {
   case NodeKind::IntLiteral: {
@@ -246,42 +239,42 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
     int64_t val = 0;
     auto text = lit->text();
     std::from_chars(text.data(), text.data() + text.size(), val);
-    return ctx_.alloc<HirIntLiteral>(expr->span(), type, val);
+    return ctx_.alloc<HirExpr>(span, type, HirIntLiteral{val});
   }
 
   case NodeKind::FloatLiteral: {
     const auto* lit = static_cast<const FloatLiteralNode*>(expr);
     double val = std::strtod(std::string(lit->text()).c_str(), nullptr);
-    return ctx_.alloc<HirFloatLiteral>(expr->span(), type, val);
+    return ctx_.alloc<HirExpr>(span, type, HirFloatLiteral{val});
   }
 
   case NodeKind::StringLiteral: {
     const auto* lit = static_cast<const StringLiteralNode*>(expr);
-    return ctx_.alloc<HirStringLiteral>(expr->span(), type, lit->text());
+    return ctx_.alloc<HirExpr>(span, type, HirStringLiteral{lit->text()});
   }
 
   case NodeKind::BoolLiteral: {
     const auto* lit = static_cast<const BoolLiteralNode*>(expr);
-    return ctx_.alloc<HirBoolLiteral>(expr->span(), type, lit->value());
+    return ctx_.alloc<HirExpr>(span, type, HirBoolLiteral{lit->value()});
   }
 
   case NodeKind::Identifier: {
     const auto* sym = find_symbol_at_use(expr->span().offset);
-    return ctx_.alloc<HirSymbolRef>(expr->span(), type, sym);
+    return ctx_.alloc<HirExpr>(span, type, HirSymbolRef{sym});
   }
 
   case NodeKind::UnaryExpr: {
     const auto* un = static_cast<const UnaryExprNode*>(expr);
     auto* operand = lower_expr(un->operand());
-    return ctx_.alloc<HirUnary>(expr->span(), type, un->op(), operand);
+    return ctx_.alloc<HirExpr>(span, type, HirUnary{un->op(), operand});
   }
 
   case NodeKind::BinaryExpr: {
     const auto* bin = static_cast<const BinaryExprNode*>(expr);
     auto* left = lower_expr(bin->left());
     auto* right = lower_expr(bin->right());
-    return ctx_.alloc<HirBinary>(expr->span(), type, bin->op(), left,
-                                right);
+    return ctx_.alloc<HirExpr>(span, type,
+                                HirBinary{bin->op(), left, right});
   }
 
   case NodeKind::CallExpr: {
@@ -291,20 +284,22 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
     for (const auto* arg : call->args()) {
       args.push_back(lower_expr(arg));
     }
-    return ctx_.alloc<HirCall>(expr->span(), type, callee, std::move(args));
+    return ctx_.alloc<HirExpr>(span, type,
+                                HirCall{callee, std::move(args)});
   }
 
   case NodeKind::PipeExpr: {
     const auto* pipe = static_cast<const PipeExprNode*>(expr);
     auto* left = lower_expr(pipe->left());
     auto* right = lower_expr(pipe->right());
-    return ctx_.alloc<HirPipe>(expr->span(), type, left, right);
+    return ctx_.alloc<HirExpr>(span, type, HirPipe{left, right});
   }
 
   case NodeKind::FieldExpr: {
     const auto* field = static_cast<const FieldExprNode*>(expr);
     auto* object = lower_expr(field->object());
-    return ctx_.alloc<HirField>(expr->span(), type, object, field->field());
+    return ctx_.alloc<HirExpr>(span, type,
+                                HirField{object, field->field()});
   }
 
   case NodeKind::IndexExpr: {
@@ -314,30 +309,29 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
     for (const auto* i : idx->indices()) {
       indices.push_back(lower_expr(i));
     }
-    return ctx_.alloc<HirIndex>(expr->span(), type, object,
-                                std::move(indices));
+    return ctx_.alloc<HirExpr>(span, type,
+                                HirIndex{object, std::move(indices)});
   }
 
   case NodeKind::Lambda: {
     const auto* lam = static_cast<const LambdaNode*>(expr);
     std::vector<HirParam> params;
-    // Lambda params: derive types from the function type if available.
     const TypeFunction* fn_type = nullptr;
     if (type != nullptr && type->kind() == TypeKind::Function) {
       fn_type = static_cast<const TypeFunction*>(type);
     }
     for (size_t i = 0; i < lam->params().size(); ++i) {
-      const auto& [name, span] = lam->params()[i];
-      const auto* param_sym = find_symbol_at_decl(span.offset);
+      const auto& [name, param_span] = lam->params()[i];
+      const auto* param_sym = find_symbol_at_decl(param_span.offset);
       const Type* param_type = nullptr;
       if (fn_type != nullptr && i < fn_type->param_types().size()) {
         param_type = fn_type->param_types()[i];
       }
-      params.push_back({param_sym, param_type, span});
+      params.push_back({param_sym, param_type, param_span});
     }
     auto* body = lower_expr(lam->body());
-    return ctx_.alloc<HirLambda>(expr->span(), type, std::move(params),
-                                body);
+    return ctx_.alloc<HirExpr>(span, type,
+                                HirLambda{std::move(params), body});
   }
 
   default:

@@ -3,6 +3,52 @@
 
 namespace dao {
 
+// ---------------------------------------------------------------------------
+// kind() — derived from active variant alternative.
+// ---------------------------------------------------------------------------
+
+auto HirDecl::kind() const -> HirKind {
+  return std::visit(overloaded{
+      [](const HirFunction&) { return HirKind::Function; },
+      [](const HirClassDecl&) { return HirKind::ClassDecl; },
+  }, payload);
+}
+
+auto HirStmt::kind() const -> HirKind {
+  return std::visit(overloaded{
+      [](const HirLet&) { return HirKind::Let; },
+      [](const HirAssign&) { return HirKind::Assign; },
+      [](const HirIf&) { return HirKind::If; },
+      [](const HirWhile&) { return HirKind::While; },
+      [](const HirFor&) { return HirKind::For; },
+      [](const HirReturn&) { return HirKind::Return; },
+      [](const HirExprStmt&) { return HirKind::ExprStmt; },
+      [](const HirMode&) { return HirKind::Mode; },
+      [](const HirResource&) { return HirKind::Resource; },
+  }, payload);
+}
+
+auto HirExpr::kind() const -> HirKind {
+  return std::visit(overloaded{
+      [](const HirIntLiteral&) { return HirKind::IntLiteral; },
+      [](const HirFloatLiteral&) { return HirKind::FloatLiteral; },
+      [](const HirStringLiteral&) { return HirKind::StringLiteral; },
+      [](const HirBoolLiteral&) { return HirKind::BoolLiteral; },
+      [](const HirSymbolRef&) { return HirKind::SymbolRef; },
+      [](const HirUnary&) { return HirKind::Unary; },
+      [](const HirBinary&) { return HirKind::Binary; },
+      [](const HirCall&) { return HirKind::Call; },
+      [](const HirField&) { return HirKind::Field; },
+      [](const HirIndex&) { return HirKind::Index; },
+      [](const HirPipe&) { return HirKind::Pipe; },
+      [](const HirLambda&) { return HirKind::Lambda; },
+  }, payload);
+}
+
+// ---------------------------------------------------------------------------
+// HirKind name lookup.
+// ---------------------------------------------------------------------------
+
 auto hir_kind_name(HirKind kind) -> const char* {
   switch (kind) {
   case HirKind::Module:        return "Module";
@@ -32,6 +78,10 @@ auto hir_kind_name(HirKind kind) -> const char* {
   }
   return "<unknown>";
 }
+
+// ---------------------------------------------------------------------------
+// Mode kind helpers.
+// ---------------------------------------------------------------------------
 
 auto hir_mode_kind_from_name(std::string_view name) -> HirModeKind {
   if (name == "unsafe") return HirModeKind::Unsafe;

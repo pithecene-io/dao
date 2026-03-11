@@ -205,22 +205,13 @@ suite<"hir_pipe"> hir_pipe = [] {
 // ---------------------------------------------------------------------------
 
 suite<"hir_lambda"> hir_lambda = [] {
-  // NOTE: the parser does not yet support fn(...) -> T as a type syntax,
-  // so lambdas cannot currently pass type checking in a call context.
-  // This test verifies structural lowering: the HIR builder produces a
-  // Lambda node with resolved parameter symbols even without a typed
-  // function context.  The type checker emits a diagnostic, but the
-  // builder still lowers the surrounding AST that parsed successfully.
   "lambda structural lowering"_test = [] {
-    // A pipe with a lambda parses but the lambda fails type checking.
-    // The builder still runs and produces a Lambda HIR node.
     HirTestPipeline p(
         "fn main(): i32\n"
         "    return 5 |> |x| -> x + 1\n");
     auto dump = p.dump();
     expect(contains(dump, "Lambda")) << dump;
     expect(contains(dump, "Body")) << dump;
-    // Lambda param 'x' should have a resolved LambdaParam symbol.
     expect(contains(dump, "Param x")) << dump;
   };
 };
@@ -314,24 +305,24 @@ suite<"hir_semantic"> hir_semantic = [] {
     expect(p.module() != nullptr);
     expect(p.hir_result.diagnostics.empty()) << "no HIR diagnostics";
 
-    const auto& decls = p.module()->declarations();
+    const auto& decls = p.module()->declarations;
     expect(decls.size() == 1_ul);
-    const auto* fn = static_cast<const HirFunction*>(decls[0]);
-    expect(fn->body().size() == 1_ul);
-    const auto* ret = static_cast<const HirReturn*>(fn->body()[0]);
-    expect(ret->value() != nullptr);
-    expect(ret->value()->type() != nullptr) << "return expr has type";
+    const auto& fn = decls[0]->as<HirFunction>();
+    expect(fn.body.size() == 1_ul);
+    const auto& ret = fn.body[0]->as<HirReturn>();
+    expect(ret.value != nullptr);
+    expect(ret.value->type != nullptr) << "return expr has type";
   };
 
   "symbol references resolved"_test = [] {
     HirTestPipeline p("fn id(x: i32): i32\n    return x\n");
-    const auto& decls = p.module()->declarations();
-    const auto* fn = static_cast<const HirFunction*>(decls[0]);
-    const auto* ret = static_cast<const HirReturn*>(fn->body()[0]);
-    expect(ret->value()->kind() == HirKind::SymbolRef);
-    const auto* ref = static_cast<const HirSymbolRef*>(ret->value());
-    expect(ref->symbol() != nullptr) << "symbol identity resolved";
-    expect(ref->symbol()->name == "x") << "correct symbol name";
+    const auto& decls = p.module()->declarations;
+    const auto& fn = decls[0]->as<HirFunction>();
+    const auto& ret = fn.body[0]->as<HirReturn>();
+    expect(ret.value->kind() == HirKind::SymbolRef);
+    const auto& ref = ret.value->as<HirSymbolRef>();
+    expect(ref.symbol != nullptr) << "symbol identity resolved";
+    expect(ref.symbol->name == "x") << "correct symbol name";
   };
 };
 
@@ -357,7 +348,7 @@ suite<"hir_edge"> hir_edge = [] {
   "empty module"_test = [] {
     HirTestPipeline p("");
     expect(p.module() != nullptr);
-    expect(p.module()->declarations().empty());
+    expect(p.module()->declarations.empty());
   };
 
   "void function"_test = [] {
