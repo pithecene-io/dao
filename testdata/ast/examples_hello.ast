@@ -2,7 +2,6 @@ File
   FunctionDecl print
     Param msg: string
     ReturnType: void
-    ReturnStatement
   FunctionDecl main
     ReturnType: i32
     ExpressionStatement

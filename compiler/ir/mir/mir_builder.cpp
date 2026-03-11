@@ -59,6 +59,11 @@ auto MirBuilder::lower_function(const HirFunction& fn) -> MirFunction* {
     declare_local(param.symbol, param.type, param.span, /*is_param=*/true);
   }
 
+  // Bodyless function (extern declaration) — no blocks to emit.
+  if (fn.body().empty()) {
+    return mir_fn;
+  }
+
   // Create entry block.
   auto* entry = fresh_block();
   switch_to_block(entry);

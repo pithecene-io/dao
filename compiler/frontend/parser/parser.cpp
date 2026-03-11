@@ -177,11 +177,16 @@ private:
       // The trailing newline may have been consumed by pipe continuation.
       match(TokenKind::Newline);
     } else {
-      // Block-bodied: NEWLINE INDENT statement+ DEDENT
+      // Consume the newline after the signature.
       consume(TokenKind::Newline);
-      consume(TokenKind::Indent);
-      body = parse_statement_list();
-      consume(TokenKind::Dedent);
+
+      if (peek_kind() == TokenKind::Indent) {
+        // Block-bodied: INDENT statement+ DEDENT
+        advance(); // consume Indent
+        body = parse_statement_list();
+        consume(TokenKind::Dedent);
+      }
+      // Otherwise: bodyless declaration (extern). No body to parse.
     }
 
     Span span = span_from(kw.span);

@@ -177,22 +177,6 @@ auto LlvmBackend::lower_function(const MirFunction& fn) -> bool {
     return true;
   }
 
-  // Detect trivial void stubs: single block with only a bare return,
-  // and at least one parameter (no-arg void functions are genuine).
-  // These are likely Dao-side placeholder bodies for functions whose
-  // real implementation lives in the runtime. Emit with weak linkage
-  // so the runtime's strong definition wins at link time.
-  bool has_params = !fn.locals.empty() && fn.locals[0].is_param;
-  if (has_params &&
-      fn.return_type != nullptr &&
-      fn.return_type->kind() == TypeKind::Void &&
-      fn.blocks.size() == 1 &&
-      fn.blocks[0]->insts.size() == 1 &&
-      fn.blocks[0]->insts[0]->kind == MirInstKind::Return &&
-      !fn.blocks[0]->insts[0]->has_return_value) {
-    llvm_fn->setLinkage(llvm::Function::WeakAnyLinkage);
-  }
-
   FunctionState state;
   state.llvm_fn = llvm_fn;
 

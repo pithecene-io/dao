@@ -1,5 +1,4 @@
 fn print(msg: string): void
-    return
 
 fn main(): i32
     print("hello, dao")

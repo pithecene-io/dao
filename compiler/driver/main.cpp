@@ -15,12 +15,15 @@
 
 #include <llvm/IR/LLVMContext.h>
 
+#include <llvm/Support/Program.h>
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -492,18 +495,39 @@ void cmd_build(const std::filesystem::path& path) {
   }
 
   // Link with system cc: object + runtime library → executable.
-  // Use -Wl,--whole-archive so the runtime's strong definitions
-  // override weak stubs emitted by the compiler.
   auto output_path = path.parent_path() / path.stem();
-  std::string link_cmd = "cc " + obj_path.string() +
-                         " -Wl,--whole-archive " + DAO_RUNTIME_LIB +
-                         " -Wl,--no-whole-archive" +
-                         " -o " + output_path.string();
-  int link_status = std::system(link_cmd.c_str()); // NOLINT(cert-env33-c)
+
+  auto cc = llvm::sys::findProgramByName("cc");
+  if (!cc) {
+    std::cerr << "error: cannot find 'cc' linker: "
+              << cc.getError().message() << "\n";
+    std::filesystem::remove(obj_path);
+    std::exit(EXIT_FAILURE);
+  }
+
+  // StringRef does not own data — keep string temporaries alive.
+  auto obj_str = obj_path.string();
+  auto out_str = output_path.string();
+  std::vector<llvm::StringRef> args = {
+      *cc,
+      obj_str,
+      DAO_RUNTIME_LIB,
+      "-o",
+      out_str,
+  };
+
+  std::string link_error;
+  int link_status = llvm::sys::ExecuteAndWait(
+      *cc, args, /*Env=*/std::nullopt, /*Redirects=*/{},
+      /*SecondsToWait=*/0, /*MemoryLimit=*/0, &link_error);
   std::filesystem::remove(obj_path);
 
   if (link_status != 0) {
-    std::cerr << "error: linking failed\n";
+    std::cerr << "error: linking failed";
+    if (!link_error.empty()) {
+      std::cerr << ": " << link_error;
+    }
+    std::cerr << "\n";
     std::exit(EXIT_FAILURE);
   }
 
