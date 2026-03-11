@@ -119,8 +119,8 @@ auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
 void cmd_parse(const std::filesystem::path& path) {
   auto result = lex_and_parse(path);
   if (result.parse_result.file != nullptr) {
-    std::cout << "File: " << result.parse_result.file->imports().size() << " imports, "
-              << result.parse_result.file->declarations().size() << " declarations\n";
+    std::cout << "File: " << result.parse_result.file->imports.size() << " imports, "
+              << result.parse_result.file->declarations.size() << " declarations\n";
   }
 }
 

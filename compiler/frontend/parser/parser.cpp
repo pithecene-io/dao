@@ -82,7 +82,7 @@ private:
     skip_newlines();
     Span file_span = peek().span;
 
-    std::vector<AstNode*> imports;
+    std::vector<ImportNode*> imports;
     while (peek_kind() == TokenKind::KwImport) {
       imports.push_back(parse_import());
       skip_newlines();
@@ -158,7 +158,8 @@ private:
         consume(TokenKind::Colon);
         auto fields = parse_field_list();
         Span span = span_from(peek().span);
-        return ctx_.alloc<ClassDeclNode>(span, name_tok.text, name_tok.span, std::move(fields));
+        return ctx_.alloc<Decl>(
+            span, ClassDecl{name_tok.text, name_tok.span, std::move(fields)});
       }
       error("expected declaration (fn, extern, class, or type)");
       advance(); // skip problematic token
@@ -166,7 +167,7 @@ private:
     }
   }
 
-  auto parse_extern_decl() -> FunctionDeclNode* {
+  auto parse_extern_decl() -> Decl* {
     advance(); // consume 'extern'
     if (peek_kind() != TokenKind::KwFn) {
       error("expected 'fn' after 'extern'");
@@ -175,7 +176,7 @@ private:
     return parse_function_decl(/*is_extern=*/true);
   }
 
-  auto parse_function_decl(bool is_extern) -> FunctionDeclNode* {
+  auto parse_function_decl(bool is_extern) -> Decl* {
     const auto& kw = consume(TokenKind::KwFn);
     const auto& name_tok = consume(TokenKind::Identifier);
 
@@ -220,14 +221,10 @@ private:
     }
 
     Span span = span_from(kw.span);
-    return ctx_.alloc<FunctionDeclNode>(span,
-                                        name_tok.text,
-                                        name_tok.span,
-                                        std::move(params),
-                                        return_type,
-                                        std::move(body),
-                                        expr_body,
-                                        is_extern);
+    return ctx_.alloc<Decl>(
+        span,
+        FunctionDecl{name_tok.text, name_tok.span, std::move(params),
+                     return_type, std::move(body), expr_body, is_extern});
   }
 
   auto parse_params() -> std::vector<Param> {
@@ -250,19 +247,20 @@ private:
     return {.name = name_tok.text, .name_span = name_tok.span, .type = type};
   }
 
-  auto parse_class_decl() -> ClassDeclNode* {
+  auto parse_class_decl() -> Decl* {
     const auto& kw = consume(TokenKind::KwClass);
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::Colon);
     auto fields = parse_field_list();
     Span span = span_from(kw.span);
-    return ctx_.alloc<ClassDeclNode>(span, name_tok.text, name_tok.span, std::move(fields));
+    return ctx_.alloc<Decl>(
+        span, ClassDecl{name_tok.text, name_tok.span, std::move(fields)});
   }
 
-  auto parse_field_list() -> std::vector<FieldSpecNode*> {
+  auto parse_field_list() -> std::vector<FieldSpec*> {
     consume(TokenKind::Newline);
     consume(TokenKind::Indent);
-    std::vector<FieldSpecNode*> fields;
+    std::vector<FieldSpec*> fields;
     while (peek_kind() != TokenKind::Dedent && peek_kind() != TokenKind::Eof) {
       fields.push_back(parse_field_spec());
     }
@@ -273,23 +271,24 @@ private:
     return fields;
   }
 
-  auto parse_field_spec() -> FieldSpecNode* {
+  auto parse_field_spec() -> FieldSpec* {
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::Colon);
     auto* type = parse_type();
     consume(TokenKind::Newline);
     Span span = span_from(name_tok.span);
-    return ctx_.alloc<FieldSpecNode>(span, name_tok.text, name_tok.span, type);
+    return ctx_.alloc<FieldSpec>(span, name_tok.text, name_tok.span, type);
   }
 
-  auto parse_alias_decl() -> AliasDeclNode* {
+  auto parse_alias_decl() -> Decl* {
     const auto& kw = consume(TokenKind::KwType);
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::Eq);
     auto* type = parse_type();
     consume(TokenKind::Newline);
     Span span = span_from(kw.span);
-    return ctx_.alloc<AliasDeclNode>(span, name_tok.text, name_tok.span, type);
+    return ctx_.alloc<Decl>(
+        span, AliasDecl{name_tok.text, name_tok.span, type});
   }
 
   // -----------------------------------------------------------------------
@@ -358,17 +357,17 @@ private:
       auto* value = parse_expression();
       // Trailing newline may have been consumed by pipe continuation.
       match(TokenKind::Newline);
-      Span span = {.offset = expr->span().offset,
-                   .length = (value->span().offset + value->span().length) - expr->span().offset};
-      return ctx_.alloc<AssignmentNode>(span, expr, value);
+      Span span = {.offset = expr->span.offset,
+                   .length = (value->span.offset + value->span.length) - expr->span.offset};
+      return ctx_.alloc<Stmt>(span, Assignment{expr, value});
     }
 
     // Trailing newline may have been consumed by pipe continuation.
     match(TokenKind::Newline);
-    return ctx_.alloc<ExpressionStatementNode>(expr->span(), expr);
+    return ctx_.alloc<Stmt>(expr->span, ExpressionStatement{expr});
   }
 
-  auto parse_let_statement() -> LetStatementNode* {
+  auto parse_let_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwLet);
     const auto& name_tok = consume(TokenKind::Identifier);
 
@@ -392,10 +391,11 @@ private:
     // Trailing newline may have been consumed by pipe continuation.
     match(TokenKind::Newline);
     Span span = span_from(kw.span);
-    return ctx_.alloc<LetStatementNode>(span, name_tok.text, name_tok.span, type, init);
+    return ctx_.alloc<Stmt>(
+        span, LetStatement{name_tok.text, name_tok.span, type, init});
   }
 
-  auto parse_if_statement() -> IfStatementNode* {
+  auto parse_if_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwIf);
     auto* condition = parse_expression();
     consume(TokenKind::Colon);
@@ -409,19 +409,20 @@ private:
     }
 
     Span span = span_from(kw.span);
-    return ctx_.alloc<IfStatementNode>(span, condition, std::move(then_body), std::move(else_body));
+    return ctx_.alloc<Stmt>(
+        span, IfStatement{condition, std::move(then_body), std::move(else_body)});
   }
 
-  auto parse_while_statement() -> WhileStatementNode* {
+  auto parse_while_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwWhile);
     auto* condition = parse_expression();
     consume(TokenKind::Colon);
     auto body = parse_suite();
     Span span = span_from(kw.span);
-    return ctx_.alloc<WhileStatementNode>(span, condition, std::move(body));
+    return ctx_.alloc<Stmt>(span, WhileStatement{condition, std::move(body)});
   }
 
-  auto parse_for_statement() -> ForStatementNode* {
+  auto parse_for_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwFor);
     const auto& var_tok = consume(TokenKind::Identifier);
     consume(TokenKind::KwIn);
@@ -429,31 +430,35 @@ private:
     consume(TokenKind::Colon);
     auto body = parse_suite();
     Span span = span_from(kw.span);
-    return ctx_.alloc<ForStatementNode>(
-        span, var_tok.text, var_tok.span, iterable, std::move(body));
+    return ctx_.alloc<Stmt>(
+        span,
+        ForStatement{var_tok.text, var_tok.span, iterable, std::move(body)});
   }
 
-  auto parse_mode_block() -> ModeBlockNode* {
+  auto parse_mode_block() -> Stmt* {
     const auto& kw = consume(TokenKind::KwMode);
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::FatArrow);
     auto body = parse_suite();
     Span span = span_from(kw.span);
-    return ctx_.alloc<ModeBlockNode>(span, name_tok.text, name_tok.span, std::move(body));
+    return ctx_.alloc<Stmt>(
+        span, ModeBlock{name_tok.text, name_tok.span, std::move(body)});
   }
 
-  auto parse_resource_block() -> ResourceBlockNode* {
+  auto parse_resource_block() -> Stmt* {
     const auto& kw = consume(TokenKind::KwResource);
     const auto& kind_tok = consume(TokenKind::Identifier);
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::FatArrow);
     auto body = parse_suite();
     Span span = span_from(kw.span);
-    return ctx_.alloc<ResourceBlockNode>(
-        span, kind_tok.text, kind_tok.span, name_tok.text, name_tok.span, std::move(body));
+    return ctx_.alloc<Stmt>(
+        span,
+        ResourceBlock{kind_tok.text, kind_tok.span, name_tok.text,
+                      name_tok.span, std::move(body)});
   }
 
-  auto parse_return_statement() -> ReturnStatementNode* {
+  auto parse_return_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwReturn);
     Expr* value = nullptr;
     if (peek_kind() != TokenKind::Newline &&
@@ -464,7 +469,7 @@ private:
     // Trailing newline may have been consumed by pipe continuation.
     match(TokenKind::Newline);
     Span span = span_from(kw.span);
-    return ctx_.alloc<ReturnStatementNode>(span, value);
+    return ctx_.alloc<Stmt>(span, ReturnStatement{value});
   }
 
   // -----------------------------------------------------------------------
@@ -500,9 +505,9 @@ private:
         right = parse_application();
         in_pipe_target_ = false;
       }
-      Span span = {.offset = left->span().offset,
-                   .length = (right->span().offset + right->span().length) - left->span().offset};
-      left = ctx_.alloc<PipeExprNode>(span, left, right);
+      Span span = {.offset = left->span.offset,
+                   .length = (right->span.offset + right->span.length) - left->span.offset};
+      left = ctx_.alloc<Expr>(span, PipeExpr{left, right});
     }
 
     // Consume matching DEDENTs for pipe continuation indents.
@@ -655,8 +660,8 @@ private:
       auto* operand = parse_unary();
       Span span = {.offset = op_tok.span.offset,
                    .length =
-                       (operand->span().offset + operand->span().length) - op_tok.span.offset};
-      return ctx_.alloc<UnaryExprNode>(span, op, operand);
+                       (operand->span.offset + operand->span.length) - op_tok.span.offset};
+      return ctx_.alloc<Expr>(span, UnaryExpr{op, operand});
     }
     return parse_application();
   }
@@ -677,10 +682,10 @@ private:
           args.push_back(parse_postfix());
         }
       }
-      Span span = {.offset = callee->span().offset,
-                   .length = (args.back()->span().offset + args.back()->span().length) -
-                             callee->span().offset};
-      return ctx_.alloc<CallExprNode>(span, callee, std::move(args));
+      Span span = {.offset = callee->span.offset,
+                   .length = (args.back()->span.offset + args.back()->span.length) -
+                             callee->span.offset};
+      return ctx_.alloc<Expr>(span, CallExpr{callee, std::move(args)});
     }
 
     return callee;
@@ -711,17 +716,17 @@ private:
           }
         }
         const auto& rparen = consume(TokenKind::RParen);
-        Span span = {.offset = expr->span().offset,
-                     .length = (rparen.span.offset + rparen.span.length) - expr->span().offset};
-        expr = ctx_.alloc<CallExprNode>(span, expr, std::move(args));
+        Span span = {.offset = expr->span.offset,
+                     .length = (rparen.span.offset + rparen.span.length) - expr->span.offset};
+        expr = ctx_.alloc<Expr>(span, CallExpr{expr, std::move(args)});
       } else if (peek_kind() == TokenKind::Dot) {
         // Field access: expr.field
         advance(); // .
         const auto& field_tok = consume(TokenKind::Identifier);
-        Span span = {.offset = expr->span().offset,
+        Span span = {.offset = expr->span.offset,
                      .length =
-                         (field_tok.span.offset + field_tok.span.length) - expr->span().offset};
-        expr = ctx_.alloc<FieldExprNode>(span, expr, field_tok.text, field_tok.span);
+                         (field_tok.span.offset + field_tok.span.length) - expr->span.offset};
+        expr = ctx_.alloc<Expr>(span, FieldExpr{expr, field_tok.text, field_tok.span});
       } else if (peek_kind() == TokenKind::LBracket) {
         // Index or type-parameter application: expr[args]
         advance(); // [
@@ -732,9 +737,9 @@ private:
           indices.push_back(parse_expression());
         }
         const auto& rbracket = consume(TokenKind::RBracket);
-        Span span = {.offset = expr->span().offset,
-                     .length = (rbracket.span.offset + rbracket.span.length) - expr->span().offset};
-        expr = ctx_.alloc<IndexExprNode>(span, expr, std::move(indices));
+        Span span = {.offset = expr->span.offset,
+                     .length = (rbracket.span.offset + rbracket.span.length) - expr->span.offset};
+        expr = ctx_.alloc<Expr>(span, IndexExpr{expr, std::move(indices)});
       } else {
         break;
       }
@@ -748,23 +753,23 @@ private:
     switch (peek_kind()) {
     case TokenKind::IntLiteral: {
       const auto& tok = advance();
-      return ctx_.alloc<IntLiteralNode>(tok.span, tok.text);
+      return ctx_.alloc<Expr>(tok.span, IntLiteral{tok.text});
     }
     case TokenKind::FloatLiteral: {
       const auto& tok = advance();
-      return ctx_.alloc<FloatLiteralNode>(tok.span, tok.text);
+      return ctx_.alloc<Expr>(tok.span, FloatLiteral{tok.text});
     }
     case TokenKind::StringLiteral: {
       const auto& tok = advance();
-      return ctx_.alloc<StringLiteralNode>(tok.span, tok.text);
+      return ctx_.alloc<Expr>(tok.span, StringLiteral{tok.text});
     }
     case TokenKind::KwTrue: {
       const auto& tok = advance();
-      return ctx_.alloc<BoolLiteralNode>(tok.span, true);
+      return ctx_.alloc<Expr>(tok.span, BoolLiteral{true});
     }
     case TokenKind::KwFalse: {
       const auto& tok = advance();
-      return ctx_.alloc<BoolLiteralNode>(tok.span, false);
+      return ctx_.alloc<Expr>(tok.span, BoolLiteral{false});
     }
     case TokenKind::LParen: {
       advance(); // (
@@ -782,7 +787,7 @@ private:
       error("expected expression");
       const auto& tok = advance();
       // Return an error placeholder.
-      return ctx_.alloc<IdentifierNode>(tok.span, tok.text);
+      return ctx_.alloc<Expr>(tok.span, IdentifierExpr{tok.text});
     }
   }
 
@@ -799,7 +804,7 @@ private:
     const auto& rbracket = consume(TokenKind::RBracket);
     Span span = {.offset = lbracket.span.offset,
                  .length = (rbracket.span.offset + rbracket.span.length) - lbracket.span.offset};
-    return ctx_.alloc<ListLiteralNode>(span, std::move(elements));
+    return ctx_.alloc<Expr>(span, ListLiteral{std::move(elements)});
   }
 
   auto parse_lambda() -> Expr* {
@@ -818,14 +823,14 @@ private:
     consume(TokenKind::Arrow);
     auto* body = parse_expression();
     Span span = {.offset = open_pipe.span.offset,
-                 .length = (body->span().offset + body->span().length) - open_pipe.span.offset};
-    return ctx_.alloc<LambdaNode>(span, std::move(params), body);
+                 .length = (body->span.offset + body->span.length) - open_pipe.span.offset};
+    return ctx_.alloc<Expr>(span, LambdaExpr{std::move(params), body});
   }
 
   auto parse_qualified_name_or_identifier() -> Expr* {
     const auto& first = consume(TokenKind::Identifier);
     if (peek_kind() != TokenKind::ColonColon) {
-      return ctx_.alloc<IdentifierNode>(first.span, first.text);
+      return ctx_.alloc<Expr>(first.span, IdentifierExpr{first.text});
     }
 
     // Qualified name: ident :: ident (:: ident)*
@@ -840,7 +845,7 @@ private:
       span.length = (seg.span.offset + seg.span.length) - span.offset;
     }
 
-    return ctx_.alloc<QualifiedNameNode>(span, std::move(segments));
+    return ctx_.alloc<Expr>(span, QualifiedName{std::move(segments)});
   }
 
   // -----------------------------------------------------------------------
@@ -852,14 +857,14 @@ private:
       const auto& star = advance();
       auto* pointee = parse_type();
       Span span = {.offset = star.span.offset,
-                   .length = (pointee->span().offset + pointee->span().length) - star.span.offset};
-      return ctx_.alloc<PointerTypeNode>(span, pointee);
+                   .length = (pointee->span.offset + pointee->span.length) - star.span.offset};
+      return ctx_.alloc<TypeNode>(span, PointerType{pointee});
     }
 
     return parse_named_type();
   }
 
-  auto parse_named_type() -> NamedTypeNode* {
+  auto parse_named_type() -> TypeNode* {
     auto path = parse_type_path();
 
     std::vector<TypeNode*> type_args;
@@ -874,7 +879,7 @@ private:
       path.span.length = (rbracket.span.offset + rbracket.span.length) - path.span.offset;
     }
 
-    return ctx_.alloc<NamedTypeNode>(path.span, std::move(path), std::move(type_args));
+    return ctx_.alloc<TypeNode>(path.span, NamedType{std::move(path), std::move(type_args)});
   }
 
   auto parse_type_path() -> QualifiedPath {
@@ -897,10 +902,10 @@ private:
   // Helpers
   // -----------------------------------------------------------------------
 
-  auto make_binary(BinaryOp op, Expr* left, Expr* right) -> BinaryExprNode* {
-    Span span = {.offset = left->span().offset,
-                 .length = (right->span().offset + right->span().length) - left->span().offset};
-    return ctx_.alloc<BinaryExprNode>(span, op, left, right);
+  auto make_binary(BinaryOp op, Expr* left, Expr* right) -> Expr* {
+    Span span = {.offset = left->span.offset,
+                 .length = (right->span.offset + right->span.length) - left->span.offset};
+    return ctx_.alloc<Expr>(span, BinaryExpr{op, left, right});
   }
 
   auto span_from(Span start) -> Span {

@@ -78,21 +78,21 @@ private:
 
   void register_declarations(const FileNode& file);
   void check_declaration(const Decl* decl);
-  void check_function(const FunctionDeclNode* fn);
-  void check_class(const ClassDeclNode* st);
+  void check_function(const Decl* decl);
+  void check_class(const Decl* decl);
 
   // --- Statement checking ---
 
   void check_statement(const Stmt* stmt);
-  void check_let(const LetStatementNode* let);
-  void check_assignment(const AssignmentNode* assign);
-  void check_if(const IfStatementNode* ifn);
-  void check_while(const WhileStatementNode* wh);
-  void check_for(const ForStatementNode* fo);
-  void check_mode_block(const ModeBlockNode* mb);
-  void check_resource_block(const ResourceBlockNode* rb);
-  void check_return(const ReturnStatementNode* ret);
-  void check_expr_stmt(const ExpressionStatementNode* es);
+  void check_let(const Stmt* stmt);
+  void check_assignment(const Stmt* stmt);
+  void check_if(const Stmt* stmt);
+  void check_while(const Stmt* stmt);
+  void check_for(const Stmt* stmt);
+  void check_mode_block(const Stmt* stmt);
+  void check_resource_block(const Stmt* stmt);
+  void check_return(const Stmt* stmt);
+  void check_expr_stmt(const Stmt* stmt);
 
   void check_body(const std::vector<Stmt*>& body);
 
@@ -101,19 +101,19 @@ private:
   auto check_expr(const Expr* expr) -> const Type*;
   auto check_expr(const Expr* expr, const Type* expected) -> const Type*;
 
-  auto check_identifier(const IdentifierNode* id) -> const Type*;
-  auto check_int_literal(const IntLiteralNode* lit) -> const Type*;
-  auto check_float_literal(const FloatLiteralNode* lit) -> const Type*;
-  auto check_string_literal(const StringLiteralNode* lit) -> const Type*;
-  auto check_bool_literal(const BoolLiteralNode* lit) -> const Type*;
-  auto check_binary(const BinaryExprNode* bin) -> const Type*;
-  auto check_unary(const UnaryExprNode* un) -> const Type*;
-  auto check_call(const CallExprNode* call) -> const Type*;
-  auto check_pipe(const PipeExprNode* pipe) -> const Type*;
-  auto check_field(const FieldExprNode* field) -> const Type*;
-  auto check_index(const IndexExprNode* idx) -> const Type*;
-  auto check_lambda(const LambdaNode* lam, const Type* expected) -> const Type*;
-  auto check_list_literal(const ListLiteralNode* list) -> const Type*;
+  auto check_identifier(const Expr* expr) -> const Type*;
+  auto check_int_literal(const Expr* expr) -> const Type*;
+  auto check_float_literal(const Expr* expr) -> const Type*;
+  auto check_string_literal(const Expr* expr) -> const Type*;
+  auto check_bool_literal(const Expr* expr) -> const Type*;
+  auto check_binary(const Expr* expr) -> const Type*;
+  auto check_unary(const Expr* expr) -> const Type*;
+  auto check_call(const Expr* expr) -> const Type*;
+  auto check_pipe(const Expr* expr) -> const Type*;
+  auto check_field(const Expr* expr) -> const Type*;
+  auto check_index(const Expr* expr) -> const Type*;
+  auto check_lambda(const Expr* expr, const Type* expected) -> const Type*;
+  auto check_list_literal(const Expr* expr) -> const Type*;
 
   // --- Diagnostics ---
 

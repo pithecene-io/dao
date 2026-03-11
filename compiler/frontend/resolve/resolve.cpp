@@ -95,19 +95,18 @@ private:
 
   void collect_top_level(const FileNode& file) {
     // Register imports.
-    for (const auto* imp : file.imports()) {
-      const auto& import_node = static_cast<const ImportNode&>(*imp);
-      collect_import(import_node);
+    for (const auto* imp : file.imports) {
+      collect_import(*imp);
     }
 
     // Register top-level declarations.
-    for (const auto* decl : file.declarations()) {
+    for (const auto* decl : file.declarations) {
       collect_decl(*decl);
     }
   }
 
   void collect_import(const ImportNode& node) {
-    const auto& path = node.path();
+    const auto& path = node.path;
     if (path.segments.empty()) {
       return;
     }
@@ -140,23 +139,23 @@ private:
 
     switch (decl.kind()) {
     case NodeKind::FunctionDecl: {
-      const auto& fn = static_cast<const FunctionDeclNode&>(decl);
-      name = fn.name();
-      name_span = fn.name_span();
+      const auto& fn = decl.as<FunctionDecl>();
+      name = fn.name;
+      name_span = fn.name_span;
       kind = SymbolKind::Function;
       break;
     }
     case NodeKind::ClassDecl: {
-      const auto& st = static_cast<const ClassDeclNode&>(decl);
-      name = st.name();
-      name_span = st.name_span();
+      const auto& st = decl.as<ClassDecl>();
+      name = st.name;
+      name_span = st.name_span;
       kind = SymbolKind::Type;
       break;
     }
     case NodeKind::AliasDecl: {
-      const auto& alias = static_cast<const AliasDeclNode&>(decl);
-      name = alias.name();
-      name_span = alias.name_span();
+      const auto& alias = decl.as<AliasDecl>();
+      name = alias.name;
+      name_span = alias.name_span;
       kind = SymbolKind::Type;
       break;
     }
@@ -177,7 +176,7 @@ private:
   // --- Pass 2: Resolve bodies ---
 
   void resolve_bodies(const FileNode& file) {
-    for (const auto* decl : file.declarations()) {
+    for (const auto* decl : file.declarations) {
       resolve_decl(*decl, file_scope_);
     }
   }
@@ -185,30 +184,31 @@ private:
   void resolve_decl(const Decl& decl, Scope* scope) {
     switch (decl.kind()) {
     case NodeKind::FunctionDecl:
-      resolve_function(static_cast<const FunctionDeclNode&>(decl), scope);
+      resolve_function(decl, scope);
       break;
     case NodeKind::ClassDecl:
-      resolve_class(static_cast<const ClassDeclNode&>(decl), scope);
+      resolve_class(decl, scope);
       break;
     case NodeKind::AliasDecl:
-      resolve_alias(static_cast<const AliasDeclNode&>(decl), scope);
+      resolve_alias(decl, scope);
       break;
     default:
       break;
     }
   }
 
-  void resolve_function(const FunctionDeclNode& fn, Scope* parent) {
+  void resolve_function(const Decl& decl, Scope* parent) {
+    const auto& fn = decl.as<FunctionDecl>();
     auto* fn_scope = ctx_.make_scope(ScopeKind::Function, parent);
 
     // Declare parameters.
-    for (const auto& param : fn.params()) {
+    for (const auto& param : fn.params) {
       if (fn_scope->lookup_local(param.name) != nullptr) {
         diagnostics_.push_back(Diagnostic::error(
             param.name_span,
             "duplicate parameter '" + std::string(param.name) + "'"));
       } else {
-        auto* sym = ctx_.make_symbol(SymbolKind::Param, param.name, param.name_span, &fn);
+        auto* sym = ctx_.make_symbol(SymbolKind::Param, param.name, param.name_span, &decl);
         fn_scope->declare(param.name, sym);
       }
 
@@ -219,46 +219,48 @@ private:
     }
 
     // Resolve return type.
-    if (fn.return_type() != nullptr) {
-      resolve_type(*fn.return_type(), fn_scope);
+    if (fn.return_type != nullptr) {
+      resolve_type(*fn.return_type, fn_scope);
     }
 
     // Resolve body statements in a nested block scope so that let
     // bindings can shadow parameters without triggering duplicate errors.
     auto* body_scope = ctx_.make_scope(ScopeKind::Block, fn_scope);
-    for (const auto* stmt : fn.body()) {
+    for (const auto* stmt : fn.body) {
       resolve_stmt(*stmt, body_scope);
     }
 
     // Resolve expression body (same body scope).
-    if (fn.expr_body() != nullptr) {
-      resolve_expr(*fn.expr_body(), body_scope);
+    if (fn.expr_body != nullptr) {
+      resolve_expr(*fn.expr_body, body_scope);
     }
   }
 
-  void resolve_class(const ClassDeclNode& st, Scope* parent) {
+  void resolve_class(const Decl& decl, Scope* parent) {
+    const auto& st = decl.as<ClassDecl>();
     auto* struct_scope = ctx_.make_scope(ScopeKind::Struct, parent);
 
-    for (const auto* field : st.fields()) {
-      if (struct_scope->lookup_local(field->name()) != nullptr) {
+    for (const auto* field : st.fields) {
+      if (struct_scope->lookup_local(field->name) != nullptr) {
         diagnostics_.push_back(Diagnostic::error(
-            field->name_span(),
-            "duplicate declaration '" + std::string(field->name()) + "'"));
+            field->name_span,
+            "duplicate declaration '" + std::string(field->name) + "'"));
       } else {
         auto* sym =
-            ctx_.make_symbol(SymbolKind::Field, field->name(), field->name_span(), field);
-        struct_scope->declare(field->name(), sym);
+            ctx_.make_symbol(SymbolKind::Field, field->name, field->name_span, field);
+        struct_scope->declare(field->name, sym);
       }
 
-      if (field->type() != nullptr) {
-        resolve_type(*field->type(), struct_scope);
+      if (field->type != nullptr) {
+        resolve_type(*field->type, struct_scope);
       }
     }
   }
 
-  void resolve_alias(const AliasDeclNode& alias, Scope* scope) {
-    if (alias.type() != nullptr) {
-      resolve_type(*alias.type(), scope);
+  void resolve_alias(const Decl& decl, Scope* scope) {
+    const auto& alias = decl.as<AliasDecl>();
+    if (alias.type != nullptr) {
+      resolve_type(*alias.type, scope);
     }
   }
 
@@ -267,104 +269,104 @@ private:
   void resolve_stmt(const Stmt& stmt, Scope* scope) {
     switch (stmt.kind()) {
     case NodeKind::LetStatement: {
-      const auto& let_stmt = static_cast<const LetStatementNode&>(stmt);
+      const auto& let_stmt = stmt.as<LetStatement>();
 
       // Resolve type and initializer BEFORE declaring (prevents self-reference).
-      if (let_stmt.type() != nullptr) {
-        resolve_type(*let_stmt.type(), scope);
+      if (let_stmt.type != nullptr) {
+        resolve_type(*let_stmt.type, scope);
       }
-      if (let_stmt.initializer() != nullptr) {
-        resolve_expr(*let_stmt.initializer(), scope);
+      if (let_stmt.initializer != nullptr) {
+        resolve_expr(*let_stmt.initializer, scope);
       }
 
       // Declare the local variable (visible after this point).
-      if (scope->lookup_local(let_stmt.name()) != nullptr) {
+      if (scope->lookup_local(let_stmt.name) != nullptr) {
         diagnostics_.push_back(Diagnostic::error(
-            let_stmt.name_span(),
-            "duplicate declaration '" + std::string(let_stmt.name()) + "'"));
+            let_stmt.name_span,
+            "duplicate declaration '" + std::string(let_stmt.name) + "'"));
       } else {
         auto* sym =
-            ctx_.make_symbol(SymbolKind::Local, let_stmt.name(), let_stmt.name_span(), &let_stmt);
-        scope->declare(let_stmt.name(), sym);
+            ctx_.make_symbol(SymbolKind::Local, let_stmt.name, let_stmt.name_span, &stmt);
+        scope->declare(let_stmt.name, sym);
       }
       break;
     }
     case NodeKind::Assignment: {
-      const auto& assign = static_cast<const AssignmentNode&>(stmt);
-      resolve_expr(*assign.target(), scope);
-      resolve_expr(*assign.value(), scope);
+      const auto& assign = stmt.as<Assignment>();
+      resolve_expr(*assign.target, scope);
+      resolve_expr(*assign.value, scope);
       break;
     }
     case NodeKind::IfStatement: {
-      const auto& if_stmt = static_cast<const IfStatementNode&>(stmt);
-      resolve_expr(*if_stmt.condition(), scope);
+      const auto& if_stmt = stmt.as<IfStatement>();
+      resolve_expr(*if_stmt.condition, scope);
 
       auto* then_scope = ctx_.make_scope(ScopeKind::Block, scope);
-      for (const auto* s : if_stmt.then_body()) {
+      for (const auto* s : if_stmt.then_body) {
         resolve_stmt(*s, then_scope);
       }
 
       if (if_stmt.has_else()) {
         auto* else_scope = ctx_.make_scope(ScopeKind::Block, scope);
-        for (const auto* s : if_stmt.else_body()) {
+        for (const auto* s : if_stmt.else_body) {
           resolve_stmt(*s, else_scope);
         }
       }
       break;
     }
     case NodeKind::WhileStatement: {
-      const auto& while_stmt = static_cast<const WhileStatementNode&>(stmt);
-      resolve_expr(*while_stmt.condition(), scope);
+      const auto& while_stmt = stmt.as<WhileStatement>();
+      resolve_expr(*while_stmt.condition, scope);
 
       auto* while_scope = ctx_.make_scope(ScopeKind::Block, scope);
-      for (const auto* s : while_stmt.body()) {
+      for (const auto* s : while_stmt.body) {
         resolve_stmt(*s, while_scope);
       }
       break;
     }
     case NodeKind::ForStatement: {
-      const auto& for_stmt = static_cast<const ForStatementNode&>(stmt);
+      const auto& for_stmt = stmt.as<ForStatement>();
 
       // Resolve iterable in the outer scope.
-      resolve_expr(*for_stmt.iterable(), scope);
+      resolve_expr(*for_stmt.iterable, scope);
 
       // Create block scope for the loop body; declare the loop variable.
       auto* for_scope = ctx_.make_scope(ScopeKind::Block, scope);
       auto* sym = ctx_.make_symbol(
-          SymbolKind::Local, for_stmt.var(), for_stmt.var_span(), &for_stmt);
-      for_scope->declare(for_stmt.var(), sym);
+          SymbolKind::Local, for_stmt.var, for_stmt.var_span, &stmt);
+      for_scope->declare(for_stmt.var, sym);
 
-      for (const auto* s : for_stmt.body()) {
+      for (const auto* s : for_stmt.body) {
         resolve_stmt(*s, for_scope);
       }
       break;
     }
     case NodeKind::ModeBlock: {
-      const auto& mode = static_cast<const ModeBlockNode&>(stmt);
+      const auto& mode = stmt.as<ModeBlock>();
       auto* mode_scope = ctx_.make_scope(ScopeKind::Block, scope);
-      for (const auto* s : mode.body()) {
+      for (const auto* s : mode.body) {
         resolve_stmt(*s, mode_scope);
       }
       break;
     }
     case NodeKind::ResourceBlock: {
-      const auto& res = static_cast<const ResourceBlockNode&>(stmt);
+      const auto& res = stmt.as<ResourceBlock>();
       auto* res_scope = ctx_.make_scope(ScopeKind::Block, scope);
-      for (const auto* s : res.body()) {
+      for (const auto* s : res.body) {
         resolve_stmt(*s, res_scope);
       }
       break;
     }
     case NodeKind::ReturnStatement: {
-      const auto& ret = static_cast<const ReturnStatementNode&>(stmt);
-      if (ret.value() != nullptr) {
-        resolve_expr(*ret.value(), scope);
+      const auto& ret = stmt.as<ReturnStatement>();
+      if (ret.value != nullptr) {
+        resolve_expr(*ret.value, scope);
       }
       break;
     }
     case NodeKind::ExpressionStatement: {
-      const auto& expr_stmt = static_cast<const ExpressionStatementNode&>(stmt);
-      resolve_expr(*expr_stmt.expr(), scope);
+      const auto& expr_stmt = stmt.as<ExpressionStatement>();
+      resolve_expr(*expr_stmt.expr, scope);
       break;
     }
     default:
@@ -377,28 +379,28 @@ private:
   void resolve_expr(const Expr& expr, Scope* scope) {
     switch (expr.kind()) {
     case NodeKind::Identifier: {
-      const auto& ident = static_cast<const IdentifierNode&>(expr);
-      auto* sym = scope->lookup(ident.name());
+      const auto& ident = expr.as<IdentifierExpr>();
+      auto* sym = scope->lookup(ident.name);
       if (sym != nullptr) {
-        uses_[expr.span().offset] = sym;
+        uses_[expr.span.offset] = sym;
       } else {
         diagnostics_.push_back(Diagnostic::error(
-            expr.span(),
-            "unknown name '" + std::string(ident.name()) + "'"));
+            expr.span,
+            "unknown name '" + std::string(ident.name) + "'"));
       }
       break;
     }
     case NodeKind::QualifiedName: {
-      const auto& qn = static_cast<const QualifiedNameNode&>(expr);
-      if (qn.segments().empty()) {
+      const auto& qn = expr.as<QualifiedName>();
+      if (qn.segments.empty()) {
         break;
       }
 
       // Resolve first segment against the scope chain — must be a
       // module/import binding per TASK_6_RESOLVE.md.
-      auto first_seg = qn.segments().front();
+      auto first_seg = qn.segments.front();
       auto seg_len = static_cast<uint32_t>(first_seg.size());
-      Span seg_span{.offset = expr.span().offset, .length = seg_len};
+      Span seg_span{.offset = expr.span.offset, .length = seg_len};
       auto* sym = scope->lookup(first_seg);
 
       if (sym == nullptr) {
@@ -411,72 +413,72 @@ private:
             "'" + std::string(first_seg) + "' is not a module"));
       } else {
         // Record the first segment's resolution.
-        uses_[expr.span().offset] = sym;
+        uses_[expr.span.offset] = sym;
         // Trailing segments are unresolvable in Task 6 (no cross-file
         // module resolution) — left without entries in the uses table.
       }
       break;
     }
     case NodeKind::BinaryExpr: {
-      const auto& bin = static_cast<const BinaryExprNode&>(expr);
-      resolve_expr(*bin.left(), scope);
-      resolve_expr(*bin.right(), scope);
+      const auto& bin = expr.as<BinaryExpr>();
+      resolve_expr(*bin.left, scope);
+      resolve_expr(*bin.right, scope);
       break;
     }
     case NodeKind::UnaryExpr: {
-      const auto& unary = static_cast<const UnaryExprNode&>(expr);
-      resolve_expr(*unary.operand(), scope);
+      const auto& unary = expr.as<UnaryExpr>();
+      resolve_expr(*unary.operand, scope);
       break;
     }
     case NodeKind::CallExpr: {
-      const auto& call = static_cast<const CallExprNode&>(expr);
-      resolve_expr(*call.callee(), scope);
-      for (const auto* arg : call.args()) {
+      const auto& call = expr.as<CallExpr>();
+      resolve_expr(*call.callee, scope);
+      for (const auto* arg : call.args) {
         resolve_expr(*arg, scope);
       }
       break;
     }
     case NodeKind::IndexExpr: {
-      const auto& idx = static_cast<const IndexExprNode&>(expr);
-      resolve_expr(*idx.object(), scope);
-      for (const auto* i : idx.indices()) {
+      const auto& idx = expr.as<IndexExpr>();
+      resolve_expr(*idx.object, scope);
+      for (const auto* i : idx.indices) {
         resolve_expr(*i, scope);
       }
       break;
     }
     case NodeKind::FieldExpr: {
-      const auto& field = static_cast<const FieldExprNode&>(expr);
-      resolve_expr(*field.object(), scope);
+      const auto& field = expr.as<FieldExpr>();
+      resolve_expr(*field.object, scope);
       // Field member access is not resolved in Task 6 (needs type info).
       break;
     }
     case NodeKind::PipeExpr: {
-      const auto& pipe = static_cast<const PipeExprNode&>(expr);
-      resolve_expr(*pipe.left(), scope);
-      resolve_expr(*pipe.right(), scope);
+      const auto& pipe = expr.as<PipeExpr>();
+      resolve_expr(*pipe.left, scope);
+      resolve_expr(*pipe.right, scope);
       break;
     }
     case NodeKind::Lambda: {
-      const auto& lam = static_cast<const LambdaNode&>(expr);
+      const auto& lam = expr.as<LambdaExpr>();
 
       // Create a block scope for the lambda body.
       auto* lam_scope = ctx_.make_scope(ScopeKind::Block, scope);
-      for (const auto& [name, span] : lam.params()) {
+      for (const auto& [name, span] : lam.params) {
         if (lam_scope->lookup_local(name) != nullptr) {
           diagnostics_.push_back(Diagnostic::error(
               span,
               "duplicate parameter '" + std::string(name) + "'"));
         } else {
-          auto* sym = ctx_.make_symbol(SymbolKind::LambdaParam, name, span, &lam);
+          auto* sym = ctx_.make_symbol(SymbolKind::LambdaParam, name, span, &expr);
           lam_scope->declare(name, sym);
         }
       }
-      resolve_expr(*lam.body(), lam_scope);
+      resolve_expr(*lam.body, lam_scope);
       break;
     }
     case NodeKind::ListLiteral: {
-      const auto& list = static_cast<const ListLiteralNode&>(expr);
-      for (const auto* elem : list.elements()) {
+      const auto& list = expr.as<ListLiteral>();
+      for (const auto* elem : list.elements) {
         resolve_expr(*elem, scope);
       }
       break;
@@ -497,8 +499,8 @@ private:
   void resolve_type(const TypeNode& type, Scope* scope) {
     switch (type.kind()) {
     case NodeKind::NamedType: {
-      const auto& named = static_cast<const NamedTypeNode&>(type);
-      const auto& path = named.name();
+      const auto& named = type.as<NamedType>();
+      const auto& path = named.name;
 
       if (path.segments.empty()) {
         break;
@@ -526,14 +528,14 @@ private:
       }
 
       // Resolve type arguments recursively.
-      for (const auto* arg : named.type_args()) {
+      for (const auto* arg : named.type_args) {
         resolve_type(*arg, scope);
       }
       break;
     }
     case NodeKind::PointerType: {
-      const auto& ptr = static_cast<const PointerTypeNode&>(type);
-      resolve_type(*ptr.pointee(), scope);
+      const auto& ptr = type.as<PointerType>();
+      resolve_type(*ptr.pointee, scope);
       break;
     }
     default:

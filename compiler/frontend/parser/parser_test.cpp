@@ -52,37 +52,39 @@ suite<"function_tests"> function_tests = [] {
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     auto* file = output.parse_result.file;
     expect(file != nullptr);
-    expect(file->declarations().size() == 1_u);
+    expect(file->declarations.size() == 1_u);
 
-    auto* fn = static_cast<FunctionDeclNode*>(file->declarations()[0]);
-    expect(fn->kind() == NodeKind::FunctionDecl);
-    expect(fn->name() == "add");
-    expect(fn->params().size() == 2_u);
-    expect(fn->params()[0].name == "a");
-    expect(fn->params()[1].name == "b");
-    expect(fn->return_type() != nullptr);
-    expect(fn->is_expr_bodied());
-    expect(fn->expr_body() != nullptr);
-    expect(fn->expr_body()->kind() == NodeKind::BinaryExpr);
+    auto* decl0 = file->declarations[0];
+    const auto& fn = decl0->as<FunctionDecl>();
+    expect(decl0->kind() == NodeKind::FunctionDecl);
+    expect(fn.name == "add");
+    expect(fn.params.size() == 2_u);
+    expect(fn.params[0].name == "a");
+    expect(fn.params[1].name == "b");
+    expect(fn.return_type != nullptr);
+    expect(fn.is_expr_bodied());
+    expect(fn.expr_body != nullptr);
+    expect(fn.expr_body->kind() == NodeKind::BinaryExpr);
   };
 
   "block-bodied function"_test = [] {
     auto output = parse_string("fn main(): i32\n    0\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     auto* file = output.parse_result.file;
-    expect(file->declarations().size() == 1_u);
+    expect(file->declarations.size() == 1_u);
 
-    auto* fn = static_cast<FunctionDeclNode*>(file->declarations()[0]);
-    expect(!fn->is_expr_bodied());
-    expect(fn->body().size() == 1_u);
-    expect(fn->body()[0]->kind() == NodeKind::ExpressionStatement);
+    auto* decl0 = file->declarations[0];
+    const auto& fn = decl0->as<FunctionDecl>();
+    expect(!fn.is_expr_bodied());
+    expect(fn.body.size() == 1_u);
+    expect(fn.body[0]->kind() == NodeKind::ExpressionStatement);
   };
 
   "no-param function"_test = [] {
     auto output = parse_string("fn greet(): i32 -> 0\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    expect(fn->params().empty());
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    expect(fn.params.empty());
   };
 };
 
@@ -90,32 +92,32 @@ suite<"let_tests"> let_tests = [] {
   "let with type and initializer"_test = [] {
     auto output = parse_string("fn f(): i32\n    let x: i32 = 42\n    x\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    expect(fn->body().size() == 2_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    expect(fn.body.size() == 2_u);
 
-    auto* let_stmt = static_cast<LetStatementNode*>(fn->body()[0]);
-    expect(let_stmt->kind() == NodeKind::LetStatement);
-    expect(let_stmt->name() == "x");
-    expect(let_stmt->type() != nullptr);
-    expect(let_stmt->initializer() != nullptr);
+    const auto& let_stmt = fn.body[0]->as<LetStatement>();
+    expect(fn.body[0]->kind() == NodeKind::LetStatement);
+    expect(let_stmt.name == "x");
+    expect(let_stmt.type != nullptr);
+    expect(let_stmt.initializer != nullptr);
   };
 
   "let with type only"_test = [] {
     auto output = parse_string("fn f(): i32\n    let x: i32\n    x\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* let_stmt = static_cast<LetStatementNode*>(fn->body()[0]);
-    expect(let_stmt->type() != nullptr);
-    expect(let_stmt->initializer() == nullptr);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& let_stmt = fn.body[0]->as<LetStatement>();
+    expect(let_stmt.type != nullptr);
+    expect(let_stmt.initializer == nullptr);
   };
 
   "let with initializer only"_test = [] {
     auto output = parse_string("fn f(): i32\n    let x = 42\n    x\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* let_stmt = static_cast<LetStatementNode*>(fn->body()[0]);
-    expect(let_stmt->type() == nullptr);
-    expect(let_stmt->initializer() != nullptr);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& let_stmt = fn.body[0]->as<LetStatement>();
+    expect(let_stmt.type == nullptr);
+    expect(let_stmt.initializer != nullptr);
   };
 };
 
@@ -123,39 +125,39 @@ suite<"control_flow_tests"> control_flow_tests = [] {
   "if statement"_test = [] {
     auto output = parse_string("fn f(): i32\n    if true:\n        0\n    1\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* if_stmt = static_cast<IfStatementNode*>(fn->body()[0]);
-    expect(if_stmt->kind() == NodeKind::IfStatement);
-    expect(if_stmt->condition()->kind() == NodeKind::BoolLiteral);
-    expect(if_stmt->then_body().size() == 1_u);
-    expect(!if_stmt->has_else());
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& if_stmt = fn.body[0]->as<IfStatement>();
+    expect(fn.body[0]->kind() == NodeKind::IfStatement);
+    expect(if_stmt.condition->kind() == NodeKind::BoolLiteral);
+    expect(if_stmt.then_body.size() == 1_u);
+    expect(!if_stmt.has_else());
   };
 
   "if-else statement"_test = [] {
     auto output = parse_string("fn f(): i32\n    if true:\n        0\n    else:\n        1\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* if_stmt = static_cast<IfStatementNode*>(fn->body()[0]);
-    expect(if_stmt->has_else());
-    expect(if_stmt->else_body().size() == 1_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& if_stmt = fn.body[0]->as<IfStatement>();
+    expect(if_stmt.has_else());
+    expect(if_stmt.else_body.size() == 1_u);
   };
 
   "while statement"_test = [] {
     auto output = parse_string("fn f(): i32\n    while true:\n        0\n    1\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* while_stmt = static_cast<WhileStatementNode*>(fn->body()[0]);
-    expect(while_stmt->kind() == NodeKind::WhileStatement);
-    expect(while_stmt->body().size() == 1_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& while_stmt = fn.body[0]->as<WhileStatement>();
+    expect(fn.body[0]->kind() == NodeKind::WhileStatement);
+    expect(while_stmt.body.size() == 1_u);
   };
 
   "for statement"_test = [] {
     auto output = parse_string("fn f(): i32\n    for i in items:\n        i\n    0\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* for_stmt = static_cast<ForStatementNode*>(fn->body()[0]);
-    expect(for_stmt->kind() == NodeKind::ForStatement);
-    expect(for_stmt->var() == "i");
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& for_stmt = fn.body[0]->as<ForStatement>();
+    expect(fn.body[0]->kind() == NodeKind::ForStatement);
+    expect(for_stmt.var == "i");
   };
 };
 
@@ -163,86 +165,86 @@ suite<"expression_tests"> expression_tests = [] {
   "binary operators"_test = [] {
     auto output = parse_string("fn f(): i32 -> 1 + 2 * 3\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
     // Should be BinaryExpr(+, 1, BinaryExpr(*, 2, 3)) — * binds tighter than +
-    auto* add = static_cast<BinaryExprNode*>(fn->expr_body());
-    expect(add->kind() == NodeKind::BinaryExpr);
-    expect(add->op() == BinaryOp::Add);
-    expect(add->left()->kind() == NodeKind::IntLiteral);
-    expect(add->right()->kind() == NodeKind::BinaryExpr);
-    auto* mul = static_cast<BinaryExprNode*>(add->right());
-    expect(mul->op() == BinaryOp::Mul);
+    const auto& add = fn.expr_body->as<BinaryExpr>();
+    expect(fn.expr_body->kind() == NodeKind::BinaryExpr);
+    expect(add.op == BinaryOp::Add);
+    expect(add.left->kind() == NodeKind::IntLiteral);
+    expect(add.right->kind() == NodeKind::BinaryExpr);
+    const auto& mul = add.right->as<BinaryExpr>();
+    expect(mul.op == BinaryOp::Mul);
   };
 
   "unary operators"_test = [] {
     auto output = parse_string("fn f(p: *i32): i32 -> *p\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* deref = static_cast<UnaryExprNode*>(fn->expr_body());
-    expect(deref->kind() == NodeKind::UnaryExpr);
-    expect(deref->op() == UnaryOp::Deref);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& deref = fn.expr_body->as<UnaryExpr>();
+    expect(fn.expr_body->kind() == NodeKind::UnaryExpr);
+    expect(deref.op == UnaryOp::Deref);
   };
 
   "function call"_test = [] {
     auto output = parse_string("fn f(): i32\n    foo(1, 2)\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
-    auto* call = static_cast<CallExprNode*>(expr_stmt->expr());
-    expect(call->kind() == NodeKind::CallExpr);
-    expect(call->args().size() == 2_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& expr_stmt = fn.body[0]->as<ExpressionStatement>();
+    const auto& call = expr_stmt.expr->as<CallExpr>();
+    expect(expr_stmt.expr->kind() == NodeKind::CallExpr);
+    expect(call.args.size() == 2_u);
   };
 
   "field access"_test = [] {
     auto output = parse_string("fn f(): i32\n    x.y.z\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
-    auto* outer = static_cast<FieldExprNode*>(expr_stmt->expr());
-    expect(outer->kind() == NodeKind::FieldExpr);
-    expect(outer->field() == "z");
-    auto* inner = static_cast<FieldExprNode*>(outer->object());
-    expect(inner->field() == "y");
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& expr_stmt = fn.body[0]->as<ExpressionStatement>();
+    const auto& outer = expr_stmt.expr->as<FieldExpr>();
+    expect(expr_stmt.expr->kind() == NodeKind::FieldExpr);
+    expect(outer.field == "z");
+    const auto& inner = outer.object->as<FieldExpr>();
+    expect(inner.field == "y");
   };
 
   "index expression"_test = [] {
     auto output = parse_string("fn f(): i32\n    a[0]\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
-    auto* idx = static_cast<IndexExprNode*>(expr_stmt->expr());
-    expect(idx->kind() == NodeKind::IndexExpr);
-    expect(idx->indices().size() == 1_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& expr_stmt = fn.body[0]->as<ExpressionStatement>();
+    const auto& idx = expr_stmt.expr->as<IndexExpr>();
+    expect(expr_stmt.expr->kind() == NodeKind::IndexExpr);
+    expect(idx.indices.size() == 1_u);
   };
 
   "multi-arg bracket"_test = [] {
     auto output = parse_string("fn f(): i32\n    Map[i32, string]()\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
-    auto* call = static_cast<CallExprNode*>(expr_stmt->expr());
-    expect(call->kind() == NodeKind::CallExpr);
-    auto* idx = static_cast<IndexExprNode*>(call->callee());
-    expect(idx->indices().size() == 2_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& expr_stmt = fn.body[0]->as<ExpressionStatement>();
+    const auto& call = expr_stmt.expr->as<CallExpr>();
+    expect(expr_stmt.expr->kind() == NodeKind::CallExpr);
+    const auto& idx = call.callee->as<IndexExpr>();
+    expect(idx.indices.size() == 2_u);
   };
 
   "comparison operators"_test = [] {
     auto output = parse_string("fn f(): i32 -> 1 == 2\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* eq = static_cast<BinaryExprNode*>(fn->expr_body());
-    expect(eq->op() == BinaryOp::EqEq);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& eq = fn.expr_body->as<BinaryExpr>();
+    expect(eq.op == BinaryOp::EqEq);
   };
 
   "logical operators"_test = [] {
     auto output = parse_string("fn f(): i32 -> true and false or true\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
     // or binds less tightly than and: or(and(true, false), true)
-    auto* or_expr = static_cast<BinaryExprNode*>(fn->expr_body());
-    expect(or_expr->op() == BinaryOp::Or);
-    auto* and_expr = static_cast<BinaryExprNode*>(or_expr->left());
-    expect(and_expr->op() == BinaryOp::And);
+    const auto& or_expr = fn.expr_body->as<BinaryExpr>();
+    expect(or_expr.op == BinaryOp::Or);
+    const auto& and_expr = or_expr.left->as<BinaryExpr>();
+    expect(and_expr.op == BinaryOp::And);
   };
 };
 
@@ -255,9 +257,9 @@ suite<"lambda_tests"> lambda_tests = [] {
   "lambda in pipe"_test = [] {
     auto output = parse_string("fn f(): i32\n    xs |> map |x| -> x * x\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
-    expect(expr_stmt->expr()->kind() == NodeKind::PipeExpr);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& expr_stmt = fn.body[0]->as<ExpressionStatement>();
+    expect(expr_stmt.expr->kind() == NodeKind::PipeExpr);
   };
 };
 
@@ -265,20 +267,20 @@ suite<"pipe_tests"> pipe_tests = [] {
   "simple pipe"_test = [] {
     auto output = parse_string("fn f(): i32\n    x |> foo |> bar\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
-    auto* outer = static_cast<PipeExprNode*>(expr_stmt->expr());
-    expect(outer->kind() == NodeKind::PipeExpr);
-    expect(outer->left()->kind() == NodeKind::PipeExpr);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& expr_stmt = fn.body[0]->as<ExpressionStatement>();
+    const auto& outer = expr_stmt.expr->as<PipeExpr>();
+    expect(expr_stmt.expr->kind() == NodeKind::PipeExpr);
+    expect(outer.left->kind() == NodeKind::PipeExpr);
   };
 
   "multi-line pipe in suite"_test = [] {
     auto output = parse_string("fn f(): i32\n    xs\n        |> map |x| -> x\n    0\n");
     expect(output.parse_result.diagnostics.empty()) << "multi-line pipe in suite";
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    expect(fn->body().size() == 2_u) << "pipe expr + trailing 0";
-    auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
-    expect(expr_stmt->expr()->kind() == NodeKind::PipeExpr);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    expect(fn.body.size() == 2_u) << "pipe expr + trailing 0";
+    const auto& expr_stmt = fn.body[0]->as<ExpressionStatement>();
+    expect(expr_stmt.expr->kind() == NodeKind::PipeExpr);
   };
 };
 
@@ -286,22 +288,22 @@ suite<"mode_resource_tests"> mode_resource_tests = [] {
   "mode block"_test = [] {
     auto output = parse_string("fn f(): i32\n    mode unsafe =>\n        0\n    1\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* mode = static_cast<ModeBlockNode*>(fn->body()[0]);
-    expect(mode->kind() == NodeKind::ModeBlock);
-    expect(mode->mode_name() == "unsafe");
-    expect(mode->body().size() == 1_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& mode = fn.body[0]->as<ModeBlock>();
+    expect(fn.body[0]->kind() == NodeKind::ModeBlock);
+    expect(mode.mode_name == "unsafe");
+    expect(mode.body.size() == 1_u);
   };
 
   "resource block"_test = [] {
     auto output = parse_string("fn f(): i32\n    resource memory Search =>\n        0\n    1\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* res = static_cast<ResourceBlockNode*>(fn->body()[0]);
-    expect(res->kind() == NodeKind::ResourceBlock);
-    expect(res->resource_kind() == "memory");
-    expect(res->resource_name() == "Search");
-    expect(res->body().size() == 1_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& res = fn.body[0]->as<ResourceBlock>();
+    expect(fn.body[0]->kind() == NodeKind::ResourceBlock);
+    expect(res.resource_kind == "memory");
+    expect(res.resource_name == "Search");
+    expect(res.body.size() == 1_u);
   };
 };
 
@@ -309,28 +311,28 @@ suite<"type_tests"> type_tests = [] {
   "pointer type"_test = [] {
     auto output = parse_string("fn f(p: *i32): i32 -> 0\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* param_type = fn->params()[0].type;
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    auto* param_type = fn.params[0].type;
     expect(param_type->kind() == NodeKind::PointerType);
   };
 
   "parameterized type"_test = [] {
     auto output = parse_string("fn f(): List[i32] -> []\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* ret = static_cast<NamedTypeNode*>(fn->return_type());
-    expect(ret->kind() == NodeKind::NamedType);
-    expect(ret->name().segments.size() == 1_u);
-    expect(ret->name().segments[0] == "List");
-    expect(ret->type_args().size() == 1_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& ret = fn.return_type->as<NamedType>();
+    expect(fn.return_type->kind() == NodeKind::NamedType);
+    expect(ret.name.segments.size() == 1_u);
+    expect(ret.name.segments[0] == "List");
+    expect(ret.type_args.size() == 1_u);
   };
 
   "multi-param type"_test = [] {
     auto output = parse_string("fn f(): Map[i32, string] -> []\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* ret = static_cast<NamedTypeNode*>(fn->return_type());
-    expect(ret->type_args().size() == 2_u);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& ret = fn.return_type->as<NamedType>();
+    expect(ret.type_args.size() == 2_u);
   };
 };
 
@@ -338,19 +340,19 @@ suite<"import_tests"> import_tests = [] {
   "simple import"_test = [] {
     auto output = parse_string("import foo\nfn f(): i32 -> 0\n");
     expect(output.parse_result.diagnostics.empty());
-    expect(output.parse_result.file->imports().size() == 1_u);
-    auto* imp = static_cast<ImportNode*>(output.parse_result.file->imports()[0]);
-    expect(imp->path().segments.size() == 1_u);
-    expect(imp->path().segments[0] == "foo");
+    expect(output.parse_result.file->imports.size() == 1_u);
+    auto* imp = output.parse_result.file->imports[0];
+    expect(imp->path.segments.size() == 1_u);
+    expect(imp->path.segments[0] == "foo");
   };
 
   "qualified import"_test = [] {
     auto output = parse_string("import net::http\nfn f(): i32 -> 0\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* imp = static_cast<ImportNode*>(output.parse_result.file->imports()[0]);
-    expect(imp->path().segments.size() == 2_u);
-    expect(imp->path().segments[0] == "net");
-    expect(imp->path().segments[1] == "http");
+    auto* imp = output.parse_result.file->imports[0];
+    expect(imp->path.segments.size() == 2_u);
+    expect(imp->path.segments[0] == "net");
+    expect(imp->path.segments[1] == "http");
   };
 };
 
@@ -358,27 +360,27 @@ suite<"assignment_tests"> assignment_tests = [] {
   "simple assignment"_test = [] {
     auto output = parse_string("fn f(): i32\n    x = 42\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* assign = static_cast<AssignmentNode*>(fn->body()[0]);
-    expect(assign->kind() == NodeKind::Assignment);
-    expect(assign->target()->kind() == NodeKind::Identifier);
-    expect(assign->value()->kind() == NodeKind::IntLiteral);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& assign = fn.body[0]->as<Assignment>();
+    expect(fn.body[0]->kind() == NodeKind::Assignment);
+    expect(assign.target->kind() == NodeKind::Identifier);
+    expect(assign.value->kind() == NodeKind::IntLiteral);
   };
 
   "field assignment"_test = [] {
     auto output = parse_string("fn f(): i32\n    x.y = 42\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* assign = static_cast<AssignmentNode*>(fn->body()[0]);
-    expect(assign->target()->kind() == NodeKind::FieldExpr);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& assign = fn.body[0]->as<Assignment>();
+    expect(assign.target->kind() == NodeKind::FieldExpr);
   };
 
   "index assignment"_test = [] {
     auto output = parse_string("fn f(): i32\n    a[0] = 42\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* assign = static_cast<AssignmentNode*>(fn->body()[0]);
-    expect(assign->target()->kind() == NodeKind::IndexExpr);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& assign = fn.body[0]->as<Assignment>();
+    expect(assign.target->kind() == NodeKind::IndexExpr);
   };
 
   "invalid assignment target"_test = [] {
@@ -391,10 +393,10 @@ suite<"return_tests"> return_tests = [] {
   "return statement"_test = [] {
     auto output = parse_string("fn f(): i32\n    return 42\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* ret = static_cast<ReturnStatementNode*>(fn->body()[0]);
-    expect(ret->kind() == NodeKind::ReturnStatement);
-    expect(ret->value()->kind() == NodeKind::IntLiteral);
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& ret = fn.body[0]->as<ReturnStatement>();
+    expect(fn.body[0]->kind() == NodeKind::ReturnStatement);
+    expect(ret.value->kind() == NodeKind::IntLiteral);
   };
 };
 
@@ -403,32 +405,33 @@ suite<"class_tests"> class_tests = [] {
     auto output = parse_string("class Point:\n    x: i32\n    y: i32\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     auto* file = output.parse_result.file;
-    expect(file->declarations().size() == 1_u);
+    expect(file->declarations.size() == 1_u);
 
-    auto* cls = static_cast<ClassDeclNode*>(file->declarations()[0]);
-    expect(cls->kind() == NodeKind::ClassDecl);
-    expect(cls->name() == "Point");
-    expect(cls->fields().size() == 2_u);
-    expect(cls->fields()[0]->name() == "x");
-    expect(cls->fields()[1]->name() == "y");
-    expect(cls->fields()[0]->type() != nullptr);
-    expect(cls->fields()[1]->type() != nullptr);
+    auto* decl0 = file->declarations[0];
+    const auto& cls = decl0->as<ClassDecl>();
+    expect(decl0->kind() == NodeKind::ClassDecl);
+    expect(cls.name == "Point");
+    expect(cls.fields.size() == 2_u);
+    expect(cls.fields[0]->name == "x");
+    expect(cls.fields[1]->name == "y");
+    expect(cls.fields[0]->type != nullptr);
+    expect(cls.fields[1]->type != nullptr);
   };
 
   "class with single field"_test = [] {
     auto output = parse_string("class Wrapper:\n    value: string\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* cls = static_cast<ClassDeclNode*>(output.parse_result.file->declarations()[0]);
-    expect(cls->fields().size() == 1_u);
-    expect(cls->fields()[0]->name() == "value");
+    const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
+    expect(cls.fields.size() == 1_u);
+    expect(cls.fields[0]->name == "value");
   };
 
   "class followed by function"_test = [] {
     auto output = parse_string("class Point:\n    x: i32\n    y: i32\nfn f(): i32 -> 0\n");
     expect(output.parse_result.diagnostics.empty());
-    expect(output.parse_result.file->declarations().size() == 2_u);
-    expect(output.parse_result.file->declarations()[0]->kind() == NodeKind::ClassDecl);
-    expect(output.parse_result.file->declarations()[1]->kind() == NodeKind::FunctionDecl);
+    expect(output.parse_result.file->declarations.size() == 2_u);
+    expect(output.parse_result.file->declarations[0]->kind() == NodeKind::ClassDecl);
+    expect(output.parse_result.file->declarations[1]->kind() == NodeKind::FunctionDecl);
   };
 
   "let inside class body is rejected"_test = [] {
@@ -481,14 +484,14 @@ suite<"qualified_name_tests"> qualified_name_tests = [] {
   "qualified name in expression"_test = [] {
     auto output = parse_string("fn f(): i32\n    Foo::bar()\n");
     expect(output.parse_result.diagnostics.empty());
-    auto* fn = static_cast<FunctionDeclNode*>(output.parse_result.file->declarations()[0]);
-    auto* expr_stmt = static_cast<ExpressionStatementNode*>(fn->body()[0]);
-    auto* call = static_cast<CallExprNode*>(expr_stmt->expr());
-    expect(call->callee()->kind() == NodeKind::QualifiedName);
-    auto* qn = static_cast<QualifiedNameNode*>(call->callee());
-    expect(qn->segments().size() == 2_u);
-    expect(qn->segments()[0] == "Foo");
-    expect(qn->segments()[1] == "bar");
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& expr_stmt = fn.body[0]->as<ExpressionStatement>();
+    const auto& call = expr_stmt.expr->as<CallExpr>();
+    expect(call.callee->kind() == NodeKind::QualifiedName);
+    const auto& qn = call.callee->as<QualifiedName>();
+    expect(qn.segments.size() == 2_u);
+    expect(qn.segments[0] == "Foo");
+    expect(qn.segments[1] == "bar");
   };
 };
 

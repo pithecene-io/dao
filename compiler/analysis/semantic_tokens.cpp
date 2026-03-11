@@ -160,10 +160,10 @@ public:
   }
 
   void visit_file(const FileNode& file) {
-    for (const auto* imp : file.imports()) {
-      visit_import(static_cast<const ImportNode&>(*imp));
+    for (const auto* imp : file.imports) {
+      visit_import(*imp);
     }
-    for (const auto* decl : file.declarations()) {
+    for (const auto* decl : file.declarations) {
       visit_decl(*decl);
     }
   }
@@ -209,7 +209,7 @@ private:
   void visit_import(const ImportNode& node) {
     // Leading segments of an import path are module references.
     // The last segment is the binding site — classified as decl.module.
-    auto spans = segment_spans(node.path());
+    auto spans = segment_spans(node.path);
     for (size_t i = 0; i < spans.size(); ++i) {
       if (i + 1 < spans.size()) {
         classify(spans[i].second, "use.module");
@@ -224,23 +224,24 @@ private:
   void visit_decl(const Decl& decl) {
     switch (decl.kind()) {
     case NodeKind::FunctionDecl:
-      visit_function(static_cast<const FunctionDeclNode&>(decl));
+      visit_function(decl);
       break;
     case NodeKind::ClassDecl:
-      visit_class(static_cast<const ClassDeclNode&>(decl));
+      visit_class(decl);
       break;
     case NodeKind::AliasDecl:
-      visit_alias(static_cast<const AliasDeclNode&>(decl));
+      visit_alias(decl);
       break;
     default:
       break;
     }
   }
 
-  void visit_function(const FunctionDeclNode& fn) {
-    classify(fn.name_span(), "decl.function");
+  void visit_function(const Decl& decl) {
+    const auto& fn = decl.as<FunctionDecl>();
+    classify(fn.name_span, "decl.function");
 
-    for (const auto& param : fn.params()) {
+    for (const auto& param : fn.params) {
       // Parameter binders are declaration sites, not uses. The frozen
       // taxonomy has use.variable.param but no decl.variable.param.
       // Omit until name resolution can classify actual references.
@@ -249,35 +250,37 @@ private:
       }
     }
 
-    if (fn.return_type() != nullptr) {
-      visit_type(*fn.return_type());
+    if (fn.return_type != nullptr) {
+      visit_type(*fn.return_type);
     }
 
-    for (const auto* stmt : fn.body()) {
+    for (const auto* stmt : fn.body) {
       visit_stmt(*stmt);
     }
 
-    if (fn.expr_body() != nullptr) {
-      visit_expr(*fn.expr_body());
+    if (fn.expr_body != nullptr) {
+      visit_expr(*fn.expr_body);
     }
   }
 
-  void visit_class(const ClassDeclNode& st) {
-    classify(st.name_span(), "decl.type");
+  void visit_class(const Decl& decl) {
+    const auto& st = decl.as<ClassDecl>();
+    classify(st.name_span, "decl.type");
 
-    for (const auto* field : st.fields()) {
-      classify(field->name_span(), "decl.field");
-      if (field->type() != nullptr) {
-        visit_type(*field->type());
+    for (const auto* field : st.fields) {
+      classify(field->name_span, "decl.field");
+      if (field->type != nullptr) {
+        visit_type(*field->type);
       }
     }
   }
 
-  void visit_alias(const AliasDeclNode& alias) {
-    classify(alias.name_span(), "decl.type");
+  void visit_alias(const Decl& decl) {
+    const auto& alias = decl.as<AliasDecl>();
+    classify(alias.name_span, "decl.type");
 
-    if (alias.type() != nullptr) {
-      visit_type(*alias.type());
+    if (alias.type != nullptr) {
+      visit_type(*alias.type);
     }
   }
 
@@ -286,89 +289,89 @@ private:
   void visit_stmt(const Stmt& stmt) {
     switch (stmt.kind()) {
     case NodeKind::LetStatement: {
-      const auto& let_stmt = static_cast<const LetStatementNode&>(stmt);
+      const auto& let_stmt = stmt.as<LetStatement>();
       // Let binders are declaration sites, not uses. The frozen
       // taxonomy has use.variable.local but no decl.variable.local.
       // Omit until name resolution can classify actual references.
-      if (let_stmt.type() != nullptr) {
-        visit_type(*let_stmt.type());
+      if (let_stmt.type != nullptr) {
+        visit_type(*let_stmt.type);
       }
-      if (let_stmt.initializer() != nullptr) {
-        visit_expr(*let_stmt.initializer());
+      if (let_stmt.initializer != nullptr) {
+        visit_expr(*let_stmt.initializer);
       }
       break;
     }
     case NodeKind::Assignment: {
-      const auto& assign = static_cast<const AssignmentNode&>(stmt);
-      visit_expr(*assign.target());
-      visit_expr(*assign.value());
+      const auto& assign = stmt.as<Assignment>();
+      visit_expr(*assign.target);
+      visit_expr(*assign.value);
       break;
     }
     case NodeKind::IfStatement: {
-      const auto& if_stmt = static_cast<const IfStatementNode&>(stmt);
-      visit_expr(*if_stmt.condition());
-      for (const auto* s : if_stmt.then_body()) {
+      const auto& if_stmt = stmt.as<IfStatement>();
+      visit_expr(*if_stmt.condition);
+      for (const auto* s : if_stmt.then_body) {
         visit_stmt(*s);
       }
-      for (const auto* s : if_stmt.else_body()) {
+      for (const auto* s : if_stmt.else_body) {
         visit_stmt(*s);
       }
       break;
     }
     case NodeKind::WhileStatement: {
-      const auto& while_stmt = static_cast<const WhileStatementNode&>(stmt);
-      visit_expr(*while_stmt.condition());
-      for (const auto* s : while_stmt.body()) {
+      const auto& while_stmt = stmt.as<WhileStatement>();
+      visit_expr(*while_stmt.condition);
+      for (const auto* s : while_stmt.body) {
         visit_stmt(*s);
       }
       break;
     }
     case NodeKind::ForStatement: {
-      const auto& for_stmt = static_cast<const ForStatementNode&>(stmt);
+      const auto& for_stmt = stmt.as<ForStatement>();
       // For-loop binders are declaration sites — omit like let binders.
-      visit_expr(*for_stmt.iterable());
-      for (const auto* s : for_stmt.body()) {
+      visit_expr(*for_stmt.iterable);
+      for (const auto* s : for_stmt.body) {
         visit_stmt(*s);
       }
       break;
     }
     case NodeKind::ModeBlock: {
-      const auto& mode = static_cast<const ModeBlockNode&>(stmt);
-      auto mode_name = mode.mode_name();
+      const auto& mode = stmt.as<ModeBlock>();
+      auto mode_name = mode.mode_name;
       if (mode_name == "unsafe") {
-        classify(mode.name_span(), "mode.unsafe");
+        classify(mode.name_span, "mode.unsafe");
       } else if (mode_name == "gpu") {
-        classify(mode.name_span(), "mode.gpu");
+        classify(mode.name_span, "mode.gpu");
       } else if (mode_name == "parallel") {
-        classify(mode.name_span(), "mode.parallel");
+        classify(mode.name_span, "mode.parallel");
       }
-      for (const auto* s : mode.body()) {
+      for (const auto* s : mode.body) {
         visit_stmt(*s);
       }
       break;
     }
     case NodeKind::ResourceBlock: {
-      const auto& res = static_cast<const ResourceBlockNode&>(stmt);
-      auto kind = res.resource_kind();
+      const auto& res = stmt.as<ResourceBlock>();
+      auto kind = res.resource_kind;
       if (kind == "memory") {
-        classify(res.kind_span(), "resource.kind.memory");
+        classify(res.kind_span, "resource.kind.memory");
       }
-      classify(res.name_span(), "resource.binding");
-      for (const auto* s : res.body()) {
+      classify(res.name_span, "resource.binding");
+      for (const auto* s : res.body) {
         visit_stmt(*s);
       }
       break;
     }
     case NodeKind::ReturnStatement: {
-      const auto& ret = static_cast<const ReturnStatementNode&>(stmt);
-      if (ret.value() != nullptr) {
-        visit_expr(*ret.value());
+      const auto& ret = stmt.as<ReturnStatement>();
+      if (ret.value != nullptr) {
+        visit_expr(*ret.value);
       }
       break;
     }
     case NodeKind::ExpressionStatement: {
-      const auto& expr_stmt = static_cast<const ExpressionStatementNode&>(stmt);
-      visit_expr(*expr_stmt.expr());
+      const auto& expr_stmt = stmt.as<ExpressionStatement>();
+      visit_expr(*expr_stmt.expr);
       break;
     }
     default:
@@ -381,55 +384,55 @@ private:
   void visit_expr(const Expr& expr) {
     switch (expr.kind()) {
     case NodeKind::BinaryExpr: {
-      const auto& bin = static_cast<const BinaryExprNode&>(expr);
-      visit_expr(*bin.left());
-      visit_expr(*bin.right());
+      const auto& bin = expr.as<BinaryExpr>();
+      visit_expr(*bin.left);
+      visit_expr(*bin.right);
       break;
     }
     case NodeKind::UnaryExpr: {
-      const auto& unary = static_cast<const UnaryExprNode&>(expr);
-      visit_expr(*unary.operand());
+      const auto& unary = expr.as<UnaryExpr>();
+      visit_expr(*unary.operand);
       break;
     }
     case NodeKind::CallExpr: {
-      const auto& call = static_cast<const CallExprNode&>(expr);
-      visit_expr(*call.callee());
-      for (const auto* arg : call.args()) {
+      const auto& call = expr.as<CallExpr>();
+      visit_expr(*call.callee);
+      for (const auto* arg : call.args) {
         visit_expr(*arg);
       }
       break;
     }
     case NodeKind::IndexExpr: {
-      const auto& idx = static_cast<const IndexExprNode&>(expr);
-      visit_expr(*idx.object());
-      for (const auto* i : idx.indices()) {
+      const auto& idx = expr.as<IndexExpr>();
+      visit_expr(*idx.object);
+      for (const auto* i : idx.indices) {
         visit_expr(*i);
       }
       break;
     }
     case NodeKind::FieldExpr: {
-      const auto& field = static_cast<const FieldExprNode&>(expr);
-      visit_expr(*field.object());
-      classify(field.field_span(), "use.field");
+      const auto& field = expr.as<FieldExpr>();
+      visit_expr(*field.object);
+      classify(field.field_span, "use.field");
       break;
     }
     case NodeKind::PipeExpr: {
-      const auto& pipe = static_cast<const PipeExprNode&>(expr);
-      visit_expr(*pipe.left());
-      visit_expr(*pipe.right());
+      const auto& pipe = expr.as<PipeExpr>();
+      visit_expr(*pipe.left);
+      visit_expr(*pipe.right);
       break;
     }
     case NodeKind::Lambda: {
-      const auto& lam = static_cast<const LambdaNode&>(expr);
-      for (const auto& [name, span] : lam.params()) {
+      const auto& lam = expr.as<LambdaExpr>();
+      for (const auto& [name, span] : lam.params) {
         classify(span, "lambda.param");
       }
-      visit_expr(*lam.body());
+      visit_expr(*lam.body);
       break;
     }
     case NodeKind::ListLiteral: {
-      const auto& list = static_cast<const ListLiteralNode&>(expr);
-      for (const auto* elem : list.elements()) {
+      const auto& list = expr.as<ListLiteral>();
+      for (const auto* elem : list.elements) {
         visit_expr(*elem);
       }
       break;
@@ -458,22 +461,22 @@ private:
   void visit_type(const TypeNode& type) {
     switch (type.kind()) {
     case NodeKind::NamedType: {
-      const auto& named = static_cast<const NamedTypeNode&>(type);
+      const auto& named = type.as<NamedType>();
       // Classify the type name: leading segments are use.module,
       // the final segment is type.builtin or type.nominal.
-      if (!named.name().segments.empty()) {
-        auto type_name = named.name().segments.back();
+      if (!named.name.segments.empty()) {
+        auto type_name = named.name.segments.back();
         auto category = is_builtin_type(type_name) ? "type.builtin" : "type.nominal";
-        classify_qualified(named.name(), category);
+        classify_qualified(named.name, category);
       }
-      for (const auto* arg : named.type_args()) {
+      for (const auto* arg : named.type_args) {
         visit_type(*arg);
       }
       break;
     }
     case NodeKind::PointerType: {
-      const auto& ptr = static_cast<const PointerTypeNode&>(type);
-      visit_type(*ptr.pointee());
+      const auto& ptr = type.as<PointerType>();
+      visit_type(*ptr.pointee);
       break;
     }
     default:
