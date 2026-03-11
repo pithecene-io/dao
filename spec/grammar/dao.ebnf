@@ -37,6 +37,7 @@ return_type :=
 function_body :=
       NEWLINE INDENT statement+ DEDENT
     | "->" expression NEWLINE
+    | NEWLINE                              # bodyless declaration (extern)
 
 params :=
     param ("," param)*
