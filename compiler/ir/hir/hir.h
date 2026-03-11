@@ -141,6 +141,11 @@ struct HirCall {
   std::vector<HirExpr*> args;
 };
 
+struct HirConstruct {
+  const TypeStruct* struct_type;
+  std::vector<HirExpr*> args;
+};
+
 struct HirField {
   HirExpr* object;
   std::string_view field_name;
@@ -163,7 +168,7 @@ struct HirLambda {
 
 using HirExprPayload = std::variant<
     HirIntLiteral, HirFloatLiteral, HirStringLiteral, HirBoolLiteral,
-    HirSymbolRef, HirUnary, HirBinary, HirCall,
+    HirSymbolRef, HirUnary, HirBinary, HirCall, HirConstruct,
     HirField, HirIndex, HirPipe, HirLambda>;
 
 // ---------------------------------------------------------------------------

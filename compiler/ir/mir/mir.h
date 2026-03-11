@@ -92,6 +92,7 @@ struct MirIndexAccess { MirValueId object; MirValueId index; };
 
 struct MirFnRef { const Symbol* symbol; };
 struct MirCall  { MirValueId callee; std::vector<MirValueId>* args; };
+struct MirConstruct { const TypeStruct* struct_type; std::vector<MirValueId>* field_values; };
 
 struct MirIterInit    { MirValueId iter_operand; };
 struct MirIterHasNext { MirValueId iter_operand; };
@@ -118,7 +119,7 @@ using MirPayload = std::variant<
     MirUnary, MirBinary,
     MirStore, MirLoad, MirAddrOf,
     MirFieldAccess, MirIndexAccess,
-    MirFnRef, MirCall,
+    MirFnRef, MirCall, MirConstruct,
     MirIterInit, MirIterHasNext, MirIterNext,
     MirModeEnter, MirModeExit, MirResourceEnter, MirResourceExit,
     MirLambdaInst,

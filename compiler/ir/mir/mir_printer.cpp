@@ -138,6 +138,22 @@ private:
           }
           out_ << ")";
         },
+        [&](const MirConstruct& p) {
+          out_ << "construct ";
+          if (p.struct_type != nullptr) {
+            out_ << p.struct_type->name();
+          }
+          out_ << "(";
+          if (p.field_values != nullptr) {
+            for (size_t i = 0; i < p.field_values->size(); ++i) {
+              if (i > 0) {
+                out_ << ", ";
+              }
+              out_ << "%" << (*p.field_values)[i].id;
+            }
+          }
+          out_ << ")";
+        },
         [&](const MirIterInit& p) {
           out_ << "iter_init %" << p.iter_operand.id;
         },

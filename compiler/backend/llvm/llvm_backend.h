@@ -108,6 +108,8 @@ private:
                     FunctionState& state) -> bool;
   auto lower_call(const MirCall& p, const MirInst& inst,
                   FunctionState& state) -> bool;
+  auto lower_construct(const MirConstruct& p, const MirInst& inst,
+                       FunctionState& state) -> bool;
   auto lower_return(const MirReturn& p, const MirInst& inst,
                     FunctionState& state) -> bool;
   auto lower_br(const MirBr& p, const MirInst& inst,

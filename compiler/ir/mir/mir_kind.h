@@ -31,6 +31,9 @@ enum class MirInstKind : std::uint8_t {
   // Calls
   Call,
 
+  // Construction
+  Construct,
+
   // Iteration (narrow model)
   IterInit,
   IterHasNext,

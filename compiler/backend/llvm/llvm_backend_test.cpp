@@ -495,6 +495,91 @@ suite<"unsupported_constructs"> unsupported_constructs = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Class construction
+// ---------------------------------------------------------------------------
+
+suite<"construction"> construction = [] {
+  "basic construction produces struct value"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "fn make(): Point\n"
+        "  return Point(1, 2)\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "%dao.Point")) << ir;
+    expect(contains(ir, "ret %dao.Point")) << ir;
+  };
+
+  "construction and field access roundtrip"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "fn get_x(): i32\n"
+        "  let p: Point = Point(10, 20)\n"
+        "  return p.x\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "store %dao.Point")) << ir;
+    expect(contains(ir, "extractvalue")) << ir;
+  };
+
+  "nested construction"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "class Rect:\n"
+        "  tl: Point\n"
+        "  br: Point\n"
+        "\n"
+        "fn make(): Rect\n"
+        "  return Rect(Point(0, 0), Point(1, 1))\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "%dao.Rect")) << ir;
+    expect(contains(ir, "%dao.Point")) << ir;
+    expect(contains(ir, "ret %dao.Rect")) << ir;
+  };
+
+  "pass constructed value to function"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "fn get_x(p: Point): i32\n"
+        "  return p.x\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return get_x(Point(42, 0))\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "%dao.Point")) << ir;
+    expect(contains(ir, "call i32 @get_x")) << ir;
+  };
+
+  "construction with non-constant args uses insertvalue"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "fn make(a: i32, b: i32): Point\n"
+        "  return Point(a, b)\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "insertvalue")) << ir;
+    expect(contains(ir, "%dao.Point")) << ir;
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)

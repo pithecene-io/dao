@@ -811,6 +811,12 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
     return nullptr;
   }
 
+  // Constructor call: callee resolves to a struct type.
+  if (callee_type->kind() == TypeKind::Struct) {
+    return check_construct(expr,
+                           static_cast<const TypeStruct*>(callee_type));
+  }
+
   if (callee_type->kind() != TypeKind::Function) {
     error(call.callee->span,
           "cannot call non-function type '" + print_type(callee_type) + "'");
@@ -839,6 +845,38 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
   }
 
   return fn_type->return_type();
+}
+
+// ---------------------------------------------------------------------------
+// Constructor expressions (Point(1, 2))
+// ---------------------------------------------------------------------------
+
+auto TypeChecker::check_construct(const Expr* expr,
+                                  const TypeStruct* struct_type)
+    -> const Type* {
+  const auto& call = expr->as<CallExpr>();
+  const auto& fields = struct_type->fields();
+
+  if (call.args.size() != fields.size()) {
+    error(expr->span,
+          "'" + std::string(struct_type->name()) + "' expects " +
+              std::to_string(fields.size()) + " field(s), got " +
+              std::to_string(call.args.size()));
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < fields.size(); ++i) {
+    const auto* arg_type = check_expr(call.args[i]);
+    if (arg_type != nullptr && fields[i].type != nullptr &&
+        !is_assignable(arg_type, fields[i].type)) {
+      error(call.args[i]->span,
+            "field '" + std::string(fields[i].name) + "' expects type '" +
+                print_type(fields[i].type) + "', got '" +
+                print_type(arg_type) + "'");
+    }
+  }
+
+  return struct_type;
 }
 
 // ---------------------------------------------------------------------------

@@ -270,6 +270,7 @@ auto LlvmBackend::lower_inst(const MirInst& inst, const MirFunction& fn,
       [&](const MirLoad& p)        { return lower_load(p, inst, fn, state); },
       [&](const MirFnRef& p)       { return lower_fn_ref(p, inst, state); },
       [&](const MirCall& p)        { return lower_call(p, inst, state); },
+      [&](const MirConstruct& p)   { return lower_construct(p, inst, state); },
       [&](const MirReturn& p)      { return lower_return(p, inst, state); },
       [&](const MirBr& p)          { return lower_br(p, inst, state); },
       [&](const MirCondBr& p)      { return lower_cond_br(p, inst, state); },
@@ -824,6 +825,42 @@ auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
     state.values[inst.result.id] = call;
     state.value_types[inst.result.id] = inst.type;
   }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Struct construction
+// ---------------------------------------------------------------------------
+
+auto LlvmBackend::lower_construct(const MirConstruct& p, const MirInst& inst,
+                                    FunctionState& state) -> bool {
+  if (p.struct_type == nullptr) {
+    emit_diagnostic(inst.span, "construct with null struct type");
+    return false;
+  }
+
+  auto* llvm_type = types_.lower(p.struct_type);
+  if (llvm_type == nullptr) {
+    emit_diagnostic(inst.span,
+                    "cannot lower construct type: " + types_.error());
+    return false;
+  }
+
+  llvm::Value* agg = llvm::UndefValue::get(llvm_type);
+  if (p.field_values != nullptr) {
+    for (unsigned i = 0; i < p.field_values->size(); ++i) {
+      auto* val = get_value((*p.field_values)[i], state);
+      if (val == nullptr) {
+        emit_diagnostic(inst.span, "construct field value not found");
+        return false;
+      }
+      agg = state.builder->CreateInsertValue(
+          agg, val, i, "ctor." + std::to_string(i));
+    }
+  }
+
+  state.values[inst.result.id] = agg;
+  state.value_types[inst.result.id] = inst.type;
   return true;
 }
 

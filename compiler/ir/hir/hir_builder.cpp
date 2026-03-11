@@ -281,6 +281,21 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
 
   case NodeKind::CallExpr: {
     const auto& call = expr->as<CallExpr>();
+
+    // Constructor call: callee type is a struct.
+    const auto* callee_type = expr_type(call.callee);
+    if (callee_type != nullptr && callee_type->kind() == TypeKind::Struct) {
+      const auto* struct_type =
+          static_cast<const TypeStruct*>(callee_type);
+      std::vector<HirExpr*> args;
+      for (const auto* arg : call.args) {
+        args.push_back(lower_expr(arg));
+      }
+      return ctx_.alloc<HirExpr>(span, type,
+                                  HirConstruct{struct_type, std::move(args)});
+    }
+
+    // Normal function call.
     auto* callee = lower_expr(call.callee);
     std::vector<HirExpr*> args;
     for (const auto* arg : call.args) {

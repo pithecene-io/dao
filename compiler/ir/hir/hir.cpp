@@ -38,6 +38,7 @@ auto HirExpr::kind() const -> HirKind {
       [](const HirUnary&) { return HirKind::Unary; },
       [](const HirBinary&) { return HirKind::Binary; },
       [](const HirCall&) { return HirKind::Call; },
+      [](const HirConstruct&) { return HirKind::Construct; },
       [](const HirField&) { return HirKind::Field; },
       [](const HirIndex&) { return HirKind::Index; },
       [](const HirPipe&) { return HirKind::Pipe; },
@@ -71,6 +72,7 @@ auto hir_kind_name(HirKind kind) -> const char* {
   case HirKind::Unary:         return "Unary";
   case HirKind::Binary:        return "Binary";
   case HirKind::Call:          return "Call";
+  case HirKind::Construct:     return "Construct";
   case HirKind::Field:         return "Field";
   case HirKind::Index:         return "Index";
   case HirKind::Pipe:          return "Pipe";

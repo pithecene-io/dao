@@ -377,6 +377,13 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
         }
         return emit_value(expr, MirCall{callee_val, args});
       },
+      [&](const HirConstruct& ctor) -> MirValueId {
+        auto* field_vals = ctx_.alloc<std::vector<MirValueId>>();
+        for (const auto* arg : ctor.args) {
+          field_vals->push_back(lower_expr_value(*arg));
+        }
+        return emit_value(expr, MirConstruct{ctor.struct_type, field_vals});
+      },
       [&](const HirPipe& pipe) -> MirValueId {
         auto left_val = lower_expr_value(*pipe.left);
         auto callee_val = lower_expr_value(*pipe.right);
