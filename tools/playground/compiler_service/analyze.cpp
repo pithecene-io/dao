@@ -11,6 +11,7 @@
 #include "ir/hir/hir_builder.h"
 #include "ir/hir/hir_context.h"
 #include "ir/hir/hir_printer.h"
+#include "backend/llvm/llvm_backend.h"
 #include "ir/mir/mir_builder.h"
 #include "ir/mir/mir_context.h"
 #include "ir/mir/mir_printer.h"
@@ -142,10 +143,12 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     }
   }
 
-  // Run type checking, HIR, and MIR when lex/parse/resolve succeeded
-  // without errors. Typecheck warnings are surfaced but do not gate IR.
+  // Run type checking, HIR, MIR, and LLVM IR when lex/parse/resolve
+  // succeeded without errors. Typecheck warnings are surfaced but do
+  // not gate IR.
   std::string hir_text;
   std::string mir_text;
+  std::string llvm_ir_text;
   TypeContext types;
   bool resolve_clean =
       lex_parse_clean && resolve_result.diagnostics.empty();
@@ -212,6 +215,30 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
           std::ostringstream mir_out;
           print_mir(mir_out, *mir_result.module);
           mir_text = mir_out.str();
+
+          // LLVM IR lowering — gate on MIR success.
+          llvm::LLVMContext llvm_ctx;
+          LlvmBackend llvm_backend(llvm_ctx);
+          auto llvm_result = llvm_backend.lower(*mir_result.module);
+
+          for (const auto& diag : llvm_result.diagnostics) {
+            auto loc = source.line_col(diag.span.offset);
+            diagnostics.push_back({
+                {"severity", "error"},
+                {"offset", diag.span.offset},
+                {"length", diag.span.length},
+                {"line", loc.line},
+                {"col", loc.col},
+                {"message", diag.message},
+            });
+          }
+
+          if (llvm_result.module != nullptr &&
+              llvm_result.diagnostics.empty()) {
+            std::ostringstream llvm_out;
+            LlvmBackend::print_ir(llvm_out, *llvm_result.module);
+            llvm_ir_text = llvm_out.str();
+          }
         }
       }
     }
@@ -223,6 +250,7 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
       {"ast", ast_text},
       {"hir", hir_text},
       {"mir", mir_text},
+      {"llvm_ir", llvm_ir_text},
       {"diagnostics", diagnostics},
   };
 

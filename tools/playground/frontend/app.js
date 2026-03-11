@@ -149,6 +149,7 @@ async function doAnalyze() {
     document.getElementById("ast-output").textContent = data.ast || "";
     document.getElementById("hir-output").textContent = data.hir || "";
     document.getElementById("mir-output").textContent = data.mir || "";
+    document.getElementById("llvm-ir-output").textContent = data.llvm_ir || "";
 
     // Update diagnostics panel.
     renderDiagnostics(data.diagnostics || []);
