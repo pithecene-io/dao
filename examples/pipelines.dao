@@ -1,8 +1,5 @@
-type List = i32
+fn double(x: i32): i32 -> x * 2
 
-fn filter(pred: i32): i32 -> 0
-fn map(f: i32): i32 -> 0
+fn increment(x: i32): i32 -> x + 1
 
-fn positive_squares(xs: List[i32]): List[i32] -> xs
-    |> filter |x| -> x > 0
-    |> map |x| -> x * x
+fn transform(x: i32): i32 -> x |> double |> increment
