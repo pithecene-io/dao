@@ -48,6 +48,14 @@ jobs:
           pip install conan
           conan profile detect
 
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py', 'profiles/clang-21-debug.lock') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
       - name: Detect Clang version
         id: clang
         run: |

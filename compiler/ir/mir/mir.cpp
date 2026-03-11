@@ -1,6 +1,45 @@
+#include "ir/mir/mir.h"
 #include "ir/mir/mir_kind.h"
 
 namespace dao {
+
+// ---------------------------------------------------------------------------
+// MirInst::kind() — derived from the active variant alternative.
+// Variant order matches MirInstKind enum order exactly.
+// ---------------------------------------------------------------------------
+
+auto MirInst::kind() const -> MirInstKind {
+  return std::visit(overloaded{
+      [](const MirConstInt&)      { return MirInstKind::ConstInt; },
+      [](const MirConstFloat&)    { return MirInstKind::ConstFloat; },
+      [](const MirConstBool&)     { return MirInstKind::ConstBool; },
+      [](const MirConstString&)   { return MirInstKind::ConstString; },
+      [](const MirUnary&)         { return MirInstKind::Unary; },
+      [](const MirBinary&)        { return MirInstKind::Binary; },
+      [](const MirStore&)         { return MirInstKind::Store; },
+      [](const MirLoad&)          { return MirInstKind::Load; },
+      [](const MirAddrOf&)        { return MirInstKind::AddrOf; },
+      [](const MirFieldAccess&)   { return MirInstKind::FieldAccess; },
+      [](const MirIndexAccess&)   { return MirInstKind::IndexAccess; },
+      [](const MirFnRef&)         { return MirInstKind::FnRef; },
+      [](const MirCall&)          { return MirInstKind::Call; },
+      [](const MirIterInit&)      { return MirInstKind::IterInit; },
+      [](const MirIterHasNext&)   { return MirInstKind::IterHasNext; },
+      [](const MirIterNext&)      { return MirInstKind::IterNext; },
+      [](const MirModeEnter&)     { return MirInstKind::ModeEnter; },
+      [](const MirModeExit&)      { return MirInstKind::ModeExit; },
+      [](const MirResourceEnter&) { return MirInstKind::ResourceEnter; },
+      [](const MirResourceExit&)  { return MirInstKind::ResourceExit; },
+      [](const MirLambdaInst&)    { return MirInstKind::Lambda; },
+      [](const MirBr&)            { return MirInstKind::Br; },
+      [](const MirCondBr&)        { return MirInstKind::CondBr; },
+      [](const MirReturn&)        { return MirInstKind::Return; },
+  }, payload);
+}
+
+// ---------------------------------------------------------------------------
+// MirInstKind utilities
+// ---------------------------------------------------------------------------
 
 auto mir_inst_kind_name(MirInstKind kind) -> const char* {
   switch (kind) {

@@ -85,25 +85,42 @@ private:
   auto lower_inst(const MirInst& inst, const MirFunction& fn,
                    FunctionState& state) -> bool;
 
-  // Instruction lowering helpers
-  auto lower_const_int(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_const_float(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_const_bool(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_const_string(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_unary(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_binary(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_store(const MirInst& inst, const MirFunction& fn,
-                    FunctionState& state) -> bool;
-  auto lower_load(const MirInst& inst, const MirFunction& fn,
+  // Typed instruction lowering helpers
+  auto lower_const_int(const MirConstInt& p, const MirInst& inst,
+                       FunctionState& state) -> bool;
+  auto lower_const_float(const MirConstFloat& p, const MirInst& inst,
+                         FunctionState& state) -> bool;
+  auto lower_const_bool(const MirConstBool& p, const MirInst& inst,
+                        FunctionState& state) -> bool;
+  auto lower_const_string(const MirConstString& p, const MirInst& inst,
+                          FunctionState& state) -> bool;
+  auto lower_unary(const MirUnary& p, const MirInst& inst,
                    FunctionState& state) -> bool;
-  auto lower_fn_ref(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_call(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_return(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_br(const MirInst& inst, FunctionState& state) -> bool;
-  auto lower_cond_br(const MirInst& inst, FunctionState& state) -> bool;
+  auto lower_binary(const MirBinary& p, const MirInst& inst,
+                    FunctionState& state) -> bool;
+  auto lower_store(const MirStore& p, const MirInst& inst,
+                   const MirFunction& fn, FunctionState& state) -> bool;
+  auto lower_load(const MirLoad& p, const MirInst& inst,
+                  const MirFunction& fn, FunctionState& state) -> bool;
+  auto lower_field_access(const MirFieldAccess& p, const MirInst& inst,
+                          FunctionState& state) -> bool;
+  auto lower_fn_ref(const MirFnRef& p, const MirInst& inst,
+                    FunctionState& state) -> bool;
+  auto lower_call(const MirCall& p, const MirInst& inst,
+                  FunctionState& state) -> bool;
+  auto lower_return(const MirReturn& p, const MirInst& inst,
+                    FunctionState& state) -> bool;
+  auto lower_br(const MirBr& p, const MirInst& inst,
+                FunctionState& state) -> bool;
+  auto lower_cond_br(const MirCondBr& p, const MirInst& inst,
+                     FunctionState& state) -> bool;
+
+  // Place resolution — walk projection chains to an LLVM pointer.
+  auto resolve_place(const MirPlace& place, const MirFunction& fn,
+                      FunctionState& state) -> llvm::Value*;
 
   // Value lookup
-  auto get_value(MirValueId id, FunctionState& state) -> llvm::Value*;
+  static auto get_value(MirValueId id, FunctionState& state) -> llvm::Value*;
 };
 
 } // namespace dao

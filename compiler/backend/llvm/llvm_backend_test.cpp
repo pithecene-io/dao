@@ -326,6 +326,99 @@ suite<"module_structure"> module_structure = [] {
 };
 
 // ---------------------------------------------------------------------------
+// Class field access
+// ---------------------------------------------------------------------------
+
+suite<"field_access"> field_access = [] {
+  "field read via extractvalue"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: f64\n"
+        "  y: f64\n"
+        "\n"
+        "fn getx(p: Point): f64\n"
+        "  return p.x\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "%dao.Point")) << ir;
+  };
+
+  "second field read"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: f64\n"
+        "  y: f64\n"
+        "\n"
+        "fn gety(p: Point): f64\n"
+        "  return p.y\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "%dao.Point")) << ir;
+  };
+
+  "field write and read"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Vec2:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "fn set_and_get(v: Vec2): i32\n"
+        "  v.x = 42\n"
+        "  return v.y\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "getelementptr inbounds %dao.Vec2")) << ir;
+    expect(contains(ir, "store i32")) << ir;
+  };
+
+  "pointer-to-struct field store (Deref -> Field)"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "fn setx(p: *Point): void\n"
+        "  mode unsafe =>\n"
+        "    (*p).x = 99\n"
+        "  return\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "deref.ptr")) << ir;
+    expect(contains(ir, "getelementptr inbounds %dao.Point")) << ir;
+    expect(contains(ir, "store i32")) << ir;
+  };
+
+  "pointer-to-struct field read (Deref then extractvalue)"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "fn gety(p: *Point): i32\n"
+        "  mode unsafe =>\n"
+        "    return (*p).y\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "deref.ptr")) << ir;
+    expect(contains(ir, "extractvalue %dao.Point")) << ir;
+  };
+
+  "struct type appears in LLVM IR"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Pair:\n"
+        "  a: i32\n"
+        "  b: i64\n"
+        "\n"
+        "fn first(p: Pair): i32\n"
+        "  return p.a\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "%dao.Pair = type { i32, i64 }")) << ir;
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Unsupported constructs — must fail explicitly
 // ---------------------------------------------------------------------------
 
@@ -357,7 +450,7 @@ suite<"unsupported_constructs"> unsupported_constructs = [] {
     expect(pipe.has_errors()) << "resource should fail";
   };
 
-  "field assignment is rejected"_test = [] {
+  "field assignment via store"_test = [] {
     LlvmTestPipeline pipe(
         "class Point:\n"
         "  x: i32\n"
@@ -366,10 +459,13 @@ suite<"unsupported_constructs"> unsupported_constructs = [] {
         "fn sety(p: Point): i32\n"
         "  p.y = 1\n"
         "  return 0\n");
-    expect(pipe.has_errors()) << "projected store should fail";
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "getelementptr inbounds %dao.Point")) << ir;
+    expect(contains(ir, "store i32")) << ir;
   };
 
-  "field load is rejected"_test = [] {
+  "field read via extractvalue"_test = [] {
     LlvmTestPipeline pipe(
         "class Point:\n"
         "  x: i32\n"
@@ -377,10 +473,13 @@ suite<"unsupported_constructs"> unsupported_constructs = [] {
         "\n"
         "fn gety(p: Point): i32\n"
         "  return p.y\n");
-    expect(pipe.has_errors()) << "projected load should fail";
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "extractvalue %dao.Point")) << ir;
+    expect(contains(ir, "ret i32")) << ir;
   };
 
-  "address-of field is rejected"_test = [] {
+  "address-of field via GEP"_test = [] {
     LlvmTestPipeline pipe(
         "class Point:\n"
         "  x: i32\n"
@@ -390,7 +489,9 @@ suite<"unsupported_constructs"> unsupported_constructs = [] {
         "  mode unsafe =>\n"
         "    return &p.y\n"
         "  return &p.x\n");
-    expect(pipe.has_errors()) << "projected AddrOf should fail";
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "getelementptr inbounds %dao.Point")) << ir;
   };
 };
 
