@@ -49,8 +49,8 @@ private:
   // --- Declaration lowering ---
 
   auto lower_decl(const Decl* decl) -> HirDecl*;
-  auto lower_function(const FunctionDeclNode* fn) -> HirDecl*;
-  auto lower_class(const ClassDeclNode* st) -> HirDecl*;
+  auto lower_function(const Decl* decl) -> HirDecl*;
+  auto lower_class(const Decl* decl) -> HirDecl*;
 
   // --- Statement lowering ---
 

@@ -73,10 +73,9 @@ struct TypecheckPipeline {
     if (parse_result.file == nullptr) {
       return nullptr;
     }
-    for (const auto* decl : parse_result.file->declarations()) {
+    for (const auto* decl : parse_result.file->declarations) {
       if (decl->kind() == NodeKind::FunctionDecl) {
-        return check_result.typed.decl_type(
-            static_cast<const Decl*>(decl));
+        return check_result.typed.decl_type(decl);
       }
     }
     return nullptr;
