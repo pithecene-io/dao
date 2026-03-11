@@ -591,31 +591,38 @@ auto LlvmBackend::resolve_place(const MirPlace& place,
 
   llvm::Value* ptr = it->second;
 
+  // Track the semantic type of what ptr points to, so that after a Deref
+  // produces a raw loaded pointer we still know the LLVM type for the
+  // subsequent Field GEP.
+  const Type* current_type = nullptr;
+  for (const auto& local : fn.locals) {
+    if (local.id.id == place.local.id) {
+      current_type = local.type;
+      break;
+    }
+  }
+
   for (const auto& proj : place.projections) {
     switch (proj.kind) {
     case MirProjectionKind::Deref: {
-      auto* ptr_type = ptr->getType();
-      // ptr is an alloca holding a pointer value — load the pointer.
-      auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr);
-      if (alloca != nullptr) {
-        ptr = state.builder->CreateLoad(alloca->getAllocatedType(), ptr,
-                                        "deref.ptr");
-      } else {
-        // Already a raw pointer from a previous GEP.
-        // We need the semantic type to know what to load — bail for now.
+      // ptr holds a pointer value — load it.
+      auto* load_type = types_.lower(current_type);
+      if (load_type == nullptr) {
         return nullptr;
+      }
+      ptr = state.builder->CreateLoad(load_type, ptr, "deref.ptr");
+      // Advance semantic type through the pointer.
+      if (current_type != nullptr && current_type->kind() == TypeKind::Pointer) {
+        current_type = static_cast<const TypePointer*>(current_type)->pointee();
+      } else {
+        current_type = nullptr;
       }
       break;
     }
     case MirProjectionKind::Field: {
       // ptr points to a struct — GEP into the field.
-      // Determine the struct's LLVM type from the alloca or previous GEP.
-      llvm::Type* struct_type = nullptr;
-      if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr)) {
-        struct_type = alloca->getAllocatedType();
-      } else if (auto* gep = llvm::dyn_cast<llvm::GetElementPtrInst>(ptr)) {
-        struct_type = gep->getResultElementType();
-      }
+      auto* struct_type = (current_type != nullptr) ? types_.lower(current_type)
+                                                     : nullptr;
       if (struct_type == nullptr || !struct_type->isStructTy()) {
         return nullptr;
       }
@@ -625,6 +632,17 @@ auto LlvmBackend::resolve_place(const MirPlace& place,
       ptr = state.builder->CreateInBoundsGEP(
           struct_type, ptr, {zero, idx},
           "field." + std::string(proj.field_name));
+      // Advance semantic type to the field's type.
+      if (current_type != nullptr && current_type->kind() == TypeKind::Struct) {
+        const auto* sty = static_cast<const TypeStruct*>(current_type);
+        if (proj.field_index < sty->fields().size()) {
+          current_type = sty->fields()[proj.field_index].type;
+        } else {
+          current_type = nullptr;
+        }
+      } else {
+        current_type = nullptr;
+      }
       break;
     }
     case MirProjectionKind::Index:

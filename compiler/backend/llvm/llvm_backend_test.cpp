@@ -371,6 +371,39 @@ suite<"field_access"> field_access = [] {
     expect(contains(ir, "store i32")) << ir;
   };
 
+  "pointer-to-struct field store (Deref -> Field)"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "fn setx(p: *Point): void\n"
+        "  mode unsafe =>\n"
+        "    (*p).x = 99\n"
+        "  return\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "deref.ptr")) << ir;
+    expect(contains(ir, "getelementptr inbounds %dao.Point")) << ir;
+    expect(contains(ir, "store i32")) << ir;
+  };
+
+  "pointer-to-struct field read (Deref then extractvalue)"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "fn gety(p: *Point): i32\n"
+        "  mode unsafe =>\n"
+        "    return (*p).y\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "deref.ptr")) << ir;
+    expect(contains(ir, "extractvalue %dao.Point")) << ir;
+  };
+
   "struct type appears in LLVM IR"_test = [] {
     LlvmTestPipeline pipe(
         "class Pair:\n"
