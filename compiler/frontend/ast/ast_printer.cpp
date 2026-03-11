@@ -121,8 +121,11 @@ private:
     indent();
     out_ << "ClassDecl " << node.name() << "\n";
     Scope scope(depth_);
-    for (const auto* member : node.members()) {
-      print_stmt(*member);
+    for (const auto* field : node.fields()) {
+      indent();
+      out_ << "Field " << field->name() << ": ";
+      print_type_inline(*field->type());
+      out_ << "\n";
     }
   }
 

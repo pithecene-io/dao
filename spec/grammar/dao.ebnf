@@ -23,7 +23,10 @@ type_decl :=
   | alias_decl
 
 class_decl :=
-    "class" identifier ":" suite
+    "class" identifier ":" NEWLINE INDENT field_spec+ DEDENT
+
+field_spec :=
+    identifier ":" type NEWLINE
 
 alias_decl :=
     "type" identifier "=" type NEWLINE

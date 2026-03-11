@@ -89,7 +89,7 @@ struct TypecheckPipeline {
 // Positive: literals and let bindings
 // ---------------------------------------------------------------------------
 
-suite typecheck_literals = [] {
+suite<"typecheck_literals"> typecheck_literals = [] {
   "int literal types as i32"_test = [] {
     auto result = check_source("fn main(): i32\n    return 42\n");
     expect(is_ok(result)) << "should typecheck cleanly";
@@ -131,7 +131,7 @@ suite typecheck_literals = [] {
 // Positive: arithmetic
 // ---------------------------------------------------------------------------
 
-suite typecheck_arithmetic = [] {
+suite<"typecheck_arithmetic"> typecheck_arithmetic = [] {
   "i32 addition"_test = [] {
     auto result = check_source("fn add(a: i32, b: i32): i32 -> a + b\n");
     expect(is_ok(result));
@@ -162,7 +162,7 @@ suite typecheck_arithmetic = [] {
 // Positive: function calls
 // ---------------------------------------------------------------------------
 
-suite typecheck_calls = [] {
+suite<"typecheck_calls"> typecheck_calls = [] {
   "simple function call"_test = [] {
     auto result = check_source(
         "fn double(x: i32): i32 -> x + x\n"
@@ -176,7 +176,7 @@ suite typecheck_calls = [] {
 // Positive: expression-bodied functions
 // ---------------------------------------------------------------------------
 
-suite typecheck_expr_body = [] {
+suite<"typecheck_expr_body"> typecheck_expr_body = [] {
   "expression-bodied function"_test = [] {
     auto result = check_source("fn inc(x: i32): i32 -> x + 1\n");
     expect(is_ok(result));
@@ -187,7 +187,7 @@ suite typecheck_expr_body = [] {
 // Positive: if/while with bool conditions
 // ---------------------------------------------------------------------------
 
-suite typecheck_control_flow = [] {
+suite<"typecheck_control_flow"> typecheck_control_flow = [] {
   "if with bool condition"_test = [] {
     auto result = check_source(
         "fn abs(x: i32): i32\n"
@@ -212,7 +212,7 @@ suite typecheck_control_flow = [] {
 // Positive: void functions
 // ---------------------------------------------------------------------------
 
-suite typecheck_void = [] {
+suite<"typecheck_void"> typecheck_void = [] {
   "void function with bare return"_test = [] {
     auto result = check_source("fn noop(): void\n    return\n");
     expect(is_ok(result));
@@ -233,7 +233,7 @@ suite typecheck_void = [] {
 // Positive: pointer operations
 // ---------------------------------------------------------------------------
 
-suite typecheck_pointers = [] {
+suite<"typecheck_pointers"> typecheck_pointers = [] {
   "address-of and deref in unsafe"_test = [] {
     auto result = check_source(
         "fn ptr_test(x: i32): i32\n"
@@ -248,7 +248,7 @@ suite typecheck_pointers = [] {
 // Negative: type mismatches
 // ---------------------------------------------------------------------------
 
-suite typecheck_negative = [] {
+suite<"typecheck_negative"> typecheck_negative = [] {
   "let type mismatch"_test = [] {
     auto result = check_source(
         "fn main(): i32\n"
@@ -331,7 +331,7 @@ suite typecheck_negative = [] {
 // Type aliases
 // ---------------------------------------------------------------------------
 
-suite type_alias = [] {
+suite<"type_alias"> type_alias = [] {
   "alias resolves to underlying type"_test = [] {
     auto result = check_source(
         "type NodeId = i32\n"

@@ -91,7 +91,7 @@ auto count_tokens(const std::vector<SemanticToken>& tokens, std::string_view kin
 
 // NOLINTBEGIN(readability-magic-numbers)
 
-suite keyword_classification = [] {
+suite<"keyword_classification"> keyword_classification = [] {
   "keyword.fn is classified"_test = [] {
     auto result = classify_source("test.dao", "fn main(): i32\n    0\n");
     expect(find_token(result.tokens, "keyword.fn") != nullptr);
@@ -130,7 +130,7 @@ suite keyword_classification = [] {
   };
 };
 
-suite literal_classification = [] {
+suite<"literal_classification"> literal_classification = [] {
   "literal.number for integers"_test = [] {
     auto result = classify_source("test.dao", "fn main(): i32\n    42\n");
     expect(find_token(result.tokens, "literal.number") != nullptr);
@@ -142,7 +142,7 @@ suite literal_classification = [] {
   };
 };
 
-suite operator_classification = [] {
+suite<"operator_classification"> operator_classification = [] {
   "operator.pipe is classified"_test = [] {
     auto result =
         classify_source("test.dao", "fn f(x: i32): i32 -> x\nfn g(): i32 -> 1 |> f\n");
@@ -160,24 +160,24 @@ suite operator_classification = [] {
   };
 };
 
-suite declaration_classification = [] {
+suite<"declaration_classification"> declaration_classification = [] {
   "decl.function on function name"_test = [] {
     auto result = classify_source("test.dao", "fn main(): i32\n    0\n");
     expect(find_token(result.tokens, "decl.function") != nullptr);
   };
 
   "decl.type on class name"_test = [] {
-    auto result = classify_source("test.dao", "class Point:\n    let x: i32\n");
+    auto result = classify_source("test.dao", "class Point:\n    x: i32\n");
     expect(find_token(result.tokens, "decl.type") != nullptr);
   };
 
   "decl.field on class member"_test = [] {
-    auto result = classify_source("test.dao", "class Point:\n    let x: i32\n");
+    auto result = classify_source("test.dao", "class Point:\n    x: i32\n");
     expect(find_token(result.tokens, "decl.field") != nullptr);
   };
 };
 
-suite type_classification = [] {
+suite<"type_classification"> type_classification = [] {
   "type.builtin for i32"_test = [] {
     auto result = classify_source("test.dao", "fn main(): i32\n    0\n");
     expect(find_token(result.tokens, "type.builtin") != nullptr);
@@ -199,7 +199,7 @@ suite type_classification = [] {
   };
 };
 
-suite module_classification = [] {
+suite<"module_classification"> module_classification = [] {
   "use.module on import path segments"_test = [] {
     auto result = classify_source("test.dao", "import net::http\nfn main(): i32\n    0\n");
     expect(find_token_at(result, "use.module", "net") != nullptr)
@@ -219,7 +219,7 @@ suite module_classification = [] {
   };
 };
 
-suite variable_classification = [] {
+suite<"variable_classification"> variable_classification = [] {
   "param binder is not classified as use.variable.param"_test = [] {
     // Parameter binders are declaration sites. use.variable.param is
     // for references, which require name resolution (Task 6).
@@ -239,7 +239,7 @@ suite variable_classification = [] {
   };
 };
 
-suite mode_resource_classification = [] {
+suite<"mode_resource_classification"> mode_resource_classification = [] {
   "mode.unsafe is classified"_test = [] {
     auto result =
         classify_source("test.dao", "fn main(): i32\n    mode unsafe =>\n        0\n    0\n");
@@ -259,7 +259,7 @@ suite mode_resource_classification = [] {
   };
 };
 
-suite lambda_classification = [] {
+suite<"lambda_classification"> lambda_classification = [] {
   "lambda.param is classified"_test = [] {
     auto result =
         classify_source("test.dao", "fn f(x: i32): i32 -> x\nfn g(): i32 -> 1 |> |x| -> x\n");
@@ -267,14 +267,14 @@ suite lambda_classification = [] {
   };
 };
 
-suite punctuation_classification = [] {
+suite<"punctuation_classification"> punctuation_classification = [] {
   "punctuation is classified"_test = [] {
     auto result = classify_source("test.dao", "fn f(x: i32): i32\n    0\n");
     expect(find_token(result.tokens, "punctuation") != nullptr);
   };
 };
 
-suite sorted_output = [] {
+suite<"sorted_output"> sorted_output = [] {
   "tokens are sorted by offset"_test = [] {
     auto result = classify_source("test.dao",
                                   "fn main(): i32\n"
@@ -287,7 +287,7 @@ suite sorted_output = [] {
   };
 };
 
-suite example_files = [] {
+suite<"example_files"> example_files = [] {
   "all examples classify without crash"_test = [] {
     auto root = std::filesystem::path(DAO_SOURCE_DIR);
     auto examples_dir = root / "examples";
@@ -316,7 +316,7 @@ suite example_files = [] {
   };
 };
 
-suite taxonomy_coverage = [] {
+suite<"taxonomy_coverage"> taxonomy_coverage = [] {
   "all lexically determinable categories appear in hello.dao"_test = [] {
     auto root = std::filesystem::path(DAO_SOURCE_DIR);
     auto contents = read_file(root / "examples" / "hello.dao");

@@ -82,7 +82,7 @@ auto find_offset(const ResolvedSource& result, const std::string& text, size_t n
 
 // NOLINTBEGIN(readability-magic-numbers)
 
-suite resolve_basic = [] {
+suite<"resolve_basic"> resolve_basic = [] {
   "simple identifier resolves to param"_test = [] {
     auto result = resolve_source("test", "fn foo(x: i32): i32 -> x");
     expect(result.resolve_result.diagnostics.empty());
@@ -130,7 +130,7 @@ suite resolve_basic = [] {
   };
 };
 
-suite resolve_scoping = [] {
+suite<"resolve_scoping"> resolve_scoping = [] {
   "let binding not visible before declaration"_test = [] {
     auto result = resolve_source("test",
                                  "fn foo(): i32\n"
@@ -190,7 +190,7 @@ suite resolve_scoping = [] {
   };
 };
 
-suite resolve_duplicates = [] {
+suite<"resolve_duplicates"> resolve_duplicates = [] {
   "duplicate top-level functions"_test = [] {
     auto result = resolve_source("test",
                                  "fn foo(): i32 -> 0\n"
@@ -220,7 +220,7 @@ suite resolve_duplicates = [] {
   };
 };
 
-suite resolve_types = [] {
+suite<"resolve_types"> resolve_types = [] {
   "builtin type resolves"_test = [] {
     auto result = resolve_source("test", "fn foo(x: i32): i32 -> x");
     expect(result.resolve_result.diagnostics.empty());
@@ -240,8 +240,8 @@ suite resolve_types = [] {
   "user-declared type resolves"_test = [] {
     auto result = resolve_source("test",
                                  "class Point:\n"
-                                 "    let x: i32\n"
-                                 "    let y: i32\n"
+                                 "    x: i32\n"
+                                 "    y: i32\n"
                                  "fn foo(p: Point): i32 -> 0");
     expect(result.resolve_result.diagnostics.empty());
 
@@ -250,7 +250,7 @@ suite resolve_types = [] {
   };
 };
 
-suite resolve_imports = [] {
+suite<"resolve_imports"> resolve_imports = [] {
   "import binds last segment"_test = [] {
     auto result = resolve_source("test",
                                  "import net::http\n"
@@ -282,25 +282,25 @@ suite resolve_imports = [] {
   };
 };
 
-suite resolve_class = [] {
+suite<"resolve_class"> resolve_class = [] {
   "class fields declared"_test = [] {
     auto result = resolve_source("test",
                                  "class Point:\n"
-                                 "    let x: i32\n"
-                                 "    let y: i32");
+                                 "    x: i32\n"
+                                 "    y: i32");
     expect(result.resolve_result.diagnostics.empty());
   };
 
   "duplicate class field"_test = [] {
     auto result = resolve_source("test",
                                  "class Point:\n"
-                                 "    let x: i32\n"
-                                 "    let x: i32");
+                                 "    x: i32\n"
+                                 "    x: i32");
     expect(has_diagnostic_containing(result.resolve_result, "duplicate declaration 'x'"));
   };
 };
 
-suite resolve_corpus = [] {
+suite<"resolve_corpus"> resolve_corpus = [] {
   "all examples resolve without spurious diagnostics"_test = [] {
     std::filesystem::path root(DAO_SOURCE_DIR);
     auto examples_dir = root / "examples";

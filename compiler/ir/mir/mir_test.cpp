@@ -74,7 +74,7 @@ auto contains(const std::string& haystack, std::string_view needle) -> bool {
 // Control flow: if
 // ---------------------------------------------------------------------------
 
-suite mir_if = [] {
+suite<"mir_if"> mir_if = [] {
   "if lowers to cond_br with then and merge blocks"_test = [] {
     MirTestPipeline pipe(
         "fn test(x: i32): i32\n"
@@ -123,7 +123,7 @@ suite mir_if = [] {
 // Control flow: while
 // ---------------------------------------------------------------------------
 
-suite mir_while = [] {
+suite<"mir_while"> mir_while = [] {
   "while lowers to loop blocks"_test = [] {
     MirTestPipeline pipe(
         "fn test(x: i32): i32\n"
@@ -144,7 +144,7 @@ suite mir_while = [] {
 // Control flow: return
 // ---------------------------------------------------------------------------
 
-suite mir_return = [] {
+suite<"mir_return"> mir_return = [] {
   "return with value"_test = [] {
     MirTestPipeline pipe("fn main(): i32\n    return 42\n");
     auto dump = pipe.dump();
@@ -157,7 +157,7 @@ suite mir_return = [] {
 // Data flow: let with initializer
 // ---------------------------------------------------------------------------
 
-suite mir_let = [] {
+suite<"mir_let"> mir_let = [] {
   "let with initializer lowers to store"_test = [] {
     MirTestPipeline pipe(
         "fn main(): i32\n"
@@ -184,7 +184,7 @@ suite mir_let = [] {
 // Data flow: assignment
 // ---------------------------------------------------------------------------
 
-suite mir_assignment = [] {
+suite<"mir_assignment"> mir_assignment = [] {
   "assignment lowers to store"_test = [] {
     MirTestPipeline pipe(
         "fn main(): i32\n"
@@ -208,7 +208,7 @@ suite mir_assignment = [] {
 // Data flow: arithmetic
 // ---------------------------------------------------------------------------
 
-suite mir_arithmetic = [] {
+suite<"mir_arithmetic"> mir_arithmetic = [] {
   "arithmetic lowers to binary instructions"_test = [] {
     MirTestPipeline pipe(
         "fn add(a: i32, b: i32): i32\n"
@@ -223,7 +223,7 @@ suite mir_arithmetic = [] {
 // Data flow: call
 // ---------------------------------------------------------------------------
 
-suite mir_call = [] {
+suite<"mir_call"> mir_call = [] {
   "call lowers with explicit args"_test = [] {
     MirTestPipeline pipe(
         "fn add(a: i32, b: i32): i32 -> a + b\n"
@@ -238,7 +238,7 @@ suite mir_call = [] {
 // Dao-specific: pipe lowering
 // ---------------------------------------------------------------------------
 
-suite mir_pipe = [] {
+suite<"mir_pipe"> mir_pipe = [] {
   "pipe lowers to call"_test = [] {
     MirTestPipeline pipe(
         "fn double(x: i32): i32 -> x + x\n"
@@ -256,7 +256,7 @@ suite mir_pipe = [] {
 // Dao-specific: mode region
 // ---------------------------------------------------------------------------
 
-suite mir_mode = [] {
+suite<"mir_mode"> mir_mode = [] {
   "mode region preserved as enter/exit"_test = [] {
     MirTestPipeline pipe(
         "fn main(): i32\n"
@@ -273,7 +273,7 @@ suite mir_mode = [] {
 // Dao-specific: resource region
 // ---------------------------------------------------------------------------
 
-suite mir_resource = [] {
+suite<"mir_resource"> mir_resource = [] {
   "resource region preserved as enter/exit"_test = [] {
     MirTestPipeline pipe(
         "fn main(): i32\n"
@@ -290,7 +290,7 @@ suite mir_resource = [] {
 // Dao-specific: lambda
 // ---------------------------------------------------------------------------
 
-suite mir_lambda = [] {
+suite<"mir_lambda"> mir_lambda = [] {
   // NOTE: bare lambdas (e.g. `|x| -> x + 1`) are currently rejected by the
   // type checker without contextual function type information. Once lambda
   // type inference is implemented, this test should be updated to verify
@@ -307,7 +307,7 @@ suite mir_lambda = [] {
 // Structural: every block ends with terminator
 // ---------------------------------------------------------------------------
 
-suite mir_structural = [] {
+suite<"mir_structural"> mir_structural = [] {
   "every block ends with terminator"_test = [] {
     MirTestPipeline pipe(
         "fn test(x: i32): i32\n"
@@ -350,7 +350,7 @@ suite mir_structural = [] {
 // Edge cases
 // ---------------------------------------------------------------------------
 
-suite mir_edge = [] {
+suite<"mir_edge"> mir_edge = [] {
   "empty function"_test = [] {
     MirTestPipeline pipe("fn noop(): void\n    let x: i32 = 1\n");
     auto dump = pipe.dump();

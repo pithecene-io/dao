@@ -265,19 +265,10 @@ private:
   void visit_class(const ClassDeclNode& st) {
     classify(st.name_span(), "decl.type");
 
-    for (const auto* member : st.members()) {
-      // Struct members declared with let are fields.
-      if (member->kind() == NodeKind::LetStatement) {
-        const auto& let_stmt = static_cast<const LetStatementNode&>(*member);
-        classify(let_stmt.name_span(), "decl.field");
-        if (let_stmt.type() != nullptr) {
-          visit_type(*let_stmt.type());
-        }
-        if (let_stmt.initializer() != nullptr) {
-          visit_expr(*let_stmt.initializer());
-        }
-      } else {
-        visit_stmt(*member);
+    for (const auto* field : st.fields()) {
+      classify(field->name_span(), "decl.field");
+      if (field->type() != nullptr) {
+        visit_type(*field->type());
       }
     }
   }

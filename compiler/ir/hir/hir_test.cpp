@@ -68,7 +68,7 @@ auto contains(const std::string& haystack, std::string_view needle) -> bool {
 // Positive: expression-bodied function normalized to HIR
 // ---------------------------------------------------------------------------
 
-suite hir_expr_bodied = [] {
+suite<"hir_expr_bodied"> hir_expr_bodied = [] {
   "expression-bodied function normalized to return"_test = [] {
     HirTestPipeline p("fn double(x: i32): i32 -> x + x\n");
     auto dump = p.dump();
@@ -84,7 +84,7 @@ suite hir_expr_bodied = [] {
 // Positive: block-bodied function
 // ---------------------------------------------------------------------------
 
-suite hir_block_bodied = [] {
+suite<"hir_block_bodied"> hir_block_bodied = [] {
   "block-bodied function"_test = [] {
     HirTestPipeline p("fn add(a: i32, b: i32): i32\n    return a + b\n");
     auto dump = p.dump();
@@ -100,7 +100,7 @@ suite hir_block_bodied = [] {
 // Positive: let with inferred type
 // ---------------------------------------------------------------------------
 
-suite hir_let = [] {
+suite<"hir_let"> hir_let = [] {
   "let with initializer"_test = [] {
     HirTestPipeline p("fn main(): i32\n    let x: i32 = 42\n    return x\n");
     auto dump = p.dump();
@@ -113,7 +113,7 @@ suite hir_let = [] {
 // Positive: assignment
 // ---------------------------------------------------------------------------
 
-suite hir_assignment = [] {
+suite<"hir_assignment"> hir_assignment = [] {
   "variable assignment"_test = [] {
     HirTestPipeline p(
         "fn main(): i32\n"
@@ -131,7 +131,7 @@ suite hir_assignment = [] {
 // Positive: if / while / for
 // ---------------------------------------------------------------------------
 
-suite hir_control_flow = [] {
+suite<"hir_control_flow"> hir_control_flow = [] {
   "if statement"_test = [] {
     HirTestPipeline p(
         "fn test(x: i32): i32\n"
@@ -174,7 +174,7 @@ suite hir_control_flow = [] {
 // Positive: return
 // ---------------------------------------------------------------------------
 
-suite hir_return = [] {
+suite<"hir_return"> hir_return = [] {
   "return with value"_test = [] {
     HirTestPipeline p("fn main(): i32\n    return 42\n");
     auto dump = p.dump();
@@ -187,7 +187,7 @@ suite hir_return = [] {
 // Positive: pipe expression
 // ---------------------------------------------------------------------------
 
-suite hir_pipe = [] {
+suite<"hir_pipe"> hir_pipe = [] {
   "pipe preserved as first-class node"_test = [] {
     HirTestPipeline p(
         "fn double(x: i32): i32 -> x + x\n"
@@ -204,7 +204,7 @@ suite hir_pipe = [] {
 // Positive: lambda expression
 // ---------------------------------------------------------------------------
 
-suite hir_lambda = [] {
+suite<"hir_lambda"> hir_lambda = [] {
   // NOTE: the parser does not yet support fn(...) -> T as a type syntax,
   // so lambdas cannot currently pass type checking in a call context.
   // This test verifies structural lowering: the HIR builder produces a
@@ -229,7 +229,7 @@ suite hir_lambda = [] {
 // Positive: mode block
 // ---------------------------------------------------------------------------
 
-suite hir_mode = [] {
+suite<"hir_mode"> hir_mode = [] {
   "mode block preserved"_test = [] {
     HirTestPipeline p(
         "fn main(): i32\n"
@@ -246,7 +246,7 @@ suite hir_mode = [] {
 // Positive: resource block
 // ---------------------------------------------------------------------------
 
-suite hir_resource = [] {
+suite<"hir_resource"> hir_resource = [] {
   "resource block preserved"_test = [] {
     HirTestPipeline p(
         "fn main(): i32\n"
@@ -262,7 +262,7 @@ suite hir_resource = [] {
 // Positive: function call
 // ---------------------------------------------------------------------------
 
-suite hir_call = [] {
+suite<"hir_call"> hir_call = [] {
   "function call"_test = [] {
     HirTestPipeline p(
         "fn add(a: i32, b: i32): i32 -> a + b\n"
@@ -280,7 +280,7 @@ suite hir_call = [] {
 // Positive: literals
 // ---------------------------------------------------------------------------
 
-suite hir_literals = [] {
+suite<"hir_literals"> hir_literals = [] {
   "integer literal"_test = [] {
     HirTestPipeline p("fn main(): i32\n    return 42\n");
     expect(contains(p.dump(), "IntLiteral 42 : i32"));
@@ -308,7 +308,7 @@ suite hir_literals = [] {
 // Semantic preservation: typed expressions
 // ---------------------------------------------------------------------------
 
-suite hir_semantic = [] {
+suite<"hir_semantic"> hir_semantic = [] {
   "expressions carry semantic types"_test = [] {
     HirTestPipeline p("fn main(): i32\n    return 1 + 2\n");
     expect(p.module() != nullptr);
@@ -339,12 +339,12 @@ suite hir_semantic = [] {
 // Struct declaration
 // ---------------------------------------------------------------------------
 
-suite hir_class = [] {
+suite<"hir_class"> hir_class = [] {
   "class declaration lowered"_test = [] {
     HirTestPipeline p(
         "class Point:\n"
-        "    let x: i32\n"
-        "    let y: i32\n");
+        "    x: i32\n"
+        "    y: i32\n");
     expect(contains(p.dump(), "ClassDecl Point"));
   };
 };
@@ -353,7 +353,7 @@ suite hir_class = [] {
 // HIR builder diagnostics (no crashes on empty)
 // ---------------------------------------------------------------------------
 
-suite hir_edge = [] {
+suite<"hir_edge"> hir_edge = [] {
   "empty module"_test = [] {
     HirTestPipeline p("");
     expect(p.module() != nullptr);

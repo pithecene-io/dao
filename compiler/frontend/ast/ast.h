@@ -48,6 +48,9 @@ enum class NodeKind : std::uint8_t {
   ClassDecl,
   AliasDecl,
 
+  // Class members
+  FieldSpec,
+
   // Statements
   LetStatement,
   Assignment,
@@ -277,11 +280,14 @@ private:
   bool is_extern_ = false;
 };
 
-class ClassDeclNode : public Decl {
+// ---------------------------------------------------------------------------
+// Class field specifier
+// ---------------------------------------------------------------------------
+
+class FieldSpecNode : public AstNode {
 public:
-  ClassDeclNode(Span span, std::string_view name, Span name_span, std::vector<Stmt*> members)
-      : Decl(NodeKind::ClassDecl, span), name_(name), name_span_(name_span),
-        members_(std::move(members)) {
+  FieldSpecNode(Span span, std::string_view name, Span name_span, TypeNode* type)
+      : AstNode(NodeKind::FieldSpec, span), name_(name), name_span_(name_span), type_(type) {
   }
 
   [[nodiscard]] auto name() const -> std::string_view {
@@ -290,14 +296,38 @@ public:
   [[nodiscard]] auto name_span() const -> Span {
     return name_span_;
   }
-  [[nodiscard]] auto members() const -> const std::vector<Stmt*>& {
-    return members_;
+  [[nodiscard]] auto type() const -> TypeNode* {
+    return type_;
   }
 
 private:
   std::string_view name_;
   Span name_span_;
-  std::vector<Stmt*> members_;
+  TypeNode* type_;
+};
+
+class ClassDeclNode : public Decl {
+public:
+  ClassDeclNode(Span span, std::string_view name, Span name_span,
+                std::vector<FieldSpecNode*> fields)
+      : Decl(NodeKind::ClassDecl, span), name_(name), name_span_(name_span),
+        fields_(std::move(fields)) {
+  }
+
+  [[nodiscard]] auto name() const -> std::string_view {
+    return name_;
+  }
+  [[nodiscard]] auto name_span() const -> Span {
+    return name_span_;
+  }
+  [[nodiscard]] auto fields() const -> const std::vector<FieldSpecNode*>& {
+    return fields_;
+  }
+
+private:
+  std::string_view name_;
+  Span name_span_;
+  std::vector<FieldSpecNode*> fields_;
 };
 
 class AliasDeclNode : public Decl {

@@ -156,9 +156,9 @@ private:
         advance(); // consume 'struct' identifier
         const auto& name_tok = consume(TokenKind::Identifier);
         consume(TokenKind::Colon);
-        auto members = parse_suite();
+        auto fields = parse_field_list();
         Span span = span_from(peek().span);
-        return ctx_.alloc<ClassDeclNode>(span, name_tok.text, name_tok.span, std::move(members));
+        return ctx_.alloc<ClassDeclNode>(span, name_tok.text, name_tok.span, std::move(fields));
       }
       error("expected declaration (fn, extern, class, or type)");
       advance(); // skip problematic token
@@ -254,9 +254,32 @@ private:
     const auto& kw = consume(TokenKind::KwClass);
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::Colon);
-    auto members = parse_suite();
+    auto fields = parse_field_list();
     Span span = span_from(kw.span);
-    return ctx_.alloc<ClassDeclNode>(span, name_tok.text, name_tok.span, std::move(members));
+    return ctx_.alloc<ClassDeclNode>(span, name_tok.text, name_tok.span, std::move(fields));
+  }
+
+  auto parse_field_list() -> std::vector<FieldSpecNode*> {
+    consume(TokenKind::Newline);
+    consume(TokenKind::Indent);
+    std::vector<FieldSpecNode*> fields;
+    while (peek_kind() != TokenKind::Dedent && peek_kind() != TokenKind::Eof) {
+      fields.push_back(parse_field_spec());
+    }
+    consume(TokenKind::Dedent);
+    if (fields.empty()) {
+      error("class body must contain at least one field");
+    }
+    return fields;
+  }
+
+  auto parse_field_spec() -> FieldSpecNode* {
+    const auto& name_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::Colon);
+    auto* type = parse_type();
+    consume(TokenKind::Newline);
+    Span span = span_from(name_tok.span);
+    return ctx_.alloc<FieldSpecNode>(span, name_tok.text, name_tok.span, type);
   }
 
   auto parse_alias_decl() -> AliasDeclNode* {

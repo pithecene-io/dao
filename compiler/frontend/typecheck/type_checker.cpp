@@ -281,15 +281,12 @@ void TypeChecker::register_declarations(const FileNode& file) {
       }
       const auto* sym = decl_it->second;
 
-      // Build struct type from member let-statements.
+      // Build struct type from field specifiers.
       std::vector<StructField> fields;
-      for (const auto* member : st->members()) {
-        if (member->kind() == NodeKind::LetStatement) {
-          const auto* let = static_cast<const LetStatementNode*>(member);
-          const auto* field_type = resolve_type_node(let->type());
-          if (field_type != nullptr) {
-            fields.push_back({let->name(), field_type});
-          }
+      for (const auto* field : st->fields()) {
+        const auto* field_type = resolve_type_node(field->type());
+        if (field_type != nullptr) {
+          fields.push_back({field->name(), field_type});
         }
       }
       const auto* struct_type =

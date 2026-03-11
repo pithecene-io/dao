@@ -87,6 +87,62 @@ Visibility tiers (not yet frozen):
 The module system distinguishes packages, modules, and workspaces as
 separate concepts with explicit boundaries.
 
+## Aggregate Types and Classes
+
+Dao uses the keyword `class` for its canonical named aggregate type.
+This is a deliberate departure from the C++/Java/Python tradition
+where `class` implies inheritance, vtables, and reference semantics.
+
+In Dao, `class` means *classification* — the taxonomic act of giving
+a name and structure to a set of fields. A class value is a plain
+product type: it lives on the stack by default, copies on assignment,
+and carries no hidden runtime metadata.
+
+```dao
+class Point:
+    x: f64
+    y: f64
+```
+
+This declares a value type with two named fields. There is no
+superclass, no implicit constructor chain, no destructor protocol,
+and no vtable pointer. `Point` values are as lightweight as a pair
+of floats.
+
+### Why not `struct`?
+
+`struct` was considered and used during early development. It was
+replaced because:
+
+1. `struct` in C/C++ carries ABI and layout connotations that Dao
+   does not share — Dao classes are semantic, not layout-first.
+2. `class` better communicates that these are first-class named
+   types, not raw memory layouts.
+3. The word "class" in its taxonomic sense — a named classification
+   of things — is precisely what Dao's aggregates are.
+
+The OOP baggage of `class` is addressed by simply not implementing
+the OOP features: no inheritance, no dynamic dispatch, no implicit
+heap allocation. The word is reclaimed for its original meaning.
+
+### Abstraction without inheritance
+
+Dao provides abstraction through composition and conformance rather
+than inheritance:
+
+- **Composition**: embed one class inside another as a field.
+- **Conformance**: classes can satisfy trait/interface contracts
+  (when the conformance mechanism is implemented), enabling
+  polymorphism without subtyping.
+- **Explicit indirection**: when dynamic dispatch is needed, trait
+  objects or explicit function pointers provide it — the class
+  itself remains a static, value-typed entity.
+
+This design follows the principle that objects should not carry
+mechanisms they don't use. A `Point` is just two floats. A complex
+abstraction is built by composing simple types, not by inheriting
+from a deep hierarchy.
+
 ## GPU and Accelerator Support
 
 GPU workloads are expressed through the existing `mode` and `resource`

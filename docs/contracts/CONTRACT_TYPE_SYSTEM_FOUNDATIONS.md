@@ -34,7 +34,7 @@ The compiler semantic type layer must support, at minimum:
 - function types
 - named types
 - generic parameter types
-- struct types
+- class types (named aggregate types)
 - enum types
 - alias-backed named references, whether aliases are preserved
   semantically or normalized later
@@ -118,7 +118,71 @@ This means the language direction assumes:
 The exact surface syntax for payload-bearing variants may evolve, but
 the semantic direction is fixed.
 
-## 8. Generics
+## 8. Class semantics
+
+A `class` in Dao is the canonical named aggregate type: a value-typed
+product of named fields.
+
+### 8.1 Value semantics
+
+Classes are value types. Assignment copies and passing to a function
+passes a copy unless an explicit pointer or reference mechanism is
+used. Comparison and construction semantics are not yet frozen by
+this contract.
+
+There is no implicit heap allocation, no reference counting, and no
+garbage-collected backing store for class values. Stack allocation is
+the default; explicit allocation domains are expressed through the
+`resource` construct.
+
+### 8.2 No inheritance
+
+Classes do not participate in inheritance hierarchies. There is no
+`extends`, no superclass, no method-resolution order, and no
+implicit vtable.
+
+Composition, delegation, and conformance to traits or interfaces
+(section 10) are the intended mechanisms for abstraction and
+polymorphism.
+
+### 8.3 No implicit constructor magic
+
+There are no synthesized default constructors, copy constructors, or
+destructor chains. Construction syntax and its exact semantics are
+not yet frozen; what is frozen is that implicit constructor magic is
+not part of the class model.
+
+### 8.4 No dynamic dispatch on class identity
+
+Method dispatch on class values is static. Classes do not carry
+type metadata or vtable pointers at runtime. Dynamic dispatch, if
+needed, is expressed through trait objects or explicit indirection,
+not through the class mechanism itself.
+
+### 8.5 Field access
+
+Fields are accessed via `.` (dot notation). There are no synthesized
+getters, setters, or property wrappers at the class level.
+
+### 8.6 Why "class"
+
+The keyword `class` was chosen deliberately despite its OOP
+connotations in other languages. In Dao, `class` means "a named
+classification of data" — the taxonomic sense, not the object-oriented
+sense. This reflects Dao's position that the word's overloaded history
+in programming does not disqualify its precise meaning.
+
+### 8.7 Non-goals
+
+The following are explicitly not part of class semantics:
+
+- inheritance or subtyping between classes
+- implicit heap allocation or reference semantics
+- synthesized special members (constructors, destructors, copy/move)
+- runtime type identity or reflection on class values
+- field visibility tiers (deferred; not ruled out, but not yet frozen)
+
+## 9. Generics
 
 Dao supports parametric generics.
 
@@ -132,7 +196,7 @@ The semantic type layer must be designed so later generic substitution
 and instantiation are possible without replacing the foundational
 representation.
 
-## 9. Conformance / trait-interface direction
+## 10. Conformance / trait-interface direction
 
 Dao will support an abstraction and conformance mechanism broadly in
 the space of traits, interfaces, or protocols.
@@ -147,15 +211,15 @@ This mechanism is intended to be:
 This contract freezes the direction, not the final syntax or solving
 model.
 
-## 10. Nominal identity
+## 11. Nominal identity
 
-Named declarations such as structs, enums, and later
+Named declarations such as classes, enums, and later
 trait/interface-like declarations are nominal.
 
 Two distinct named declarations are not equivalent merely because they
 have structurally identical fields or variants.
 
-## 11. Separation of layers
+## 12. Separation of layers
 
 The compiler must preserve a strict separation between:
 
@@ -169,7 +233,7 @@ Specifically:
 - semantic types belong in `compiler/frontend/types/`
 - type checking belongs in `compiler/frontend/typecheck/`
 
-## 12. Non-goals of this contract
+## 13. Non-goals of this contract
 
 This contract does not freeze:
 
@@ -183,7 +247,7 @@ This contract does not freeze:
 - higher-kinded types
 - dependent typing
 
-## 13. Implementation consequences
+## 14. Implementation consequences
 
 Compiler work may rely on the following architectural assumptions:
 
@@ -193,7 +257,7 @@ Compiler work may rely on the following architectural assumptions:
   tooling
 - `types/` must not depend on `typecheck/`
 
-## 14. Stability rule
+## 15. Stability rule
 
 Any change that would alter Dao from:
 

@@ -21,7 +21,7 @@ const int kDeclB = 2;
 // Builtin types
 // ---------------------------------------------------------------------------
 
-suite type_builtin = [] {
+suite<"type_builtin"> type_builtin = [] {
   "builtin types are non-null and have correct kind"_test = [] {
     TypeContext ctx;
 
@@ -52,7 +52,7 @@ suite type_builtin = [] {
 // Void type (not a builtin scalar)
 // ---------------------------------------------------------------------------
 
-suite type_void = [] {
+suite<"type_void"> type_void = [] {
   "void_type is non-null and has Void kind"_test = [] {
     TypeContext ctx;
     auto* v = ctx.void_type();
@@ -81,7 +81,7 @@ suite type_void = [] {
 // Pointer types
 // ---------------------------------------------------------------------------
 
-suite type_pointer = [] {
+suite<"type_pointer"> type_pointer = [] {
   "pointer_to canonicalizes"_test = [] {
     TypeContext ctx;
     auto* pi32a = ctx.pointer_to(ctx.i32());
@@ -110,7 +110,7 @@ suite type_pointer = [] {
 // Function types
 // ---------------------------------------------------------------------------
 
-suite type_function = [] {
+suite<"type_function"> type_function = [] {
   "function type canonicalizes"_test = [] {
     TypeContext ctx;
     auto* fn1 = ctx.function_type({ctx.i32()}, ctx.i32());
@@ -146,7 +146,7 @@ suite type_function = [] {
 // Named types
 // ---------------------------------------------------------------------------
 
-suite type_named = [] {
+suite<"type_named"> type_named = [] {
   "named type with zero args"_test = [] {
     TypeContext ctx;
     auto* t1 = ctx.named_type(&kDeclA, "Point", {});
@@ -182,7 +182,7 @@ suite type_named = [] {
 // Generic parameters
 // ---------------------------------------------------------------------------
 
-suite type_generic_param = [] {
+suite<"type_generic_param"> type_generic_param = [] {
   "generic param creation"_test = [] {
     TypeContext ctx;
     auto* t = ctx.generic_param("T", 0);
@@ -210,7 +210,7 @@ suite type_generic_param = [] {
 // Struct and enum types (nominal — not interned)
 // ---------------------------------------------------------------------------
 
-suite type_struct_enum = [] {
+suite<"type_struct_enum"> type_struct_enum = [] {
   "struct creation with fields"_test = [] {
     TypeContext ctx;
     auto* s = ctx.make_struct(&kDeclA, "Point",
@@ -249,7 +249,7 @@ suite type_struct_enum = [] {
 // Type printer
 // ---------------------------------------------------------------------------
 
-suite type_printer = [] {
+suite<"type_printer"> type_printer = [] {
   "print builtin"_test = [] {
     TypeContext ctx;
     expect(print_type(ctx.i32()) == "i32");
@@ -321,7 +321,7 @@ suite type_printer = [] {
 // Type kind name and builtin_kind_from_name
 // ---------------------------------------------------------------------------
 
-suite type_utilities = [] {
+suite<"type_utilities"> type_utilities = [] {
   "type_kind_name covers all kinds"_test = [] {
     expect(std::string_view(type_kind_name(TypeKind::Builtin)) == "Builtin");
     expect(std::string_view(type_kind_name(TypeKind::Void)) == "Void");

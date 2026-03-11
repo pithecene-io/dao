@@ -15,6 +15,8 @@ auto node_kind_name(NodeKind kind) -> const char* {
     return "ClassDecl";
   case NodeKind::AliasDecl:
     return "AliasDecl";
+  case NodeKind::FieldSpec:
+    return "FieldSpec";
   case NodeKind::LetStatement:
     return "LetStatement";
   case NodeKind::Assignment:
