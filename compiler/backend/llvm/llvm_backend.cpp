@@ -243,7 +243,9 @@ auto LlvmBackend::lower_inst(const MirInst& inst, const MirFunction& fn,
     }
     return true;
 
-  // Resource regions — no codegen support yet.
+  // Resource regions — no runtime hook or upstream enforcement exists yet.
+  // Reject explicitly per CONTRACT_EXECUTION_CONTEXTS.md and TASK_11 §16.2:
+  // resource constructs must not be forgotten casually.
   case MirInstKind::ResourceEnter:
     emit_diagnostic(inst.span,
                      "resource region lowering not yet supported");
@@ -257,14 +259,24 @@ auto LlvmBackend::lower_inst(const MirInst& inst, const MirFunction& fn,
       emit_diagnostic(inst.span, "AddrOf with null place");
       return false;
     }
-    if (!inst.place->projections.empty()) {
-      emit_diagnostic(inst.span,
-                       "AddrOf with projections not yet supported");
-      return false;
-    }
     auto it = state.locals.find(inst.place->local.id);
     if (it == state.locals.end()) {
       emit_diagnostic(inst.span, "AddrOf: unknown local");
+      return false;
+    }
+    if (!inst.place->projections.empty()) {
+      // Handle single Deref projection: &(*ptr) = ptr
+      if (inst.place->projections.size() == 1 &&
+          inst.place->projections[0].kind == MirProjectionKind::Deref) {
+        auto* ptr_type = it->second->getAllocatedType();
+        auto* ptr_val =
+            state.builder->CreateLoad(ptr_type, it->second, "deref.ptr");
+        state.values[inst.result.id] = ptr_val;
+        return true;
+      }
+      emit_diagnostic(inst.span,
+                       "AddrOf with projections (field/index) "
+                       "not yet supported");
       return false;
     }
     state.values[inst.result.id] = it->second;
@@ -525,13 +537,6 @@ auto LlvmBackend::lower_store(const MirInst& inst, const MirFunction& fn,
     return false;
   }
 
-  if (!inst.place->projections.empty()) {
-    emit_diagnostic(inst.span,
-                     "store to projected place (field/index/deref) "
-                     "not yet supported");
-    return false;
-  }
-
   auto* value = get_value(inst.store_value, state);
   if (value == nullptr) {
     emit_diagnostic(inst.span, "store value not found");
@@ -541,6 +546,22 @@ auto LlvmBackend::lower_store(const MirInst& inst, const MirFunction& fn,
   auto it = state.locals.find(inst.place->local.id);
   if (it == state.locals.end()) {
     emit_diagnostic(inst.span, "store target local not found");
+    return false;
+  }
+
+  if (!inst.place->projections.empty()) {
+    // Handle single Deref projection: *ptr = value
+    if (inst.place->projections.size() == 1 &&
+        inst.place->projections[0].kind == MirProjectionKind::Deref) {
+      auto* ptr_type = it->second->getAllocatedType();
+      auto* ptr_val =
+          state.builder->CreateLoad(ptr_type, it->second, "deref.ptr");
+      state.builder->CreateStore(value, ptr_val);
+      return true;
+    }
+    emit_diagnostic(inst.span,
+                     "store to projected place (field/index) "
+                     "not yet supported");
     return false;
   }
 
@@ -555,16 +576,33 @@ auto LlvmBackend::lower_load(const MirInst& inst, const MirFunction& fn,
     return false;
   }
 
-  if (!inst.place->projections.empty()) {
-    emit_diagnostic(inst.span,
-                     "load from projected place (field/index/deref) "
-                     "not yet supported");
-    return false;
-  }
-
   auto it = state.locals.find(inst.place->local.id);
   if (it == state.locals.end()) {
     emit_diagnostic(inst.span, "load source local not found");
+    return false;
+  }
+
+  if (!inst.place->projections.empty()) {
+    // Handle single Deref projection: *ptr (load through pointer)
+    if (inst.place->projections.size() == 1 &&
+        inst.place->projections[0].kind == MirProjectionKind::Deref) {
+      auto* ptr_type = it->second->getAllocatedType();
+      auto* ptr_val =
+          state.builder->CreateLoad(ptr_type, it->second, "deref.ptr");
+      auto* load_type = types_.lower(inst.type);
+      if (load_type == nullptr) {
+        emit_diagnostic(inst.span,
+                        "cannot lower deref load type: " + types_.error());
+        return false;
+      }
+      auto* val = state.builder->CreateLoad(load_type, ptr_val, "deref");
+      state.values[inst.result.id] = val;
+      state.value_types[inst.result.id] = inst.type;
+      return true;
+    }
+    emit_diagnostic(inst.span,
+                     "load from projected place (field/index) "
+                     "not yet supported");
     return false;
   }
 

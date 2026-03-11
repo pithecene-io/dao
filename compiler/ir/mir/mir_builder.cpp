@@ -524,14 +524,14 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
     }
 
     if (un.op() == UnaryOp::Deref) {
-      auto val = lower_expr_value(*un.operand());
+      // Deref in value context → Load from a place with Deref projection.
+      auto place = lower_expr_place(expr);
       auto* inst = ctx_.alloc<MirInst>();
-      inst->kind = MirInstKind::Unary;
+      inst->kind = MirInstKind::Load;
       inst->result = fresh_value();
       inst->type = expr.type();
       inst->span = expr.span();
-      inst->unary_op = un.op();
-      inst->operand = val;
+      inst->place = ctx_.alloc<MirPlace>(place);
       emit(inst);
       return inst->result;
     }
