@@ -323,28 +323,21 @@ auto LlvmBackend::lower_inst(const MirInst& inst, const MirFunction& fn,
       return false;
     }
     if (!inst.place->projections.empty()) {
-      // Handle single Deref projection: &(*ptr) = ptr
-      if (inst.place->projections.size() == 1 &&
-          inst.place->projections[0].kind == MirProjectionKind::Deref) {
-        auto* ptr_type = it->second->getAllocatedType();
-        auto* ptr_val =
-            state.builder->CreateLoad(ptr_type, it->second, "deref.ptr");
-        state.values[inst.result.id] = ptr_val;
-        return true;
+      auto* ptr = resolve_place(*inst.place, fn, state);
+      if (ptr == nullptr) {
+        emit_diagnostic(inst.span, "cannot resolve AddrOf projected place");
+        return false;
       }
-      emit_diagnostic(inst.span,
-                       "AddrOf with projections (field/index) "
-                       "not yet supported");
-      return false;
+      state.values[inst.result.id] = ptr;
+      return true;
     }
     state.values[inst.result.id] = it->second;
     return true;
   }
 
-  // Unsupported constructs — fail explicitly per contract.
+  // Field access — extractvalue on a struct SSA value.
   case MirInstKind::FieldAccess:
-    emit_diagnostic(inst.span, "field access lowering not yet implemented");
-    return false;
+    return lower_field_access(inst, state);
   case MirInstKind::IndexAccess:
     emit_diagnostic(inst.span, "index access lowering not yet implemented");
     return false;
@@ -585,6 +578,65 @@ auto LlvmBackend::lower_binary(const MirInst& inst, FunctionState& state) -> boo
 }
 
 // ---------------------------------------------------------------------------
+// Place resolution — walk a MirPlace projection chain to an LLVM pointer.
+// ---------------------------------------------------------------------------
+
+auto LlvmBackend::resolve_place(const MirPlace& place,
+                                 const MirFunction& fn,
+                                 FunctionState& state) -> llvm::Value* {
+  auto it = state.locals.find(place.local.id);
+  if (it == state.locals.end()) {
+    return nullptr;
+  }
+
+  llvm::Value* ptr = it->second;
+
+  for (const auto& proj : place.projections) {
+    switch (proj.kind) {
+    case MirProjectionKind::Deref: {
+      auto* ptr_type = ptr->getType();
+      // ptr is an alloca holding a pointer value — load the pointer.
+      auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr);
+      if (alloca != nullptr) {
+        ptr = state.builder->CreateLoad(alloca->getAllocatedType(), ptr,
+                                        "deref.ptr");
+      } else {
+        // Already a raw pointer from a previous GEP.
+        // We need the semantic type to know what to load — bail for now.
+        return nullptr;
+      }
+      break;
+    }
+    case MirProjectionKind::Field: {
+      // ptr points to a struct — GEP into the field.
+      // Determine the struct's LLVM type from the alloca or previous GEP.
+      llvm::Type* struct_type = nullptr;
+      if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr)) {
+        struct_type = alloca->getAllocatedType();
+      } else if (auto* gep = llvm::dyn_cast<llvm::GetElementPtrInst>(ptr)) {
+        struct_type = gep->getResultElementType();
+      }
+      if (struct_type == nullptr || !struct_type->isStructTy()) {
+        return nullptr;
+      }
+      auto* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx_), 0);
+      auto* idx = llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx_),
+                                          proj.field_index);
+      ptr = state.builder->CreateInBoundsGEP(
+          struct_type, ptr, {zero, idx},
+          "field." + std::string(proj.field_name));
+      break;
+    }
+    case MirProjectionKind::Index:
+      // Not yet supported.
+      return nullptr;
+    }
+  }
+
+  return ptr;
+}
+
+// ---------------------------------------------------------------------------
 // Memory operations
 // ---------------------------------------------------------------------------
 
@@ -608,19 +660,13 @@ auto LlvmBackend::lower_store(const MirInst& inst, const MirFunction& fn,
   }
 
   if (!inst.place->projections.empty()) {
-    // Handle single Deref projection: *ptr = value
-    if (inst.place->projections.size() == 1 &&
-        inst.place->projections[0].kind == MirProjectionKind::Deref) {
-      auto* ptr_type = it->second->getAllocatedType();
-      auto* ptr_val =
-          state.builder->CreateLoad(ptr_type, it->second, "deref.ptr");
-      state.builder->CreateStore(value, ptr_val);
-      return true;
+    auto* ptr = resolve_place(*inst.place, fn, state);
+    if (ptr == nullptr) {
+      emit_diagnostic(inst.span, "cannot resolve projected store target");
+      return false;
     }
-    emit_diagnostic(inst.span,
-                     "store to projected place (field/index) "
-                     "not yet supported");
-    return false;
+    state.builder->CreateStore(value, ptr);
+    return true;
   }
 
   state.builder->CreateStore(value, it->second);
@@ -641,27 +687,21 @@ auto LlvmBackend::lower_load(const MirInst& inst, const MirFunction& fn,
   }
 
   if (!inst.place->projections.empty()) {
-    // Handle single Deref projection: *ptr (load through pointer)
-    if (inst.place->projections.size() == 1 &&
-        inst.place->projections[0].kind == MirProjectionKind::Deref) {
-      auto* ptr_type = it->second->getAllocatedType();
-      auto* ptr_val =
-          state.builder->CreateLoad(ptr_type, it->second, "deref.ptr");
-      auto* load_type = types_.lower(inst.type);
-      if (load_type == nullptr) {
-        emit_diagnostic(inst.span,
-                        "cannot lower deref load type: " + types_.error());
-        return false;
-      }
-      auto* val = state.builder->CreateLoad(load_type, ptr_val, "deref");
-      state.values[inst.result.id] = val;
-      state.value_types[inst.result.id] = inst.type;
-      return true;
+    auto* ptr = resolve_place(*inst.place, fn, state);
+    if (ptr == nullptr) {
+      emit_diagnostic(inst.span, "cannot resolve projected load source");
+      return false;
     }
-    emit_diagnostic(inst.span,
-                     "load from projected place (field/index) "
-                     "not yet supported");
-    return false;
+    auto* load_type = types_.lower(inst.type);
+    if (load_type == nullptr) {
+      emit_diagnostic(inst.span,
+                      "cannot lower projected load type: " + types_.error());
+      return false;
+    }
+    auto* val = state.builder->CreateLoad(load_type, ptr, "proj.load");
+    state.values[inst.result.id] = val;
+    state.value_types[inst.result.id] = inst.type;
+    return true;
   }
 
   auto* local_type = types_.lower(inst.type);
@@ -671,6 +711,31 @@ auto LlvmBackend::lower_load(const MirInst& inst, const MirFunction& fn,
   }
 
   auto* val = state.builder->CreateLoad(local_type, it->second, "load");
+  state.values[inst.result.id] = val;
+  state.value_types[inst.result.id] = inst.type;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Field access — extractvalue on struct SSA values
+// ---------------------------------------------------------------------------
+
+auto LlvmBackend::lower_field_access(const MirInst& inst,
+                                      FunctionState& state) -> bool {
+  auto* obj = get_value(inst.access_object, state);
+  if (obj == nullptr) {
+    emit_diagnostic(inst.span, "field access: object value not found");
+    return false;
+  }
+
+  if (!obj->getType()->isStructTy()) {
+    emit_diagnostic(inst.span, "field access: object is not a struct type");
+    return false;
+  }
+
+  auto* val = state.builder->CreateExtractValue(
+      obj, inst.access_field_index,
+      "field." + std::string(inst.access_field));
   state.values[inst.result.id] = val;
   state.value_types[inst.result.id] = inst.type;
   return true;

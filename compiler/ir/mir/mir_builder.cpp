@@ -14,6 +14,23 @@ MirBuilder::MirBuilder(MirContext& ctx, TypeContext& types)
     : ctx_(ctx), types_(types) {}
 
 // ---------------------------------------------------------------------------
+// Field index resolution
+// ---------------------------------------------------------------------------
+
+auto MirBuilder::resolve_field_index(const Type* obj_type,
+                                     std::string_view field_name) -> uint32_t {
+  if (obj_type != nullptr && obj_type->kind() == TypeKind::Struct) {
+    const auto* st = static_cast<const TypeStruct*>(obj_type);
+    for (uint32_t idx = 0; idx < st->fields().size(); ++idx) {
+      if (st->fields()[idx].name == field_name) {
+        return idx;
+      }
+    }
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Top-level
 // ---------------------------------------------------------------------------
 
@@ -620,6 +637,7 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
     inst->span = expr.span();
     inst->access_object = obj;
     inst->access_field = field.field_name();
+    inst->access_field_index = resolve_field_index(field.object()->type(), field.field_name());
     emit(inst);
     return inst->result;
   }
@@ -746,7 +764,7 @@ auto MirBuilder::lower_expr_place(const HirExpr& expr) -> MirPlace {
     base.projections.push_back(
         {.kind = MirProjectionKind::Field,
          .field_name = field.field_name(),
-         .field_index = 0,
+         .field_index = resolve_field_index(field.object()->type(), field.field_name()),
          .index_value = {}});
     return base;
   }

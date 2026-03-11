@@ -97,6 +97,7 @@ struct MirInst {
   // --- Field/Index access (value-producing) ---
   MirValueId access_object;
   std::string_view access_field;
+  uint32_t access_field_index = 0;
   MirValueId access_index;
 
   // --- Function reference ---

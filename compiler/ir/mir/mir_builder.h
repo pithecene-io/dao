@@ -84,6 +84,9 @@ private:
 
   void emit_region_exits(Span span);
 
+  auto resolve_field_index(const Type* obj_type, std::string_view field_name)
+      -> uint32_t;
+
   void error(Span span, std::string message);
 };
 

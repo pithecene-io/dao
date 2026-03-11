@@ -96,11 +96,16 @@ private:
                     FunctionState& state) -> bool;
   auto lower_load(const MirInst& inst, const MirFunction& fn,
                    FunctionState& state) -> bool;
+  auto lower_field_access(const MirInst& inst, FunctionState& state) -> bool;
   auto lower_fn_ref(const MirInst& inst, FunctionState& state) -> bool;
   auto lower_call(const MirInst& inst, FunctionState& state) -> bool;
   auto lower_return(const MirInst& inst, FunctionState& state) -> bool;
   auto lower_br(const MirInst& inst, FunctionState& state) -> bool;
   auto lower_cond_br(const MirInst& inst, FunctionState& state) -> bool;
+
+  // Place resolution — walk projection chains to an LLVM pointer.
+  auto resolve_place(const MirPlace& place, const MirFunction& fn,
+                      FunctionState& state) -> llvm::Value*;
 
   // Value lookup
   auto get_value(MirValueId id, FunctionState& state) -> llvm::Value*;
