@@ -846,6 +846,17 @@ auto LlvmBackend::lower_construct(const MirConstruct& p, const MirInst& inst,
     return false;
   }
 
+  // Validate field count matches struct layout.
+  size_t value_count =
+      p.field_values != nullptr ? p.field_values->size() : 0;
+  if (value_count != p.struct_type->fields().size()) {
+    emit_diagnostic(inst.span,
+                    "construct field count mismatch: expected " +
+                        std::to_string(p.struct_type->fields().size()) +
+                        ", got " + std::to_string(value_count));
+    return false;
+  }
+
   llvm::Value* agg = llvm::UndefValue::get(llvm_type);
   if (p.field_values != nullptr) {
     for (unsigned i = 0; i < p.field_values->size(); ++i) {

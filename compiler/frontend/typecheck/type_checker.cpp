@@ -811,10 +811,17 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
     return nullptr;
   }
 
-  // Constructor call: callee resolves to a struct type.
-  if (callee_type->kind() == TypeKind::Struct) {
-    return check_construct(expr,
-                           static_cast<const TypeStruct*>(callee_type));
+  // Constructor call: callee must be an identifier that resolves to a
+  // Type symbol (e.g. `Point`), not merely any expression whose type
+  // happens to be a struct (e.g. `p` where `p: Point`).
+  if (callee_type->kind() == TypeKind::Struct &&
+      call.callee->is<IdentifierExpr>()) {
+    auto sym_it = resolve_.uses.find(call.callee->span.offset);
+    if (sym_it != resolve_.uses.end() &&
+        sym_it->second->kind == SymbolKind::Type) {
+      return check_construct(expr,
+                             static_cast<const TypeStruct*>(callee_type));
+    }
   }
 
   if (callee_type->kind() != TypeKind::Function) {

@@ -282,17 +282,22 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
   case NodeKind::CallExpr: {
     const auto& call = expr->as<CallExpr>();
 
-    // Constructor call: callee type is a struct.
+    // Constructor call: callee must be a Type symbol whose type is a
+    // struct, not any expression that happens to have struct type.
     const auto* callee_type = expr_type(call.callee);
-    if (callee_type != nullptr && callee_type->kind() == TypeKind::Struct) {
-      const auto* struct_type =
-          static_cast<const TypeStruct*>(callee_type);
-      std::vector<HirExpr*> args;
-      for (const auto* arg : call.args) {
-        args.push_back(lower_expr(arg));
+    if (callee_type != nullptr && callee_type->kind() == TypeKind::Struct &&
+        call.callee->is<IdentifierExpr>()) {
+      const auto* sym = find_symbol_at_use(call.callee->span.offset);
+      if (sym != nullptr && sym->kind == SymbolKind::Type) {
+        const auto* struct_type =
+            static_cast<const TypeStruct*>(callee_type);
+        std::vector<HirExpr*> args;
+        for (const auto* arg : call.args) {
+          args.push_back(lower_expr(arg));
+        }
+        return ctx_.alloc<HirExpr>(
+            span, type, HirConstruct{struct_type, std::move(args)});
       }
-      return ctx_.alloc<HirExpr>(span, type,
-                                  HirConstruct{struct_type, std::move(args)});
     }
 
     // Normal function call.

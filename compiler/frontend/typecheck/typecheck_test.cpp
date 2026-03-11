@@ -451,6 +451,17 @@ suite<"typecheck_construct"> typecheck_construct = [] {
         "fn get_x(): i32 -> Point(1, 2).x\n");
     expect(is_ok(result)) << "field access on construction should typecheck";
   };
+
+  "value of struct type is not a constructor"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "\n"
+        "fn bad(p: Point): Point -> p(1, 2)\n");
+    expect(has_error_containing(result, "cannot call non-function"))
+        << "calling a struct value should not be treated as construction";
+  };
 };
 
 // NOLINTEND(readability-magic-numbers)
