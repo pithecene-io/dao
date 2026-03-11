@@ -12,8 +12,8 @@ auto token_kind_name(TokenKind kind) -> const char* {
     return "KwExtern";
   case TokenKind::KwFn:
     return "KwFn";
-  case TokenKind::KwStruct:
-    return "KwStruct";
+  case TokenKind::KwClass:
+    return "KwClass";
   case TokenKind::KwType:
     return "KwType";
   case TokenKind::KwLet:
@@ -496,8 +496,8 @@ private:
     if (word == "fn") {
       return TokenKind::KwFn;
     }
-    if (word == "struct") {
-      return TokenKind::KwStruct;
+    if (word == "class") {
+      return TokenKind::KwClass;
     }
     if (word == "type") {
       return TokenKind::KwType;

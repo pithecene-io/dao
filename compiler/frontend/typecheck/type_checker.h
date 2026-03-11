@@ -79,7 +79,7 @@ private:
   void register_declarations(const FileNode& file);
   void check_declaration(const Decl* decl);
   void check_function(const FunctionDeclNode* fn);
-  void check_struct(const StructDeclNode* st);
+  void check_class(const ClassDeclNode* st);
 
   // --- Statement checking ---
 

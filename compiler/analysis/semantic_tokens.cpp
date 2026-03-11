@@ -51,7 +51,7 @@ auto lexical_category(TokenKind kind) -> std::string_view {
     return "keyword.extern";
   case TokenKind::KwFn:
     return "keyword.fn";
-  case TokenKind::KwStruct:
+  case TokenKind::KwClass:
     return "keyword.type";
   case TokenKind::KwType:
     return "keyword.type";
@@ -226,8 +226,8 @@ private:
     case NodeKind::FunctionDecl:
       visit_function(static_cast<const FunctionDeclNode&>(decl));
       break;
-    case NodeKind::StructDecl:
-      visit_struct(static_cast<const StructDeclNode&>(decl));
+    case NodeKind::ClassDecl:
+      visit_class(static_cast<const ClassDeclNode&>(decl));
       break;
     case NodeKind::AliasDecl:
       visit_alias(static_cast<const AliasDeclNode&>(decl));
@@ -262,7 +262,7 @@ private:
     }
   }
 
-  void visit_struct(const StructDeclNode& st) {
+  void visit_class(const ClassDeclNode& st) {
     classify(st.name_span(), "decl.type");
 
     for (const auto* member : st.members()) {

@@ -15,7 +15,7 @@ enum class HirKind : std::uint8_t {
 
   // Declarations
   Function,
-  StructDecl,
+  ClassDecl,
 
   // Statements
   Let,

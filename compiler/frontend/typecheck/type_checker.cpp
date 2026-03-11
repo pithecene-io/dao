@@ -272,8 +272,8 @@ void TypeChecker::register_declarations(const FileNode& file) {
       break;
     }
 
-    case NodeKind::StructDecl: {
-      const auto* st = static_cast<const StructDeclNode*>(decl);
+    case NodeKind::ClassDecl: {
+      const auto* st = static_cast<const ClassDeclNode*>(decl);
       // Find symbol via declaration map.
       auto decl_it = decl_symbols_.find(st->name_span().offset);
       if (decl_it == decl_symbols_.end()) {
@@ -314,8 +314,8 @@ void TypeChecker::check_declaration(const Decl* decl) {
   case NodeKind::FunctionDecl:
     check_function(static_cast<const FunctionDeclNode*>(decl));
     break;
-  case NodeKind::StructDecl:
-    check_struct(static_cast<const StructDeclNode*>(decl));
+  case NodeKind::ClassDecl:
+    check_class(static_cast<const ClassDeclNode*>(decl));
     break;
   default:
     // AliasDecl — no body checking needed yet.
@@ -361,8 +361,8 @@ void TypeChecker::check_function(const FunctionDeclNode* fn) {
   ctx_ = saved_ctx;
 }
 
-void TypeChecker::check_struct(const StructDeclNode* st) {
-  // Struct members are validated during pass 1 (field types resolved).
+void TypeChecker::check_class(const ClassDeclNode* st) {
+  // Class members are validated during pass 1 (field types resolved).
   // Nothing further to check in bodies for now.
   (void)st;
 }
@@ -877,7 +877,7 @@ auto TypeChecker::check_field(const FieldExprNode* field) -> const Type* {
 
   if (obj_type->kind() != TypeKind::Struct) {
     error(field->object()->span(),
-          "field access on non-struct type '" + print_type(obj_type) + "'");
+          "field access on non-class type '" + print_type(obj_type) + "'");
     return nullptr;
   }
 

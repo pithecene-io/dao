@@ -67,8 +67,8 @@ private:
     case NodeKind::FunctionDecl:
       print_function_decl(static_cast<const FunctionDeclNode&>(decl));
       break;
-    case NodeKind::StructDecl:
-      print_struct_decl(static_cast<const StructDeclNode&>(decl));
+    case NodeKind::ClassDecl:
+      print_class_decl(static_cast<const ClassDeclNode&>(decl));
       break;
     case NodeKind::AliasDecl:
       print_alias_decl(static_cast<const AliasDeclNode&>(decl));
@@ -117,9 +117,9 @@ private:
     }
   }
 
-  void print_struct_decl(const StructDeclNode& node) {
+  void print_class_decl(const ClassDeclNode& node) {
     indent();
-    out_ << "StructDecl " << node.name() << "\n";
+    out_ << "ClassDecl " << node.name() << "\n";
     Scope scope(depth_);
     for (const auto* member : node.members()) {
       print_stmt(*member);

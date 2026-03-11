@@ -11,8 +11,8 @@ auto node_kind_name(NodeKind kind) -> const char* {
     return "Import";
   case NodeKind::FunctionDecl:
     return "FunctionDecl";
-  case NodeKind::StructDecl:
-    return "StructDecl";
+  case NodeKind::ClassDecl:
+    return "ClassDecl";
   case NodeKind::AliasDecl:
     return "AliasDecl";
   case NodeKind::LetStatement:

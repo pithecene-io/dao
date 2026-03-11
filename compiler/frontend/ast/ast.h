@@ -45,7 +45,7 @@ enum class NodeKind : std::uint8_t {
 
   // Declarations
   FunctionDecl,
-  StructDecl,
+  ClassDecl,
   AliasDecl,
 
   // Statements
@@ -277,10 +277,10 @@ private:
   bool is_extern_ = false;
 };
 
-class StructDeclNode : public Decl {
+class ClassDeclNode : public Decl {
 public:
-  StructDeclNode(Span span, std::string_view name, Span name_span, std::vector<Stmt*> members)
-      : Decl(NodeKind::StructDecl, span), name_(name), name_span_(name_span),
+  ClassDeclNode(Span span, std::string_view name, Span name_span, std::vector<Stmt*> members)
+      : Decl(NodeKind::ClassDecl, span), name_(name), name_span_(name_span),
         members_(std::move(members)) {
   }
 

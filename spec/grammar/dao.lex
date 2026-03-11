@@ -4,7 +4,7 @@ Reserved keywords:
 - import
 - extern
 - fn
-- struct
+- class
 - type
 - let
 - if

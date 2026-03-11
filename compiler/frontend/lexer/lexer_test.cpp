@@ -45,7 +45,7 @@ auto count_kind(const std::vector<Token>& tokens, TokenKind kind) -> int {
 
 suite keyword_tests = [] {
   "all keywords recognized"_test = [] {
-    auto output = lex_string("import fn struct type let if else while for in return mode resource "
+    auto output = lex_string("import fn class type let if else while for in return mode resource "
                              "true false and or\n");
     auto kinds = std::vector<TokenKind>{};
     for (const auto& tok : output.result.tokens) {
@@ -56,7 +56,7 @@ suite keyword_tests = [] {
     expect(kinds.size() == 17_u);
     expect(kinds[0] == TokenKind::KwImport);
     expect(kinds[1] == TokenKind::KwFn);
-    expect(kinds[2] == TokenKind::KwStruct);
+    expect(kinds[2] == TokenKind::KwClass);
     expect(kinds[3] == TokenKind::KwType);
     expect(kinds[4] == TokenKind::KwLet);
     expect(kinds[5] == TokenKind::KwIf);

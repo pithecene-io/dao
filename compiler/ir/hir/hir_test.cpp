@@ -339,13 +339,13 @@ suite hir_semantic = [] {
 // Struct declaration
 // ---------------------------------------------------------------------------
 
-suite hir_struct = [] {
-  "struct declaration lowered"_test = [] {
+suite hir_class = [] {
+  "class declaration lowered"_test = [] {
     HirTestPipeline p(
-        "struct Point:\n"
+        "class Point:\n"
         "    let x: i32\n"
         "    let y: i32\n");
-    expect(contains(p.dump(), "StructDecl Point"));
+    expect(contains(p.dump(), "ClassDecl Point"));
   };
 };
 
