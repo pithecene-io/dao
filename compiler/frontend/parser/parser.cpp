@@ -149,6 +149,17 @@ private:
     case TokenKind::KwType:
       return parse_alias_decl();
     default:
+      // Migration diagnostic: 'struct' was renamed to 'class'.
+      if (peek_kind() == TokenKind::Identifier && peek().text == "struct") {
+        error("'struct' has been renamed to 'class'");
+        // Recover by parsing as a class declaration.
+        advance(); // consume 'struct' identifier
+        const auto& name_tok = consume(TokenKind::Identifier);
+        consume(TokenKind::Colon);
+        auto members = parse_suite();
+        Span span = span_from(peek().span);
+        return ctx_.alloc<ClassDeclNode>(span, name_tok.text, name_tok.span, std::move(members));
+      }
       error("expected declaration (fn, extern, class, or type)");
       advance(); // skip problematic token
       return nullptr;

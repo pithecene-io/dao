@@ -877,7 +877,7 @@ auto TypeChecker::check_field(const FieldExprNode* field) -> const Type* {
 
   if (obj_type->kind() != TypeKind::Struct) {
     error(field->object()->span(),
-          "field access on non-struct type '" + print_type(obj_type) + "'");
+          "field access on non-class type '" + print_type(obj_type) + "'");
     return nullptr;
   }
 
