@@ -36,18 +36,17 @@ Rules:
 - `->` denotes a single yielded expression
 - expression-bodied forms do not open suites
 
-### Bodyless declaration form
+### Extern declaration form
 
 ```dao
-fn print(msg: string): void
+extern fn print(msg: string): void
 ```
 
 Rules:
-- a function signature followed by a newline with no indented body and
-  no `->` is a bodyless declaration (extern)
-- bodyless declarations produce `declare` (not `define`) in codegen
-- they are used to bind externally-provided symbols (e.g. runtime builtins)
-- a return type annotation is required on bodyless declarations
+- `extern fn` declares an externally-provided function with no body
+- extern declarations produce `declare` (not `define`) in codegen
+- a return type annotation is required on extern declarations
+- a non-extern `fn` without a body is a parse error
 
 ## Lambdas
 

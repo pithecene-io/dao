@@ -14,6 +14,7 @@ inline auto token_category(TokenKind kind) -> std::string_view {
   switch (kind) {
   // Keywords
   case TokenKind::KwImport:
+  case TokenKind::KwExtern:
   case TokenKind::KwFn:
   case TokenKind::KwStruct:
   case TokenKind::KwType:

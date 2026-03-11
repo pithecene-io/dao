@@ -145,6 +145,7 @@ struct MirFunction {
   std::vector<MirLocal> locals; // params first, then let-bindings
   std::vector<MirBlock*> blocks; // blocks[0] is entry
   Span span;
+  bool is_extern = false;
 };
 
 // ---------------------------------------------------------------------------

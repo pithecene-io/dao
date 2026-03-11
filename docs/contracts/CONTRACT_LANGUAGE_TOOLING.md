@@ -42,6 +42,7 @@ classify at least the following categories:
 ### Keywords and control
 - `keyword.import`
 - `keyword.type`
+- `keyword.extern`
 - `keyword.fn`
 - `keyword.let`
 - `keyword.return`

@@ -172,8 +172,8 @@ auto LlvmBackend::lower_function(const MirFunction& fn) -> bool {
     return false;
   }
 
-  // If no blocks, this is a declaration (extern). Leave it as-is.
-  if (fn.blocks.empty()) {
+  // Extern declaration — no body to lower, leave as LLVM declare.
+  if (fn.is_extern) {
     return true;
   }
 

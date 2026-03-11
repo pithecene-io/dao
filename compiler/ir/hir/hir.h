@@ -88,10 +88,11 @@ struct HirParam {
 class HirFunction : public HirDecl {
 public:
   HirFunction(Span span, const Symbol* symbol, std::vector<HirParam> params,
-              const Type* return_type, std::vector<HirStmt*> body)
+              const Type* return_type, std::vector<HirStmt*> body,
+              bool is_extern = false)
       : HirDecl(HirKind::Function, span), symbol_(symbol),
         params_(std::move(params)), return_type_(return_type),
-        body_(std::move(body)) {}
+        body_(std::move(body)), is_extern_(is_extern) {}
 
   [[nodiscard]] auto symbol() const -> const Symbol* { return symbol_; }
   [[nodiscard]] auto params() const -> const std::vector<HirParam>& {
@@ -103,12 +104,14 @@ public:
   [[nodiscard]] auto body() const -> const std::vector<HirStmt*>& {
     return body_;
   }
+  [[nodiscard]] auto is_extern() const -> bool { return is_extern_; }
 
 private:
   const Symbol* symbol_;
   std::vector<HirParam> params_;
   const Type* return_type_;
   std::vector<HirStmt*> body_;
+  bool is_extern_ = false;
 };
 
 class HirStructDecl : public HirDecl {

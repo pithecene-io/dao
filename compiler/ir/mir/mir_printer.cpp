@@ -25,7 +25,7 @@ private:
   std::ostream& out_;
 
   void print_function(const MirFunction& fn) {
-    out_ << "fn ";
+    out_ << (fn.is_extern ? "extern fn " : "fn ");
     if (fn.symbol != nullptr) {
       out_ << fn.symbol->name;
     } else {

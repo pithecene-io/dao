@@ -14,6 +14,7 @@ namespace dao {
 enum class TokenKind : std::uint8_t {
   // Keywords — control
   KwImport,
+  KwExtern,
   KwFn,
   KwStruct,
   KwType,

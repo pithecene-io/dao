@@ -294,9 +294,9 @@ suite calls = [] {
 // ---------------------------------------------------------------------------
 
 suite externs = [] {
-  "bodyless declaration produces declare"_test = [] {
+  "extern declaration produces declare"_test = [] {
     LlvmTestPipeline pipe(
-        "fn print(msg: string): void\n"
+        "extern fn print(msg: string): void\n"
         "\n"
         "fn main(): i32\n"
         "  return 0\n");

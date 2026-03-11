@@ -235,10 +235,11 @@ public:
                    std::vector<Param> params,
                    TypeNode* return_type,
                    std::vector<Stmt*> body,
-                   Expr* expr_body)
+                   Expr* expr_body,
+                   bool is_extern = false)
       : Decl(NodeKind::FunctionDecl, span), name_(name), name_span_(name_span),
         params_(std::move(params)), return_type_(return_type), body_(std::move(body)),
-        expr_body_(expr_body) {
+        expr_body_(expr_body), is_extern_(is_extern) {
   }
 
   [[nodiscard]] auto name() const -> std::string_view {
@@ -262,14 +263,18 @@ public:
   [[nodiscard]] auto is_expr_bodied() const -> bool {
     return expr_body_ != nullptr;
   }
+  [[nodiscard]] auto is_extern() const -> bool {
+    return is_extern_;
+  }
 
 private:
   std::string_view name_;
   Span name_span_;
   std::vector<Param> params_;
   TypeNode* return_type_;   // nullable
-  std::vector<Stmt*> body_; // empty if expression-bodied
-  Expr* expr_body_;         // nullptr if block-bodied
+  std::vector<Stmt*> body_; // empty if expression-bodied or extern
+  Expr* expr_body_;         // nullptr if block-bodied or extern
+  bool is_extern_ = false;
 };
 
 class StructDeclNode : public Decl {

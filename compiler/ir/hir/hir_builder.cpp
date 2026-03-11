@@ -90,9 +90,11 @@ auto HirBuilder::lower_function(const FunctionDeclNode* fn) -> HirFunction* {
     ret_type = static_cast<const TypeFunction*>(fn_type_raw)->return_type();
   }
 
-  // Body: normalize expression-bodied to block with return.
+  // Body: extern functions have no body to lower.
   std::vector<HirStmt*> hir_body;
-  if (fn->is_expr_bodied()) {
+  if (fn->is_extern()) {
+    // No body for extern declarations.
+  } else if (fn->is_expr_bodied()) {
     auto* expr = lower_expr(fn->expr_body());
     if (expr != nullptr) {
       auto* ret = ctx_.alloc<HirReturn>(fn->expr_body()->span(), expr);
@@ -103,7 +105,8 @@ auto HirBuilder::lower_function(const FunctionDeclNode* fn) -> HirFunction* {
   }
 
   return ctx_.alloc<HirFunction>(fn->span(), sym, std::move(hir_params),
-                                 ret_type, std::move(hir_body));
+                                 ret_type, std::move(hir_body),
+                                 fn->is_extern());
 }
 
 auto HirBuilder::lower_struct(const StructDeclNode* st) -> HirStructDecl* {

@@ -82,7 +82,11 @@ private:
 
   void print_function_decl(const FunctionDeclNode& fn) {
     indent();
-    out_ << "FunctionDecl " << fn.name() << "\n";
+    if (fn.is_extern()) {
+      out_ << "ExternFunctionDecl " << fn.name() << "\n";
+    } else {
+      out_ << "FunctionDecl " << fn.name() << "\n";
+    }
     Scope scope(depth_);
 
     for (const auto& param : fn.params()) {

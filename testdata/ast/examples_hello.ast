@@ -1,5 +1,5 @@
 File
-  FunctionDecl print
+  ExternFunctionDecl print
     Param msg: string
     ReturnType: void
   FunctionDecl main
