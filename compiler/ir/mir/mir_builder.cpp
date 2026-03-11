@@ -31,6 +31,40 @@ auto MirBuilder::resolve_field_index(const Type* obj_type,
 }
 
 // ---------------------------------------------------------------------------
+// Emit helpers
+// ---------------------------------------------------------------------------
+
+auto MirBuilder::emit_value(const HirExpr& expr, MirPayload payload)
+    -> MirValueId {
+  return emit_value(expr.type(), expr.span(), std::move(payload));
+}
+
+auto MirBuilder::emit_value(const Type* type, Span span, MirPayload payload)
+    -> MirValueId {
+  auto* inst = ctx_.alloc<MirInst>();
+  inst->result = fresh_value();
+  inst->type = type;
+  inst->span = span;
+  inst->payload = payload;
+  emit(inst);
+  return inst->result;
+}
+
+void MirBuilder::emit_effect(Span span, MirPayload payload) {
+  auto* inst = ctx_.alloc<MirInst>();
+  inst->span = span;
+  inst->payload = payload;
+  emit(inst);
+}
+
+void MirBuilder::emit_terminator(Span span, MirPayload payload) {
+  auto* inst = ctx_.alloc<MirInst>();
+  inst->span = span;
+  inst->payload = payload;
+  emit(inst);
+}
+
+// ---------------------------------------------------------------------------
 // Top-level
 // ---------------------------------------------------------------------------
 
@@ -93,11 +127,7 @@ auto MirBuilder::lower_function(const HirFunction& fn) -> MirFunction* {
 
   // Ensure the last block has a terminator.
   if (!block_terminated()) {
-    auto* ret = ctx_.alloc<MirInst>();
-    ret->kind = MirInstKind::Return;
-    ret->has_return_value = false;
-    ret->span = fn.span();
-    emit(ret);
+    emit_terminator(fn.span(), MirReturn{{}, false});
   }
 
   return mir_fn;
@@ -152,27 +182,16 @@ void MirBuilder::lower_let(const HirLet& let_stmt) {
 
   if (let_stmt.initializer() != nullptr) {
     auto val = lower_expr_value(*let_stmt.initializer());
-
-    auto* store = ctx_.alloc<MirInst>();
-    store->kind = MirInstKind::Store;
-    store->span = let_stmt.span();
-    store->place = ctx_.alloc<MirPlace>();
-    store->place->local = local_id;
-    store->store_value = val;
-    emit(store);
+    auto* place = ctx_.alloc<MirPlace>();
+    place->local = local_id;
+    emit_effect(let_stmt.span(), MirStore{place, val});
   }
 }
 
 void MirBuilder::lower_assign(const HirAssign& assign) {
   auto place = lower_expr_place(*assign.target());
   auto val = lower_expr_value(*assign.value());
-
-  auto* store = ctx_.alloc<MirInst>();
-  store->kind = MirInstKind::Store;
-  store->span = assign.span();
-  store->place = ctx_.alloc<MirPlace>(place);
-  store->store_value = val;
-  emit(store);
+  emit_effect(assign.span(), MirStore{ctx_.alloc<MirPlace>(place), val});
 }
 
 void MirBuilder::lower_if(const HirIf& hir_if) {
@@ -193,13 +212,8 @@ void MirBuilder::lower_if(const HirIf& hir_if) {
     else_bb = merge_bb;
   }
 
-  auto* cond_br = ctx_.alloc<MirInst>();
-  cond_br->kind = MirInstKind::CondBr;
-  cond_br->span = hir_if.span();
-  cond_br->cond = cond_val;
-  cond_br->then_block = then_bb->id;
-  cond_br->else_block = else_bb->id;
-  emit(cond_br);
+  emit_terminator(hir_if.span(),
+                  MirCondBr{cond_val, then_bb->id, else_bb->id});
 
   // Then block.
   switch_to_block(then_bb);
@@ -211,11 +225,7 @@ void MirBuilder::lower_if(const HirIf& hir_if) {
     if (merge_bb == nullptr) {
       merge_bb = fresh_block();
     }
-    auto* br = ctx_.alloc<MirInst>();
-    br->kind = MirInstKind::Br;
-    br->br_target = merge_bb->id;
-    br->span = hir_if.span();
-    emit(br);
+    emit_terminator(hir_if.span(), MirBr{merge_bb->id});
   }
 
   // Else block.
@@ -230,11 +240,7 @@ void MirBuilder::lower_if(const HirIf& hir_if) {
       if (merge_bb == nullptr) {
         merge_bb = fresh_block();
       }
-      auto* br = ctx_.alloc<MirInst>();
-      br->kind = MirInstKind::Br;
-      br->br_target = merge_bb->id;
-      br->span = hir_if.span();
-      emit(br);
+      emit_terminator(hir_if.span(), MirBr{merge_bb->id});
     }
   }
 
@@ -242,7 +248,6 @@ void MirBuilder::lower_if(const HirIf& hir_if) {
     switch_to_block(merge_bb);
   } else {
     // Both branches terminated; no merge block needed.
-    // Set current_block_ to nullptr — subsequent code is dead.
     current_block_ = nullptr;
   }
 }
@@ -252,23 +257,13 @@ void MirBuilder::lower_while(const HirWhile& hir_while) {
   auto* body_bb = fresh_block();
   auto* exit_bb = fresh_block();
 
-  // Branch to condition block.
-  auto* br_cond = ctx_.alloc<MirInst>();
-  br_cond->kind = MirInstKind::Br;
-  br_cond->br_target = cond_bb->id;
-  br_cond->span = hir_while.span();
-  emit(br_cond);
+  emit_terminator(hir_while.span(), MirBr{cond_bb->id});
 
   // Condition block.
   switch_to_block(cond_bb);
   auto cond_val = lower_expr_value(*hir_while.condition());
-  auto* cond_br = ctx_.alloc<MirInst>();
-  cond_br->kind = MirInstKind::CondBr;
-  cond_br->span = hir_while.span();
-  cond_br->cond = cond_val;
-  cond_br->then_block = body_bb->id;
-  cond_br->else_block = exit_bb->id;
-  emit(cond_br);
+  emit_terminator(hir_while.span(),
+                  MirCondBr{cond_val, body_bb->id, exit_bb->id});
 
   // Body block.
   switch_to_block(body_bb);
@@ -276,11 +271,7 @@ void MirBuilder::lower_while(const HirWhile& hir_while) {
     lower_stmt(*stmt);
   }
   if (!block_terminated()) {
-    auto* br_back = ctx_.alloc<MirInst>();
-    br_back->kind = MirInstKind::Br;
-    br_back->br_target = cond_bb->id;
-    br_back->span = hir_while.span();
-    emit(br_back);
+    emit_terminator(hir_while.span(), MirBr{cond_bb->id});
   }
 
   switch_to_block(exit_bb);
@@ -291,17 +282,11 @@ void MirBuilder::lower_for(const HirFor& hir_for) {
   auto iter_src = lower_expr_value(*hir_for.iterable());
 
   // IterInit.
-  auto* init = ctx_.alloc<MirInst>();
-  init->kind = MirInstKind::IterInit;
-  init->result = fresh_value();
-  init->type = hir_for.iterable()->type();
-  init->span = hir_for.span();
-  init->iter_operand = iter_src;
-  emit(init);
-  auto iter_val = init->result;
+  auto iter_val = emit_value(
+      hir_for.iterable()->type(), hir_for.span(),
+      MirIterInit{iter_src});
 
-  // Declare loop variable with iterable's element type.
-  // Until element-type extraction exists, use iterable's own type.
+  // Declare loop variable.
   const Type* var_type = hir_for.iterable()->type();
   auto var_local =
       declare_local(hir_for.var_symbol(), var_type, hir_for.span());
@@ -310,58 +295,31 @@ void MirBuilder::lower_for(const HirFor& hir_for) {
   auto* body_bb = fresh_block();
   auto* exit_bb = fresh_block();
 
-  // Branch to condition.
-  auto* br_cond = ctx_.alloc<MirInst>();
-  br_cond->kind = MirInstKind::Br;
-  br_cond->br_target = cond_bb->id;
-  br_cond->span = hir_for.span();
-  emit(br_cond);
+  emit_terminator(hir_for.span(), MirBr{cond_bb->id});
 
   // Condition: IterHasNext.
   switch_to_block(cond_bb);
-  auto* has_next = ctx_.alloc<MirInst>();
-  has_next->kind = MirInstKind::IterHasNext;
-  has_next->result = fresh_value();
-  has_next->type = types_.bool_type();
-  has_next->span = hir_for.span();
-  has_next->iter_operand = iter_val;
-  emit(has_next);
+  auto has_next_val = emit_value(
+      types_.bool_type(), hir_for.span(),
+      MirIterHasNext{iter_val});
 
-  auto* cond_br = ctx_.alloc<MirInst>();
-  cond_br->kind = MirInstKind::CondBr;
-  cond_br->span = hir_for.span();
-  cond_br->cond = has_next->result;
-  cond_br->then_block = body_bb->id;
-  cond_br->else_block = exit_bb->id;
-  emit(cond_br);
+  emit_terminator(hir_for.span(),
+                  MirCondBr{has_next_val, body_bb->id, exit_bb->id});
 
   // Body: IterNext + store to loop var.
   switch_to_block(body_bb);
-  auto* next = ctx_.alloc<MirInst>();
-  next->kind = MirInstKind::IterNext;
-  next->result = fresh_value();
-  next->type = var_type;
-  next->span = hir_for.span();
-  next->iter_operand = iter_val;
-  emit(next);
+  auto next_val = emit_value(
+      var_type, hir_for.span(), MirIterNext{iter_val});
 
-  auto* store_var = ctx_.alloc<MirInst>();
-  store_var->kind = MirInstKind::Store;
-  store_var->span = hir_for.span();
-  store_var->place = ctx_.alloc<MirPlace>();
-  store_var->place->local = var_local;
-  store_var->store_value = next->result;
-  emit(store_var);
+  auto* place = ctx_.alloc<MirPlace>();
+  place->local = var_local;
+  emit_effect(hir_for.span(), MirStore{place, next_val});
 
   for (const auto* stmt : hir_for.body()) {
     lower_stmt(*stmt);
   }
   if (!block_terminated()) {
-    auto* br_back = ctx_.alloc<MirInst>();
-    br_back->kind = MirInstKind::Br;
-    br_back->br_target = cond_bb->id;
-    br_back->span = hir_for.span();
-    emit(br_back);
+    emit_terminator(hir_for.span(), MirBr{cond_bb->id});
   }
 
   switch_to_block(exit_bb);
@@ -378,15 +336,7 @@ void MirBuilder::lower_return(const HirReturn& ret) {
   // Exit all active mode/resource regions in reverse order.
   emit_region_exits(ret.span());
 
-  auto* mir_ret = ctx_.alloc<MirInst>();
-  mir_ret->kind = MirInstKind::Return;
-  mir_ret->span = ret.span();
-  if (has_val) {
-    mir_ret->return_value = ret_val;
-    mir_ret->has_return_value = true;
-  }
-
-  emit(mir_ret);
+  emit_terminator(ret.span(), MirReturn{ret_val, has_val});
 }
 
 void MirBuilder::lower_expr_stmt(const HirExprStmt& expr_stmt) {
@@ -394,16 +344,11 @@ void MirBuilder::lower_expr_stmt(const HirExprStmt& expr_stmt) {
 }
 
 void MirBuilder::lower_mode(const HirMode& mode) {
-  auto* enter = ctx_.alloc<MirInst>();
-  enter->kind = MirInstKind::ModeEnter;
-  enter->span = mode.span();
-  enter->mode_kind = mode.mode();
-  enter->region_name = mode.mode_name();
-  emit(enter);
+  emit_effect(mode.span(),
+              MirModeEnter{mode.mode(), mode.mode_name()});
 
   active_regions_.push_back(
-      {.exit_kind = MirInstKind::ModeExit,
-       .mode_kind = mode.mode(),
+      {.exit_payload = MirModeExit{mode.mode()},
        .span = mode.span()});
 
   for (const auto* stmt : mode.body()) {
@@ -413,25 +358,16 @@ void MirBuilder::lower_mode(const HirMode& mode) {
   active_regions_.pop_back();
 
   if (!block_terminated()) {
-    auto* exit = ctx_.alloc<MirInst>();
-    exit->kind = MirInstKind::ModeExit;
-    exit->span = mode.span();
-    exit->mode_kind = mode.mode();
-    emit(exit);
+    emit_effect(mode.span(), MirModeExit{mode.mode()});
   }
 }
 
 void MirBuilder::lower_resource(const HirResource& res) {
-  auto* enter = ctx_.alloc<MirInst>();
-  enter->kind = MirInstKind::ResourceEnter;
-  enter->span = res.span();
-  enter->region_kind = res.resource_kind();
-  enter->region_name = res.resource_name();
-  emit(enter);
+  emit_effect(res.span(),
+              MirResourceEnter{res.resource_kind(), res.resource_name()});
 
   active_regions_.push_back(
-      {.exit_kind = MirInstKind::ResourceExit,
-       .mode_kind = {},
+      {.exit_payload = MirResourceExit{},
        .span = res.span()});
 
   for (const auto* stmt : res.body()) {
@@ -441,10 +377,7 @@ void MirBuilder::lower_resource(const HirResource& res) {
   active_regions_.pop_back();
 
   if (!block_terminated()) {
-    auto* exit = ctx_.alloc<MirInst>();
-    exit->kind = MirInstKind::ResourceExit;
-    exit->span = res.span();
-    emit(exit);
+    emit_effect(res.span(), MirResourceExit{});
   }
 }
 
@@ -457,50 +390,22 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
   switch (expr.kind()) {
   case HirKind::IntLiteral: {
     const auto& lit = static_cast<const HirIntLiteral&>(expr);
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::ConstInt;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->const_int = lit.value();
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirConstInt{lit.value()});
   }
 
   case HirKind::FloatLiteral: {
     const auto& lit = static_cast<const HirFloatLiteral&>(expr);
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::ConstFloat;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->const_float = lit.value();
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirConstFloat{lit.value()});
   }
 
   case HirKind::BoolLiteral: {
     const auto& lit = static_cast<const HirBoolLiteral&>(expr);
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::ConstBool;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->const_bool = lit.value();
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirConstBool{lit.value()});
   }
 
   case HirKind::StringLiteral: {
     const auto& lit = static_cast<const HirStringLiteral&>(expr);
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::ConstString;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->const_string = lit.value();
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirConstString{lit.value()});
   }
 
   case HirKind::SymbolRef: {
@@ -508,27 +413,12 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
     if (ref.symbol() != nullptr) {
       auto it = symbol_to_local_.find(ref.symbol());
       if (it != symbol_to_local_.end()) {
-        // Load from local.
-        auto* load = ctx_.alloc<MirInst>();
-        load->kind = MirInstKind::Load;
-        load->result = fresh_value();
-        load->type = expr.type();
-        load->span = expr.span();
-        load->place = ctx_.alloc<MirPlace>();
-        load->place->local = it->second;
-        emit(load);
-        return load->result;
+        auto* place = ctx_.alloc<MirPlace>();
+        place->local = it->second;
+        return emit_value(expr, MirLoad{place});
       }
     }
-    // Function reference — emit FnRef to produce a callable value.
-    auto* fn_ref = ctx_.alloc<MirInst>();
-    fn_ref->kind = MirInstKind::FnRef;
-    fn_ref->result = fresh_value();
-    fn_ref->type = expr.type();
-    fn_ref->span = expr.span();
-    fn_ref->fn_symbol = ref.symbol();
-    emit(fn_ref);
-    return fn_ref->result;
+    return emit_value(expr, MirFnRef{ref.symbol()});
   }
 
   case HirKind::Unary: {
@@ -536,142 +426,70 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
 
     if (un.op() == UnaryOp::AddrOf) {
       auto place = lower_expr_place(*un.operand());
-      auto* inst = ctx_.alloc<MirInst>();
-      inst->kind = MirInstKind::AddrOf;
-      inst->result = fresh_value();
-      inst->type = expr.type();
-      inst->span = expr.span();
-      inst->place = ctx_.alloc<MirPlace>(place);
-      emit(inst);
-      return inst->result;
+      return emit_value(expr, MirAddrOf{ctx_.alloc<MirPlace>(place)});
     }
 
     if (un.op() == UnaryOp::Deref) {
-      // Deref in value context → Load from a place with Deref projection.
       auto place = lower_expr_place(expr);
-      auto* inst = ctx_.alloc<MirInst>();
-      inst->kind = MirInstKind::Load;
-      inst->result = fresh_value();
-      inst->type = expr.type();
-      inst->span = expr.span();
-      inst->place = ctx_.alloc<MirPlace>(place);
-      emit(inst);
-      return inst->result;
+      return emit_value(expr, MirLoad{ctx_.alloc<MirPlace>(place)});
     }
 
     auto val = lower_expr_value(*un.operand());
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::Unary;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->unary_op = un.op();
-    inst->operand = val;
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirUnary{un.op(), val});
   }
 
   case HirKind::Binary: {
     const auto& bin = static_cast<const HirBinary&>(expr);
     auto left = lower_expr_value(*bin.left());
     auto right = lower_expr_value(*bin.right());
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::Binary;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->binary_op = bin.op();
-    inst->lhs = left;
-    inst->rhs = right;
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirBinary{bin.op(), left, right});
   }
 
   case HirKind::Call: {
     const auto& call = static_cast<const HirCall&>(expr);
     auto callee_val = lower_expr_value(*call.callee());
-
     auto* args = ctx_.alloc<std::vector<MirValueId>>();
     for (const auto* arg : call.args()) {
       args->push_back(lower_expr_value(*arg));
     }
-
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::Call;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->callee = callee_val;
-    inst->call_args = args;
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirCall{callee_val, args});
   }
 
   case HirKind::Pipe: {
     const auto& pipe = static_cast<const HirPipe&>(expr);
     auto left_val = lower_expr_value(*pipe.left());
-
-    // Lower pipe as: call right(left).
     auto callee_val = lower_expr_value(*pipe.right());
     auto* args = ctx_.alloc<std::vector<MirValueId>>();
     args->push_back(left_val);
-
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::Call;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->callee = callee_val;
-    inst->call_args = args;
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirCall{callee_val, args});
   }
 
   case HirKind::Field: {
     const auto& field = static_cast<const HirField&>(expr);
     auto obj = lower_expr_value(*field.object());
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::FieldAccess;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->access_object = obj;
-    inst->access_field = field.field_name();
-    inst->access_field_index = resolve_field_index(field.object()->type(), field.field_name());
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirFieldAccess{
+        obj, field.field_name(),
+        resolve_field_index(field.object()->type(), field.field_name())});
   }
 
   case HirKind::Index: {
     const auto& idx = static_cast<const HirIndex&>(expr);
     auto obj = lower_expr_value(*idx.object());
-    // Only single-index for now.
     MirValueId index_val;
     if (!idx.indices().empty()) {
       index_val = lower_expr_value(*idx.indices()[0]);
     }
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::IndexAccess;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->access_object = obj;
-    inst->access_index = index_val;
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirIndexAccess{obj, index_val});
   }
 
   case HirKind::Lambda: {
     const auto& lam = static_cast<const HirLambda&>(expr);
 
-    // Lower lambda body as a nested MirFunction registered on the module.
     auto* lam_fn = ctx_.alloc<MirFunction>();
     lam_fn->span = expr.span();
-    // Derive return type from body expression type when available.
     if (lam.body() != nullptr && lam.body()->type() != nullptr) {
       lam_fn->return_type = lam.body()->type();
     }
-    // Lambda symbol is typically nullptr; symbol field stays null.
 
     // Save and reset builder state.
     auto* saved_fn = current_fn_;
@@ -686,30 +504,18 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
     next_block_id_ = 0;
     symbol_to_local_.clear();
 
-    // Lambda params.
     for (const auto& param : lam.params()) {
-      declare_local(param.symbol, param.type, param.span,
-                    /*is_param=*/true);
+      declare_local(param.symbol, param.type, param.span, /*is_param=*/true);
     }
 
     auto* entry = fresh_block();
     switch_to_block(entry);
 
-    // Lambda body is an expression; lower and return.
     if (lam.body() != nullptr) {
       auto body_val = lower_expr_value(*lam.body());
-      auto* ret = ctx_.alloc<MirInst>();
-      ret->kind = MirInstKind::Return;
-      ret->span = lam.body()->span();
-      ret->return_value = body_val;
-      ret->has_return_value = true;
-      emit(ret);
+      emit_terminator(lam.body()->span(), MirReturn{body_val, true});
     } else if (!block_terminated()) {
-      auto* ret = ctx_.alloc<MirInst>();
-      ret->kind = MirInstKind::Return;
-      ret->has_return_value = false;
-      ret->span = expr.span();
-      emit(ret);
+      emit_terminator(expr.span(), MirReturn{{}, false});
     }
 
     // Restore builder state.
@@ -719,19 +525,11 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
     next_block_id_ = saved_block_id;
     symbol_to_local_ = std::move(saved_locals);
 
-    // Register lambda function on the module so printers and backends see it.
     if (current_module_ != nullptr) {
       current_module_->functions.push_back(lam_fn);
     }
 
-    auto* inst = ctx_.alloc<MirInst>();
-    inst->kind = MirInstKind::Lambda;
-    inst->result = fresh_value();
-    inst->type = expr.type();
-    inst->span = expr.span();
-    inst->lambda_fn = lam_fn;
-    emit(inst);
-    return inst->result;
+    return emit_value(expr, MirLambdaInst{lam_fn});
   }
 
   default:
@@ -844,27 +642,19 @@ void MirBuilder::switch_to_block(MirBlock* block) {
 }
 
 auto MirBuilder::block_terminated() const -> bool {
-  // nullptr means all paths already terminated (e.g. both if branches
-  // returned). Treat as terminated so subsequent dead code is skipped.
   if (current_block_ == nullptr) {
     return true;
   }
   if (current_block_->insts.empty()) {
     return false;
   }
-  return is_terminator(current_block_->insts.back()->kind);
+  return is_terminator(current_block_->insts.back()->kind());
 }
 
 void MirBuilder::emit_region_exits(Span span) {
   for (auto it = active_regions_.rbegin(); it != active_regions_.rend();
        ++it) {
-    auto* exit_inst = ctx_.alloc<MirInst>();
-    exit_inst->kind = it->exit_kind;
-    exit_inst->span = span;
-    if (it->exit_kind == MirInstKind::ModeExit) {
-      exit_inst->mode_kind = it->mode_kind;
-    }
-    emit(exit_inst);
+    emit_effect(span, it->exit_payload);
   }
 }
 

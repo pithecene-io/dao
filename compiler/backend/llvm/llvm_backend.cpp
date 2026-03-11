@@ -253,106 +253,98 @@ auto LlvmBackend::lower_block(const MirBlock& block, const MirFunction& fn,
 }
 
 // ---------------------------------------------------------------------------
-// Instruction dispatch
+// Instruction dispatch via std::visit
 // ---------------------------------------------------------------------------
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto LlvmBackend::lower_inst(const MirInst& inst, const MirFunction& fn,
                                FunctionState& state) -> bool {
-  switch (inst.kind) {
-  case MirInstKind::ConstInt:
-    return lower_const_int(inst, state);
-  case MirInstKind::ConstFloat:
-    return lower_const_float(inst, state);
-  case MirInstKind::ConstBool:
-    return lower_const_bool(inst, state);
-  case MirInstKind::ConstString:
-    return lower_const_string(inst, state);
-  case MirInstKind::Unary:
-    return lower_unary(inst, state);
-  case MirInstKind::Binary:
-    return lower_binary(inst, state);
-  case MirInstKind::Store:
-    return lower_store(inst, fn, state);
-  case MirInstKind::Load:
-    return lower_load(inst, fn, state);
-  case MirInstKind::FnRef:
-    return lower_fn_ref(inst, state);
-  case MirInstKind::Call:
-    return lower_call(inst, state);
-  case MirInstKind::Return:
-    return lower_return(inst, state);
-  case MirInstKind::Br:
-    return lower_br(inst, state);
-  case MirInstKind::CondBr:
-    return lower_cond_br(inst, state);
+  return std::visit(overloaded{
+      [&](const MirConstInt& p)    { return lower_const_int(p, inst, state); },
+      [&](const MirConstFloat& p)  { return lower_const_float(p, inst, state); },
+      [&](const MirConstBool& p)   { return lower_const_bool(p, inst, state); },
+      [&](const MirConstString& p) { return lower_const_string(p, inst, state); },
+      [&](const MirUnary& p)       { return lower_unary(p, inst, state); },
+      [&](const MirBinary& p)      { return lower_binary(p, inst, state); },
+      [&](const MirStore& p)       { return lower_store(p, inst, fn, state); },
+      [&](const MirLoad& p)        { return lower_load(p, inst, fn, state); },
+      [&](const MirFnRef& p)       { return lower_fn_ref(p, inst, state); },
+      [&](const MirCall& p)        { return lower_call(p, inst, state); },
+      [&](const MirReturn& p)      { return lower_return(p, inst, state); },
+      [&](const MirBr& p)          { return lower_br(p, inst, state); },
+      [&](const MirCondBr& p)      { return lower_cond_br(p, inst, state); },
+      [&](const MirFieldAccess& p) { return lower_field_access(p, inst, state); },
 
-  // Mode unsafe — permission semantics enforced upstream; no-op in codegen.
-  case MirInstKind::ModeEnter:
-    if (inst.mode_kind != HirModeKind::Unsafe) {
-      emit_diagnostic(inst.span,
-                       "mode '" + std::string(inst.region_name) +
-                       "' lowering not yet supported");
-      return false;
-    }
-    return true;
-  case MirInstKind::ModeExit:
-    if (inst.mode_kind != HirModeKind::Unsafe) {
-      // Entry already diagnosed; skip duplicate.
-    }
-    return true;
+      // AddrOf — address of a place.
+      [&](const MirAddrOf& p) -> bool {
+        if (p.place == nullptr) {
+          emit_diagnostic(inst.span, "AddrOf with null place");
+          return false;
+        }
+        auto loc = state.locals.find(p.place->local.id);
+        if (loc == state.locals.end()) {
+          emit_diagnostic(inst.span, "AddrOf: unknown local");
+          return false;
+        }
+        if (!p.place->projections.empty()) {
+          auto* ptr = resolve_place(*p.place, fn, state);
+          if (ptr == nullptr) {
+            emit_diagnostic(inst.span, "cannot resolve AddrOf projected place");
+            return false;
+          }
+          state.values[inst.result.id] = ptr;
+          return true;
+        }
+        state.values[inst.result.id] = loc->second;
+        return true;
+      },
 
-  // Resource regions — no runtime hook or upstream enforcement exists yet.
-  // Reject explicitly per CONTRACT_EXECUTION_CONTEXTS.md and TASK_11 §16.2:
-  // resource constructs must not be forgotten casually.
-  case MirInstKind::ResourceEnter:
-    emit_diagnostic(inst.span,
-                     "resource region lowering not yet supported");
-    return false;
-  case MirInstKind::ResourceExit:
-    return true;
+      // Mode unsafe — permission semantics enforced upstream; no-op in codegen.
+      [&](const MirModeEnter& p) -> bool {
+        if (p.mode_kind != HirModeKind::Unsafe) {
+          emit_diagnostic(inst.span,
+                           "mode '" + std::string(p.region_name) +
+                           "' lowering not yet supported");
+          return false;
+        }
+        return true;
+      },
+      [&](const MirModeExit& p) -> bool {
+        if (p.mode_kind != HirModeKind::Unsafe) {
+          // Entry already diagnosed; skip duplicate.
+        }
+        return true;
+      },
 
-  // AddrOf — address of a place.
-  case MirInstKind::AddrOf: {
-    if (inst.place == nullptr) {
-      emit_diagnostic(inst.span, "AddrOf with null place");
-      return false;
-    }
-    auto it = state.locals.find(inst.place->local.id);
-    if (it == state.locals.end()) {
-      emit_diagnostic(inst.span, "AddrOf: unknown local");
-      return false;
-    }
-    if (!inst.place->projections.empty()) {
-      auto* ptr = resolve_place(*inst.place, fn, state);
-      if (ptr == nullptr) {
-        emit_diagnostic(inst.span, "cannot resolve AddrOf projected place");
+      // Resource regions — no runtime hook exists yet.
+      [&](const MirResourceEnter&) -> bool {
+        emit_diagnostic(inst.span, "resource region lowering not yet supported");
         return false;
-      }
-      state.values[inst.result.id] = ptr;
-      return true;
-    }
-    state.values[inst.result.id] = it->second;
-    return true;
-  }
+      },
+      [&](const MirResourceExit&) -> bool { return true; },
 
-  // Field access — extractvalue on a struct SSA value.
-  case MirInstKind::FieldAccess:
-    return lower_field_access(inst, state);
-  case MirInstKind::IndexAccess:
-    emit_diagnostic(inst.span, "index access lowering not yet implemented");
-    return false;
-  case MirInstKind::IterInit:
-  case MirInstKind::IterHasNext:
-  case MirInstKind::IterNext:
-    emit_diagnostic(inst.span, "iteration lowering not yet implemented");
-    return false;
-  case MirInstKind::Lambda:
-    emit_diagnostic(inst.span, "lambda lowering not yet implemented");
-    return false;
-  }
-
-  emit_diagnostic(inst.span, "unknown MIR instruction kind");
-  return false;
+      // Unsupported constructs.
+      [&](const MirIndexAccess&) -> bool {
+        emit_diagnostic(inst.span, "index access lowering not yet implemented");
+        return false;
+      },
+      [&](const MirIterInit&) -> bool {
+        emit_diagnostic(inst.span, "iteration lowering not yet implemented");
+        return false;
+      },
+      [&](const MirIterHasNext&) -> bool {
+        emit_diagnostic(inst.span, "iteration lowering not yet implemented");
+        return false;
+      },
+      [&](const MirIterNext&) -> bool {
+        emit_diagnostic(inst.span, "iteration lowering not yet implemented");
+        return false;
+      },
+      [&](const MirLambdaInst&) -> bool {
+        emit_diagnostic(inst.span, "lambda lowering not yet implemented");
+        return false;
+      },
+  }, inst.payload);
 }
 
 // ---------------------------------------------------------------------------
@@ -371,42 +363,46 @@ auto LlvmBackend::get_value(MirValueId id, FunctionState& state) -> llvm::Value*
 // Constant lowering
 // ---------------------------------------------------------------------------
 
-auto LlvmBackend::lower_const_int(const MirInst& inst, FunctionState& state) -> bool {
+auto LlvmBackend::lower_const_int(const MirConstInt& p, const MirInst& inst,
+                                    FunctionState& state) -> bool {
   auto* type = types_.lower(inst.type);
   if (type == nullptr) {
     emit_diagnostic(inst.span, "cannot lower const int type: " + types_.error());
     return false;
   }
-  auto* val = llvm::ConstantInt::get(type, static_cast<uint64_t>(inst.const_int),
+  auto* val = llvm::ConstantInt::get(type, static_cast<uint64_t>(p.value),
                                      /*isSigned=*/!LlvmTypeLowering::is_unsigned(inst.type));
   state.values[inst.result.id] = val;
   state.value_types[inst.result.id] = inst.type;
   return true;
 }
 
-auto LlvmBackend::lower_const_float(const MirInst& inst, FunctionState& state) -> bool {
+auto LlvmBackend::lower_const_float(const MirConstFloat& p, const MirInst& inst,
+                                      FunctionState& state) -> bool {
   auto* type = types_.lower(inst.type);
   if (type == nullptr) {
     emit_diagnostic(inst.span, "cannot lower const float type: " + types_.error());
     return false;
   }
-  auto* val = llvm::ConstantFP::get(type, inst.const_float);
+  auto* val = llvm::ConstantFP::get(type, p.value);
   state.values[inst.result.id] = val;
   state.value_types[inst.result.id] = inst.type;
   return true;
 }
 
-auto LlvmBackend::lower_const_bool(const MirInst& inst, FunctionState& state) -> bool {
+auto LlvmBackend::lower_const_bool(const MirConstBool& p, const MirInst& inst,
+                                     FunctionState& state) -> bool {
   auto* val = llvm::ConstantInt::get(llvm::Type::getInt1Ty(ctx_),
-                                     inst.const_bool ? 1 : 0);
+                                     p.value ? 1 : 0);
   state.values[inst.result.id] = val;
   state.value_types[inst.result.id] = inst.type;
   return true;
 }
 
-auto LlvmBackend::lower_const_string(const MirInst& inst, FunctionState& state) -> bool {
+auto LlvmBackend::lower_const_string(const MirConstString& p, const MirInst& inst,
+                                       FunctionState& state) -> bool {
   // Create a global constant for the string data.
-  auto str = std::string(inst.const_string);
+  auto str = std::string(p.value);
   auto* str_constant = llvm::ConstantDataArray::getString(ctx_, str, /*AddNull=*/true);
   auto* global = new llvm::GlobalVariable(
       *module_, str_constant->getType(), /*isConstant=*/true,
@@ -434,15 +430,16 @@ auto LlvmBackend::lower_const_string(const MirInst& inst, FunctionState& state) 
 // Unary / binary operations
 // ---------------------------------------------------------------------------
 
-auto LlvmBackend::lower_unary(const MirInst& inst, FunctionState& state) -> bool {
-  auto* operand = get_value(inst.operand, state);
+auto LlvmBackend::lower_unary(const MirUnary& p, const MirInst& inst,
+                                FunctionState& state) -> bool {
+  auto* operand = get_value(p.operand, state);
   if (operand == nullptr) {
     emit_diagnostic(inst.span, "unary operand not found");
     return false;
   }
 
   llvm::Value* result = nullptr;
-  switch (inst.unary_op) {
+  switch (p.op) {
   case UnaryOp::Negate:
     if (operand->getType()->isFloatingPointTy()) {
       result = state.builder->CreateFNeg(operand, "fneg");
@@ -455,7 +452,6 @@ auto LlvmBackend::lower_unary(const MirInst& inst, FunctionState& state) -> bool
     break;
   case UnaryOp::Deref:
   case UnaryOp::AddrOf:
-    // These should be lowered to Load/AddrOf MIR instructions by the MIR builder.
     emit_diagnostic(inst.span, "unexpected Deref/AddrOf as unary op in MIR");
     return false;
   }
@@ -467,23 +463,23 @@ auto LlvmBackend::lower_unary(const MirInst& inst, FunctionState& state) -> bool
   return result != nullptr;
 }
 
-auto LlvmBackend::lower_binary(const MirInst& inst, FunctionState& state) -> bool {
-  auto* lhs = get_value(inst.lhs, state);
-  auto* rhs = get_value(inst.rhs, state);
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+auto LlvmBackend::lower_binary(const MirBinary& p, const MirInst& inst,
+                                 FunctionState& state) -> bool {
+  auto* lhs = get_value(p.lhs, state);
+  auto* rhs = get_value(p.rhs, state);
   if (lhs == nullptr || rhs == nullptr) {
     emit_diagnostic(inst.span, "binary operand not found");
     return false;
   }
 
   bool is_float = lhs->getType()->isFloatingPointTy();
-  // For signedness, check the LHS operand's semantic type, not the result type.
-  // Comparisons have result type bool, but signedness comes from operands.
-  auto lhs_type_it = state.value_types.find(inst.lhs.id);
+  auto lhs_type_it = state.value_types.find(p.lhs.id);
   const Type* operand_type = lhs_type_it != state.value_types.end() ? lhs_type_it->second : inst.type;
   bool is_unsigned_op = LlvmTypeLowering::is_unsigned(operand_type);
   llvm::Value* result = nullptr;
 
-  switch (inst.binary_op) {
+  switch (p.op) {
   case BinaryOp::Add:
     result = is_float ? state.builder->CreateFAdd(lhs, rhs, "fadd")
                       : state.builder->CreateAdd(lhs, rhs, "add");
@@ -578,7 +574,7 @@ auto LlvmBackend::lower_binary(const MirInst& inst, FunctionState& state) -> boo
 }
 
 // ---------------------------------------------------------------------------
-// Place resolution — walk a MirPlace projection chain to an LLVM pointer.
+// Place resolution — walk projection chains to an LLVM pointer.
 // ---------------------------------------------------------------------------
 
 auto LlvmBackend::resolve_place(const MirPlace& place,
@@ -658,27 +654,28 @@ auto LlvmBackend::resolve_place(const MirPlace& place,
 // Memory operations
 // ---------------------------------------------------------------------------
 
-auto LlvmBackend::lower_store(const MirInst& inst, const MirFunction& fn,
+auto LlvmBackend::lower_store(const MirStore& p, const MirInst& inst,
+                                const MirFunction& fn,
                                 FunctionState& state) -> bool {
-  if (inst.place == nullptr) {
+  if (p.place == nullptr) {
     emit_diagnostic(inst.span, "store with null place");
     return false;
   }
 
-  auto* value = get_value(inst.store_value, state);
+  auto* value = get_value(p.value, state);
   if (value == nullptr) {
     emit_diagnostic(inst.span, "store value not found");
     return false;
   }
 
-  auto it = state.locals.find(inst.place->local.id);
+  auto it = state.locals.find(p.place->local.id);
   if (it == state.locals.end()) {
     emit_diagnostic(inst.span, "store target local not found");
     return false;
   }
 
-  if (!inst.place->projections.empty()) {
-    auto* ptr = resolve_place(*inst.place, fn, state);
+  if (!p.place->projections.empty()) {
+    auto* ptr = resolve_place(*p.place, fn, state);
     if (ptr == nullptr) {
       emit_diagnostic(inst.span, "cannot resolve projected store target");
       return false;
@@ -691,21 +688,22 @@ auto LlvmBackend::lower_store(const MirInst& inst, const MirFunction& fn,
   return true;
 }
 
-auto LlvmBackend::lower_load(const MirInst& inst, const MirFunction& fn,
+auto LlvmBackend::lower_load(const MirLoad& p, const MirInst& inst,
+                               const MirFunction& fn,
                                FunctionState& state) -> bool {
-  if (inst.place == nullptr) {
+  if (p.place == nullptr) {
     emit_diagnostic(inst.span, "load with null place");
     return false;
   }
 
-  auto it = state.locals.find(inst.place->local.id);
+  auto it = state.locals.find(p.place->local.id);
   if (it == state.locals.end()) {
     emit_diagnostic(inst.span, "load source local not found");
     return false;
   }
 
-  if (!inst.place->projections.empty()) {
-    auto* ptr = resolve_place(*inst.place, fn, state);
+  if (!p.place->projections.empty()) {
+    auto* ptr = resolve_place(*p.place, fn, state);
     if (ptr == nullptr) {
       emit_diagnostic(inst.span, "cannot resolve projected load source");
       return false;
@@ -738,9 +736,10 @@ auto LlvmBackend::lower_load(const MirInst& inst, const MirFunction& fn,
 // Field access — extractvalue on struct SSA values
 // ---------------------------------------------------------------------------
 
-auto LlvmBackend::lower_field_access(const MirInst& inst,
+auto LlvmBackend::lower_field_access(const MirFieldAccess& p,
+                                      const MirInst& inst,
                                       FunctionState& state) -> bool {
-  auto* obj = get_value(inst.access_object, state);
+  auto* obj = get_value(p.object, state);
   if (obj == nullptr) {
     emit_diagnostic(inst.span, "field access: object value not found");
     return false;
@@ -752,8 +751,8 @@ auto LlvmBackend::lower_field_access(const MirInst& inst,
   }
 
   auto* val = state.builder->CreateExtractValue(
-      obj, inst.access_field_index,
-      "field." + std::string(inst.access_field));
+      obj, p.field_index,
+      "field." + std::string(p.field));
   state.values[inst.result.id] = val;
   state.value_types[inst.result.id] = inst.type;
   return true;
@@ -763,16 +762,17 @@ auto LlvmBackend::lower_field_access(const MirInst& inst,
 // Function reference and calls
 // ---------------------------------------------------------------------------
 
-auto LlvmBackend::lower_fn_ref(const MirInst& inst, FunctionState& state) -> bool {
-  if (inst.fn_symbol == nullptr) {
+auto LlvmBackend::lower_fn_ref(const MirFnRef& p, const MirInst& inst,
+                                 FunctionState& state) -> bool {
+  if (p.symbol == nullptr) {
     emit_diagnostic(inst.span, "FnRef with null symbol");
     return false;
   }
 
-  auto* fn = module_->getFunction(std::string(inst.fn_symbol->name));
+  auto* fn = module_->getFunction(std::string(p.symbol->name));
   if (fn == nullptr) {
     emit_diagnostic(inst.span,
-                    "function not found: " + std::string(inst.fn_symbol->name));
+                    "function not found: " + std::string(p.symbol->name));
     return false;
   }
 
@@ -781,8 +781,9 @@ auto LlvmBackend::lower_fn_ref(const MirInst& inst, FunctionState& state) -> boo
   return true;
 }
 
-auto LlvmBackend::lower_call(const MirInst& inst, FunctionState& state) -> bool {
-  auto* callee_val = get_value(inst.callee, state);
+auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
+                               FunctionState& state) -> bool {
+  auto* callee_val = get_value(p.callee, state);
   if (callee_val == nullptr) {
     emit_diagnostic(inst.span, "call callee not found");
     return false;
@@ -795,10 +796,10 @@ auto LlvmBackend::lower_call(const MirInst& inst, FunctionState& state) -> bool 
   }
 
   std::vector<llvm::Value*> args;
-  if (inst.call_args != nullptr) {
-    args.reserve(inst.call_args->size());
-    for (size_t i = 0; i < inst.call_args->size(); ++i) {
-      auto* arg_val = get_value((*inst.call_args)[i], state);
+  if (p.args != nullptr) {
+    args.reserve(p.args->size());
+    for (size_t i = 0; i < p.args->size(); ++i) {
+      auto* arg_val = get_value((*p.args)[i], state);
       if (arg_val == nullptr) {
         emit_diagnostic(inst.span, "call argument not found");
         return false;
@@ -830,9 +831,10 @@ auto LlvmBackend::lower_call(const MirInst& inst, FunctionState& state) -> bool 
 // Terminators
 // ---------------------------------------------------------------------------
 
-auto LlvmBackend::lower_return(const MirInst& inst, FunctionState& state) -> bool {
-  if (inst.has_return_value) {
-    auto* val = get_value(inst.return_value, state);
+auto LlvmBackend::lower_return(const MirReturn& p, const MirInst& inst,
+                                 FunctionState& state) -> bool {
+  if (p.has_value) {
+    auto* val = get_value(p.value, state);
     if (val == nullptr) {
       emit_diagnostic(inst.span, "return value not found");
       return false;
@@ -844,8 +846,9 @@ auto LlvmBackend::lower_return(const MirInst& inst, FunctionState& state) -> boo
   return true;
 }
 
-auto LlvmBackend::lower_br(const MirInst& inst, FunctionState& state) -> bool {
-  auto it = state.blocks.find(inst.br_target.id);
+auto LlvmBackend::lower_br(const MirBr& p, const MirInst& inst,
+                              FunctionState& state) -> bool {
+  auto it = state.blocks.find(p.target.id);
   if (it == state.blocks.end()) {
     emit_diagnostic(inst.span, "branch target block not found");
     return false;
@@ -854,15 +857,16 @@ auto LlvmBackend::lower_br(const MirInst& inst, FunctionState& state) -> bool {
   return true;
 }
 
-auto LlvmBackend::lower_cond_br(const MirInst& inst, FunctionState& state) -> bool {
-  auto* cond = get_value(inst.cond, state);
+auto LlvmBackend::lower_cond_br(const MirCondBr& p, const MirInst& inst,
+                                   FunctionState& state) -> bool {
+  auto* cond = get_value(p.cond, state);
   if (cond == nullptr) {
     emit_diagnostic(inst.span, "conditional branch condition not found");
     return false;
   }
 
-  auto then_it = state.blocks.find(inst.then_block.id);
-  auto else_it = state.blocks.find(inst.else_block.id);
+  auto then_it = state.blocks.find(p.then_block.id);
+  auto else_it = state.blocks.find(p.else_block.id);
   if (then_it == state.blocks.end() || else_it == state.blocks.end()) {
     emit_diagnostic(inst.span, "conditional branch target block not found");
     return false;

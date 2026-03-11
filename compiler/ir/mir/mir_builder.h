@@ -48,8 +48,7 @@ private:
 
   // Active mode/resource region stack for exit-on-return.
   struct ActiveRegion {
-    MirInstKind exit_kind; // ModeExit or ResourceExit
-    HirModeKind mode_kind; // valid only for ModeExit
+    MirPayload exit_payload;
     Span span;
   };
   std::vector<ActiveRegion> active_regions_;
@@ -72,6 +71,16 @@ private:
   // --- Expression lowering ---
   auto lower_expr_value(const HirExpr& expr) -> MirValueId;
   auto lower_expr_place(const HirExpr& expr) -> MirPlace;
+
+  // --- Emit helpers ---
+  // Value-producing: sets result, type (from expr), span, emits, returns id.
+  auto emit_value(const HirExpr& expr, MirPayload payload) -> MirValueId;
+  // Value-producing with explicit type and span.
+  auto emit_value(const Type* type, Span span, MirPayload payload) -> MirValueId;
+  // Side-effect only: no result, no type.
+  void emit_effect(Span span, MirPayload payload);
+  // Terminator: no result, no type.
+  void emit_terminator(Span span, MirPayload payload);
 
   // --- Helpers ---
   auto fresh_value() -> MirValueId;

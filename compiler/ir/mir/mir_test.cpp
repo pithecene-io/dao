@@ -320,7 +320,7 @@ suite<"mir_structural"> mir_structural = [] {
       for (const auto* block : fn->blocks) {
         expect(!block->insts.empty()) << "block must not be empty";
         if (!block->insts.empty()) {
-          expect(is_terminator(block->insts.back()->kind))
+          expect(is_terminator(block->insts.back()->kind()))
               << "block must end with terminator";
         }
       }

@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace dao {
@@ -64,67 +65,80 @@ struct MirPlace {
 };
 
 // ---------------------------------------------------------------------------
-// MirInst — a single instruction in a basic block
+// Forward declarations for payload types
+// ---------------------------------------------------------------------------
+
+struct MirFunction;
+
+// ---------------------------------------------------------------------------
+// Instruction payloads — one per MirInstKind, carrying only that kind's data.
+// All payloads are trivially destructible (scalars, pointers, string_views).
+// ---------------------------------------------------------------------------
+
+struct MirConstInt    { int64_t value; };
+struct MirConstFloat  { double value; };
+struct MirConstBool   { bool value; };
+struct MirConstString { std::string_view value; };
+
+struct MirUnary  { UnaryOp op; MirValueId operand; };
+struct MirBinary { BinaryOp op; MirValueId lhs; MirValueId rhs; };
+
+struct MirStore { MirPlace* place; MirValueId value; };
+struct MirLoad  { MirPlace* place; };
+struct MirAddrOf { MirPlace* place; };
+
+struct MirFieldAccess { MirValueId object; std::string_view field; uint32_t field_index; };
+struct MirIndexAccess { MirValueId object; MirValueId index; };
+
+struct MirFnRef { const Symbol* symbol; };
+struct MirCall  { MirValueId callee; std::vector<MirValueId>* args; };
+
+struct MirIterInit    { MirValueId iter_operand; };
+struct MirIterHasNext { MirValueId iter_operand; };
+struct MirIterNext    { MirValueId iter_operand; };
+
+struct MirModeEnter     { HirModeKind mode_kind; std::string_view region_name; };
+struct MirModeExit      { HirModeKind mode_kind; };
+struct MirResourceEnter { std::string_view region_kind; std::string_view region_name; };
+struct MirResourceExit  {};
+
+struct MirLambdaInst { MirFunction* fn; };
+
+struct MirBr     { BlockId target; };
+struct MirCondBr { MirValueId cond; BlockId then_block; BlockId else_block; };
+struct MirReturn { MirValueId value; bool has_value; };
+
+// ---------------------------------------------------------------------------
+// MirPayload — variant of all instruction payloads.
+// Variant alternative order matches MirInstKind enum order.
+// ---------------------------------------------------------------------------
+
+using MirPayload = std::variant<
+    MirConstInt, MirConstFloat, MirConstBool, MirConstString,
+    MirUnary, MirBinary,
+    MirStore, MirLoad, MirAddrOf,
+    MirFieldAccess, MirIndexAccess,
+    MirFnRef, MirCall,
+    MirIterInit, MirIterHasNext, MirIterNext,
+    MirModeEnter, MirModeExit, MirResourceEnter, MirResourceExit,
+    MirLambdaInst,
+    MirBr, MirCondBr, MirReturn>;
+
+// ---------------------------------------------------------------------------
+// MirInst — a single instruction in a basic block.
 //
-// Each instruction has a kind tag. Value-producing instructions set
-// result to a valid MirValueId. Terminators have an invalid result.
-// Payload fields are relevant only for their matching kind.
+// The payload variant carries kind-specific data. kind() is derived from
+// the active variant alternative. Value-producing instructions set result
+// to a valid MirValueId; terminators and effects leave it invalid.
 // ---------------------------------------------------------------------------
 
 struct MirInst {
-  MirInstKind kind;
   MirValueId result;
   const Type* type = nullptr;
   Span span;
+  MirPayload payload;
 
-  // --- Constant payloads ---
-  int64_t const_int = 0;
-  double const_float = 0.0;
-  bool const_bool = false;
-  std::string_view const_string;
-
-  // --- Unary/binary ---
-  UnaryOp unary_op = UnaryOp::Negate;
-  BinaryOp binary_op = BinaryOp::Add;
-  MirValueId operand;
-  MirValueId lhs;
-  MirValueId rhs;
-
-  // --- Store/Load/AddrOf ---
-  MirPlace* place = nullptr; // arena-allocated; for Store, Load, AddrOf
-  MirValueId store_value;
-
-  // --- Field/Index access (value-producing) ---
-  MirValueId access_object;
-  std::string_view access_field;
-  uint32_t access_field_index = 0;
-  MirValueId access_index;
-
-  // --- Function reference ---
-  const Symbol* fn_symbol = nullptr; // for FnRef
-
-  // --- Call ---
-  MirValueId callee;
-  std::vector<MirValueId>* call_args = nullptr; // arena-allocated
-
-  // --- Iteration ---
-  MirValueId iter_operand;
-
-  // --- Mode/resource ---
-  HirModeKind mode_kind = HirModeKind::Other;
-  std::string_view region_kind;
-  std::string_view region_name;
-
-  // --- Lambda ---
-  struct MirFunction* lambda_fn = nullptr;
-
-  // --- Terminators ---
-  BlockId br_target;
-  MirValueId cond;
-  BlockId then_block;
-  BlockId else_block;
-  MirValueId return_value;
-  bool has_return_value = false;
+  [[nodiscard]] auto kind() const -> MirInstKind;
 };
 
 // ---------------------------------------------------------------------------
@@ -157,6 +171,15 @@ struct MirModule {
   std::vector<MirFunction*> functions;
   Span span;
 };
+
+// ---------------------------------------------------------------------------
+// Visitor helper — standard C++17 overloaded pattern.
+// ---------------------------------------------------------------------------
+
+template <class... Ts>
+struct overloaded : Ts... { using Ts::operator()...; };
+template <class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
 
 } // namespace dao
 

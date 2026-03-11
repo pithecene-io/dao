@@ -73,128 +73,117 @@ private:
     }
   }
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   void print_inst(const MirInst& inst) {
     // Print result assignment if value-producing.
-    if (inst.result.valid() && !is_terminator(inst.kind)) {
+    if (inst.result.valid() && !is_terminator(inst.kind())) {
       out_ << "%" << inst.result.id << " = ";
     }
 
-    switch (inst.kind) {
-    case MirInstKind::ConstInt:
-      out_ << "const_int " << inst.const_int;
-      break;
-    case MirInstKind::ConstFloat:
-      out_ << "const_float " << inst.const_float;
-      break;
-    case MirInstKind::ConstBool:
-      out_ << "const_bool " << (inst.const_bool ? "true" : "false");
-      break;
-    case MirInstKind::ConstString:
-      out_ << "const_string " << inst.const_string;
-      break;
-
-    case MirInstKind::Unary:
-      out_ << "unary " << unary_op_str(inst.unary_op)
-           << " %" << inst.operand.id;
-      break;
-    case MirInstKind::Binary:
-      out_ << "binary " << binary_op_str(inst.binary_op)
-           << " %" << inst.lhs.id << ", %" << inst.rhs.id;
-      break;
-
-    case MirInstKind::Store:
-      out_ << "store ";
-      print_place(inst.place);
-      out_ << ", %" << inst.store_value.id;
-      break;
-    case MirInstKind::Load:
-      out_ << "load ";
-      print_place(inst.place);
-      break;
-    case MirInstKind::AddrOf:
-      out_ << "addr_of ";
-      print_place(inst.place);
-      break;
-
-    case MirInstKind::FieldAccess:
-      out_ << "field %" << inst.access_object.id
-           << "." << inst.access_field;
-      break;
-    case MirInstKind::IndexAccess:
-      out_ << "index %" << inst.access_object.id
-           << "[%" << inst.access_index.id << "]";
-      break;
-
-    case MirInstKind::FnRef:
-      out_ << "fn_ref";
-      if (inst.fn_symbol != nullptr) {
-        out_ << " " << inst.fn_symbol->name;
-      }
-      break;
-
-    case MirInstKind::Call:
-      out_ << "call %" << inst.callee.id << "(";
-      if (inst.call_args != nullptr) {
-        for (size_t i = 0; i < inst.call_args->size(); ++i) {
-          if (i > 0) {
-            out_ << ", ";
+    std::visit(overloaded{
+        [&](const MirConstInt& p) {
+          out_ << "const_int " << p.value;
+        },
+        [&](const MirConstFloat& p) {
+          out_ << "const_float " << p.value;
+        },
+        [&](const MirConstBool& p) {
+          out_ << "const_bool " << (p.value ? "true" : "false");
+        },
+        [&](const MirConstString& p) {
+          out_ << "const_string " << p.value;
+        },
+        [&](const MirUnary& p) {
+          out_ << "unary " << unary_op_str(p.op)
+               << " %" << p.operand.id;
+        },
+        [&](const MirBinary& p) {
+          out_ << "binary " << binary_op_str(p.op)
+               << " %" << p.lhs.id << ", %" << p.rhs.id;
+        },
+        [&](const MirStore& p) {
+          out_ << "store ";
+          print_place(p.place);
+          out_ << ", %" << p.value.id;
+        },
+        [&](const MirLoad& p) {
+          out_ << "load ";
+          print_place(p.place);
+        },
+        [&](const MirAddrOf& p) {
+          out_ << "addr_of ";
+          print_place(p.place);
+        },
+        [&](const MirFieldAccess& p) {
+          out_ << "field %" << p.object.id << "." << p.field;
+        },
+        [&](const MirIndexAccess& p) {
+          out_ << "index %" << p.object.id
+               << "[%" << p.index.id << "]";
+        },
+        [&](const MirFnRef& p) {
+          out_ << "fn_ref";
+          if (p.symbol != nullptr) {
+            out_ << " " << p.symbol->name;
           }
-          out_ << "%" << (*inst.call_args)[i].id;
-        }
-      }
-      out_ << ")";
-      break;
-
-    case MirInstKind::IterInit:
-      out_ << "iter_init %" << inst.iter_operand.id;
-      break;
-    case MirInstKind::IterHasNext:
-      out_ << "iter_has_next %" << inst.iter_operand.id;
-      break;
-    case MirInstKind::IterNext:
-      out_ << "iter_next %" << inst.iter_operand.id;
-      break;
-
-    case MirInstKind::ModeEnter:
-      out_ << "mode_enter " << inst.region_name;
-      break;
-    case MirInstKind::ModeExit:
-      out_ << "mode_exit " << hir_mode_kind_name(inst.mode_kind);
-      break;
-    case MirInstKind::ResourceEnter:
-      out_ << "resource_enter " << inst.region_kind
-           << " " << inst.region_name;
-      break;
-    case MirInstKind::ResourceExit:
-      out_ << "resource_exit";
-      break;
-
-    case MirInstKind::Lambda:
-      out_ << "lambda";
-      if (inst.lambda_fn != nullptr && inst.lambda_fn->symbol != nullptr) {
-        out_ << " " << inst.lambda_fn->symbol->name;
-      }
-      break;
-
-    case MirInstKind::Br:
-      out_ << "br bb" << inst.br_target.id;
-      break;
-    case MirInstKind::CondBr:
-      out_ << "cond_br %" << inst.cond.id
-           << ", bb" << inst.then_block.id
-           << ", bb" << inst.else_block.id;
-      break;
-    case MirInstKind::Return:
-      out_ << "return";
-      if (inst.has_return_value) {
-        out_ << " %" << inst.return_value.id;
-      }
-      break;
-    }
+        },
+        [&](const MirCall& p) {
+          out_ << "call %" << p.callee.id << "(";
+          if (p.args != nullptr) {
+            for (size_t i = 0; i < p.args->size(); ++i) {
+              if (i > 0) {
+                out_ << ", ";
+              }
+              out_ << "%" << (*p.args)[i].id;
+            }
+          }
+          out_ << ")";
+        },
+        [&](const MirIterInit& p) {
+          out_ << "iter_init %" << p.iter_operand.id;
+        },
+        [&](const MirIterHasNext& p) {
+          out_ << "iter_has_next %" << p.iter_operand.id;
+        },
+        [&](const MirIterNext& p) {
+          out_ << "iter_next %" << p.iter_operand.id;
+        },
+        [&](const MirModeEnter& p) {
+          out_ << "mode_enter " << p.region_name;
+        },
+        [&](const MirModeExit& p) {
+          out_ << "mode_exit " << hir_mode_kind_name(p.mode_kind);
+        },
+        [&](const MirResourceEnter& p) {
+          out_ << "resource_enter " << p.region_kind
+               << " " << p.region_name;
+        },
+        [&](const MirResourceExit&) {
+          out_ << "resource_exit";
+        },
+        [&](const MirLambdaInst& p) {
+          out_ << "lambda";
+          if (p.fn != nullptr && p.fn->symbol != nullptr) {
+            out_ << " " << p.fn->symbol->name;
+          }
+        },
+        [&](const MirBr& p) {
+          out_ << "br bb" << p.target.id;
+        },
+        [&](const MirCondBr& p) {
+          out_ << "cond_br %" << p.cond.id
+               << ", bb" << p.then_block.id
+               << ", bb" << p.else_block.id;
+        },
+        [&](const MirReturn& p) {
+          out_ << "return";
+          if (p.has_value) {
+            out_ << " %" << p.value.id;
+          }
+        },
+    }, inst.payload);
 
     // Print type annotation for value-producing instructions.
-    if (inst.type != nullptr && !is_terminator(inst.kind)) {
+    if (inst.type != nullptr && !is_terminator(inst.kind())) {
       out_ << " : " << print_type(inst.type);
     }
   }
