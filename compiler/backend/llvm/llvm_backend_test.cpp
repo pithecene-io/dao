@@ -294,13 +294,13 @@ suite calls = [] {
 // ---------------------------------------------------------------------------
 
 suite externs = [] {
-  "declaration without body produces declare"_test = [] {
+  "trivial void stub gets weak linkage"_test = [] {
     LlvmTestPipeline pipe(
         "fn print(msg: string): void\n"
         "  return\n");
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
-    expect(contains(ir, "define void @print")) << ir;
+    expect(contains(ir, "define weak void @print")) << ir;
   };
 };
 

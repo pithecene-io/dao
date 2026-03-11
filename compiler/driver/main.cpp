@@ -408,6 +408,108 @@ void cmd_llvm_ir(const std::filesystem::path& path) {
   dao::LlvmBackend::print_ir(std::cout, *llvm_result.module);
 }
 
+// Compile a .dao file to a native executable.
+void cmd_build(const std::filesystem::path& path) {
+  auto result = lex_and_parse(path);
+  if (result.parse_result.file == nullptr) {
+    return;
+  }
+
+  auto resolve_result = dao::resolve(*result.parse_result.file);
+
+  for (const auto& diag : resolve_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
+  }
+
+  dao::TypeContext types;
+  auto check_result =
+      dao::typecheck(*result.parse_result.file, resolve_result, types);
+
+  bool has_errors = !resolve_result.diagnostics.empty();
+
+  for (const auto& diag : check_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    auto severity = diag.severity == dao::Severity::Error ? "error" : "warning";
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": " << severity << ": " << diag.message << "\n";
+    if (diag.severity == dao::Severity::Error) {
+      has_errors = true;
+    }
+  }
+
+  if (has_errors) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  dao::HirContext hir_ctx;
+  auto hir_result = dao::build_hir(*result.parse_result.file, resolve_result,
+                                   check_result, hir_ctx);
+
+  if (hir_result.module == nullptr) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  dao::MirContext mir_ctx;
+  auto mir_result = dao::build_mir(*hir_result.module, mir_ctx, types);
+
+  for (const auto& diag : mir_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
+    has_errors = true;
+  }
+
+  if (mir_result.module == nullptr || has_errors) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  llvm::LLVMContext llvm_ctx;
+  dao::LlvmBackend backend(llvm_ctx);
+  auto llvm_result = backend.lower(*mir_result.module);
+
+  for (const auto& diag : llvm_result.diagnostics) {
+    auto loc = result.source.line_col(diag.span.offset);
+    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
+  }
+
+  if (llvm_result.module == nullptr || !llvm_result.diagnostics.empty()) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Initialize LLVM targets and emit object file.
+  dao::LlvmBackend::initialize_targets();
+
+  auto obj_path = std::filesystem::temp_directory_path() /
+                  (path.stem().string() + ".o");
+  std::string emit_error;
+  if (!dao::LlvmBackend::emit_object(*llvm_result.module,
+                                      obj_path.string(), emit_error)) {
+    std::cerr << "error: " << emit_error << "\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Link with system cc: object + runtime library → executable.
+  // Use -Wl,--whole-archive so the runtime's strong definitions
+  // override weak stubs emitted by the compiler.
+  auto output_path = path.parent_path() / path.stem();
+  std::string link_cmd = "cc " + obj_path.string() +
+                         " -Wl,--whole-archive " + DAO_RUNTIME_LIB +
+                         " -Wl,--no-whole-archive" +
+                         " -o " + output_path.string();
+  int link_status = std::system(link_cmd.c_str()); // NOLINT(cert-env33-c)
+  std::filesystem::remove(obj_path);
+
+  if (link_status != 0) {
+    std::cerr << "error: linking failed\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  std::cout << output_path.string() << "\n";
+}
+
 // Pretty-print AST. Output is deterministic and suitable for golden-file testing.
 void cmd_ast(const std::filesystem::path& path) {
   auto result = lex_and_parse(path);
@@ -421,7 +523,7 @@ void cmd_ast(const std::filesystem::path& path) {
 auto main(int argc, char* argv[]) -> int {
   if (argc < 2) {
     std::cerr << "usage: daoc <command> <file>\n";
-    std::cerr << "commands: lex, parse, ast, tokens, resolve, check, hir, mir, llvm-ir\n";
+    std::cerr << "commands: lex, parse, ast, tokens, resolve, check, hir, mir, llvm-ir, build\n";
     return EXIT_FAILURE;
   }
 
@@ -544,6 +646,21 @@ auto main(int argc, char* argv[]) -> int {
       return EXIT_FAILURE;
     }
     cmd_llvm_ir(llvm_ir_path);
+    return EXIT_SUCCESS;
+  }
+
+  // daoc build <file>
+  if (arg1 == "build") {
+    if (argc < 3) {
+      std::cerr << "usage: daoc build <file>\n";
+      return EXIT_FAILURE;
+    }
+    std::filesystem::path build_path(argv[2]);
+    if (!std::filesystem::exists(build_path)) {
+      std::cerr << "error: file not found: " << build_path << "\n";
+      return EXIT_FAILURE;
+    }
+    cmd_build(build_path);
     return EXIT_SUCCESS;
   }
 

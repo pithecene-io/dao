@@ -8,9 +8,16 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_os_ostream.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
+#include <llvm/TargetParser/Host.h>
 
 #include <cassert>
 #include <string>
@@ -94,6 +101,57 @@ void LlvmBackend::print_ir(std::ostream& out, const llvm::Module& module) {
   module.print(llvm_out, nullptr);
 }
 
+void LlvmBackend::initialize_targets() {
+  llvm::InitializeAllTargetInfos();
+  llvm::InitializeAllTargets();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllAsmParsers();
+  llvm::InitializeAllAsmPrinters();
+}
+
+auto LlvmBackend::emit_object(llvm::Module& module,
+                               const std::string& output_path,
+                               std::string& error_out) -> bool {
+  auto triple = llvm::sys::getDefaultTargetTriple();
+  module.setTargetTriple(triple);
+
+  std::string lookup_error;
+  const auto* target = llvm::TargetRegistry::lookupTarget(triple, lookup_error);
+  if (target == nullptr) {
+    error_out = "failed to look up target: " + lookup_error;
+    return false;
+  }
+
+  llvm::TargetOptions opts;
+  auto target_machine = std::unique_ptr<llvm::TargetMachine>(
+      target->createTargetMachine(triple, "generic", "", opts,
+                                  llvm::Reloc::PIC_));
+  if (target_machine == nullptr) {
+    error_out = "failed to create target machine";
+    return false;
+  }
+
+  module.setDataLayout(target_machine->createDataLayout());
+
+  std::error_code ec;
+  llvm::raw_fd_ostream dest(output_path, ec, llvm::sys::fs::OF_None);
+  if (ec) {
+    error_out = "failed to open output file: " + ec.message();
+    return false;
+  }
+
+  llvm::legacy::PassManager pass;
+  if (target_machine->addPassesToEmitFile(pass, dest, nullptr,
+                                           llvm::CodeGenFileType::ObjectFile)) {
+    error_out = "target machine cannot emit object files";
+    return false;
+  }
+
+  pass.run(module);
+  dest.flush();
+  return true;
+}
+
 void LlvmBackend::emit_diagnostic(Span span, const std::string& message) {
   diagnostics_.push_back(
       Diagnostic{.severity = Severity::Error, .span = span, .message = message});
@@ -117,6 +175,22 @@ auto LlvmBackend::lower_function(const MirFunction& fn) -> bool {
   // If no blocks, this is a declaration (extern). Leave it as-is.
   if (fn.blocks.empty()) {
     return true;
+  }
+
+  // Detect trivial void stubs: single block with only a bare return,
+  // and at least one parameter (no-arg void functions are genuine).
+  // These are likely Dao-side placeholder bodies for functions whose
+  // real implementation lives in the runtime. Emit with weak linkage
+  // so the runtime's strong definition wins at link time.
+  bool has_params = !fn.locals.empty() && fn.locals[0].is_param;
+  if (has_params &&
+      fn.return_type != nullptr &&
+      fn.return_type->kind() == TypeKind::Void &&
+      fn.blocks.size() == 1 &&
+      fn.blocks[0]->insts.size() == 1 &&
+      fn.blocks[0]->insts[0]->kind == MirInstKind::Return &&
+      !fn.blocks[0]->insts[0]->has_return_value) {
+    llvm_fn->setLinkage(llvm::Function::WeakAnyLinkage);
   }
 
   FunctionState state;

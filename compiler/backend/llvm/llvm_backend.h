@@ -42,6 +42,15 @@ public:
   // Emit textual LLVM IR to a stream.
   static void print_ir(std::ostream& out, const llvm::Module& module);
 
+  // Initialize LLVM target machinery (call once per process).
+  static void initialize_targets();
+
+  // Emit a native object file from a lowered module.
+  // Returns true on success; on failure, writes a message to error_out.
+  static auto emit_object(llvm::Module& module,
+                          const std::string& output_path,
+                          std::string& error_out) -> bool;
+
 private:
   llvm::LLVMContext& ctx_;
   LlvmTypeLowering types_;
