@@ -398,6 +398,57 @@ suite return_tests = [] {
   };
 };
 
+suite class_tests = [] {
+  "class with fields"_test = [] {
+    auto output = parse_string("class Point:\n    x: i32\n    y: i32\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    auto* file = output.parse_result.file;
+    expect(file->declarations().size() == 1_u);
+
+    auto* cls = static_cast<ClassDeclNode*>(file->declarations()[0]);
+    expect(cls->kind() == NodeKind::ClassDecl);
+    expect(cls->name() == "Point");
+    expect(cls->fields().size() == 2_u);
+    expect(cls->fields()[0]->name() == "x");
+    expect(cls->fields()[1]->name() == "y");
+    expect(cls->fields()[0]->type() != nullptr);
+    expect(cls->fields()[1]->type() != nullptr);
+  };
+
+  "class with single field"_test = [] {
+    auto output = parse_string("class Wrapper:\n    value: string\n");
+    expect(output.parse_result.diagnostics.empty());
+    auto* cls = static_cast<ClassDeclNode*>(output.parse_result.file->declarations()[0]);
+    expect(cls->fields().size() == 1_u);
+    expect(cls->fields()[0]->name() == "value");
+  };
+
+  "class followed by function"_test = [] {
+    auto output = parse_string("class Point:\n    x: i32\n    y: i32\nfn f(): i32 -> 0\n");
+    expect(output.parse_result.diagnostics.empty());
+    expect(output.parse_result.file->declarations().size() == 2_u);
+    expect(output.parse_result.file->declarations()[0]->kind() == NodeKind::ClassDecl);
+    expect(output.parse_result.file->declarations()[1]->kind() == NodeKind::FunctionDecl);
+  };
+
+  "let inside class body is rejected"_test = [] {
+    auto output = parse_string("class Point:\n    let x: i32\n");
+    expect(!output.parse_result.diagnostics.empty()) << "let in class body should fail";
+  };
+
+  "struct keyword produces migration diagnostic"_test = [] {
+    auto output = parse_string("struct Point:\n    x: i32\n");
+    expect(!output.parse_result.diagnostics.empty());
+    bool found = false;
+    for (const auto& diag : output.parse_result.diagnostics) {
+      if (diag.message.find("renamed") != std::string::npos) {
+        found = true;
+      }
+    }
+    expect(found) << "should mention 'renamed'";
+  };
+};
+
 suite file_tests = [] {
   "examples parse without error"_test = [] {
     std::filesystem::path root(DAO_SOURCE_DIR);

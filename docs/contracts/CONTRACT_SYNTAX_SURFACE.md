@@ -85,11 +85,28 @@ Rules:
 - the uninitialized form requires an explicit type annotation
 - initialization semantics for the uninitialized form are not yet frozen
 
+## Class Declarations
+
+```dao
+class Point:
+    x: f64
+    y: f64
+```
+
+Rules:
+- `class <name> :` introduces a class declaration
+- the body is an indented block of field specifiers
+- each field specifier is `name: type` on its own line
+- field specifiers are not statements; `let` is not used inside class bodies
+- the body must contain at least one field
+- field names must be unique within a class
+
 ## Non-Laws
 
 This contract does not yet freeze:
 - receiver declaration syntax
-- type declaration syntax beyond examples
+- class construction syntax
+- class method syntax
 - pattern matching syntax
 - import alias syntax
 
