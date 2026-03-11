@@ -117,7 +117,7 @@ auto TypeChecker::resolve_symbol_type(const Symbol* sym) -> const Type* {
     if (sym->decl == nullptr) {
       break;
     }
-    const auto& fn = static_cast<const Decl*>(sym->decl)->as<FunctionDecl>();
+    const auto& fn = sym->decl_as_decl()->as<FunctionDecl>();
     std::vector<const Type*> param_types;
     bool valid = true;
     for (const auto& param : fn.params) {
@@ -144,7 +144,7 @@ auto TypeChecker::resolve_symbol_type(const Symbol* sym) -> const Type* {
     }
     // The decl for a param points to the Decl (FunctionDecl payload).
     // We need to find the matching param by name.
-    const auto& fn = static_cast<const Decl*>(sym->decl)->as<FunctionDecl>();
+    const auto& fn = sym->decl_as_decl()->as<FunctionDecl>();
     for (const auto& p : fn.params) {
       if (p.name == sym->name) {
         result = resolve_type_node(p.type);
