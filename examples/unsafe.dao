@@ -4,4 +4,4 @@ fn read(ptr: *i32): i32
     mode unsafe =>
         value = *ptr
 
-    value
+    return value

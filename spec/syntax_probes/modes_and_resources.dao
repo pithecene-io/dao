@@ -7,4 +7,4 @@ fn search(start: NodeId, goal: NodeId): List[NodeId]
         mode parallel =>
             let frontier = PriorityQueue[NodeId]()
             frontier.push(start)
-            [goal]
+            return [goal]

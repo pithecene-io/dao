@@ -13,7 +13,7 @@ File
   FunctionDecl positive_squares
     Param xs: List[i32]
     ReturnType: List[i32]
-    ExpressionStatement
+    ReturnStatement
       PipeExpr
         Identifier xs
         CallExpr

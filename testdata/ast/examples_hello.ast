@@ -2,8 +2,7 @@ File
   FunctionDecl print
     Param msg: string
     ReturnType: void
-    ExpressionStatement
-      IntLiteral 0
+    ReturnStatement
   FunctionDecl main
     ReturnType: i32
     ExpressionStatement
@@ -12,5 +11,5 @@ File
           Identifier print
         Args
           StringLiteral "hello, dao"
-    ExpressionStatement
+    ReturnStatement
       IntLiteral 0

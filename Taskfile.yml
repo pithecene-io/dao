@@ -15,7 +15,7 @@ tasks:
         --build=missing
         -of {{.BUILD_DIR}}
     sources:
-      - conanfile.txt
+      - conanfile.py
       - "{{.PROFILE}}"
     generates:
       - "{{.BUILD_DIR}}/conan_toolchain.cmake"
@@ -95,3 +95,9 @@ tasks:
     deps: [build]
     cmds:
       - "{{.BUILD_DIR}}/compiler/driver/daoc resolve {{.CLI_ARGS}}"
+
+  llvm-ir:
+    desc: "Run daoc llvm-ir on a file (usage: task llvm-ir -- file.dao)"
+    deps: [build]
+    cmds:
+      - "{{.BUILD_DIR}}/compiler/driver/daoc llvm-ir {{.CLI_ARGS}}"

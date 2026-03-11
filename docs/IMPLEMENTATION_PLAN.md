@@ -24,15 +24,13 @@ for the Dao compiler project. It is subordinate to `CLAUDE.md` and
 ### Package manager
 
 - **Conan 2.x** in manifest mode
-- `conanfile.txt` initially; upgrade to `conanfile.py` if custom logic
-  is needed
+- `conanfile.py` with custom logic for LLVM option configuration
 - Compiler profiles managed via Conan profiles
   (e.g. `profiles/clang-17-debug`, `profiles/gcc-13-release`)
 - One `conan.lock` per profile, committed under `locks/`
   (e.g. `locks/clang-17-debug.lock`); lockfiles are
   configuration-specific and must not be shared across profiles
-- LLVM is a system dependency found via `find_package`, not managed
-  by Conan
+- LLVM is managed by Conan like all other dependencies
 
 ### Test framework
 
@@ -89,7 +87,7 @@ Deliverables:
 
 - `CMakeLists.txt` (root) — top-level build with C++23 target
 - `CMakePresets.json` — presets for clang debug/release
-- `conanfile.txt` — declares boost-ext/ut 2.3.1
+- `conanfile.py` — declares boost-ext/ut, cpp-httplib, nlohmann_json, llvm-core
 - `profiles/clang-17-debug` — Conan profile for primary dev
 - `locks/clang-17-debug.lock` — committed lockfile for primary profile
 - `.clang-format` — LLVM base + Dao overrides

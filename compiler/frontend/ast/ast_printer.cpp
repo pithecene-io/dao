@@ -281,8 +281,10 @@ private:
   void print_return(const ReturnStatementNode& node) {
     indent();
     out_ << "ReturnStatement\n";
-    Scope scope(depth_);
-    print_expr(*node.value());
+    if (node.value() != nullptr) {
+      Scope scope(depth_);
+      print_expr(*node.value());
+    }
   }
 
   void print_expr_stmt(const ExpressionStatementNode& node) {
