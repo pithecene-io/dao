@@ -54,19 +54,10 @@ private:
   std::vector<ActiveRegion> active_regions_;
 
   // --- Function lowering ---
-  auto lower_function(const HirFunction& fn) -> MirFunction*;
+  auto lower_function(const HirFunction& fn, Span span) -> MirFunction*;
 
   // --- Statement lowering ---
   void lower_stmt(const HirStmt& stmt);
-  void lower_let(const HirLet& let_stmt);
-  void lower_assign(const HirAssign& assign);
-  void lower_if(const HirIf& hir_if);
-  void lower_while(const HirWhile& hir_while);
-  void lower_for(const HirFor& hir_for);
-  void lower_return(const HirReturn& ret);
-  void lower_expr_stmt(const HirExprStmt& expr_stmt);
-  void lower_mode(const HirMode& mode);
-  void lower_resource(const HirResource& res);
 
   // --- Expression lowering ---
   auto lower_expr_value(const HirExpr& expr) -> MirValueId;

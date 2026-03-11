@@ -2,6 +2,7 @@
 #define DAO_IR_HIR_HIR_BUILDER_H
 
 #include "frontend/ast/ast.h"
+#include "frontend/diagnostics/diagnostic.h"
 #include "frontend/resolve/resolve.h"
 #include "frontend/typecheck/type_checker.h"
 #include "frontend/types/type_context.h"
@@ -48,22 +49,12 @@ private:
   // --- Declaration lowering ---
 
   auto lower_decl(const Decl* decl) -> HirDecl*;
-  auto lower_function(const FunctionDeclNode* fn) -> HirFunction*;
-  auto lower_class(const ClassDeclNode* st) -> HirClassDecl*;
+  auto lower_function(const FunctionDeclNode* fn) -> HirDecl*;
+  auto lower_class(const ClassDeclNode* st) -> HirDecl*;
 
   // --- Statement lowering ---
 
   auto lower_stmt(const Stmt* stmt) -> HirStmt*;
-  auto lower_let(const LetStatementNode* let) -> HirLet*;
-  auto lower_assignment(const AssignmentNode* assign) -> HirAssign*;
-  auto lower_if(const IfStatementNode* ifn) -> HirIf*;
-  auto lower_while(const WhileStatementNode* wh) -> HirWhile*;
-  auto lower_for(const ForStatementNode* fo) -> HirFor*;
-  auto lower_mode(const ModeBlockNode* mb) -> HirMode*;
-  auto lower_resource(const ResourceBlockNode* rb) -> HirResource*;
-  auto lower_return(const ReturnStatementNode* ret) -> HirReturn*;
-  auto lower_expr_stmt(const ExpressionStatementNode* es) -> HirExprStmt*;
-
   auto lower_body(const std::vector<Stmt*>& body) -> std::vector<HirStmt*>;
 
   // --- Expression lowering ---

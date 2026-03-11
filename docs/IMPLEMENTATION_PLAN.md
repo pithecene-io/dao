@@ -47,12 +47,18 @@ for the Dao compiler project. It is subordinate to `CLAUDE.md` and
 
 ### CI
 
-- GitHub Actions
-- Pipeline: checkout, provision CMake >= 3.30, install clang 17 + Conan,
-  cmake build, run tests
+- **Earthly** for reproducible, cacheable builds
+- GitHub Actions as the trigger/runner; Earthly defines the actual
+  build pipeline
+- Earthly targets produce Docker cache layers so LLVM and Conan
+  dependency builds are cached across runs (the primary bottleneck
+  without caching is LLVM from-source compilation at 60–90 min)
+- Pipeline: checkout → `earthly +build` → `earthly +test`
 - CI must verify the CMake version satisfies the `cmake_minimum_required`
   floor before building
 - Ubuntu only initially; macOS deferred
+- Previous GitHub Actions-only CI was removed due to impractical
+  build times without layer caching
 
 ## Binary Architecture
 
