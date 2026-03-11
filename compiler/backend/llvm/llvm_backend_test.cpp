@@ -81,7 +81,7 @@ auto contains(const std::string& haystack, std::string_view needle) -> bool {
 // Type lowering
 // ---------------------------------------------------------------------------
 
-suite type_lowering = [] {
+suite<"type_lowering"> type_lowering = [] {
   "builtin scalars lower correctly"_test = [] {
     llvm::LLVMContext ctx;
     LlvmTypeLowering lowering(ctx);
@@ -150,7 +150,7 @@ suite type_lowering = [] {
 // Simple function lowering
 // ---------------------------------------------------------------------------
 
-suite simple_functions = [] {
+suite<"simple_functions"> simple_functions = [] {
   "empty function with i32 return"_test = [] {
     LlvmTestPipeline pipe(
         "fn answer(): i32\n"
@@ -187,7 +187,7 @@ suite simple_functions = [] {
 // Arithmetic and comparisons
 // ---------------------------------------------------------------------------
 
-suite arithmetic = [] {
+suite<"arithmetic"> arithmetic = [] {
   "integer arithmetic"_test = [] {
     LlvmTestPipeline pipe(
         "fn calc(x: i32, y: i32): i32\n"
@@ -222,7 +222,7 @@ suite arithmetic = [] {
 // Control flow
 // ---------------------------------------------------------------------------
 
-suite control_flow = [] {
+suite<"control_flow"> control_flow = [] {
   "if-else produces conditional branch"_test = [] {
     LlvmTestPipeline pipe(
         "fn abs(x: i32): i32\n"
@@ -254,7 +254,7 @@ suite control_flow = [] {
 // String literals
 // ---------------------------------------------------------------------------
 
-suite strings = [] {
+suite<"strings"> strings = [] {
   "string constant creates global"_test = [] {
     LlvmTestPipeline pipe(
         "fn print(msg: string): void\n"
@@ -275,7 +275,7 @@ suite strings = [] {
 // Function calls
 // ---------------------------------------------------------------------------
 
-suite calls = [] {
+suite<"calls"> calls = [] {
   "direct function call"_test = [] {
     LlvmTestPipeline pipe(
         "fn double(x: i32): i32\n"
@@ -293,7 +293,7 @@ suite calls = [] {
 // Extern declarations (no body)
 // ---------------------------------------------------------------------------
 
-suite externs = [] {
+suite<"externs"> externs = [] {
   "extern declaration produces declare"_test = [] {
     LlvmTestPipeline pipe(
         "extern fn print(msg: string): void\n"
@@ -310,7 +310,7 @@ suite externs = [] {
 // Module structure
 // ---------------------------------------------------------------------------
 
-suite module_structure = [] {
+suite<"module_structure"> module_structure = [] {
   "module contains all functions"_test = [] {
     LlvmTestPipeline pipe(
         "fn foo(): i32\n"
@@ -329,7 +329,7 @@ suite module_structure = [] {
 // Unsupported constructs — must fail explicitly
 // ---------------------------------------------------------------------------
 
-suite unsupported_constructs = [] {
+suite<"unsupported_constructs"> unsupported_constructs = [] {
   "mode parallel is rejected"_test = [] {
     LlvmTestPipeline pipe(
         "fn test(): i32\n"

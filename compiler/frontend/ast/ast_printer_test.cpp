@@ -35,7 +35,7 @@ auto ast_string(const std::filesystem::path& source_path) -> std::string {
 
 // NOLINTBEGIN(readability-function-cognitive-complexity,modernize-use-trailing-return-type)
 
-suite ast_golden_tests = [] {
+suite<"ast_golden_tests"> ast_golden_tests = [] {
   "examples match golden files"_test = [] {
     std::filesystem::path root(DAO_SOURCE_DIR);
     auto golden_dir = root / "testdata" / "ast";

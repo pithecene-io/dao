@@ -43,7 +43,7 @@ auto count_kind(const std::vector<Token>& tokens, TokenKind kind) -> int {
 
 // NOLINTBEGIN(readability-function-cognitive-complexity,readability-magic-numbers,modernize-use-trailing-return-type)
 
-suite keyword_tests = [] {
+suite<"keyword_tests"> keyword_tests = [] {
   "all keywords recognized"_test = [] {
     auto output = lex_string("import fn class type let if else while for in return mode resource "
                              "true false and or\n");
@@ -74,7 +74,7 @@ suite keyword_tests = [] {
   };
 };
 
-suite operator_tests = [] {
+suite<"operator_tests"> operator_tests = [] {
   "all operators recognized"_test = [] {
     auto output = lex_string(": :: -> => = == != < <= > >= + - * / % & ! . , | |>\n");
     auto kinds = std::vector<TokenKind>{};
@@ -145,7 +145,7 @@ suite operator_tests = [] {
   };
 };
 
-suite literal_tests = [] {
+suite<"literal_tests"> literal_tests = [] {
   "integer literals"_test = [] {
     auto output = lex_string("0 42 12345\n");
     auto kinds = std::vector<TokenKind>{};
@@ -176,7 +176,7 @@ suite literal_tests = [] {
   };
 };
 
-suite identifier_tests = [] {
+suite<"identifier_tests"> identifier_tests = [] {
   "identifiers not confused with keywords"_test = [] {
     auto output = lex_string("foo bar _baz import_thing fn2\n");
     auto ids = std::vector<std::string_view>{};
@@ -194,7 +194,7 @@ suite identifier_tests = [] {
   };
 };
 
-suite indentation_tests = [] {
+suite<"indentation_tests"> indentation_tests = [] {
   "simple indent dedent"_test = [] {
     auto output = lex_string("fn main(): i32\n    0\n");
     int indents = count_kind(output.result.tokens, TokenKind::Indent);
@@ -231,7 +231,7 @@ suite indentation_tests = [] {
   };
 };
 
-suite span_tests = [] {
+suite<"span_tests"> span_tests = [] {
   "token spans are accurate"_test = [] {
     auto output = lex_string("fn add\n");
     // fn at offset 0, length 2
@@ -245,7 +245,7 @@ suite span_tests = [] {
   };
 };
 
-suite file_tests = [] {
+suite<"file_tests"> file_tests = [] {
   "examples lex without error"_test = [] {
     std::filesystem::path root(DAO_SOURCE_DIR);
     for (const auto& entry : std::filesystem::directory_iterator(root / "examples")) {
