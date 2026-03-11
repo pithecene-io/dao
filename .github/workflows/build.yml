@@ -64,7 +64,7 @@ jobs:
             -pr:b profiles/clang-21-debug \
             -s compiler.version=${{ steps.clang.outputs.major }} \
             -s:b compiler.version=${{ steps.clang.outputs.major }} \
-            --lockfile=locks/clang-21-debug.lock
+            --lockfile=profiles/clang-21-debug.lock
 
       - name: Configure
         run: cmake --preset debug
