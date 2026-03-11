@@ -101,3 +101,9 @@ tasks:
     deps: [build]
     cmds:
       - "{{.BUILD_DIR}}/compiler/driver/daoc llvm-ir {{.CLI_ARGS}}"
+
+  compile:
+    desc: "Compile a .dao file to a native executable (usage: task compile -- file.dao)"
+    deps: [build]
+    cmds:
+      - "{{.BUILD_DIR}}/compiler/driver/daoc build {{.CLI_ARGS}}"

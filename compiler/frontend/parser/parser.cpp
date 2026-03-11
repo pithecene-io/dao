@@ -140,20 +140,31 @@ private:
 
   auto parse_declaration() -> Decl* {
     switch (peek_kind()) {
+    case TokenKind::KwExtern:
+      return parse_extern_decl();
     case TokenKind::KwFn:
-      return parse_function_decl();
+      return parse_function_decl(/*is_extern=*/false);
     case TokenKind::KwStruct:
       return parse_struct_decl();
     case TokenKind::KwType:
       return parse_alias_decl();
     default:
-      error("expected declaration (fn, struct, or type)");
+      error("expected declaration (fn, extern, struct, or type)");
       advance(); // skip problematic token
       return nullptr;
     }
   }
 
-  auto parse_function_decl() -> FunctionDeclNode* {
+  auto parse_extern_decl() -> FunctionDeclNode* {
+    advance(); // consume 'extern'
+    if (peek_kind() != TokenKind::KwFn) {
+      error("expected 'fn' after 'extern'");
+      return nullptr;
+    }
+    return parse_function_decl(/*is_extern=*/true);
+  }
+
+  auto parse_function_decl(bool is_extern) -> FunctionDeclNode* {
     const auto& kw = consume(TokenKind::KwFn);
     const auto& name_tok = consume(TokenKind::Identifier);
 
@@ -170,18 +181,31 @@ private:
     std::vector<Stmt*> body;
     Expr* expr_body = nullptr;
 
-    if (peek_kind() == TokenKind::Arrow) {
+    if (is_extern) {
+      // Extern declarations: signature only, no body.
+      if (return_type == nullptr) {
+        error("extern function declaration requires a return type");
+      }
+      consume(TokenKind::Newline);
+    } else if (peek_kind() == TokenKind::Arrow) {
       // Expression-bodied: -> expression NEWLINE
       advance(); // ->
       expr_body = parse_expression();
       // The trailing newline may have been consumed by pipe continuation.
       match(TokenKind::Newline);
     } else {
-      // Block-bodied: NEWLINE INDENT statement+ DEDENT
+      // Consume the newline after the signature.
       consume(TokenKind::Newline);
-      consume(TokenKind::Indent);
-      body = parse_statement_list();
-      consume(TokenKind::Dedent);
+
+      if (peek_kind() == TokenKind::Indent) {
+        // Block-bodied: INDENT statement+ DEDENT
+        advance(); // consume Indent
+        body = parse_statement_list();
+        consume(TokenKind::Dedent);
+      } else {
+        // Non-extern function without a body is an error.
+        error("expected function body (indented block or -> expression)");
+      }
     }
 
     Span span = span_from(kw.span);
@@ -191,7 +215,8 @@ private:
                                         std::move(params),
                                         return_type,
                                         std::move(body),
-                                        expr_body);
+                                        expr_body,
+                                        is_extern);
   }
 
   auto parse_params() -> std::vector<Param> {

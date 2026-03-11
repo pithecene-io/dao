@@ -14,6 +14,7 @@ module_path :=
 
 declaration :=
       function_decl
+    | extern_decl
     | type_decl
 
 # Placeholder: type declarations are intentionally not frozen beyond broad shape.
@@ -37,6 +38,9 @@ return_type :=
 function_body :=
       NEWLINE INDENT statement+ DEDENT
     | "->" expression NEWLINE
+
+extern_decl :=
+    "extern" "fn" identifier "(" params? ")" return_type NEWLINE
 
 params :=
     param ("," param)*

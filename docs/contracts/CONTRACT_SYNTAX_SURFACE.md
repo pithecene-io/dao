@@ -36,6 +36,18 @@ Rules:
 - `->` denotes a single yielded expression
 - expression-bodied forms do not open suites
 
+### Extern declaration form
+
+```dao
+extern fn print(msg: string): void
+```
+
+Rules:
+- `extern fn` declares an externally-provided function with no body
+- extern declarations produce `declare` (not `define`) in codegen
+- a return type annotation is required on extern declarations
+- a non-extern `fn` without a body is a parse error
+
 ## Lambdas
 
 ```dao

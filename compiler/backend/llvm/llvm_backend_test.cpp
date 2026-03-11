@@ -294,13 +294,15 @@ suite calls = [] {
 // ---------------------------------------------------------------------------
 
 suite externs = [] {
-  "declaration without body produces declare"_test = [] {
+  "extern declaration produces declare"_test = [] {
     LlvmTestPipeline pipe(
-        "fn print(msg: string): void\n"
-        "  return\n");
+        "extern fn print(msg: string): void\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
-    expect(contains(ir, "define void @print")) << ir;
+    expect(contains(ir, "declare void @print")) << ir;
   };
 };
 

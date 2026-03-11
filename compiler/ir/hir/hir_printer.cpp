@@ -78,7 +78,7 @@ private:
 
   void print_function(const HirFunction& fn) {
     indent();
-    out_ << "Function ";
+    out_ << (fn.is_extern() ? "ExternFunction " : "Function ");
     print_symbol_name(fn.symbol());
     print_type_annotation(fn.return_type());
     out_ << "\n";

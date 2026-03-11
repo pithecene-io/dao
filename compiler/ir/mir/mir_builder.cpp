@@ -45,6 +45,7 @@ auto MirBuilder::lower_function(const HirFunction& fn) -> MirFunction* {
   mir_fn->symbol = fn.symbol();
   mir_fn->return_type = fn.return_type();
   mir_fn->span = fn.span();
+  mir_fn->is_extern = fn.is_extern();
 
   // Reset per-function state.
   current_fn_ = mir_fn;
@@ -57,6 +58,11 @@ auto MirBuilder::lower_function(const HirFunction& fn) -> MirFunction* {
   // Create parameter locals.
   for (const auto& param : fn.params()) {
     declare_local(param.symbol, param.type, param.span, /*is_param=*/true);
+  }
+
+  // Extern declaration — no blocks to emit.
+  if (fn.is_extern()) {
+    return mir_fn;
   }
 
   // Create entry block.

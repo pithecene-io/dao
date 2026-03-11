@@ -8,6 +8,8 @@ auto token_kind_name(TokenKind kind) -> const char* {
   switch (kind) {
   case TokenKind::KwImport:
     return "KwImport";
+  case TokenKind::KwExtern:
+    return "KwExtern";
   case TokenKind::KwFn:
     return "KwFn";
   case TokenKind::KwStruct:
@@ -487,6 +489,9 @@ private:
   static auto classify_keyword(std::string_view word) -> TokenKind {
     if (word == "import") {
       return TokenKind::KwImport;
+    }
+    if (word == "extern") {
+      return TokenKind::KwExtern;
     }
     if (word == "fn") {
       return TokenKind::KwFn;

@@ -47,6 +47,8 @@ auto lexical_category(TokenKind kind) -> std::string_view {
   // Keywords — control
   case TokenKind::KwImport:
     return "keyword.import";
+  case TokenKind::KwExtern:
+    return "keyword.extern";
   case TokenKind::KwFn:
     return "keyword.fn";
   case TokenKind::KwStruct:

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.30)
-project(dao LANGUAGES CXX)
+project(dao LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,4 +13,5 @@ add_subdirectory(compiler/ir)
 add_subdirectory(compiler/backend)
 add_subdirectory(compiler/analysis)
 add_subdirectory(compiler/driver)
+add_subdirectory(runtime)
 add_subdirectory(tools/playground)

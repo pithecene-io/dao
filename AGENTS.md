@@ -27,6 +27,7 @@ The current frozen surface assumptions are:
 - `if` / `while` / `for` use `:`
 - block-bodied functions use no token after the return type
 - expression-bodied functions use `->`
+- `extern fn` declares externally-provided functions with no body
 - lambdas use `->`
 - `mode <name> =>` enters an execution/safety mode
 - `resource <kind> <name> =>` binds a scoped resource domain

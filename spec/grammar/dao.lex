@@ -2,6 +2,7 @@
 
 Reserved keywords:
 - import
+- extern
 - fn
 - struct
 - type

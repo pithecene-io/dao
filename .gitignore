@@ -23,5 +23,11 @@ CMakeUserPresets.json
 .cache/
 .task/
 
+# Compiled executables from daoc build
+examples/hello
+examples/astar
+examples/pipelines
+examples/unsafe
+
 # Local Claude Code instructions
 CLAUDE.local.md

@@ -73,7 +73,7 @@ Compiler-internal target-agnostic representations.
 
 Target-specific lowering.
 
-- `llvm/` — initial backend target: MIR→LLVM IR lowering, type lowering, function/block/instruction emission, textual IR output
+- `llvm/` — initial backend target: MIR→LLVM IR lowering, type lowering, function/block/instruction emission, textual IR output, native object emission
 
 ### `compiler/driver/`
 
@@ -93,6 +93,7 @@ CLI, playground, and LSP.
 
 Execution support for lowered programs.
 
+- `core/` — minimal C runtime linked into every executable (builtin function implementations)
 - `memory/` — scoped resource and allocation-domain support
 - `modes/` — runtime integration for `mode` semantics
 - `gpu/` — GPU/runtime bindings and execution support
