@@ -7,7 +7,7 @@ auto hir_kind_name(HirKind kind) -> const char* {
   switch (kind) {
   case HirKind::Module:        return "Module";
   case HirKind::Function:      return "Function";
-  case HirKind::StructDecl:    return "StructDecl";
+  case HirKind::ClassDecl:     return "ClassDecl";
   case HirKind::Let:           return "Let";
   case HirKind::Assign:        return "Assign";
   case HirKind::If:            return "If";

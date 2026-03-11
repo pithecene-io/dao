@@ -359,7 +359,7 @@ suite unsupported_constructs = [] {
 
   "field assignment is rejected"_test = [] {
     LlvmTestPipeline pipe(
-        "struct Point:\n"
+        "class Point:\n"
         "  let x: i32\n"
         "  let y: i32\n"
         "\n"
@@ -371,7 +371,7 @@ suite unsupported_constructs = [] {
 
   "field load is rejected"_test = [] {
     LlvmTestPipeline pipe(
-        "struct Point:\n"
+        "class Point:\n"
         "  let x: i32\n"
         "  let y: i32\n"
         "\n"
@@ -382,7 +382,7 @@ suite unsupported_constructs = [] {
 
   "address-of field is rejected"_test = [] {
     LlvmTestPipeline pipe(
-        "struct Point:\n"
+        "class Point:\n"
         "  let x: i32\n"
         "  let y: i32\n"
         "\n"

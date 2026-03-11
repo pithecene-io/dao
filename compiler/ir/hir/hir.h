@@ -114,10 +114,10 @@ private:
   bool is_extern_ = false;
 };
 
-class HirStructDecl : public HirDecl {
+class HirClassDecl : public HirDecl {
 public:
-  HirStructDecl(Span span, const Symbol* symbol, const TypeStruct* type)
-      : HirDecl(HirKind::StructDecl, span), symbol_(symbol), type_(type) {}
+  HirClassDecl(Span span, const Symbol* symbol, const TypeStruct* type)
+      : HirDecl(HirKind::ClassDecl, span), symbol_(symbol), type_(type) {}
 
   [[nodiscard]] auto symbol() const -> const Symbol* { return symbol_; }
   [[nodiscard]] auto struct_type() const -> const TypeStruct* {

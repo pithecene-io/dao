@@ -30,7 +30,7 @@ auto MirBuilder::build(const HirModule& module) -> MirBuildResult {
         mir_mod->functions.push_back(mir_fn);
       }
     }
-    // StructDecl: no MIR function to produce; skip.
+    // ClassDecl: no MIR function to produce; skip.
   }
 
   return {.module = mir_mod, .diagnostics = std::move(diagnostics_)};

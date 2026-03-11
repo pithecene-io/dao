@@ -19,11 +19,11 @@ declaration :=
 
 # Placeholder: type declarations are intentionally not frozen beyond broad shape.
 type_decl :=
-    struct_decl
+    class_decl
   | alias_decl
 
-struct_decl :=
-    "struct" identifier ":" suite
+class_decl :=
+    "class" identifier ":" suite
 
 alias_decl :=
     "type" identifier "=" type NEWLINE

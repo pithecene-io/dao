@@ -166,13 +166,13 @@ suite declaration_classification = [] {
     expect(find_token(result.tokens, "decl.function") != nullptr);
   };
 
-  "decl.type on struct name"_test = [] {
-    auto result = classify_source("test.dao", "struct Point:\n    let x: i32\n");
+  "decl.type on class name"_test = [] {
+    auto result = classify_source("test.dao", "class Point:\n    let x: i32\n");
     expect(find_token(result.tokens, "decl.type") != nullptr);
   };
 
-  "decl.field on struct member"_test = [] {
-    auto result = classify_source("test.dao", "struct Point:\n    let x: i32\n");
+  "decl.field on class member"_test = [] {
+    auto result = classify_source("test.dao", "class Point:\n    let x: i32\n");
     expect(find_token(result.tokens, "decl.field") != nullptr);
   };
 };

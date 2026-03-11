@@ -47,8 +47,8 @@ auto HirBuilder::lower_decl(const Decl* decl) -> HirDecl* {
   switch (decl->kind()) {
   case NodeKind::FunctionDecl:
     return lower_function(static_cast<const FunctionDeclNode*>(decl));
-  case NodeKind::StructDecl:
-    return lower_struct(static_cast<const StructDeclNode*>(decl));
+  case NodeKind::ClassDecl:
+    return lower_class(static_cast<const ClassDeclNode*>(decl));
   default:
     return nullptr;
   }
@@ -109,7 +109,7 @@ auto HirBuilder::lower_function(const FunctionDeclNode* fn) -> HirFunction* {
                                  fn->is_extern());
 }
 
-auto HirBuilder::lower_struct(const StructDeclNode* st) -> HirStructDecl* {
+auto HirBuilder::lower_class(const ClassDeclNode* st) -> HirClassDecl* {
   const auto* sym = find_symbol_at_decl(st->name_span().offset);
 
   const TypeStruct* struct_type = nullptr;
@@ -118,7 +118,7 @@ auto HirBuilder::lower_struct(const StructDeclNode* st) -> HirStructDecl* {
     struct_type = static_cast<const TypeStruct*>(decl_type);
   }
 
-  return ctx_.alloc<HirStructDecl>(st->span(), sym, struct_type);
+  return ctx_.alloc<HirClassDecl>(st->span(), sym, struct_type);
 }
 
 // ---------------------------------------------------------------------------

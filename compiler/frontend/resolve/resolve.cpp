@@ -146,8 +146,8 @@ private:
       kind = SymbolKind::Function;
       break;
     }
-    case NodeKind::StructDecl: {
-      const auto& st = static_cast<const StructDeclNode&>(decl);
+    case NodeKind::ClassDecl: {
+      const auto& st = static_cast<const ClassDeclNode&>(decl);
       name = st.name();
       name_span = st.name_span();
       kind = SymbolKind::Type;
@@ -187,8 +187,8 @@ private:
     case NodeKind::FunctionDecl:
       resolve_function(static_cast<const FunctionDeclNode&>(decl), scope);
       break;
-    case NodeKind::StructDecl:
-      resolve_struct(static_cast<const StructDeclNode&>(decl), scope);
+    case NodeKind::ClassDecl:
+      resolve_class(static_cast<const ClassDeclNode&>(decl), scope);
       break;
     case NodeKind::AliasDecl:
       resolve_alias(static_cast<const AliasDeclNode&>(decl), scope);
@@ -236,7 +236,7 @@ private:
     }
   }
 
-  void resolve_struct(const StructDeclNode& st, Scope* parent) {
+  void resolve_class(const ClassDeclNode& st, Scope* parent) {
     auto* struct_scope = ctx_.make_scope(ScopeKind::Struct, parent);
 
     for (const auto* member : st.members()) {

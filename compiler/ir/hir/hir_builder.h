@@ -49,7 +49,7 @@ private:
 
   auto lower_decl(const Decl* decl) -> HirDecl*;
   auto lower_function(const FunctionDeclNode* fn) -> HirFunction*;
-  auto lower_struct(const StructDeclNode* st) -> HirStructDecl*;
+  auto lower_class(const ClassDeclNode* st) -> HirClassDecl*;
 
   // --- Statement lowering ---
 

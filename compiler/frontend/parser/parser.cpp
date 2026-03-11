@@ -144,12 +144,12 @@ private:
       return parse_extern_decl();
     case TokenKind::KwFn:
       return parse_function_decl(/*is_extern=*/false);
-    case TokenKind::KwStruct:
-      return parse_struct_decl();
+    case TokenKind::KwClass:
+      return parse_class_decl();
     case TokenKind::KwType:
       return parse_alias_decl();
     default:
-      error("expected declaration (fn, extern, struct, or type)");
+      error("expected declaration (fn, extern, class, or type)");
       advance(); // skip problematic token
       return nullptr;
     }
@@ -239,13 +239,13 @@ private:
     return {.name = name_tok.text, .name_span = name_tok.span, .type = type};
   }
 
-  auto parse_struct_decl() -> StructDeclNode* {
-    const auto& kw = consume(TokenKind::KwStruct);
+  auto parse_class_decl() -> ClassDeclNode* {
+    const auto& kw = consume(TokenKind::KwClass);
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::Colon);
     auto members = parse_suite();
     Span span = span_from(kw.span);
-    return ctx_.alloc<StructDeclNode>(span, name_tok.text, name_tok.span, std::move(members));
+    return ctx_.alloc<ClassDeclNode>(span, name_tok.text, name_tok.span, std::move(members));
   }
 
   auto parse_alias_decl() -> AliasDeclNode* {

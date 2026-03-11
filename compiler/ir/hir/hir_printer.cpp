@@ -66,8 +66,8 @@ private:
     case HirKind::Function:
       print_function(static_cast<const HirFunction&>(decl));
       break;
-    case HirKind::StructDecl:
-      print_struct(static_cast<const HirStructDecl&>(decl));
+    case HirKind::ClassDecl:
+      print_class(static_cast<const HirClassDecl&>(decl));
       break;
     default:
       indent();
@@ -97,9 +97,9 @@ private:
     }
   }
 
-  void print_struct(const HirStructDecl& st) {
+  void print_class(const HirClassDecl& st) {
     indent();
-    out_ << "StructDecl ";
+    out_ << "ClassDecl ";
     print_symbol_name(st.symbol());
     if (st.struct_type() != nullptr) {
       out_ << " : " << print_type(st.struct_type());
