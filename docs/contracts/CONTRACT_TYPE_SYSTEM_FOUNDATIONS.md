@@ -125,9 +125,10 @@ product of named fields.
 
 ### 8.1 Value semantics
 
-Classes are value types. Assignment copies, comparison compares values,
-and passing to a function passes a copy unless an explicit pointer or
-reference mechanism is used.
+Classes are value types. Assignment copies and passing to a function
+passes a copy unless an explicit pointer or reference mechanism is
+used. Comparison and construction semantics are not yet frozen by
+this contract.
 
 There is no implicit heap allocation, no reference counting, and no
 garbage-collected backing store for class values. Stack allocation is
@@ -146,9 +147,10 @@ polymorphism.
 
 ### 8.3 No implicit constructor magic
 
-Class construction is explicit. There are no synthesized default
-constructors, copy constructors, or destructor chains. Construction
-syntax produces a fully initialized aggregate value.
+There are no synthesized default constructors, copy constructors, or
+destructor chains. Construction syntax and its exact semantics are
+not yet frozen; what is frozen is that implicit constructor magic is
+not part of the class model.
 
 ### 8.4 No dynamic dispatch on class identity
 
