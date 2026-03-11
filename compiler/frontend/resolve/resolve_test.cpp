@@ -240,8 +240,8 @@ suite resolve_types = [] {
   "user-declared type resolves"_test = [] {
     auto result = resolve_source("test",
                                  "class Point:\n"
-                                 "    let x: i32\n"
-                                 "    let y: i32\n"
+                                 "    x: i32\n"
+                                 "    y: i32\n"
                                  "fn foo(p: Point): i32 -> 0");
     expect(result.resolve_result.diagnostics.empty());
 
@@ -286,16 +286,16 @@ suite resolve_class = [] {
   "class fields declared"_test = [] {
     auto result = resolve_source("test",
                                  "class Point:\n"
-                                 "    let x: i32\n"
-                                 "    let y: i32");
+                                 "    x: i32\n"
+                                 "    y: i32");
     expect(result.resolve_result.diagnostics.empty());
   };
 
   "duplicate class field"_test = [] {
     auto result = resolve_source("test",
                                  "class Point:\n"
-                                 "    let x: i32\n"
-                                 "    let x: i32");
+                                 "    x: i32\n"
+                                 "    x: i32");
     expect(has_diagnostic_containing(result.resolve_result, "duplicate declaration 'x'"));
   };
 };

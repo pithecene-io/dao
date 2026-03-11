@@ -343,8 +343,8 @@ suite hir_class = [] {
   "class declaration lowered"_test = [] {
     HirTestPipeline p(
         "class Point:\n"
-        "    let x: i32\n"
-        "    let y: i32\n");
+        "    x: i32\n"
+        "    y: i32\n");
     expect(contains(p.dump(), "ClassDecl Point"));
   };
 };

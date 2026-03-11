@@ -239,25 +239,19 @@ private:
   void resolve_class(const ClassDeclNode& st, Scope* parent) {
     auto* struct_scope = ctx_.make_scope(ScopeKind::Struct, parent);
 
-    for (const auto* member : st.members()) {
-      if (member->kind() == NodeKind::LetStatement) {
-        const auto& let_stmt = static_cast<const LetStatementNode&>(*member);
-        if (struct_scope->lookup_local(let_stmt.name()) != nullptr) {
-          diagnostics_.push_back(Diagnostic::error(
-              let_stmt.name_span(),
-              "duplicate declaration '" + std::string(let_stmt.name()) + "'"));
-        } else {
-          auto* sym =
-              ctx_.make_symbol(SymbolKind::Field, let_stmt.name(), let_stmt.name_span(), &let_stmt);
-          struct_scope->declare(let_stmt.name(), sym);
-        }
+    for (const auto* field : st.fields()) {
+      if (struct_scope->lookup_local(field->name()) != nullptr) {
+        diagnostics_.push_back(Diagnostic::error(
+            field->name_span(),
+            "duplicate declaration '" + std::string(field->name()) + "'"));
+      } else {
+        auto* sym =
+            ctx_.make_symbol(SymbolKind::Field, field->name(), field->name_span(), field);
+        struct_scope->declare(field->name(), sym);
+      }
 
-        if (let_stmt.type() != nullptr) {
-          resolve_type(*let_stmt.type(), struct_scope);
-        }
-        if (let_stmt.initializer() != nullptr) {
-          resolve_expr(*let_stmt.initializer(), struct_scope);
-        }
+      if (field->type() != nullptr) {
+        resolve_type(*field->type(), struct_scope);
       }
     }
   }

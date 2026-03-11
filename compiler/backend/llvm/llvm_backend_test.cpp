@@ -360,8 +360,8 @@ suite unsupported_constructs = [] {
   "field assignment is rejected"_test = [] {
     LlvmTestPipeline pipe(
         "class Point:\n"
-        "  let x: i32\n"
-        "  let y: i32\n"
+        "  x: i32\n"
+        "  y: i32\n"
         "\n"
         "fn sety(p: Point): i32\n"
         "  p.y = 1\n"
@@ -372,8 +372,8 @@ suite unsupported_constructs = [] {
   "field load is rejected"_test = [] {
     LlvmTestPipeline pipe(
         "class Point:\n"
-        "  let x: i32\n"
-        "  let y: i32\n"
+        "  x: i32\n"
+        "  y: i32\n"
         "\n"
         "fn gety(p: Point): i32\n"
         "  return p.y\n");
@@ -383,8 +383,8 @@ suite unsupported_constructs = [] {
   "address-of field is rejected"_test = [] {
     LlvmTestPipeline pipe(
         "class Point:\n"
-        "  let x: i32\n"
-        "  let y: i32\n"
+        "  x: i32\n"
+        "  y: i32\n"
         "\n"
         "fn addr(p: Point): *i32\n"
         "  mode unsafe =>\n"

@@ -167,12 +167,12 @@ suite declaration_classification = [] {
   };
 
   "decl.type on class name"_test = [] {
-    auto result = classify_source("test.dao", "class Point:\n    let x: i32\n");
+    auto result = classify_source("test.dao", "class Point:\n    x: i32\n");
     expect(find_token(result.tokens, "decl.type") != nullptr);
   };
 
   "decl.field on class member"_test = [] {
-    auto result = classify_source("test.dao", "class Point:\n    let x: i32\n");
+    auto result = classify_source("test.dao", "class Point:\n    x: i32\n");
     expect(find_token(result.tokens, "decl.field") != nullptr);
   };
 };

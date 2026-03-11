@@ -100,8 +100,8 @@ and carries no hidden runtime metadata.
 
 ```dao
 class Point:
-    let x: f64
-    let y: f64
+    x: f64
+    y: f64
 ```
 
 This declares a value type with two named fields. There is no
