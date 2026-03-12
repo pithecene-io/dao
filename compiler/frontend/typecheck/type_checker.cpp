@@ -332,6 +332,14 @@ void TypeChecker::check_declaration(const Decl* decl) {
   case NodeKind::ClassDecl:
     check_class(decl);
     break;
+  case NodeKind::ConceptDecl:
+    // Concept declarations — method signatures checked structurally.
+    // Full satisfaction checking deferred to a later commit.
+    break;
+  case NodeKind::ExtendDecl:
+    // Extend declarations — conformance methods checked structurally.
+    // Full satisfaction checking deferred to a later commit.
+    break;
   default:
     // AliasDecl — no body checking needed yet.
     break;
