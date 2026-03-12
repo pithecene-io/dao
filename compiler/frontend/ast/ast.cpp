@@ -11,6 +11,8 @@ auto Decl::kind() const -> NodeKind {
       [](const FunctionDecl&) { return NodeKind::FunctionDecl; },
       [](const ClassDecl&) { return NodeKind::ClassDecl; },
       [](const AliasDecl&) { return NodeKind::AliasDecl; },
+      [](const ConceptDecl&) { return NodeKind::ConceptDecl; },
+      [](const ExtendDecl&) { return NodeKind::ExtendDecl; },
   }, payload);
 }
 
@@ -71,6 +73,10 @@ auto node_kind_name(NodeKind kind) -> const char* {
     return "ClassDecl";
   case NodeKind::AliasDecl:
     return "AliasDecl";
+  case NodeKind::ConceptDecl:
+    return "ConceptDecl";
+  case NodeKind::ExtendDecl:
+    return "ExtendDecl";
   case NodeKind::FieldSpec:
     return "FieldSpec";
   case NodeKind::LetStatement:

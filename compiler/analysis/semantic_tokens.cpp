@@ -84,6 +84,22 @@ auto lexical_category(TokenKind kind) -> std::string_view {
   case TokenKind::KwOr:
     return "";
 
+  // Keywords — concepts and conformance
+  case TokenKind::KwConcept:
+    return "keyword.concept";
+  case TokenKind::KwDerived:
+    return "keyword.derived";
+  case TokenKind::KwAs:
+    return "keyword.as";
+  case TokenKind::KwExtend:
+    return "keyword.extend";
+  case TokenKind::KwDeny:
+    return "keyword.deny";
+  case TokenKind::KwSelf:
+    return "keyword.self";
+  case TokenKind::KwWhere:
+    return "keyword.where";
+
   // Numeric literals
   case TokenKind::IntLiteral:
   case TokenKind::FloatLiteral:

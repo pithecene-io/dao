@@ -69,6 +69,8 @@ private:
         [&](const FunctionDecl& fn) { print_function_decl(fn); },
         [&](const ClassDecl& cls) { print_class_decl(cls); },
         [&](const AliasDecl& alias) { print_alias_decl(alias); },
+        [&](const ConceptDecl& concept_) { print_concept_decl(concept_); },
+        [&](const ExtendDecl& ext) { print_extend_decl(ext); },
     }, decl.payload);
   }
 
@@ -145,6 +147,44 @@ private:
       out_ << "Field " << field->name << ": ";
       print_type_inline(*field->type);
       out_ << "\n";
+    }
+    for (const auto& conf : node.conformances) {
+      indent();
+      out_ << "Conformance " << conf.concept_name << "\n";
+      Scope conf_scope(depth_);
+      for (const auto* method : conf.methods) {
+        print_decl(*method);
+      }
+    }
+    for (const auto& deny : node.denials) {
+      indent();
+      out_ << "Deny " << deny.concept_name << "\n";
+    }
+  }
+
+  void print_concept_decl(const ConceptDecl& node) {
+    indent();
+    if (node.is_derived) {
+      out_ << "DerivedConceptDecl " << node.name;
+    } else {
+      out_ << "ConceptDecl " << node.name;
+    }
+    print_type_params(node.type_params);
+    out_ << "\n";
+    Scope scope(depth_);
+    for (const auto* method : node.methods) {
+      print_decl(*method);
+    }
+  }
+
+  void print_extend_decl(const ExtendDecl& node) {
+    indent();
+    out_ << "ExtendDecl ";
+    print_type_inline(*node.target_type);
+    out_ << " as " << node.concept_name << "\n";
+    Scope scope(depth_);
+    for (const auto* method : node.methods) {
+      print_decl(*method);
     }
   }
 

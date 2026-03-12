@@ -550,6 +550,148 @@ suite<"qualified_name_tests"> qualified_name_tests = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Concept declarations
+// ---------------------------------------------------------------------------
+
+suite<"concept_tests"> concept_tests = [] {
+  "simple concept with bare method"_test = [] {
+    auto output = parse_string(
+        "concept Printable:\n"
+        "    fn to_string(self): string\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    auto* file = output.parse_result.file;
+    expect(file->declarations.size() == 1_u);
+
+    auto* decl = file->declarations[0];
+    expect(decl->kind() == NodeKind::ConceptDecl);
+    const auto& concept_ = decl->as<ConceptDecl>();
+    expect(concept_.name == "Printable");
+    expect(!concept_.is_derived);
+    expect(concept_.methods.size() == 1_u);
+
+    const auto& method = concept_.methods[0]->as<FunctionDecl>();
+    expect(method.name == "to_string");
+    expect(method.params.size() == 1_u);
+    expect(method.params[0].name == "self");
+    expect(method.params[0].type == nullptr) << "bare self has no explicit type";
+    expect(!method.is_expr_bodied());
+    expect(method.body.empty()) << "bare signature has no body";
+  };
+
+  "concept with default method"_test = [] {
+    auto output = parse_string(
+        "concept Equatable:\n"
+        "    fn eq(self, other: Equatable): bool\n"
+        "    fn ne(self, other: Equatable): bool -> !self.eq(other)\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& concept_ = output.parse_result.file->declarations[0]->as<ConceptDecl>();
+    expect(concept_.name == "Equatable");
+    expect(concept_.methods.size() == 2_u);
+
+    const auto& eq_method = concept_.methods[0]->as<FunctionDecl>();
+    expect(eq_method.name == "eq");
+    expect(!eq_method.is_expr_bodied());
+
+    const auto& ne_method = concept_.methods[1]->as<FunctionDecl>();
+    expect(ne_method.name == "ne");
+    expect(ne_method.is_expr_bodied());
+  };
+
+  "derived concept"_test = [] {
+    auto output = parse_string(
+        "derived concept Copyable:\n"
+        "    fn copy(self): Copyable\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& concept_ = output.parse_result.file->declarations[0]->as<ConceptDecl>();
+    expect(concept_.name == "Copyable");
+    expect(concept_.is_derived);
+  };
+
+  "generic concept"_test = [] {
+    auto output = parse_string(
+        "concept Iterator<T>:\n"
+        "    fn has_next(self): bool\n"
+        "    fn next(self): T\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& concept_ = output.parse_result.file->declarations[0]->as<ConceptDecl>();
+    expect(concept_.name == "Iterator");
+    expect(concept_.type_params.size() == 1_u);
+    expect(concept_.type_params[0].name == "T");
+    expect(concept_.methods.size() == 2_u);
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Conformance blocks
+// ---------------------------------------------------------------------------
+
+suite<"conformance_tests"> conformance_tests = [] {
+  "class with inline conformance"_test = [] {
+    auto output = parse_string(
+        "class Point:\n"
+        "    x: f64\n"
+        "    y: f64\n"
+        "    as Printable:\n"
+        "        fn to_string(self): string -> \"point\"\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
+    expect(cls.name == "Point");
+    expect(cls.fields.size() == 2_u);
+    expect(cls.conformances.size() == 1_u);
+    expect(cls.conformances[0].concept_name == "Printable");
+    expect(cls.conformances[0].methods.size() == 1_u);
+  };
+
+  "class with deny"_test = [] {
+    auto output = parse_string(
+        "class SecretKey:\n"
+        "    data: i32\n"
+        "    deny Printable\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
+    expect(cls.denials.size() == 1_u);
+    expect(cls.denials[0].concept_name == "Printable");
+  };
+
+  "class with multiple conformances"_test = [] {
+    auto output = parse_string(
+        "class Point:\n"
+        "    x: f64\n"
+        "    as Printable:\n"
+        "        fn to_string(self): string -> \"p\"\n"
+        "    as Equatable:\n"
+        "        fn eq(self, other: Point): bool -> true\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
+    expect(cls.conformances.size() == 2_u);
+    expect(cls.conformances[0].concept_name == "Printable");
+    expect(cls.conformances[1].concept_name == "Equatable");
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Extend declarations
+// ---------------------------------------------------------------------------
+
+suite<"extend_tests"> extend_tests = [] {
+  "extend builtin with concept"_test = [] {
+    auto output = parse_string(
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    auto* file = output.parse_result.file;
+    expect(file->declarations.size() == 1_u);
+
+    auto* decl = file->declarations[0];
+    expect(decl->kind() == NodeKind::ExtendDecl);
+    const auto& ext = decl->as<ExtendDecl>();
+    expect(ext.concept_name == "Printable");
+    expect(ext.target_type != nullptr);
+    expect(ext.methods.size() == 1_u);
+  };
+};
+
 // NOLINTEND(readability-function-cognitive-complexity,readability-magic-numbers,modernize-use-trailing-return-type)
 
 } // namespace

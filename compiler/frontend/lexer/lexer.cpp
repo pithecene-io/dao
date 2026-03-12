@@ -42,6 +42,20 @@ auto token_kind_name(TokenKind kind) -> const char* {
     return "KwAnd";
   case TokenKind::KwOr:
     return "KwOr";
+  case TokenKind::KwConcept:
+    return "KwConcept";
+  case TokenKind::KwDerived:
+    return "KwDerived";
+  case TokenKind::KwAs:
+    return "KwAs";
+  case TokenKind::KwExtend:
+    return "KwExtend";
+  case TokenKind::KwDeny:
+    return "KwDeny";
+  case TokenKind::KwSelf:
+    return "KwSelf";
+  case TokenKind::KwWhere:
+    return "KwWhere";
   case TokenKind::Colon:
     return "Colon";
   case TokenKind::ColonColon:
@@ -540,6 +554,27 @@ private:
     }
     if (word == "or") {
       return TokenKind::KwOr;
+    }
+    if (word == "concept") {
+      return TokenKind::KwConcept;
+    }
+    if (word == "derived") {
+      return TokenKind::KwDerived;
+    }
+    if (word == "as") {
+      return TokenKind::KwAs;
+    }
+    if (word == "extend") {
+      return TokenKind::KwExtend;
+    }
+    if (word == "deny") {
+      return TokenKind::KwDeny;
+    }
+    if (word == "self") {
+      return TokenKind::KwSelf;
+    }
+    if (word == "where") {
+      return TokenKind::KwWhere;
     }
     return TokenKind::Identifier;
   }

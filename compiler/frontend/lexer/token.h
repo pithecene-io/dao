@@ -38,6 +38,15 @@ enum class TokenKind : std::uint8_t {
   KwAnd,
   KwOr,
 
+  // Keywords — concepts and conformance
+  KwConcept,
+  KwDerived,
+  KwAs,
+  KwExtend,
+  KwDeny,
+  KwSelf,
+  KwWhere,
+
   // Operators
   Colon,      // :
   ColonColon, // ::

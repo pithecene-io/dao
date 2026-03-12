@@ -29,6 +29,13 @@ inline auto token_category(TokenKind kind) -> std::string_view {
   case TokenKind::KwResource:
   case TokenKind::KwAnd:
   case TokenKind::KwOr:
+  case TokenKind::KwConcept:
+  case TokenKind::KwDerived:
+  case TokenKind::KwAs:
+  case TokenKind::KwExtend:
+  case TokenKind::KwDeny:
+  case TokenKind::KwSelf:
+  case TokenKind::KwWhere:
     return "keyword";
 
   // Keyword literals
