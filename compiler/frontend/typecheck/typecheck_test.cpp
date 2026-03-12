@@ -730,6 +730,48 @@ suite<"typecheck_methods"> typecheck_methods = [] {
     expect(has_error_containing(result, "no field or method"))
         << "should report missing method";
   };
+
+  "method call on builtin via extend"_test = [] {
+    auto result = check_source(
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n"
+        "fn show(x: i32): string -> x.to_string()\n");
+    expect(is_ok(result)) << "method call on i32 via extend should typecheck";
+  };
+
+  "unknown method on builtin errors"_test = [] {
+    auto result = check_source(
+        "fn bad(x: i32): string -> x.missing()\n");
+    expect(!is_ok(result)) << "unknown method on builtin should error";
+    expect(has_error_containing(result, "no method"))
+        << "should report missing method on non-class type";
+  };
+
+  "conformance method without self errors"_test = [] {
+    auto result = check_source(
+        "concept Eq:\n"
+        "    fn eq(self, other: Eq): bool\n"
+        "class Val:\n"
+        "    n: i32\n"
+        "    as Eq:\n"
+        "        fn eq(a: Val, b: Val): bool -> true\n");
+    expect(!is_ok(result)) << "conformance method without self should error";
+    expect(has_error_containing(result, "self"))
+        << "should mention self in error";
+  };
+
+  "extend method without self errors"_test = [] {
+    auto result = check_source(
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(x: i32): string -> \"num\"\n");
+    expect(!is_ok(result)) << "extend method without self should error";
+    expect(has_error_containing(result, "self"))
+        << "should mention self in error";
+  };
 };
 
 // NOLINTEND(readability-magic-numbers)

@@ -345,6 +345,7 @@ void TypeChecker::check_declaration(const Decl* decl) {
     auto saved_ctx = ctx_;
     ctx_.self_type = resolve_type_node(ext.target_type);
     for (const auto* method : ext.methods) {
+      validate_receiver(method, ext.concept_span);
       const auto& fn = method->as<FunctionDecl>();
       if (!fn.body.empty() || fn.expr_body != nullptr) {
         check_function(method);
@@ -415,9 +416,10 @@ void TypeChecker::check_class(const Decl* decl) {
     ctx_.self_type = resolve_symbol_type(decl_it->second);
   }
 
-  // Check bodies of conformance-block methods.
+  // Validate and check conformance-block methods.
   for (const auto& conf : cls.conformances) {
     for (const auto* method : conf.methods) {
+      validate_receiver(method, conf.concept_span);
       const auto& fn = method->as<FunctionDecl>();
       if (!fn.body.empty() || fn.expr_body != nullptr) {
         check_function(method);
@@ -1008,28 +1010,31 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
     return nullptr;
   }
 
-  if (obj_type->kind() != TypeKind::Struct) {
-    error(field.object->span,
-          "field access on non-class type '" + print_type(obj_type) + "'");
-    return nullptr;
-  }
-
-  const auto* st = static_cast<const TypeStruct*>(obj_type);
-  for (const auto& f : st->fields()) {
-    if (f.name == field.field) {
-      return f.type;
+  // Try struct field lookup first.
+  if (obj_type->kind() == TypeKind::Struct) {
+    const auto* st = static_cast<const TypeStruct*>(obj_type);
+    for (const auto& f : st->fields()) {
+      if (f.name == field.field) {
+        return f.type;
+      }
     }
   }
 
-  // Try method lookup on the struct type.
-  const auto* method_type = lookup_method(st, field.field);
+  // Try method lookup on any type (struct conformances + extend decls).
+  const auto* method_type = lookup_method(obj_type, field.field);
   if (method_type != nullptr) {
     return method_type;
   }
 
-  error(field.field_span,
-        "no field or method '" + std::string(field.field) + "' on type '" +
-            print_type(obj_type) + "'");
+  if (obj_type->kind() == TypeKind::Struct) {
+    error(field.field_span,
+          "no field or method '" + std::string(field.field) + "' on type '" +
+              print_type(obj_type) + "'");
+  } else {
+    error(field.field_span,
+          "no method '" + std::string(field.field) + "' on type '" +
+              print_type(obj_type) + "'");
+  }
   return nullptr;
 }
 
@@ -1037,7 +1042,7 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
 // Method lookup — search conformance blocks and extend declarations
 // ---------------------------------------------------------------------------
 
-auto TypeChecker::lookup_method(const TypeStruct* struct_type,
+auto TypeChecker::lookup_method(const Type* obj_type,
                                 std::string_view name) -> const Type* {
   // Helper: given a FunctionDecl method, build a function type with
   // the self parameter removed (receiver is already bound).
@@ -1063,17 +1068,22 @@ auto TypeChecker::lookup_method(const TypeStruct* struct_type,
     return types_.function_type(std::move(param_types), ret);
   };
 
-  // 1. Search the class's own conformance blocks.
-  const auto* decl_sym = static_cast<const Symbol*>(struct_type->decl_id());
-  if (decl_sym != nullptr && decl_sym->decl != nullptr) {
-    const auto* decl_node = static_cast<const Decl*>(decl_sym->decl);
-    if (decl_node->is<ClassDecl>()) {
-      const auto& cls = decl_node->as<ClassDecl>();
-      for (const auto& conf : cls.conformances) {
-        for (const auto* method_decl : conf.methods) {
-          const auto& method = method_decl->as<FunctionDecl>();
-          if (method.name == name) {
-            return method_fn_type(method);
+  // 1. If the type is a struct, search its own conformance blocks.
+  if (obj_type->kind() == TypeKind::Struct) {
+    const auto* struct_type =
+        static_cast<const TypeStruct*>(obj_type);
+    const auto* decl_sym =
+        static_cast<const Symbol*>(struct_type->decl_id());
+    if (decl_sym != nullptr && decl_sym->decl != nullptr) {
+      const auto* decl_node = static_cast<const Decl*>(decl_sym->decl);
+      if (decl_node->is<ClassDecl>()) {
+        const auto& cls = decl_node->as<ClassDecl>();
+        for (const auto& conf : cls.conformances) {
+          for (const auto* method_decl : conf.methods) {
+            const auto& method = method_decl->as<FunctionDecl>();
+            if (method.name == name) {
+              return method_fn_type(method);
+            }
           }
         }
       }
@@ -1087,9 +1097,8 @@ auto TypeChecker::lookup_method(const TypeStruct* struct_type,
         continue;
       }
       const auto& ext = decl->as<ExtendDecl>();
-      // Match the target type against the struct type.
       const auto* target = resolve_type_node(ext.target_type);
-      if (target != struct_type) {
+      if (target != obj_type) {
         continue;
       }
       for (const auto* method_decl : ext.methods) {
@@ -1102,6 +1111,19 @@ auto TypeChecker::lookup_method(const TypeStruct* struct_type,
   }
 
   return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Receiver validation — conformance/extend methods must have self first param
+// ---------------------------------------------------------------------------
+
+void TypeChecker::validate_receiver(const Decl* method, Span context_span) {
+  const auto& fn_decl = method->as<FunctionDecl>();
+  if (fn_decl.params.empty() || fn_decl.params[0].name != "self") {
+    error(fn_decl.name_span.length > 0 ? fn_decl.name_span : context_span,
+          "method '" + std::string(fn_decl.name) +
+              "' must have 'self' as its first parameter");
+  }
 }
 
 // ---------------------------------------------------------------------------
