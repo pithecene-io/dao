@@ -5,7 +5,7 @@ File
   FunctionDecl search
     Param start: NodeId
     Param goal: NodeId
-    ReturnType: List[NodeId]
+    ReturnType: List<NodeId>
     ResourceBlock memory Search
       ModeBlock parallel
         LetStatement frontier

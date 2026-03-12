@@ -108,6 +108,12 @@ struct Param {
   TypeNode* type;
 };
 
+struct GenericParam {
+  std::string_view name;
+  Span name_span;
+  std::vector<TypeNode*> constraints; // concept bounds from `: Concept + Concept`
+};
+
 // ---------------------------------------------------------------------------
 // Binary / Unary operator tags
 // ---------------------------------------------------------------------------
@@ -168,6 +174,7 @@ struct FieldSpec {
 struct FunctionDecl {
   std::string_view name;
   Span name_span;
+  std::vector<GenericParam> type_params;
   std::vector<Param> params;
   TypeNode* return_type;       // nullable
   std::vector<Stmt*> body;     // empty if expression-bodied or extern
@@ -182,6 +189,7 @@ struct FunctionDecl {
 struct ClassDecl {
   std::string_view name;
   Span name_span;
+  std::vector<GenericParam> type_params;
   std::vector<FieldSpec*> fields;
 };
 

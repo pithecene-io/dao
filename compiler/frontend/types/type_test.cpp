@@ -284,7 +284,7 @@ suite<"type_printer"> type_printer = [] {
   "print named type with args"_test = [] {
     TypeContext ctx;
     auto* t = ctx.named_type(&kDeclA, "List", {ctx.i32()});
-    expect(print_type(t) == "List[i32]");
+    expect(print_type(t) == "List<i32>");
   };
 
   "print generic param"_test = [] {

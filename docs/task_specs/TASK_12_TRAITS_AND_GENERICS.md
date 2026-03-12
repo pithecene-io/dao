@@ -8,8 +8,8 @@ Every significant Phase 5 deliverable depends on a concept and
 generics system:
 
 - `print` that works on any type without compiler builtins
-- `Iterator[T]` protocol for for-loops
-- `List[T]`, `Map[K,V]` for stdlib collections
+- `Iterator<T>` protocol for for-loops
+- `List<T>`, `Map<K, V>` for stdlib collections
 - `Printable`, `Equatable`, `Hashable` for value-type behavior
 
 Without this, the language cannot express its own primitives. The

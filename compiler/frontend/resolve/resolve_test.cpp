@@ -340,6 +340,52 @@ suite<"resolve_corpus"> resolve_corpus = [] {
   };
 };
 
+suite<"resolve_generics"> resolve_generics = [] {
+  "generic type param resolves in param type"_test = [] {
+    auto result = resolve_source("test",
+                                 "fn identity<T>(x: T): T -> x");
+    expect(result.resolve_result.diagnostics.empty())
+        << "no resolve errors for generic function";
+
+    // 'T' in the param type position should resolve to GenericParam.
+    // The first 'T' is the declaration; the second is in 'x: T'.
+    auto t_param_offset = find_offset(result, "T", 1);
+    expect(use_resolves_to(result, t_param_offset, SymbolKind::GenericParam))
+        << "T in param type resolves to GenericParam";
+  };
+
+  "generic type param resolves in return type"_test = [] {
+    auto result = resolve_source("test",
+                                 "fn identity<T>(x: T): T -> x");
+    expect(result.resolve_result.diagnostics.empty());
+
+    // 'T' in return type position (third occurrence).
+    auto t_ret_offset = find_offset(result, "T", 2);
+    expect(use_resolves_to(result, t_ret_offset, SymbolKind::GenericParam))
+        << "T in return type resolves to GenericParam";
+  };
+
+  "generic class type param resolves in field type"_test = [] {
+    auto result = resolve_source("test",
+                                 "class Box<T>:\n"
+                                 "    value: T\n");
+    expect(result.resolve_result.diagnostics.empty())
+        << "no resolve errors for generic class";
+
+    // 'T' in the field type should resolve to GenericParam.
+    auto t_field_offset = find_offset(result, "T", 1);
+    expect(use_resolves_to(result, t_field_offset, SymbolKind::GenericParam))
+        << "T in field type resolves to GenericParam";
+  };
+
+  "duplicate type param is an error"_test = [] {
+    auto result = resolve_source("test",
+                                 "fn bad<T, T>(x: T): T -> x");
+    expect(has_diagnostic_containing(result.resolve_result, "duplicate type parameter"))
+        << "duplicate type parameter should be an error";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {

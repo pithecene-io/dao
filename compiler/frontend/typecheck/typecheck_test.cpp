@@ -464,6 +464,20 @@ suite<"typecheck_construct"> typecheck_construct = [] {
   };
 };
 
+suite<"typecheck_generics"> typecheck_generics = [] {
+  "generic function type uses TypeGenericParam"_test = [] {
+    auto result = check_source("fn identity<T>(x: T): T -> x\n");
+    expect(result.diagnostics.empty()) << "generic function should typecheck";
+  };
+
+  "generic class with type param field"_test = [] {
+    auto result = check_source(
+        "class Box<T>:\n"
+        "    value: T\n");
+    expect(result.diagnostics.empty()) << "generic class should typecheck";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)

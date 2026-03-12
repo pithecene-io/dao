@@ -317,7 +317,7 @@ suite<"type_tests"> type_tests = [] {
   };
 
   "parameterized type"_test = [] {
-    auto output = parse_string("fn f(): List[i32] -> []\n");
+    auto output = parse_string("fn f(): List<i32> -> []\n");
     expect(output.parse_result.diagnostics.empty());
     const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
     const auto& ret = fn.return_type->as<NamedType>();
@@ -328,11 +328,66 @@ suite<"type_tests"> type_tests = [] {
   };
 
   "multi-param type"_test = [] {
-    auto output = parse_string("fn f(): Map[i32, string] -> []\n");
+    auto output = parse_string("fn f(): Map<i32, string> -> []\n");
     expect(output.parse_result.diagnostics.empty());
     const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
     const auto& ret = fn.return_type->as<NamedType>();
     expect(ret.type_args.size() == 2_u);
+  };
+};
+
+suite<"generic_tests"> generic_tests = [] {
+  "generic function with one type param"_test = [] {
+    auto output = parse_string("fn identity<T>(x: T): T -> x\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    expect(fn.name == "identity");
+    expect(fn.type_params.size() == 1_u);
+    expect(fn.type_params[0].name == "T");
+    expect(fn.type_params[0].constraints.empty());
+  };
+
+  "generic function with constrained type param"_test = [] {
+    auto output = parse_string("fn print<T: Printable>(value: T): void -> value\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    expect(fn.type_params.size() == 1_u);
+    expect(fn.type_params[0].name == "T");
+    expect(fn.type_params[0].constraints.size() == 1_u);
+  };
+
+  "generic function with multiple constraints"_test = [] {
+    auto output = parse_string("fn sort<T: Comparable + Printable>(x: T): T -> x\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    expect(fn.type_params.size() == 1_u);
+    expect(fn.type_params[0].constraints.size() == 2_u);
+  };
+
+  "generic function with multiple type params"_test = [] {
+    auto output = parse_string("fn pair<A, B>(a: A, b: B): i32 -> 0\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    expect(fn.type_params.size() == 2_u);
+    expect(fn.type_params[0].name == "A");
+    expect(fn.type_params[1].name == "B");
+  };
+
+  "generic class"_test = [] {
+    auto output = parse_string("class Box<T>:\n    value: T\n");
+    expect(output.parse_result.diagnostics.empty()) << "no parse errors";
+    const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
+    expect(cls.name == "Box");
+    expect(cls.type_params.size() == 1_u);
+    expect(cls.type_params[0].name == "T");
+    expect(cls.fields.size() == 1_u);
+  };
+
+  "non-generic function has empty type params"_test = [] {
+    auto output = parse_string("fn add(a: i32, b: i32): i32 -> a + b\n");
+    expect(output.parse_result.diagnostics.empty());
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    expect(fn.type_params.empty());
   };
 };
 

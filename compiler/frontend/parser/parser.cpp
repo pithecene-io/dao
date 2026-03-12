@@ -159,7 +159,7 @@ private:
         auto fields = parse_field_list();
         Span span = span_from(peek().span);
         return ctx_.alloc<Decl>(
-            span, ClassDecl{name_tok.text, name_tok.span, std::move(fields)});
+            span, ClassDecl{name_tok.text, name_tok.span, {}, std::move(fields)});
       }
       error("expected declaration (fn, extern, class, or type)");
       advance(); // skip problematic token
@@ -176,9 +176,41 @@ private:
     return parse_function_decl(/*is_extern=*/true);
   }
 
+  auto parse_type_params() -> std::vector<GenericParam> {
+    std::vector<GenericParam> params;
+    if (peek_kind() != TokenKind::Lt) {
+      return params;
+    }
+    advance(); // <
+
+    auto parse_one = [&]() -> GenericParam {
+      const auto& name_tok = consume(TokenKind::Identifier);
+      GenericParam param{.name = name_tok.text, .name_span = name_tok.span};
+      if (peek_kind() == TokenKind::Colon) {
+        advance(); // :
+        param.constraints.push_back(parse_type());
+        while (peek_kind() == TokenKind::Plus) {
+          advance(); // +
+          param.constraints.push_back(parse_type());
+        }
+      }
+      return param;
+    };
+
+    params.push_back(parse_one());
+    while (peek_kind() == TokenKind::Comma) {
+      advance(); // ,
+      params.push_back(parse_one());
+    }
+    consume(TokenKind::Gt);
+    return params;
+  }
+
   auto parse_function_decl(bool is_extern) -> Decl* {
     const auto& kw = consume(TokenKind::KwFn);
     const auto& name_tok = consume(TokenKind::Identifier);
+
+    auto type_params = parse_type_params();
 
     consume(TokenKind::LParen);
     auto params = parse_params();
@@ -223,8 +255,9 @@ private:
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
         span,
-        FunctionDecl{name_tok.text, name_tok.span, std::move(params),
-                     return_type, std::move(body), expr_body, is_extern});
+        FunctionDecl{name_tok.text, name_tok.span, std::move(type_params),
+                     std::move(params), return_type, std::move(body),
+                     expr_body, is_extern});
   }
 
   auto parse_params() -> std::vector<Param> {
@@ -250,11 +283,13 @@ private:
   auto parse_class_decl() -> Decl* {
     const auto& kw = consume(TokenKind::KwClass);
     const auto& name_tok = consume(TokenKind::Identifier);
+    auto type_params = parse_type_params();
     consume(TokenKind::Colon);
     auto fields = parse_field_list();
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
-        span, ClassDecl{name_tok.text, name_tok.span, std::move(fields)});
+        span, ClassDecl{name_tok.text, name_tok.span,
+                        std::move(type_params), std::move(fields)});
   }
 
   auto parse_field_list() -> std::vector<FieldSpec*> {
@@ -868,15 +903,15 @@ private:
     auto path = parse_type_path();
 
     std::vector<TypeNode*> type_args;
-    if (peek_kind() == TokenKind::LBracket) {
-      advance(); // [
+    if (peek_kind() == TokenKind::Lt) {
+      advance(); // <
       type_args.push_back(parse_type());
       while (peek_kind() == TokenKind::Comma) {
         advance();
         type_args.push_back(parse_type());
       }
-      const auto& rbracket = consume(TokenKind::RBracket);
-      path.span.length = (rbracket.span.offset + rbracket.span.length) - path.span.offset;
+      const auto& gt = consume(TokenKind::Gt);
+      path.span.length = (gt.span.offset + gt.span.length) - path.span.offset;
     }
 
     return ctx_.alloc<TypeNode>(path.span, NamedType{std::move(path), std::move(type_args)});

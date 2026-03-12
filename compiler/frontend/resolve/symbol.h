@@ -25,7 +25,8 @@ enum class SymbolKind : std::uint8_t {
   Module,      // import binding
   Builtin,      // built-in scalar type (i32, f64, bool)
   Predeclared,  // compiler-known predeclared named type (string, void)
-  LambdaParam,  // lambda |x| parameter
+  LambdaParam,    // lambda |x| parameter
+  GenericParam,   // type parameter in generic function/class
 };
 
 auto symbol_kind_name(SymbolKind kind) -> const char*;
