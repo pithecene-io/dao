@@ -148,6 +148,12 @@ private:
       return parse_class_decl();
     case TokenKind::KwType:
       return parse_alias_decl();
+    case TokenKind::KwConcept:
+      return parse_concept_decl(/*is_derived=*/false);
+    case TokenKind::KwDerived:
+      return parse_concept_decl(/*is_derived=*/true);
+    case TokenKind::KwExtend:
+      return parse_extend_decl();
     default:
       // Migration diagnostic: 'struct' was renamed to 'class'.
       if (peek_kind() == TokenKind::Identifier && peek().text == "struct") {
@@ -159,9 +165,10 @@ private:
         auto fields = parse_field_list();
         Span span = span_from(peek().span);
         return ctx_.alloc<Decl>(
-            span, ClassDecl{name_tok.text, name_tok.span, {}, std::move(fields)});
+            span, ClassDecl{name_tok.text, name_tok.span, {}, std::move(fields),
+                            {}, {}});
       }
-      error("expected declaration (fn, extern, class, or type)");
+      error("expected declaration (fn, extern, class, concept, extend, or type)");
       advance(); // skip problematic token
       return nullptr;
     }
@@ -274,10 +281,22 @@ private:
   }
 
   auto parse_param() -> Param {
-    const auto& name_tok = consume(TokenKind::Identifier);
+    // Accept `self` (reserved keyword) as a parameter name.
+    const Token* name_tok = nullptr;
+    if (peek_kind() == TokenKind::KwSelf) {
+      name_tok = &advance();
+    } else {
+      name_tok = &consume(TokenKind::Identifier);
+    }
+
+    // `self` without `: type` is a bare receiver; type resolved later.
+    if (name_tok->text == "self" && peek_kind() != TokenKind::Colon) {
+      return {.name = name_tok->text, .name_span = name_tok->span, .type = nullptr};
+    }
+
     consume(TokenKind::Colon);
     auto* type = parse_type();
-    return {.name = name_tok.text, .name_span = name_tok.span, .type = type};
+    return {.name = name_tok->text, .name_span = name_tok->span, .type = type};
   }
 
   auto parse_class_decl() -> Decl* {
@@ -285,11 +304,124 @@ private:
     const auto& name_tok = consume(TokenKind::Identifier);
     auto type_params = parse_type_params();
     consume(TokenKind::Colon);
-    auto fields = parse_field_list();
+    auto body = parse_class_body();
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
         span, ClassDecl{name_tok.text, name_tok.span,
-                        std::move(type_params), std::move(fields)});
+                        std::move(type_params), std::move(body.fields),
+                        std::move(body.conformances), std::move(body.denials)});
+  }
+
+  struct ClassBody {
+    std::vector<FieldSpec*> fields;
+    std::vector<ConformanceBlock> conformances;
+    std::vector<DenySpec> denials;
+  };
+
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+  auto parse_class_body() -> ClassBody {
+    consume(TokenKind::Newline);
+    consume(TokenKind::Indent);
+    ClassBody body;
+    while (peek_kind() != TokenKind::Dedent && peek_kind() != TokenKind::Eof) {
+      if (peek_kind() == TokenKind::KwAs) {
+        body.conformances.push_back(parse_conformance_block());
+      } else if (peek_kind() == TokenKind::KwDeny) {
+        body.denials.push_back(parse_deny_spec());
+      } else if (peek_kind() == TokenKind::KwFn) {
+        // Method declaration inside class body (future: §11.5).
+        // For now, skip ahead and emit a diagnostic.
+        error("methods inside class bodies are not yet supported");
+        advance();
+      } else {
+        body.fields.push_back(parse_field_spec());
+      }
+    }
+    consume(TokenKind::Dedent);
+    if (body.fields.empty() && body.conformances.empty()) {
+      error("class body must contain at least one field");
+    }
+    return body;
+  }
+
+  auto parse_conformance_block() -> ConformanceBlock {
+    advance(); // consume 'as'
+    const auto& concept_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::Colon);
+    auto methods = parse_method_list();
+    return {concept_tok.text, concept_tok.span, std::move(methods)};
+  }
+
+  auto parse_deny_spec() -> DenySpec {
+    advance(); // consume 'deny'
+    const auto& concept_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::Newline);
+    return {concept_tok.text, concept_tok.span};
+  }
+
+  auto parse_method_list() -> std::vector<Decl*> {
+    consume(TokenKind::Newline);
+    consume(TokenKind::Indent);
+    std::vector<Decl*> methods;
+    while (peek_kind() != TokenKind::Dedent && peek_kind() != TokenKind::Eof) {
+      skip_newlines();
+      if (peek_kind() == TokenKind::Dedent || peek_kind() == TokenKind::Eof) {
+        break;
+      }
+      if (peek_kind() != TokenKind::KwFn) {
+        error("expected 'fn' in method list");
+        advance();
+        continue;
+      }
+      methods.push_back(parse_method_decl());
+    }
+    consume(TokenKind::Dedent);
+    return methods;
+  }
+
+  auto parse_method_decl() -> Decl* {
+    // Like parse_function_decl but allows bare signatures (no body).
+    const auto& kw = consume(TokenKind::KwFn);
+    const auto& name_tok = consume(TokenKind::Identifier);
+
+    auto method_type_params = parse_type_params();
+
+    consume(TokenKind::LParen);
+    auto params = parse_params();
+    consume(TokenKind::RParen);
+
+    TypeNode* return_type = nullptr;
+    if (peek_kind() == TokenKind::Colon) {
+      advance(); // :
+      return_type = parse_type();
+    }
+
+    std::vector<Stmt*> fn_body;
+    Expr* expr_body = nullptr;
+
+    if (peek_kind() == TokenKind::Arrow) {
+      // Expression-bodied default method.
+      advance(); // ->
+      expr_body = parse_expression();
+      match(TokenKind::Newline);
+    } else if (peek_kind() == TokenKind::Newline) {
+      consume(TokenKind::Newline);
+      if (peek_kind() == TokenKind::Indent) {
+        // Block-bodied default method.
+        advance(); // consume Indent
+        fn_body = parse_statement_list();
+        consume(TokenKind::Dedent);
+      }
+      // else: bare signature (required method) — no body is fine.
+    }
+
+    Span span = span_from(kw.span);
+    return ctx_.alloc<Decl>(
+        span,
+        FunctionDecl{name_tok.text, name_tok.span,
+                     std::move(method_type_params), std::move(params),
+                     return_type, std::move(fn_body), expr_body,
+                     /*is_extern=*/false});
   }
 
   auto parse_field_list() -> std::vector<FieldSpec*> {
@@ -324,6 +456,37 @@ private:
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
         span, AliasDecl{name_tok.text, name_tok.span, type});
+  }
+
+  auto parse_concept_decl(bool is_derived) -> Decl* {
+    const auto& kw = is_derived ? advance() : peek(); // consume 'derived' if present
+    if (is_derived) {
+      consume(TokenKind::KwConcept);
+    } else {
+      advance(); // consume 'concept'
+    }
+    const auto& name_tok = consume(TokenKind::Identifier);
+    auto type_params = parse_type_params();
+    consume(TokenKind::Colon);
+    auto methods = parse_method_list();
+    Span span = span_from(kw.span);
+    return ctx_.alloc<Decl>(
+        span, ConceptDecl{name_tok.text, name_tok.span,
+                          std::move(type_params), std::move(methods),
+                          is_derived});
+  }
+
+  auto parse_extend_decl() -> Decl* {
+    const auto& kw = advance(); // consume 'extend'
+    auto* target_type = parse_type();
+    consume(TokenKind::KwAs);
+    const auto& concept_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::Colon);
+    auto methods = parse_method_list();
+    Span span = span_from(kw.span);
+    return ctx_.alloc<Decl>(
+        span, ExtendDecl{target_type, concept_tok.text, concept_tok.span,
+                         std::move(methods)});
   }
 
   // -----------------------------------------------------------------------
@@ -818,6 +981,11 @@ private:
       return parse_lambda();
     case TokenKind::Identifier:
       return parse_qualified_name_or_identifier();
+    case TokenKind::KwSelf: {
+      // `self` in expression position acts as an identifier.
+      const auto& tok = advance();
+      return ctx_.alloc<Expr>(tok.span, IdentifierExpr{tok.text});
+    }
     default:
       error("expected expression");
       const auto& tok = advance();

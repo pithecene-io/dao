@@ -48,6 +48,8 @@ enum class NodeKind : std::uint8_t {
   FunctionDecl,
   ClassDecl,
   AliasDecl,
+  ConceptDecl,
+  ExtendDecl,
 
   // Class members
   FieldSpec,
@@ -168,6 +170,23 @@ struct FieldSpec {
 };
 
 // ---------------------------------------------------------------------------
+// Conformance and denial specifiers — used inside class bodies.
+// ---------------------------------------------------------------------------
+
+// Conformance block inside a class: `as ConceptName:`
+struct ConformanceBlock {
+  std::string_view concept_name;
+  Span concept_span;
+  std::vector<Decl*> methods; // FunctionDecl nodes
+};
+
+// Deny statement inside a class: `deny ConceptName`
+struct DenySpec {
+  std::string_view concept_name;
+  Span concept_span;
+};
+
+// ---------------------------------------------------------------------------
 // Declaration payloads
 // ---------------------------------------------------------------------------
 
@@ -191,6 +210,8 @@ struct ClassDecl {
   Span name_span;
   std::vector<GenericParam> type_params;
   std::vector<FieldSpec*> fields;
+  std::vector<ConformanceBlock> conformances;
+  std::vector<DenySpec> denials;
 };
 
 struct AliasDecl {
@@ -199,7 +220,23 @@ struct AliasDecl {
   TypeNode* type;
 };
 
-using DeclPayload = std::variant<FunctionDecl, ClassDecl, AliasDecl>;
+struct ConceptDecl {
+  std::string_view name;
+  Span name_span;
+  std::vector<GenericParam> type_params;
+  std::vector<Decl*> methods; // FunctionDecl nodes (bare sigs or defaults)
+  bool is_derived = false;
+};
+
+struct ExtendDecl {
+  TypeNode* target_type;
+  std::string_view concept_name;
+  Span concept_span;
+  std::vector<Decl*> methods; // FunctionDecl nodes
+};
+
+using DeclPayload =
+    std::variant<FunctionDecl, ClassDecl, AliasDecl, ConceptDecl, ExtendDecl>;
 
 // ---------------------------------------------------------------------------
 // Statement payloads

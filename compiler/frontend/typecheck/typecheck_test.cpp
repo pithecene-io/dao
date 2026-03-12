@@ -518,6 +518,98 @@ suite<"typecheck_generics"> typecheck_generics = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Concept declarations and conformance
+// ---------------------------------------------------------------------------
+
+suite<"typecheck_concepts"> typecheck_concepts = [] {
+  "concept declaration typechecks"_test = [] {
+    auto result = check_source(
+        "concept Printable:\n"
+        "    fn to_string(self): string\n");
+    expect(is_ok(result)) << "concept declaration should typecheck";
+  };
+
+  "concept with default method typechecks"_test = [] {
+    auto result = check_source(
+        "concept Equatable:\n"
+        "    fn eq(self, other: Equatable): bool\n"
+        "    fn ne(self, other: Equatable): bool -> !self.eq(other)\n");
+    expect(is_ok(result)) << "concept with default method should typecheck";
+  };
+
+  "class with conformance block typechecks"_test = [] {
+    auto result = check_source(
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "class Point:\n"
+        "    x: f64\n"
+        "    as Printable:\n"
+        "        fn to_string(self): string -> \"p\"\n");
+    expect(is_ok(result)) << "class with conformance should typecheck";
+  };
+
+  "extend declaration typechecks"_test = [] {
+    auto result = check_source(
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n");
+    expect(is_ok(result)) << "extend declaration should typecheck";
+  };
+
+  "derived concept typechecks"_test = [] {
+    auto result = check_source(
+        "derived concept Copyable:\n"
+        "    fn copy(self): Copyable\n");
+    expect(is_ok(result)) << "derived concept should typecheck";
+  };
+
+  "class with deny typechecks"_test = [] {
+    auto result = check_source(
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "class SecretKey:\n"
+        "    data: i32\n"
+        "    deny Printable\n");
+    expect(is_ok(result)) << "class with deny should typecheck";
+  };
+
+  "bad default method body is rejected"_test = [] {
+    auto result = check_source(
+        "concept Eq:\n"
+        "    fn eq(self, other: Eq): bool\n"
+        "    fn ne(self, other: Eq): bool -> 42\n");
+    expect(!is_ok(result)) << "bad default body should produce error";
+    expect(has_error_containing(result, "does not match return type"))
+        << "should report type mismatch";
+  };
+
+  "bad conformance method body is rejected"_test = [] {
+    auto result = check_source(
+        "concept Show:\n"
+        "    fn show(self): string\n"
+        "class X:\n"
+        "    v: i32\n"
+        "    as Show:\n"
+        "        fn show(self): string -> 99\n");
+    expect(!is_ok(result)) << "bad conformance body should produce error";
+    expect(has_error_containing(result, "does not match return type"))
+        << "should report type mismatch";
+  };
+
+  "bad extend method body is rejected"_test = [] {
+    auto result = check_source(
+        "concept Show:\n"
+        "    fn show(self): string\n"
+        "extend i32 as Show:\n"
+        "    fn show(self): string -> 0\n");
+    expect(!is_ok(result)) << "bad extend body should produce error";
+    expect(has_error_containing(result, "does not match return type"))
+        << "should report type mismatch";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)

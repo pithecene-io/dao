@@ -459,7 +459,7 @@ New keywords introduced:
 - `extend` — external conformance declaration
 - `deny` — opt-out from derived concept
 - `where` — additional constraints on conformance blocks
-- `self` — receiver parameter (contextual; special only as first parameter)
+- `self` — receiver parameter (reserved keyword; valid as first parameter and in expression position)
 
 New syntax forms:
 - `<T>` / `<T: Concept>` / `<T: A + B>` — generic parameters

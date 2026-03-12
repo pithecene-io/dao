@@ -128,6 +128,15 @@ suite<"keyword_classification"> keyword_classification = [] {
         "test.dao", "fn main(): i32\n    resource memory Pool =>\n        0\n    0\n");
     expect(find_token(result.tokens, "keyword.resource") != nullptr);
   };
+
+  "keyword.self for reserved self"_test = [] {
+    auto result = classify_source(
+        "test.dao",
+        "concept Show:\n"
+        "    fn show(self): string\n");
+    expect(find_token_at(result, "keyword.self", "self") != nullptr)
+        << "self should classify as keyword.self";
+  };
 };
 
 suite<"literal_classification"> literal_classification = [] {

@@ -84,6 +84,22 @@ auto lexical_category(TokenKind kind) -> std::string_view {
   case TokenKind::KwOr:
     return "";
 
+  // Keywords — concepts and conformance
+  case TokenKind::KwConcept:
+    return "keyword.concept";
+  case TokenKind::KwDerived:
+    return "keyword.derived";
+  case TokenKind::KwAs:
+    return "keyword.as";
+  case TokenKind::KwExtend:
+    return "keyword.extend";
+  case TokenKind::KwDeny:
+    return "keyword.deny";
+  case TokenKind::KwSelf:
+    return "keyword.self";
+  case TokenKind::KwWhere:
+    return "keyword.where";
+
   // Numeric literals
   case TokenKind::IntLiteral:
   case TokenKind::FloatLiteral:
@@ -506,6 +522,8 @@ auto resolve_use_category(SymbolKind kind) -> std::string_view {
     return "use.variable.param"; // reuse param category for lambda params
   case SymbolKind::GenericParam:
     return "use.type"; // generic type parameters classify as type uses
+  case SymbolKind::Concept:
+    return "use.type"; // concept references classify as type uses
   case SymbolKind::Builtin:
   case SymbolKind::Predeclared:
     return ""; // type-position symbols — classified by visit_type(), not here

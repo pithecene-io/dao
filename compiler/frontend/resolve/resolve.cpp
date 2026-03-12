@@ -27,6 +27,8 @@ auto symbol_kind_name(SymbolKind kind) -> const char* {
     return "LambdaParam";
   case SymbolKind::GenericParam:
     return "GenericParam";
+  case SymbolKind::Concept:
+    return "Concept";
   }
   return "Unknown";
 }
@@ -161,6 +163,17 @@ private:
       kind = SymbolKind::Type;
       break;
     }
+    case NodeKind::ConceptDecl: {
+      const auto& concept_ = decl.as<ConceptDecl>();
+      name = concept_.name;
+      name_span = concept_.name_span;
+      kind = SymbolKind::Concept;
+      break;
+    }
+    case NodeKind::ExtendDecl:
+      // Extend declarations don't introduce a new name — they attach
+      // conformance to an existing type. Resolved in pass 2.
+      return;
     default:
       return;
     }
@@ -193,6 +206,12 @@ private:
       break;
     case NodeKind::AliasDecl:
       resolve_alias(decl, scope);
+      break;
+    case NodeKind::ConceptDecl:
+      resolve_concept(decl, scope);
+      break;
+    case NodeKind::ExtendDecl:
+      resolve_extend(decl, scope);
       break;
     default:
       break;
@@ -282,12 +301,64 @@ private:
         resolve_type(*field->type, struct_scope);
       }
     }
+
+    // Resolve conformance blocks — concept name + method signatures.
+    for (const auto& conf : st.conformances) {
+      auto* sym = parent->lookup(conf.concept_name);
+      if (sym != nullptr) {
+        uses_[conf.concept_span.offset] = sym;
+      }
+      for (const auto* method : conf.methods) {
+        resolve_function(*method, struct_scope);
+      }
+    }
+
+    // Resolve deny specs — concept name lookup only.
+    for (const auto& deny : st.denials) {
+      auto* sym = parent->lookup(deny.concept_name);
+      if (sym != nullptr) {
+        uses_[deny.concept_span.offset] = sym;
+      }
+    }
   }
 
   void resolve_alias(const Decl& decl, Scope* scope) {
     const auto& alias = decl.as<AliasDecl>();
     if (alias.type != nullptr) {
       resolve_type(*alias.type, scope);
+    }
+  }
+
+  void resolve_concept(const Decl& decl, Scope* parent) {
+    const auto& concept_ = decl.as<ConceptDecl>();
+    auto* concept_scope = ctx_.make_scope(ScopeKind::Function, parent);
+
+    // Declare generic type parameters.
+    declare_type_params(concept_.type_params, concept_scope, decl);
+
+    // Resolve method signatures.
+    for (const auto* method : concept_.methods) {
+      resolve_function(*method, concept_scope);
+    }
+  }
+
+  void resolve_extend(const Decl& decl, Scope* parent) {
+    const auto& ext = decl.as<ExtendDecl>();
+
+    // Resolve the target type.
+    if (ext.target_type != nullptr) {
+      resolve_type(*ext.target_type, parent);
+    }
+
+    // Resolve the concept name as a type-position reference.
+    auto* sym = parent->lookup(ext.concept_name);
+    if (sym != nullptr) {
+      uses_[ext.concept_span.offset] = sym;
+    }
+
+    // Resolve method signatures.
+    for (const auto* method : ext.methods) {
+      resolve_function(*method, parent);
     }
   }
 
