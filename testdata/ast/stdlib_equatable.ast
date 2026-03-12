@@ -1,0 +1,70 @@
+File
+  ExternFunctionDecl __i32_eq
+    Param a: i32
+    Param b: i32
+    ReturnType: bool
+  ExternFunctionDecl __f64_eq
+    Param a: f64
+    Param b: f64
+    ReturnType: bool
+  ExternFunctionDecl __bool_eq
+    Param a: bool
+    Param b: bool
+    ReturnType: bool
+  ExternFunctionDecl __string_eq
+    Param a: string
+    Param b: string
+    ReturnType: bool
+  DerivedConceptDecl Equatable
+    FunctionDecl eq
+      Param self
+      Param other: Equatable
+      ReturnType: bool
+  ExtendDecl i32 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: i32
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __i32_eq
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl f64 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: f64
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __f64_eq
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl bool as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: bool
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __bool_eq
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl string as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: string
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __string_eq
+          Args
+            Identifier self
+            Identifier other
