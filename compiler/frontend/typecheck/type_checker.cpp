@@ -77,7 +77,7 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
       if (sym->kind == SymbolKind::GenericParam) {
         // Find the parameter index from the enclosing declaration.
         uint32_t index = find_generic_param_index(sym);
-        return types_.generic_param(sym->name, index);
+        return types_.generic_param(sym->decl, sym->name, index);
       }
       return resolve_symbol_type(sym);
     }

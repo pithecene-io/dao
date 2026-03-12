@@ -185,24 +185,33 @@ suite<"type_named"> type_named = [] {
 suite<"type_generic_param"> type_generic_param = [] {
   "generic param creation"_test = [] {
     TypeContext ctx;
-    auto* t = ctx.generic_param("T", 0);
+    auto* t = ctx.generic_param(&kDeclA, "T", 0);
     expect(t != nullptr);
     expect(t->name() == "T");
     expect(t->index() == 0u);
+    expect(t->binder() == &kDeclA);
   };
 
-  "same generic param canonicalizes"_test = [] {
+  "same binder same index canonicalizes"_test = [] {
     TypeContext ctx;
-    auto* t1 = ctx.generic_param("T", 0);
-    auto* t2 = ctx.generic_param("T", 0);
+    auto* t1 = ctx.generic_param(&kDeclA, "T", 0);
+    auto* t2 = ctx.generic_param(&kDeclA, "T", 0);
     expect(t1 == t2);
   };
 
-  "different generic params are distinct"_test = [] {
+  "different index at same binder is distinct"_test = [] {
     TypeContext ctx;
-    auto* t1 = ctx.generic_param("T", 0);
-    auto* t2 = ctx.generic_param("U", 1);
+    auto* t1 = ctx.generic_param(&kDeclA, "T", 0);
+    auto* t2 = ctx.generic_param(&kDeclA, "U", 1);
     expect(t1 != t2);
+  };
+
+  "same name and index at different binders are distinct"_test = [] {
+    TypeContext ctx;
+    auto* t1 = ctx.generic_param(&kDeclA, "T", 0);
+    auto* t2 = ctx.generic_param(&kDeclB, "T", 0);
+    expect(t1 != t2)
+        << "T@0 from different declarations must not collapse";
   };
 };
 
@@ -289,7 +298,7 @@ suite<"type_printer"> type_printer = [] {
 
   "print generic param"_test = [] {
     TypeContext ctx;
-    auto* t = ctx.generic_param("T", 0);
+    auto* t = ctx.generic_param(&kDeclA, "T", 0);
     expect(print_type(t) == "T");
   };
 
