@@ -1,11 +1,11 @@
-# Task 12 — Traits and Generics
+# Task 12 — Concepts and Generics
 
 Status: design spec (pre-implementation)
 
 ## 1. Motivation
 
-Every significant Phase 5 deliverable depends on a trait and generics
-system:
+Every significant Phase 5 deliverable depends on a concept and
+generics system:
 
 - `print` that works on any type without compiler builtins
 - `Iterator[T]` protocol for for-loops
@@ -41,54 +41,54 @@ not the other way around.
 
 ### 2.3 Conformance lives with the type
 
-Trait implementations belong at the type's declaration site, not
+Concept implementations belong at the type's declaration site, not
 scattered across separate impl blocks. Related behavior for a type
 is colocated, not fragmented.
 
 ### 2.4 Static dispatch by default
 
-Trait-constrained generics resolve at compile time via
+Concept-constrained generics resolve at compile time via
 monomorphization. There is no implicit vtable, no implicit boxing, no
 hidden heap allocation. Dynamic dispatch is available through explicit
-trait objects when needed.
+concept objects when needed.
 
-### 2.5 Traits are the metalanguage, not syntax
+### 2.5 Concepts are the metalanguage, not syntax
 
-New capabilities are expressed by defining traits and implementations,
-not by adding keywords. `print` is a function constrained by a trait.
-`for` loops consume an `Iterator` trait. This is how the language
-grows without accumulating special forms.
+New capabilities are expressed by defining concepts and
+implementations, not by adding keywords. `print` is a function
+constrained by a concept. `for` loops consume an `Iterator` concept.
+This is how the language grows without accumulating special forms.
 
-## 3. Trait Declarations
+## 3. Concept Declarations
 
 ### 3.1 Syntax
 
 ```dao
-trait Printable:
-    fn print(self): string
+concept Printable:
+    fn to_string(self): string
 ```
 
-A trait declares a set of required method signatures. The `self`
+A concept declares a set of required method signatures. The `self`
 parameter is the receiver — its type is the conforming type.
 
 ### 3.2 Default methods
 
 ```dao
-trait Equatable:
+concept Equatable:
     fn eq(self, other: Self): bool
 
     fn ne(self, other: Self): bool -> !self.eq(other)
 ```
 
-Traits may provide default method implementations using `->` for
+Concepts may provide default method implementations using `->` for
 expression bodies or indented blocks. Conforming types inherit defaults
 but may override them.
 
 ### 3.3 Associated types (deferred)
 
-Associated types (e.g., `type Item` inside a trait) are deferred to a
-future spec. The initial system supports only method requirements and
-generic parameters.
+Associated types (e.g., `type Item` inside a concept) are deferred to
+a future spec. The initial system supports only method requirements
+and generic parameters.
 
 ## 4. Conformance
 
@@ -100,11 +100,11 @@ class Point:
     y: f64
 
     as Printable:
-        fn print(self): string -> "({self.x}, {self.y})"
+        fn to_string(self): string -> "({self.x}, {self.y})"
 ```
 
-The `as TraitName:` block inside a class body declares conformance and
-provides implementations. This is the primary and preferred form.
+The `as ConceptName:` block inside a class body declares conformance
+and provides implementations. This is the primary and preferred form.
 
 Rules:
 - `as` introduces a conformance block, not a new scope
@@ -116,12 +116,12 @@ Rules:
 
 ```dao
 extend i32 as Printable:
-    fn print(self): string -> to_string(self)
+    fn to_string(self): string -> __i32_to_string(self)
 ```
 
-The `extend Type as Trait:` form provides conformance for types
+The `extend Type as Concept:` form provides conformance for types
 declared elsewhere (builtins, other modules). This is necessary for
-the stdlib to make builtins conform to core traits.
+the stdlib to make builtins conform to core concepts.
 
 Rules:
 - `extend` is used only when the type is not yours to modify
@@ -131,10 +131,10 @@ Rules:
 
 ### 4.3 No standalone impl blocks
 
-There are no free-floating `impl Trait for Type` blocks. Conformance
+There are no free-floating `impl Concept for Type` blocks. Conformance
 is either inline (`as` inside the class) or external (`extend`). This
-prevents the fragmentation problem where trait implementations scatter
-across a codebase.
+prevents the fragmentation problem where concept implementations
+scatter across a codebase.
 
 ## 5. Generics
 
@@ -142,8 +142,8 @@ across a codebase.
 
 ```dao
 fn print<T: Printable>(value: T): void
-    let text = value.print()
-    write_stdout(text)
+    let text = value.to_string()
+    __write_stdout(text)
 ```
 
 Generic type parameters appear in angle brackets after the function
@@ -159,7 +159,7 @@ class List<T>:
     cap: i32
 
     as Printable where T: Printable:
-        fn print(self): string
+        fn to_string(self): string
             ...
 ```
 
@@ -172,16 +172,16 @@ additional constraints with `where` clauses.
 fn sort<T: Comparable + Printable>(items: List<T>): List<T>
 ```
 
-Multiple trait constraints use `+`.
+Multiple concept constraints use `+`.
 
 ### 5.4 Monomorphization
 
 All generic code is monomorphized at compile time. `print<i32>` and
 `print<f64>` produce separate compiled functions. There is no type
 erasure, no boxing, and no runtime dispatch unless explicitly
-requested through trait objects.
+requested through concept objects.
 
-## 6. Universal Traits
+## 6. Derived Concepts
 
 ### 6.1 The problem with opt-in everything
 
@@ -189,17 +189,17 @@ Most value types want the same baseline behaviors: printability,
 equality, copying. Requiring explicit annotation for these universally
 expected behaviors creates boilerplate without communicating intent.
 
-### 6.2 Universal trait definition
+### 6.2 Derived concept definition
 
-A trait may be declared `universal`:
+A concept may be declared `derived`:
 
 ```dao
-universal trait Printable:
-    fn print(self): string
+derived concept Printable:
+    fn to_string(self): string
 ```
 
-A universal trait has **automatic structural conformance**: any class
-whose fields all conform to the trait automatically conforms, with a
+A derived concept has **automatic structural conformance**: any class
+whose fields all conform to the concept automatically conforms, with a
 compiler-synthesized implementation. No annotation needed.
 
 ### 6.3 Behavior
@@ -208,7 +208,7 @@ For a class `Point` with fields `x: f64` and `y: f64`:
 
 - If `f64` conforms to `Printable`, then `Point` automatically
   conforms to `Printable`
-- The synthesized `print` produces a structural representation
+- The synthesized `to_string` produces a structural representation
   (e.g., `"Point(3.14, 2.72)"`)
 - If the automatic behavior is wrong, the class provides an explicit
   `as Printable:` block, which takes precedence
@@ -223,37 +223,88 @@ class SecretKey:
     deny Printable
 ```
 
-The `deny TraitName` declaration inside a class body suppresses
-automatic conformance for a universal trait. This is the explicit
+The `deny ConceptName` declaration inside a class body suppresses
+automatic conformance for a derived concept. This is the explicit
 decision — "this type intentionally does not support printing" — and
 it's visible at the declaration site.
 
-### 6.5 Initial universal traits
+### 6.5 Initial derived concepts
 
-The following traits are candidates for universal status:
+The following concepts are candidates for derived status:
 
-| Trait | Synthesized behavior |
-|-------|---------------------|
+| Concept | Synthesized behavior |
+|---------|---------------------|
 | `Printable` | Structural field printing: `TypeName(field1, field2)` |
 | `Equatable` | Field-wise equality: all fields equal ↔ values equal |
 | `Copyable` | Bitwise copy (value types are copyable by default) |
 | `Hashable` | Field-wise hash combination |
 
-Non-universal (always explicit):
+Non-derived (always explicit):
 - `Comparable` (ordering is a design choice)
 - `Serializable` (format is a design choice)
 - `Iterator` (protocol is behavioral, not structural)
 
 ### 6.6 Precedence
 
-1. Explicit `as Trait:` block — always wins
-2. Explicit `deny Trait` — suppresses automatic conformance
+1. Explicit `as Concept:` block — always wins
+2. Explicit `deny Concept` — suppresses automatic conformance
 3. Automatic structural conformance — applies if all fields conform
 4. No conformance — if any field doesn't conform and no explicit impl
 
-## 7. Self and Receivers
+## 7. Scalar Conformance
 
-### 7.1 Methods
+### 7.1 Principle
+
+Scalars (`i32`, `f64`, `bool`, `string`) conform to concepts the
+same way any type does — through explicit conformance declarations.
+No compiler magic.
+
+### 7.2 Compiler intrinsics as the floor
+
+A small set of compiler intrinsic functions provide the operations
+that genuinely cannot be expressed in Dao because they are below the
+abstraction floor:
+
+- `__i32_to_string(x: i32): string`
+- `__f64_to_string(x: f64): string`
+- `__bool_to_string(x: bool): string`
+- `__write_stdout(msg: string): void`
+
+These are the only compiler-provided primitives. Everything above
+composes from them in regular Dao code.
+
+### 7.3 Stdlib conformance
+
+The stdlib prelude provides conformance for scalars using `extend`:
+
+```dao
+// stdlib/core/printable.dao
+derived concept Printable:
+    fn to_string(self): string
+
+extend i32 as Printable:
+    fn to_string(self): string -> __i32_to_string(self)
+
+extend f64 as Printable:
+    fn to_string(self): string -> __f64_to_string(self)
+
+extend bool as Printable:
+    fn to_string(self): string -> __bool_to_string(self)
+
+extend string as Printable:
+    fn to_string(self): string -> self
+
+fn print<T: Printable>(value: T): void
+    __write_stdout(value.to_string())
+```
+
+The `__` prefix intrinsics are the absolute minimum compiler floor.
+Everything above is composable Dao code that users can read, extend,
+and reason about.
+
+## 8. Self and Receivers
+
+### 8.1 Methods
 
 Methods are functions declared inside a class body or conformance
 block that take `self` as their first parameter:
@@ -266,40 +317,40 @@ class Point:
     fn magnitude(self): f64 -> (self.x * self.x + self.y * self.y).sqrt()
 ```
 
-### 7.2 Self type
+### 8.2 Self type
 
-Inside a trait, `Self` refers to the conforming type:
+Inside a concept, `Self` refers to the conforming type:
 
 ```dao
-trait Equatable:
+concept Equatable:
     fn eq(self, other: Self): bool
 ```
 
-### 7.3 Mutating methods (deferred)
+### 8.3 Mutating methods (deferred)
 
 Whether methods can mutate `self` (mutable receivers) is deferred.
 The initial system treats `self` as an immutable value parameter.
 Mutation through methods requires explicit pointer parameters or a
 future `mut self` form.
 
-## 8. Iteration Protocol
+## 9. Iteration Protocol
 
-### 8.1 Iterator trait
+### 9.1 Iterator concept
 
 ```dao
-trait Iterator<T>:
+concept Iterator<T>:
     fn has_next(self): bool
     fn next(self): T
 ```
 
-### 8.2 Iterable trait
+### 9.2 Iterable concept
 
 ```dao
-trait Iterable<T>:
+concept Iterable<T>:
     fn iter(self): Iterator<T>
 ```
 
-### 8.3 For-loop desugaring
+### 9.3 For-loop desugaring
 
 ```dao
 for x in collection:
@@ -319,7 +370,7 @@ The for-loop is not a special form. It is syntax sugar for the
 `Iterable`/`Iterator` protocol. Any type conforming to `Iterable`
 works in a for-loop.
 
-### 8.4 Range
+### 9.4 Range
 
 ```dao
 fn range(n: i32): Range
@@ -328,77 +379,77 @@ fn range(n: i32): Range
 `range` is a stdlib function returning a `Range` type that conforms
 to `Iterable<i32>`. It is not a language primitive.
 
-## 9. Interaction with Modes and Resources
+## 10. Interaction with Modes and Resources
 
-Traits and modes are orthogonal. A method called inside
-`mode unsafe =>` follows the same trait resolution as outside it.
+Concepts and modes are orthogonal. A method called inside
+`mode unsafe =>` follows the same concept resolution as outside it.
 
-Resource regions do not affect trait dispatch. A value allocated in
-`resource memory Search =>` conforms to the same traits as one
+Resource regions do not affect concept dispatch. A value allocated in
+`resource memory Search =>` conforms to the same concepts as one
 allocated on the stack.
 
-## 10. Implementation Sequence
+## 11. Implementation Sequence
 
-### 10.1 Minimal viable generics
+### 11.1 Minimal viable generics
 
 1. Parse generic type parameters on functions and classes
 2. Resolve generic type parameters in scope
-3. Typecheck generic constraints (single trait bound)
+3. Typecheck generic constraints (single concept bound)
 4. Monomorphize at call sites (concrete type substitution)
 
-### 10.2 Minimal viable traits
+### 11.2 Minimal viable concepts
 
-5. Parse trait declarations (method signatures + defaults)
-6. Parse `as Trait:` conformance blocks inside classes
-7. Parse `extend Type as Trait:` external conformance
-8. Typecheck trait satisfaction (does the type implement all methods?)
-9. Resolve trait-constrained method calls
+5. Parse concept declarations (method signatures + defaults)
+6. Parse `as Concept:` conformance blocks inside classes
+7. Parse `extend Type as Concept:` external conformance
+8. Typecheck concept satisfaction (does the type implement all methods?)
+9. Resolve concept-constrained method calls
 
-### 10.3 Universal traits
+### 11.3 Derived concepts
 
-10. Parse `universal trait` declarations
+10. Parse `derived concept` declarations
 11. Implement automatic structural conformance checking
-12. Implement `deny Trait` opt-out
-13. Synthesize default implementations for universal traits
+12. Implement `deny Concept` opt-out
+13. Synthesize default implementations for derived concepts
 
-### 10.4 Iteration protocol
+### 11.4 Iteration protocol
 
-14. Define `Iterator<T>` and `Iterable<T>` traits in stdlib
-15. Implement for-loop desugaring to trait method calls
+14. Define `Iterator<T>` and `Iterable<T>` concepts in stdlib
+15. Implement for-loop desugaring to concept method calls
 16. Implement `Range` type with `Iterable<i32>` conformance
 
-### 10.5 Self and methods
+### 11.5 Self and methods
 
 17. Parse `self` parameter in method declarations
-18. Resolve method calls (`value.method()`) through trait dispatch
-19. Implement `Self` type alias in trait bodies
+18. Resolve method calls (`value.method()`) through concept dispatch
+19. Implement `Self` type alias in concept bodies
 
-## 11. Syntax Inventory
+## 12. Syntax Inventory
 
 New keywords introduced:
-- `trait` — trait declaration
-- `universal` — modifier for automatically-derived traits
+- `concept` — concept declaration
+- `derived` — modifier for structurally-derived concepts
 - `as` — conformance block introducer (inside class body)
 - `extend` — external conformance declaration
-- `deny` — opt-out from universal trait
+- `deny` — opt-out from derived concept
 - `where` — additional constraints on conformance blocks
 - `self` — receiver parameter
-- `Self` — the conforming type (inside trait bodies)
+- `Self` — the conforming type (inside concept bodies)
 
 New syntax forms:
-- `<T>` / `<T: Trait>` / `<T: A + B>` — generic parameters
-- `as TraitName:` — inline conformance block
-- `extend Type as Trait:` — external conformance
-- `deny TraitName` — universal trait opt-out
-- `where T: Trait` — constraint clause
+- `<T>` / `<T: Concept>` / `<T: A + B>` — generic parameters
+- `as ConceptName:` — inline conformance block
+- `extend Type as Concept:` — external conformance
+- `deny ConceptName` — derived concept opt-out
+- `where T: Concept` — constraint clause
 
-## 12. What This Spec Does Not Cover
+## 13. What This Spec Does Not Cover
 
 - Associated types
 - Higher-kinded types
 - Mutable receivers (`mut self`)
-- Trait objects / dynamic dispatch syntax
-- Operator overloading (likely expressed through traits, but syntax TBD)
+- Concept objects / dynamic dispatch syntax
+- Operator overloading (likely expressed through concepts, but syntax TBD)
 - Conditional conformance beyond `where` clauses
 - Blanket implementations
 - Module-level orphan rules
