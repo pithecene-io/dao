@@ -144,8 +144,29 @@ the stdlib to make builtins conform to core concepts.
 Rules:
 - `extend` is used only when the type is not yours to modify
 - external conformance has the same semantics as inline conformance
-- orphan rules (who may extend what) are deferred to the module system
-  spec
+
+### 4.2.1 Coherence rule (orphan rule)
+
+`extend Type as Concept` is legal only if the current module owns
+`Type` or `Concept` (or both). This prevents conflicting conformance
+implementations across modules and enforces encapsulation.
+
+Consequences:
+- A library that defines `Printable` may extend any type as `Printable`
+- A library that defines `Point` may conform `Point` to any concept
+- A third-party module that owns neither `Point` nor `Printable` may
+  not write `extend Point as Printable` — this is a compile error
+- This forces concept authors to provide stdlib conformances for
+  builtins, and type authors to provide conformances for common concepts
+
+The rule is trivially satisfied in single-file compilation (all
+declarations are owned by the file). Multi-module enforcement
+requires module ownership tracking, which will be implemented with
+the module system.
+
+Note: `deny` remains absolute regardless of ownership — if a type
+denies a concept, no module (including the owning module) can override
+that denial via `extend`.
 
 ### 4.3 No standalone impl blocks
 
@@ -264,10 +285,20 @@ Non-derived (always explicit):
 
 ### 6.6 Precedence
 
-1. Explicit `as Concept:` block — always wins
-2. Explicit `deny Concept` — suppresses automatic conformance
+1. `deny Concept` — absolute suppression; the type never conforms
+2. Explicit `as Concept:` block — explicit conformance implementation
 3. Automatic structural conformance — applies if all fields conform
 4. No conformance — if any field doesn't conform and no explicit impl
+
+Having both `as Concept:` and `deny Concept` for the same concept on
+the same class is a compile-time error. `deny` is an absolute statement
+of intent — "this type must never conform" — and cannot coexist with an
+explicit implementation.
+
+`deny` also blocks external conformance: `extend Type as Concept` is a
+compile error if `Type` has `deny Concept`. There is no syntax for
+external denial — only the type owner can deny, and only within the
+class body. See §4.2.1 for the coherence rule that governs `extend`.
 
 ## 7. Scalar Conformance
 
@@ -477,5 +508,29 @@ New syntax forms:
 - Operator overloading (likely expressed through concepts, but syntax TBD)
 - Conditional conformance beyond `where` clauses
 - Blanket implementations
-- Module-level orphan rules
 - Variance of generic type parameters
+
+## 14. Documentation Narrative (guidebook)
+
+The user-facing guidebook must explain the motivation chain that
+connects `derived`, `deny`, `extend`, and the orphan rule. Each
+feature justifies the next:
+
+1. **Derived concepts** exist so 95% of types don't need explicit
+   conformance annotations — if all fields conform, the type conforms.
+2. **`deny`** exists because derived concepts would otherwise be
+   inescapable — `SecretKey` with an `i32` field must be able to
+   refuse `Printable`.
+3. **`extend`** exists because builtins (`i32`, `f64`, `string`) have
+   no class body to put `as` in, and concept authors need to provide
+   conformances for types they didn't write.
+4. **The orphan rule** (§4.2.1) exists because `extend` without it
+   creates incoherent conformance across modules — two modules could
+   provide conflicting implementations.
+5. **`deny` is absolute** because partial denial is incoherent — if
+   external `extend` could override `deny`, the type author's safety
+   guarantee is meaningless.
+
+This chain should be the backbone of the concepts chapter in the
+language guidebook. Each rule is unintuitive in isolation but
+self-evident when presented as a consequence of the previous one.

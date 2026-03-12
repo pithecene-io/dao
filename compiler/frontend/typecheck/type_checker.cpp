@@ -352,7 +352,9 @@ auto TypeChecker::type_conforms_to(const Type* type,
         const auto& cls = decl_node->as<ClassDecl>();
         const auto& concept_name = concept_decl->as<ConceptDecl>().name;
 
-        // Check deny.
+        // deny supersedes everything — if present, the type does not
+        // conform regardless of explicit `as` blocks. (Having both
+        // is a compile error diagnosed in check_class.)
         for (const auto& deny : cls.denials) {
           if (deny.concept_name == concept_name) {
             return false;
@@ -402,14 +404,18 @@ void TypeChecker::compute_derived_conformances(const FileNode& file) {
     return;
   }
 
-  // For each class, check if it automatically conforms to derived concepts.
+  // Collect class declarations once for iteration.
+  struct ClassEntry {
+    const Decl* decl;
+    const ClassDecl* cls;
+    const Type* struct_type;
+  };
+  std::vector<ClassEntry> classes;
   for (const auto* decl : file.declarations) {
     if (decl->kind() != NodeKind::ClassDecl) {
       continue;
     }
     const auto& cls = decl->as<ClassDecl>();
-
-    // Look up the struct type from pass 1.
     auto decl_it = decl_symbols_.find(cls.name_span.offset);
     if (decl_it == decl_symbols_.end()) {
       continue;
@@ -418,45 +424,70 @@ void TypeChecker::compute_derived_conformances(const FileNode& file) {
     if (struct_type == nullptr || struct_type->kind() != TypeKind::Struct) {
       continue;
     }
+    classes.push_back({decl, &cls, struct_type});
+  }
 
-    for (const auto* concept_decl : derived_concepts_) {
-      const auto& cpt = concept_decl->as<ConceptDecl>();
+  // Fixpoint loop: repeat until no new conformances are discovered.
+  // This ensures transitive derivation is independent of declaration order.
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (const auto& entry : classes) {
+      for (const auto* concept_decl : derived_concepts_) {
+        const auto& cpt = concept_decl->as<ConceptDecl>();
 
-      // Skip if explicit conformance or deny exists.
-      bool has_explicit = false;
-      for (const auto& conf : cls.conformances) {
-        if (conf.concept_name == cpt.name) {
-          has_explicit = true;
-          break;
+        // Skip if explicit conformance or deny exists.
+        bool has_explicit = false;
+        for (const auto& conf : entry.cls->conformances) {
+          if (conf.concept_name == cpt.name) {
+            has_explicit = true;
+            break;
+          }
         }
-      }
-      if (has_explicit) {
-        continue;
-      }
-
-      bool denied = false;
-      for (const auto& deny : cls.denials) {
-        if (deny.concept_name == cpt.name) {
-          denied = true;
-          break;
+        if (has_explicit) {
+          continue;
         }
-      }
-      if (denied) {
-        continue;
-      }
 
-      // Structural check: all fields must conform to this concept.
-      const auto* st = static_cast<const TypeStruct*>(struct_type);
-      bool all_fields_conform = true;
-      for (const auto& field : st->fields()) {
-        if (!type_conforms_to(field.type, concept_decl)) {
-          all_fields_conform = false;
-          break;
+        bool denied = false;
+        for (const auto& deny : entry.cls->denials) {
+          if (deny.concept_name == cpt.name) {
+            denied = true;
+            break;
+          }
         }
-      }
+        if (denied) {
+          continue;
+        }
 
-      if (all_fields_conform) {
-        derived_conformances_[struct_type].push_back(concept_decl);
+        // Skip if already derived.
+        auto existing_it = derived_conformances_.find(entry.struct_type);
+        if (existing_it != derived_conformances_.end()) {
+          bool already_derived = false;
+          for (const auto* existing : existing_it->second) {
+            if (existing == concept_decl) {
+              already_derived = true;
+              break;
+            }
+          }
+          if (already_derived) {
+            continue;
+          }
+        }
+
+        // Structural check: all fields must conform to this concept.
+        const auto* stype = static_cast<const TypeStruct*>(entry.struct_type);
+        bool all_fields_conform = true;
+        for (const auto& field : stype->fields()) {
+          if (!type_conforms_to(field.type, concept_decl)) {
+            all_fields_conform = false;
+            break;
+          }
+        }
+
+        if (all_fields_conform) {
+          derived_conformances_[entry.struct_type].push_back(concept_decl);
+          changed = true;
+        }
       }
     }
   }
@@ -484,6 +515,26 @@ void TypeChecker::check_declaration(const Decl* decl) {
     const auto& ext = decl->as<ExtendDecl>();
     auto saved_ctx = ctx_;
     ctx_.self_type = resolve_type_node(ext.target_type);
+
+    // Diagnose extend targeting a type that denies the concept.
+    if (ctx_.self_type != nullptr &&
+        ctx_.self_type->kind() == TypeKind::Struct) {
+      const auto* st = static_cast<const TypeStruct*>(ctx_.self_type);
+      const auto* dsym = static_cast<const Symbol*>(st->decl_id());
+      if (dsym != nullptr && dsym->decl != nullptr) {
+        const auto* dnode = static_cast<const Decl*>(dsym->decl);
+        if (dnode->is<ClassDecl>()) {
+          for (const auto& deny : dnode->as<ClassDecl>().denials) {
+            if (deny.concept_name == ext.concept_name) {
+              error(ext.concept_span,
+                    "cannot extend '" + std::string(st->name()) +
+                        "' as '" + std::string(ext.concept_name) +
+                        "' because the type denies it");
+            }
+          }
+        }
+      }
+    }
     for (const auto* method : ext.methods) {
       validate_receiver(method, ext.concept_span);
       const auto& fn = method->as<FunctionDecl>();
@@ -554,6 +605,17 @@ void TypeChecker::check_class(const Decl* decl) {
   auto decl_it = decl_symbols_.find(cls.name_span.offset);
   if (decl_it != decl_symbols_.end()) {
     ctx_.self_type = resolve_symbol_type(decl_it->second);
+  }
+
+  // Diagnose conflicting as + deny for the same concept.
+  for (const auto& deny : cls.denials) {
+    for (const auto& conf : cls.conformances) {
+      if (conf.concept_name == deny.concept_name) {
+        error(deny.concept_span,
+              "'" + std::string(cls.name) + "' both conforms to and denies '" +
+                  std::string(deny.concept_name) + "'");
+      }
+    }
   }
 
   // Validate and check conformance-block methods.

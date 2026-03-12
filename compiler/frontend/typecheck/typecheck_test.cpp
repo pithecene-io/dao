@@ -643,6 +643,52 @@ suite<"typecheck_concepts"> typecheck_concepts = [] {
         << "nested derived conformance should work transitively";
   };
 
+  "reverse declaration order still derives"_test = [] {
+    // Outer declared before Inner — fixpoint loop must handle this.
+    auto result = check_source(
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n"
+        "class Outer:\n"
+        "    child: Inner\n"
+        "class Inner:\n"
+        "    val: i32\n"
+        "fn show(o: Outer): string -> o.to_string()\n");
+    expect(is_ok(result))
+        << "derived conformance must not depend on declaration order";
+  };
+
+  "extend targeting denied concept is an error"_test = [] {
+    auto result = check_source(
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "class Secret:\n"
+        "    data: i32\n"
+        "    deny Printable\n"
+        "extend Secret as Printable:\n"
+        "    fn to_string(self): string -> \"hacked\"\n");
+    expect(!is_ok(result))
+        << "extend should not override deny";
+    expect(has_error_containing(result, "denies"))
+        << "should report denied concept in extend";
+  };
+
+  "as and deny for same concept is an error"_test = [] {
+    auto result = check_source(
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "class Both:\n"
+        "    val: i32\n"
+        "    deny Printable\n"
+        "    as Printable:\n"
+        "        fn to_string(self): string -> \"both\"\n");
+    expect(!is_ok(result))
+        << "as and deny for same concept should be an error";
+    expect(has_error_containing(result, "both conforms to and denies"))
+        << "should report conflicting as/deny";
+  };
+
   "concept default method bodies are not checked"_test = [] {
     // Concept default methods are abstract over self's type;
     // body checking is deferred until concept-level type reasoning.
