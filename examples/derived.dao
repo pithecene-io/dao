@@ -1,0 +1,26 @@
+derived concept Printable:
+    fn to_string(self): string
+
+extend i32 as Printable:
+    fn to_string(self): string -> "num"
+
+extend f64 as Printable:
+    fn to_string(self): string -> "float"
+
+extend string as Printable:
+    fn to_string(self): string -> self
+
+class Point:
+    x: f64
+    y: f64
+
+class Label:
+    name: string
+    pos: Point
+
+class Secret:
+    data: i32
+    deny Printable
+
+fn show_point(p: Point): string -> p.to_string()
+fn show_label(l: Label): string -> l.to_string()

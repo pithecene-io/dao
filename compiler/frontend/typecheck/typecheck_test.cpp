@@ -575,6 +575,74 @@ suite<"typecheck_concepts"> typecheck_concepts = [] {
     expect(is_ok(result)) << "class with deny should typecheck";
   };
 
+  "derived auto-conformance enables method dispatch"_test = [] {
+    auto result = check_source(
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n"
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "fn show(p: Point): string -> p.to_string()\n");
+    expect(is_ok(result)) << "derived auto-conformance should enable method dispatch";
+  };
+
+  "deny suppresses derived auto-conformance"_test = [] {
+    auto result = check_source(
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n"
+        "class Secret:\n"
+        "    data: i32\n"
+        "    deny Printable\n"
+        "fn show(s: Secret): string -> s.to_string()\n");
+    expect(!is_ok(result)) << "deny should suppress derived conformance";
+  };
+
+  "explicit conformance takes precedence over derived"_test = [] {
+    auto result = check_source(
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n"
+        "class Point:\n"
+        "    x: i32\n"
+        "    as Printable:\n"
+        "        fn to_string(self): string -> \"custom\"\n"
+        "fn show(p: Point): string -> p.to_string()\n");
+    expect(is_ok(result)) << "explicit conformance should work alongside derived";
+  };
+
+  "non-conforming field blocks derived conformance"_test = [] {
+    auto result = check_source(
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "class Inner:\n"
+        "    val: i32\n"
+        "class Outer:\n"
+        "    child: Inner\n"
+        "fn show(o: Outer): string -> o.to_string()\n");
+    expect(!is_ok(result))
+        << "class with non-conforming field should not auto-derive";
+  };
+
+  "nested derived conformance"_test = [] {
+    auto result = check_source(
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n"
+        "class Inner:\n"
+        "    val: i32\n"
+        "class Outer:\n"
+        "    child: Inner\n"
+        "fn show(o: Outer): string -> o.to_string()\n");
+    expect(is_ok(result))
+        << "nested derived conformance should work transitively";
+  };
+
   "concept default method bodies are not checked"_test = [] {
     // Concept default methods are abstract over self's type;
     // body checking is deferred until concept-level type reasoning.
