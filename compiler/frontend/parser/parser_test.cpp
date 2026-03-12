@@ -696,20 +696,30 @@ suite<"extend_tests"> extend_tests = [] {
 // self is contextual — valid as identifier outside method context
 // ---------------------------------------------------------------------------
 
-suite<"self_contextual_tests"> self_contextual_tests = [] {
-  "self as let binding name"_test = [] {
+suite<"self_keyword_tests"> self_keyword_tests = [] {
+  "self is reserved in let binding"_test = [] {
     auto output = parse_string(
         "fn foo(): i32\n"
         "    let self: i32 = 1\n"
-        "    return self\n");
-    expect(output.parse_result.diagnostics.empty()) << "self as let name should parse";
+        "    return 0\n");
+    expect(!output.parse_result.diagnostics.empty())
+        << "self should be rejected as a let binding name";
   };
 
-  "self as class field name"_test = [] {
+  "self is reserved as class field name"_test = [] {
     auto output = parse_string(
         "class Wrapper:\n"
         "    self: i32\n");
-    expect(output.parse_result.diagnostics.empty()) << "self as field name should parse";
+    expect(!output.parse_result.diagnostics.empty())
+        << "self should be rejected as a field name";
+  };
+
+  "self is valid as parameter name"_test = [] {
+    auto output = parse_string(
+        "concept Show:\n"
+        "    fn show(self): string\n");
+    expect(output.parse_result.diagnostics.empty())
+        << "self should be accepted as a parameter name";
   };
 };
 

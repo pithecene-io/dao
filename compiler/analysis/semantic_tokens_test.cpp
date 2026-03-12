@@ -129,13 +129,13 @@ suite<"keyword_classification"> keyword_classification = [] {
     expect(find_token(result.tokens, "keyword.resource") != nullptr);
   };
 
-  "keyword.self for contextual self"_test = [] {
+  "keyword.self for reserved self"_test = [] {
     auto result = classify_source(
         "test.dao",
         "concept Show:\n"
         "    fn show(self): string\n");
     expect(find_token_at(result, "keyword.self", "self") != nullptr)
-        << "self should classify as keyword.self even though lexed as Identifier";
+        << "self should classify as keyword.self";
   };
 };
 
