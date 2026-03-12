@@ -155,7 +155,7 @@ not part of the class model.
 
 Method dispatch on class values is static. Classes do not carry
 type metadata or vtable pointers at runtime. Dynamic dispatch, if
-needed, is expressed through trait objects or explicit indirection,
+needed, is expressed through concept objects or explicit indirection,
 not through the class mechanism itself.
 
 ### 8.5 Field access

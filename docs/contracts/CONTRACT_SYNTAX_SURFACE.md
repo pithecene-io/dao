@@ -115,6 +115,8 @@ Rules:
 - the body is an indented block of method signatures
 - methods use `self` as the receiver parameter
 - methods may have default implementations using `->` or block bodies
+- within a concept declaration, the concept name in type position refers
+  to the conforming type (there is no `Self` keyword)
 
 ### Derived concepts
 
@@ -214,6 +216,7 @@ This contract does not yet freeze:
 - concept object / dynamic dispatch syntax
 - operator overloading syntax
 - associated types inside concepts
+- `sealed` modifier for concepts and classes
 
 ## Modes and Resources
 

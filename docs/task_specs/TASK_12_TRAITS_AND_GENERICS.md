@@ -71,20 +71,38 @@ concept Printable:
 A concept declares a set of required method signatures. The `self`
 parameter is the receiver — its type is the conforming type.
 
-### 3.2 Default methods
+### 3.2 Self-type convention
+
+Within a concept declaration, the concept name in type position refers
+to the conforming type. There is no separate `Self` keyword.
 
 ```dao
 concept Equatable:
-    fn eq(self, other: Self): bool
+    fn eq(self, other: Equatable): bool
+```
 
-    fn ne(self, other: Self): bool -> !self.eq(other)
+Here `Equatable` in the `other` parameter means "the type that conforms
+to this concept." When `i32` conforms, `other` is `i32`. When `Point`
+conforms, `other` is `Point`.
+
+This is unambiguous because a concept is not a type — the concept name
+can only mean "the conforming type" when it appears in its own method
+signatures.
+
+### 3.3 Default methods
+
+```dao
+concept Equatable:
+    fn eq(self, other: Equatable): bool
+
+    fn ne(self, other: Equatable): bool -> !self.eq(other)
 ```
 
 Concepts may provide default method implementations using `->` for
 expression bodies or indented blocks. Conforming types inherit defaults
 but may override them.
 
-### 3.3 Associated types (deferred)
+### 3.4 Associated types (deferred)
 
 Associated types (e.g., `type Item` inside a concept) are deferred to
 a future spec. The initial system supports only method requirements
@@ -302,7 +320,7 @@ The `__` prefix intrinsics are the absolute minimum compiler floor.
 Everything above is composable Dao code that users can read, extend,
 and reason about.
 
-## 8. Self and Receivers
+## 8. Receivers and Methods
 
 ### 8.1 Methods
 
@@ -317,13 +335,21 @@ class Point:
     fn magnitude(self): f64 -> (self.x * self.x + self.y * self.y).sqrt()
 ```
 
-### 8.2 Self type
+### 8.2 Conforming type reference
 
-Inside a concept, `Self` refers to the conforming type:
+Within a concept declaration, the concept name in type position refers
+to the conforming type (see §3.2). There is no `Self` keyword.
+
+At conformance sites (inline `as` blocks and `extend` declarations),
+methods use the concrete type name directly:
 
 ```dao
-concept Equatable:
-    fn eq(self, other: Self): bool
+class Point:
+    x: f64
+    y: f64
+
+    as Equatable:
+        fn eq(self, other: Point): bool -> self.x == other.x && self.y == other.y
 ```
 
 ### 8.3 Mutating methods (deferred)
@@ -418,11 +444,11 @@ allocated on the stack.
 15. Implement for-loop desugaring to concept method calls
 16. Implement `Range` type with `Iterable<i32>` conformance
 
-### 11.5 Self and methods
+### 11.5 Receivers and methods
 
 17. Parse `self` parameter in method declarations
 18. Resolve method calls (`value.method()`) through concept dispatch
-19. Implement `Self` type alias in concept bodies
+19. Resolve concept name as conforming type in concept method signatures
 
 ## 12. Syntax Inventory
 
@@ -433,8 +459,7 @@ New keywords introduced:
 - `extend` — external conformance declaration
 - `deny` — opt-out from derived concept
 - `where` — additional constraints on conformance blocks
-- `self` — receiver parameter
-- `Self` — the conforming type (inside concept bodies)
+- `self` — receiver parameter (contextual; special only as first parameter)
 
 New syntax forms:
 - `<T>` / `<T: Concept>` / `<T: A + B>` — generic parameters
