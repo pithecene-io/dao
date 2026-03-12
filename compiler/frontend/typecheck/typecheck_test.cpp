@@ -574,6 +574,40 @@ suite<"typecheck_concepts"> typecheck_concepts = [] {
         "    deny Printable\n");
     expect(is_ok(result)) << "class with deny should typecheck";
   };
+
+  "bad default method body is rejected"_test = [] {
+    auto result = check_source(
+        "concept Eq:\n"
+        "    fn eq(self, other: Eq): bool\n"
+        "    fn ne(self, other: Eq): bool -> 42\n");
+    expect(!is_ok(result)) << "bad default body should produce error";
+    expect(has_error_containing(result, "does not match return type"))
+        << "should report type mismatch";
+  };
+
+  "bad conformance method body is rejected"_test = [] {
+    auto result = check_source(
+        "concept Show:\n"
+        "    fn show(self): string\n"
+        "class X:\n"
+        "    v: i32\n"
+        "    as Show:\n"
+        "        fn show(self): string -> 99\n");
+    expect(!is_ok(result)) << "bad conformance body should produce error";
+    expect(has_error_containing(result, "does not match return type"))
+        << "should report type mismatch";
+  };
+
+  "bad extend method body is rejected"_test = [] {
+    auto result = check_source(
+        "concept Show:\n"
+        "    fn show(self): string\n"
+        "extend i32 as Show:\n"
+        "    fn show(self): string -> 0\n");
+    expect(!is_ok(result)) << "bad extend body should produce error";
+    expect(has_error_containing(result, "does not match return type"))
+        << "should report type mismatch";
+  };
 };
 
 // NOLINTEND(readability-magic-numbers)

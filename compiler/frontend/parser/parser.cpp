@@ -281,13 +281,8 @@ private:
   }
 
   auto parse_param() -> Param {
-    // Accept `self` as a parameter name (contextual keyword).
-    const Token* name_tok = nullptr;
-    if (peek_kind() == TokenKind::KwSelf) {
-      name_tok = &advance();
-    } else {
-      name_tok = &consume(TokenKind::Identifier);
-    }
+    // Accept `self` as a parameter name (contextual — lexed as Identifier).
+    const Token* name_tok = &consume(TokenKind::Identifier);
 
     // `self` without `: type` is a bare receiver; type resolved later.
     if (name_tok->text == "self" && peek_kind() != TokenKind::Colon) {
@@ -981,11 +976,6 @@ private:
       return parse_lambda();
     case TokenKind::Identifier:
       return parse_qualified_name_or_identifier();
-    case TokenKind::KwSelf: {
-      // `self` in expression position acts as an identifier.
-      const auto& tok = advance();
-      return ctx_.alloc<Expr>(tok.span, IdentifierExpr{tok.text});
-    }
     default:
       error("expected expression");
       const auto& tok = advance();

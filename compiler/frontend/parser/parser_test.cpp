@@ -692,6 +692,27 @@ suite<"extend_tests"> extend_tests = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// self is contextual — valid as identifier outside method context
+// ---------------------------------------------------------------------------
+
+suite<"self_contextual_tests"> self_contextual_tests = [] {
+  "self as let binding name"_test = [] {
+    auto output = parse_string(
+        "fn foo(): i32\n"
+        "    let self: i32 = 1\n"
+        "    return self\n");
+    expect(output.parse_result.diagnostics.empty()) << "self as let name should parse";
+  };
+
+  "self as class field name"_test = [] {
+    auto output = parse_string(
+        "class Wrapper:\n"
+        "    self: i32\n");
+    expect(output.parse_result.diagnostics.empty()) << "self as field name should parse";
+  };
+};
+
 // NOLINTEND(readability-function-cognitive-complexity,readability-magic-numbers,modernize-use-trailing-return-type)
 
 } // namespace

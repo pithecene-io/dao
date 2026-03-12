@@ -570,9 +570,8 @@ private:
     if (word == "deny") {
       return TokenKind::KwDeny;
     }
-    if (word == "self") {
-      return TokenKind::KwSelf;
-    }
+    // `self` is contextual — lexed as Identifier, recognised by the parser
+    // in parameter and expression position only.
     if (word == "where") {
       return TokenKind::KwWhere;
     }

@@ -332,14 +332,28 @@ void TypeChecker::check_declaration(const Decl* decl) {
   case NodeKind::ClassDecl:
     check_class(decl);
     break;
-  case NodeKind::ConceptDecl:
-    // Concept declarations — method signatures checked structurally.
-    // Full satisfaction checking deferred to a later commit.
+  case NodeKind::ConceptDecl: {
+    // Check bodies of default methods; bare signatures are skipped.
+    const auto& concept_d = decl->as<ConceptDecl>();
+    for (const auto* method : concept_d.methods) {
+      const auto& fn = method->as<FunctionDecl>();
+      if (!fn.body.empty() || fn.expr_body != nullptr) {
+        check_function(method);
+      }
+    }
     break;
-  case NodeKind::ExtendDecl:
-    // Extend declarations — conformance methods checked structurally.
-    // Full satisfaction checking deferred to a later commit.
+  }
+  case NodeKind::ExtendDecl: {
+    // Check bodies of conformance methods.
+    const auto& ext = decl->as<ExtendDecl>();
+    for (const auto* method : ext.methods) {
+      const auto& fn = method->as<FunctionDecl>();
+      if (!fn.body.empty() || fn.expr_body != nullptr) {
+        check_function(method);
+      }
+    }
     break;
+  }
   default:
     // AliasDecl — no body checking needed yet.
     break;
@@ -387,9 +401,17 @@ void TypeChecker::check_function(const Decl* decl) {
 }
 
 void TypeChecker::check_class(const Decl* decl) {
-  // Class members are validated during pass 1 (field types resolved).
-  // Nothing further to check in bodies for now.
-  (void)decl;
+  const auto& cls = decl->as<ClassDecl>();
+
+  // Check bodies of conformance-block methods.
+  for (const auto& conf : cls.conformances) {
+    for (const auto* method : conf.methods) {
+      const auto& fn = method->as<FunctionDecl>();
+      if (!fn.body.empty() || fn.expr_body != nullptr) {
+        check_function(method);
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
