@@ -332,26 +332,23 @@ void TypeChecker::check_declaration(const Decl* decl) {
   case NodeKind::ClassDecl:
     check_class(decl);
     break;
-  case NodeKind::ConceptDecl: {
-    // Check bodies of default methods; bare signatures are skipped.
-    const auto& concept_d = decl->as<ConceptDecl>();
-    for (const auto* method : concept_d.methods) {
-      const auto& fn = method->as<FunctionDecl>();
-      if (!fn.body.empty() || fn.expr_body != nullptr) {
-        check_function(method);
-      }
-    }
+  case NodeKind::ConceptDecl:
+    // Concept default method bodies are abstract over `self`'s type.
+    // Full checking requires concept-level type reasoning (deferred).
     break;
-  }
   case NodeKind::ExtendDecl: {
-    // Check bodies of conformance methods.
+    // Check bodies of conformance methods with self_type set to the
+    // target type of the extend declaration.
     const auto& ext = decl->as<ExtendDecl>();
+    auto saved_ctx = ctx_;
+    ctx_.self_type = resolve_type_node(ext.target_type);
     for (const auto* method : ext.methods) {
       const auto& fn = method->as<FunctionDecl>();
       if (!fn.body.empty() || fn.expr_body != nullptr) {
         check_function(method);
       }
     }
+    ctx_ = saved_ctx;
     break;
   }
   default:
@@ -371,11 +368,17 @@ void TypeChecker::check_function(const Decl* decl) {
   // Set up param types in symbol cache.
   for (const auto& param : fn.params) {
     auto decl_it = decl_symbols_.find(param.name_span.offset);
-    if (decl_it != decl_symbols_.end()) {
+    if (decl_it == decl_symbols_.end()) {
+      continue;
+    }
+    if (param.type != nullptr) {
       const auto* pt = resolve_type_node(param.type);
       if (pt != nullptr) {
         symbol_types_[decl_it->second] = pt;
       }
+    } else if (param.name == "self" && ctx_.self_type != nullptr) {
+      // Bare `self` receiver — type comes from the enclosing class/extend.
+      symbol_types_[decl_it->second] = ctx_.self_type;
     }
   }
 
@@ -403,6 +406,13 @@ void TypeChecker::check_function(const Decl* decl) {
 void TypeChecker::check_class(const Decl* decl) {
   const auto& cls = decl->as<ClassDecl>();
 
+  // Look up the struct type registered in pass 1.
+  auto saved_ctx = ctx_;
+  auto decl_it = decl_symbols_.find(cls.name_span.offset);
+  if (decl_it != decl_symbols_.end()) {
+    ctx_.self_type = resolve_symbol_type(decl_it->second);
+  }
+
   // Check bodies of conformance-block methods.
   for (const auto& conf : cls.conformances) {
     for (const auto* method : conf.methods) {
@@ -412,6 +422,8 @@ void TypeChecker::check_class(const Decl* decl) {
       }
     }
   }
+
+  ctx_ = saved_ctx;
 }
 
 // ---------------------------------------------------------------------------
@@ -684,7 +696,12 @@ auto TypeChecker::check_identifier(const Expr* expr) -> const Type* {
     error(expr->span, "unresolved identifier '" + std::string(id.name) + "'");
     return nullptr;
   }
-  return resolve_symbol_type(it->second);
+  const auto* result = resolve_symbol_type(it->second);
+  if (result == nullptr && it->second->kind == SymbolKind::Param) {
+    error(expr->span,
+          "'" + std::string(id.name) + "' has no known type in this context");
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
