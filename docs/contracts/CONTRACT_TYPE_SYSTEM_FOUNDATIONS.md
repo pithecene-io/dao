@@ -238,8 +238,10 @@ Specifically:
 
 This contract does not freeze:
 
-- final generic syntax
-- final conformance syntax
+- generic syntax beyond the core `<T>` and `<T: Concept>` forms
+  frozen in `CONTRACT_SYNTAX_SURFACE.md`
+- conformance syntax beyond the core `as`, `extend`, `deny`, and
+  `derived concept` forms frozen in `CONTRACT_SYNTAX_SURFACE.md`
 - overload resolution semantics
 - inference algorithm details
 - pattern matching syntax

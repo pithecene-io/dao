@@ -46,7 +46,8 @@ Rules:
 - `extern fn` declares an externally-provided function with no body
 - extern declarations produce `declare` (not `define`) in codegen
 - a return type annotation is required on extern declarations
-- a non-extern `fn` without a body is a parse error
+- a non-extern `fn` without a body is a parse error, except inside
+  concept bodies where bare signatures declare required methods
 
 ## Lambdas
 
