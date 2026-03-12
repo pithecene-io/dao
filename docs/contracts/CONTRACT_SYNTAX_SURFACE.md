@@ -46,7 +46,8 @@ Rules:
 - `extern fn` declares an externally-provided function with no body
 - extern declarations produce `declare` (not `define`) in codegen
 - a return type annotation is required on extern declarations
-- a non-extern `fn` without a body is a parse error
+- a non-extern `fn` without a body is a parse error, except inside
+  concept bodies where bare signatures declare required methods
 
 ## Lambdas
 
@@ -101,15 +102,122 @@ Rules:
 - the body must contain at least one field
 - field names must be unique within a class
 
+## Concepts
+
+### Concept declaration
+
+```dao
+concept Printable:
+    fn to_string(self): string
+```
+
+Rules:
+- `concept <name> :` introduces a concept (behavioral contract)
+- the body is an indented block of method signatures
+- methods use `self` as the receiver parameter
+- methods may have default implementations using `->` or block bodies
+- within a concept declaration, the concept name in type position refers
+  to the conforming type (there is no `Self` keyword)
+
+### Derived concepts
+
+```dao
+derived concept Printable:
+    fn to_string(self): string
+```
+
+Rules:
+- `derived concept` declares a concept with automatic structural
+  conformance
+- any class whose fields all conform to the concept automatically
+  conforms, with a compiler-synthesized implementation
+- explicit `as` blocks take precedence over derived conformance
+- `deny ConceptName` inside a class body opts out of derivation
+
+### Inline conformance
+
+```dao
+class Point:
+    x: f64
+    y: f64
+
+    as Printable:
+        fn to_string(self): string -> "({self.x}, {self.y})"
+```
+
+Rules:
+- `as ConceptName:` inside a class body declares conformance
+- methods inside `as` have access to `self` and all fields
+- multiple `as` blocks may appear in one class body
+
+### External conformance
+
+```dao
+extend i32 as Printable:
+    fn to_string(self): string -> __i32_to_string(self)
+```
+
+Rules:
+- `extend Type as Concept:` provides conformance for types declared
+  elsewhere
+- semantically identical to inline conformance
+- orphan rules are deferred to the module system spec
+
+### Deny
+
+```dao
+class SecretKey:
+    data: *u8
+    len: i32
+
+    deny Printable
+```
+
+Rules:
+- `deny ConceptName` suppresses automatic derived conformance
+- only meaningful inside a class body for derived concepts
+
+## Generics
+
+### Generic functions
+
+```dao
+fn print<T: Printable>(value: T): void
+    __write_stdout(value.to_string())
+```
+
+Rules:
+- `<T>` after a function or class name introduces type parameters
+- `T: Concept` constrains a type parameter
+- `T: A + B` applies multiple constraints
+- `where T: Concept` provides additional constraints on conformance
+  blocks
+
+### Generic classes
+
+```dao
+class List<T>:
+    data: *T
+    len: i32
+    cap: i32
+```
+
+Rules:
+- classes may have type parameters
+- conformance blocks may add `where` constraints
+
 ## Non-Laws
 
 This contract does not yet freeze:
-- receiver declaration syntax
+- receiver declaration syntax beyond `self`
+- mutable receiver syntax (`mut self`)
 - class construction syntax
-- class method syntax
 - pattern matching syntax
 - import alias syntax
-
+- concept object / dynamic dispatch syntax
+- operator overloading syntax
+- associated types inside concepts
+- `sealed` modifier for concepts and classes
 
 ## Modes and Resources
 
