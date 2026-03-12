@@ -23,6 +23,8 @@ TypeChecker::TypeChecker(TypeContext& types, const ResolveResult& resolve)
 // ---------------------------------------------------------------------------
 
 auto TypeChecker::check(const FileNode& file) -> TypeCheckResult {
+  file_ = &file;
+
   // Pass 1: register all top-level declaration types.
   register_declarations(file);
 
@@ -1019,9 +1021,86 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
     }
   }
 
+  // Try method lookup on the struct type.
+  const auto* method_type = lookup_method(st, field.field);
+  if (method_type != nullptr) {
+    return method_type;
+  }
+
   error(field.field_span,
-        "no field '" + std::string(field.field) + "' on type '" +
+        "no field or method '" + std::string(field.field) + "' on type '" +
             print_type(obj_type) + "'");
+  return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Method lookup — search conformance blocks and extend declarations
+// ---------------------------------------------------------------------------
+
+auto TypeChecker::lookup_method(const TypeStruct* struct_type,
+                                std::string_view name) -> const Type* {
+  // Helper: given a FunctionDecl method, build a function type with
+  // the self parameter removed (receiver is already bound).
+  auto method_fn_type = [&](const FunctionDecl& method) -> const Type* {
+    std::vector<const Type*> param_types;
+    bool valid = true;
+    for (size_t i = 0; i < method.params.size(); ++i) {
+      if (i == 0 && method.params[i].name == "self") {
+        continue; // skip receiver
+      }
+      const auto* pt = resolve_type_node(method.params[i].type);
+      if (pt == nullptr) {
+        valid = false;
+      }
+      param_types.push_back(pt);
+    }
+    const auto* ret = method.return_type != nullptr
+                          ? resolve_type_node(method.return_type)
+                          : types_.void_type();
+    if (!valid || ret == nullptr) {
+      return nullptr;
+    }
+    return types_.function_type(std::move(param_types), ret);
+  };
+
+  // 1. Search the class's own conformance blocks.
+  const auto* decl_sym = static_cast<const Symbol*>(struct_type->decl_id());
+  if (decl_sym != nullptr && decl_sym->decl != nullptr) {
+    const auto* decl_node = static_cast<const Decl*>(decl_sym->decl);
+    if (decl_node->is<ClassDecl>()) {
+      const auto& cls = decl_node->as<ClassDecl>();
+      for (const auto& conf : cls.conformances) {
+        for (const auto* method_decl : conf.methods) {
+          const auto& method = method_decl->as<FunctionDecl>();
+          if (method.name == name) {
+            return method_fn_type(method);
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Search top-level extend declarations targeting this type.
+  if (file_ != nullptr) {
+    for (const auto* decl : file_->declarations) {
+      if (decl->kind() != NodeKind::ExtendDecl) {
+        continue;
+      }
+      const auto& ext = decl->as<ExtendDecl>();
+      // Match the target type against the struct type.
+      const auto* target = resolve_type_node(ext.target_type);
+      if (target != struct_type) {
+        continue;
+      }
+      for (const auto* method_decl : ext.methods) {
+        const auto& method = method_decl->as<FunctionDecl>();
+        if (method.name == name) {
+          return method_fn_type(method);
+        }
+      }
+    }
+  }
+
   return nullptr;
 }
 

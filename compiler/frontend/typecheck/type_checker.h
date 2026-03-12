@@ -56,6 +56,7 @@ public:
 private:
   TypeContext& types_;
   const ResolveResult& resolve_;
+  const FileNode* file_ = nullptr;
   TypedResults typed_;
   std::vector<Diagnostic> diagnostics_;
   CheckContext ctx_;
@@ -114,6 +115,8 @@ private:
       -> const Type*;
   auto check_pipe(const Expr* expr) -> const Type*;
   auto check_field(const Expr* expr) -> const Type*;
+  auto lookup_method(const TypeStruct* struct_type, std::string_view name)
+      -> const Type*;
   auto check_index(const Expr* expr) -> const Type*;
   auto check_lambda(const Expr* expr, const Type* expected) -> const Type*;
   auto check_list_literal(const Expr* expr) -> const Type*;

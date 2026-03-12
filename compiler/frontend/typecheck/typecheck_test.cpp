@@ -667,6 +667,71 @@ suite<"typecheck_self"> typecheck_self = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Method dispatch through conformance and extend
+// ---------------------------------------------------------------------------
+
+suite<"typecheck_methods"> typecheck_methods = [] {
+  "method call through conformance"_test = [] {
+    auto result = check_source(
+        "concept HasName:\n"
+        "    fn name(self): string\n"
+        "class Person:\n"
+        "    first: string\n"
+        "    as HasName:\n"
+        "        fn name(self): string -> self.first\n"
+        "fn greet(p: Person): string -> p.name()\n");
+    expect(is_ok(result)) << "method call through conformance should typecheck";
+  };
+
+  "method call through extend"_test = [] {
+    auto result = check_source(
+        "concept HasX:\n"
+        "    fn get_x(self): f64\n"
+        "class Point:\n"
+        "    x: f64\n"
+        "    y: f64\n"
+        "extend Point as HasX:\n"
+        "    fn get_x(self): f64 -> self.x\n"
+        "fn read_x(p: Point): f64 -> p.get_x()\n");
+    expect(is_ok(result)) << "method call through extend should typecheck";
+  };
+
+  "method call with args"_test = [] {
+    auto result = check_source(
+        "concept Eq:\n"
+        "    fn eq(self, other: Eq): bool\n"
+        "class Val:\n"
+        "    n: i32\n"
+        "    as Eq:\n"
+        "        fn eq(self, other: Val): bool -> self.n == other.n\n"
+        "fn same(a: Val, b: Val): bool -> a.eq(b)\n");
+    expect(is_ok(result)) << "method call with args should typecheck";
+  };
+
+  "method call wrong arg type"_test = [] {
+    auto result = check_source(
+        "concept Eq:\n"
+        "    fn eq(self, other: Eq): bool\n"
+        "class Val:\n"
+        "    n: i32\n"
+        "    as Eq:\n"
+        "        fn eq(self, other: Val): bool -> true\n"
+        "fn bad(a: Val): bool -> a.eq(42)\n");
+    expect(!is_ok(result)) << "wrong arg type should error";
+  };
+
+  "unknown method errors"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "    x: f64\n"
+        "fn bad(p: Point): f64 -> p.missing()\n");
+    expect(!is_ok(result)) << "unknown method should error";
+    expect(has_error_containing(result, "no field or method"))
+        << "should report missing method";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)
