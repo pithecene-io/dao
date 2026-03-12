@@ -67,6 +67,12 @@ private:
   // decl_span.offset -> Symbol* for finding symbols at declaration sites.
   std::unordered_map<uint32_t, const Symbol*> decl_symbols_;
 
+  // Derived concept tracking: ConceptDecl nodes marked `derived`.
+  std::vector<const Decl*> derived_concepts_;
+
+  // Derived conformances: type -> list of derived concept Decls it auto-conforms to.
+  std::unordered_map<const Type*, std::vector<const Decl*>> derived_conformances_;
+
   // --- TypeNode -> Type* bridge ---
 
   auto resolve_type_node(const TypeNode* node) -> const Type*;
@@ -79,6 +85,8 @@ private:
   // --- Declaration checking ---
 
   void register_declarations(const FileNode& file);
+  void compute_derived_conformances(const FileNode& file);
+  auto type_conforms_to(const Type* type, const Decl* concept_decl) -> bool;
   void check_declaration(const Decl* decl);
   void check_function(const Decl* decl);
   void check_class(const Decl* decl);

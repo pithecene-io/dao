@@ -28,6 +28,9 @@ auto TypeChecker::check(const FileNode& file) -> TypeCheckResult {
   // Pass 1: register all top-level declaration types.
   register_declarations(file);
 
+  // Pass 1c: compute derived conformances for all classes.
+  compute_derived_conformances(file);
+
   // Pass 2: check all declaration bodies.
   for (const auto* decl : file.declarations) {
     check_declaration(decl);
@@ -320,6 +323,174 @@ void TypeChecker::register_declarations(const FileNode& file) {
       break;
     }
   }
+
+  // Pass 1c-prep: collect derived concept declarations.
+  for (const auto* decl : file.declarations) {
+    if (decl->kind() == NodeKind::ConceptDecl) {
+      const auto& cpt = decl->as<ConceptDecl>();
+      if (cpt.is_derived) {
+        derived_concepts_.push_back(decl);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Derived conformance computation
+// ---------------------------------------------------------------------------
+
+auto TypeChecker::type_conforms_to(const Type* type,
+                                   const Decl* concept_decl) -> bool {
+  // Check explicit conformance: inline `as` blocks on structs.
+  if (type->kind() == TypeKind::Struct) {
+    const auto* struct_type = static_cast<const TypeStruct*>(type);
+    const auto* decl_sym =
+        static_cast<const Symbol*>(struct_type->decl_id());
+    if (decl_sym != nullptr && decl_sym->decl != nullptr) {
+      const auto* decl_node = static_cast<const Decl*>(decl_sym->decl);
+      if (decl_node->is<ClassDecl>()) {
+        const auto& cls = decl_node->as<ClassDecl>();
+        const auto& concept_name = concept_decl->as<ConceptDecl>().name;
+
+        // deny supersedes everything — if present, the type does not
+        // conform regardless of explicit `as` blocks. (Having both
+        // is a compile error diagnosed in check_class.)
+        for (const auto& deny : cls.denials) {
+          if (deny.concept_name == concept_name) {
+            return false;
+          }
+        }
+
+        // Check explicit conformance.
+        for (const auto& conf : cls.conformances) {
+          if (conf.concept_name == concept_name) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  // Check extend declarations.
+  if (file_ != nullptr) {
+    const auto& concept_name = concept_decl->as<ConceptDecl>().name;
+    for (const auto* decl : file_->declarations) {
+      if (decl->kind() != NodeKind::ExtendDecl) {
+        continue;
+      }
+      const auto& ext = decl->as<ExtendDecl>();
+      const auto* target = resolve_type_node(ext.target_type);
+      if (target == type && ext.concept_name == concept_name) {
+        return true;
+      }
+    }
+  }
+
+  // Check derived conformance (already computed).
+  auto it = derived_conformances_.find(type);
+  if (it != derived_conformances_.end()) {
+    for (const auto* derived : it->second) {
+      if (derived == concept_decl) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+void TypeChecker::compute_derived_conformances(const FileNode& file) {
+  if (derived_concepts_.empty()) {
+    return;
+  }
+
+  // Collect class declarations once for iteration.
+  struct ClassEntry {
+    const Decl* decl;
+    const ClassDecl* cls;
+    const Type* struct_type;
+  };
+  std::vector<ClassEntry> classes;
+  for (const auto* decl : file.declarations) {
+    if (decl->kind() != NodeKind::ClassDecl) {
+      continue;
+    }
+    const auto& cls = decl->as<ClassDecl>();
+    auto decl_it = decl_symbols_.find(cls.name_span.offset);
+    if (decl_it == decl_symbols_.end()) {
+      continue;
+    }
+    const auto* struct_type = resolve_symbol_type(decl_it->second);
+    if (struct_type == nullptr || struct_type->kind() != TypeKind::Struct) {
+      continue;
+    }
+    classes.push_back({decl, &cls, struct_type});
+  }
+
+  // Fixpoint loop: repeat until no new conformances are discovered.
+  // This ensures transitive derivation is independent of declaration order.
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (const auto& entry : classes) {
+      for (const auto* concept_decl : derived_concepts_) {
+        const auto& cpt = concept_decl->as<ConceptDecl>();
+
+        // Skip if explicit conformance or deny exists.
+        bool has_explicit = false;
+        for (const auto& conf : entry.cls->conformances) {
+          if (conf.concept_name == cpt.name) {
+            has_explicit = true;
+            break;
+          }
+        }
+        if (has_explicit) {
+          continue;
+        }
+
+        bool denied = false;
+        for (const auto& deny : entry.cls->denials) {
+          if (deny.concept_name == cpt.name) {
+            denied = true;
+            break;
+          }
+        }
+        if (denied) {
+          continue;
+        }
+
+        // Skip if already derived.
+        auto existing_it = derived_conformances_.find(entry.struct_type);
+        if (existing_it != derived_conformances_.end()) {
+          bool already_derived = false;
+          for (const auto* existing : existing_it->second) {
+            if (existing == concept_decl) {
+              already_derived = true;
+              break;
+            }
+          }
+          if (already_derived) {
+            continue;
+          }
+        }
+
+        // Structural check: all fields must conform to this concept.
+        const auto* stype = static_cast<const TypeStruct*>(entry.struct_type);
+        bool all_fields_conform = true;
+        for (const auto& field : stype->fields()) {
+          if (!type_conforms_to(field.type, concept_decl)) {
+            all_fields_conform = false;
+            break;
+          }
+        }
+
+        if (all_fields_conform) {
+          derived_conformances_[entry.struct_type].push_back(concept_decl);
+          changed = true;
+        }
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -344,6 +515,26 @@ void TypeChecker::check_declaration(const Decl* decl) {
     const auto& ext = decl->as<ExtendDecl>();
     auto saved_ctx = ctx_;
     ctx_.self_type = resolve_type_node(ext.target_type);
+
+    // Diagnose extend targeting a type that denies the concept.
+    if (ctx_.self_type != nullptr &&
+        ctx_.self_type->kind() == TypeKind::Struct) {
+      const auto* st = static_cast<const TypeStruct*>(ctx_.self_type);
+      const auto* dsym = static_cast<const Symbol*>(st->decl_id());
+      if (dsym != nullptr && dsym->decl != nullptr) {
+        const auto* dnode = static_cast<const Decl*>(dsym->decl);
+        if (dnode->is<ClassDecl>()) {
+          for (const auto& deny : dnode->as<ClassDecl>().denials) {
+            if (deny.concept_name == ext.concept_name) {
+              error(ext.concept_span,
+                    "cannot extend '" + std::string(st->name()) +
+                        "' as '" + std::string(ext.concept_name) +
+                        "' because the type denies it");
+            }
+          }
+        }
+      }
+    }
     for (const auto* method : ext.methods) {
       validate_receiver(method, ext.concept_span);
       const auto& fn = method->as<FunctionDecl>();
@@ -414,6 +605,17 @@ void TypeChecker::check_class(const Decl* decl) {
   auto decl_it = decl_symbols_.find(cls.name_span.offset);
   if (decl_it != decl_symbols_.end()) {
     ctx_.self_type = resolve_symbol_type(decl_it->second);
+  }
+
+  // Diagnose conflicting as + deny for the same concept.
+  for (const auto& deny : cls.denials) {
+    for (const auto& conf : cls.conformances) {
+      if (conf.concept_name == deny.concept_name) {
+        error(deny.concept_span,
+              "'" + std::string(cls.name) + "' both conforms to and denies '" +
+                  std::string(deny.concept_name) + "'");
+      }
+    }
   }
 
   // Validate and check conformance-block methods.
@@ -1102,6 +1304,20 @@ auto TypeChecker::lookup_method(const Type* obj_type,
         continue;
       }
       for (const auto* method_decl : ext.methods) {
+        const auto& method = method_decl->as<FunctionDecl>();
+        if (method.name == name) {
+          return method_fn_type(method);
+        }
+      }
+    }
+  }
+
+  // 3. Search derived conformances — concept method signatures.
+  auto derived_it = derived_conformances_.find(obj_type);
+  if (derived_it != derived_conformances_.end()) {
+    for (const auto* concept_decl : derived_it->second) {
+      const auto& cpt = concept_decl->as<ConceptDecl>();
+      for (const auto* method_decl : cpt.methods) {
         const auto& method = method_decl->as<FunctionDecl>();
         if (method.name == name) {
           return method_fn_type(method);
