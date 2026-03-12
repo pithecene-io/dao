@@ -141,9 +141,8 @@ Classes do not participate in inheritance hierarchies. There is no
 `extends`, no superclass, no method-resolution order, and no
 implicit vtable.
 
-Composition, delegation, and conformance to traits or interfaces
-(section 10) are the intended mechanisms for abstraction and
-polymorphism.
+Composition, delegation, and conformance to concepts (section 10)
+are the intended mechanisms for abstraction and polymorphism.
 
 ### 8.3 No implicit constructor magic
 
@@ -196,25 +195,27 @@ The semantic type layer must be designed so later generic substitution
 and instantiation are possible without replacing the foundational
 representation.
 
-## 10. Conformance / trait-interface direction
+## 10. Concepts
 
-Dao will support an abstraction and conformance mechanism broadly in
-the space of traits, interfaces, or protocols.
+Dao's abstraction and conformance mechanism is the **concept**.
 
-This mechanism is intended to be:
+A concept declares a set of method requirements that a type must
+satisfy. Concepts are:
 
-- more expressive than Go interfaces
-- less surface-heavy and less syntactically dominant than Rust traits
-- statically resolved by default
-- capable of constraining generics
+- statically resolved by default (monomorphization, no implicit vtable)
+- capable of constraining generic type parameters
+- less surface-heavy than Rust traits — conformance lives with the
+  type via `as Concept:` blocks, not scattered in separate impl blocks
+- derivable: a `derived concept` has automatic structural conformance
+  for types whose fields all satisfy the concept, with explicit opt-out
+  via `deny`
 
-This contract freezes the direction, not the final syntax or solving
-model.
+The keyword is `concept`. The detailed design is specified in
+`docs/task_specs/TASK_12_TRAITS_AND_GENERICS.md`.
 
 ## 11. Nominal identity
 
-Named declarations such as classes, enums, and later
-trait/interface-like declarations are nominal.
+Named declarations such as classes, enums, and concepts are nominal.
 
 Two distinct named declarations are not equivalent merely because they
 have structurally identical fields or variants.
