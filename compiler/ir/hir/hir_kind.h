@@ -37,6 +37,7 @@ enum class HirKind : std::uint8_t {
   Unary,
   Binary,
   Call,
+  Construct,
   Field,
   Index,
   Pipe,

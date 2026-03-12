@@ -327,6 +327,24 @@ private:
             }
           }
         },
+        [&](const HirConstruct& node) {
+          indent();
+          out_ << "Construct ";
+          if (node.struct_type != nullptr) {
+            out_ << node.struct_type->name();
+          }
+          print_type_annotation(expr.type);
+          out_ << "\n";
+          if (!node.args.empty()) {
+            Scope scope(depth_);
+            indent();
+            out_ << "Args\n";
+            Scope args_scope(depth_);
+            for (const auto* arg : node.args) {
+              print_expr(*arg);
+            }
+          }
+        },
         [&](const HirField& node) {
           indent();
           out_ << "Field ." << node.field_name;

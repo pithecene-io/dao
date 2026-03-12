@@ -381,6 +381,89 @@ suite<"type_alias"> type_alias = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Class construction
+// ---------------------------------------------------------------------------
+
+suite<"typecheck_construct"> typecheck_construct = [] {
+  "basic construction"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "\n"
+        "fn make(): Point -> Point(1, 2)\n");
+    expect(is_ok(result)) << "basic construction should typecheck";
+  };
+
+  "construction with wrong arity"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "\n"
+        "fn make(): Point -> Point(1)\n");
+    expect(has_error_containing(result, "expects 2 field(s), got 1"));
+  };
+
+  "construction with wrong field type"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "\n"
+        "fn make(): Point -> Point(1, true)\n");
+    expect(has_error_containing(result, "field 'y' expects type"));
+  };
+
+  "construction in let binding"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "\n"
+        "fn make(): i32\n"
+        "    let p: Point = Point(1, 2)\n"
+        "    p.x\n");
+    expect(is_ok(result)) << "let with construction should typecheck";
+  };
+
+  "nested construction"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "\n"
+        "class Rect:\n"
+        "    tl: Point\n"
+        "    br: Point\n"
+        "\n"
+        "fn make(): Rect -> Rect(Point(0, 0), Point(1, 1))\n");
+    expect(is_ok(result)) << "nested construction should typecheck";
+  };
+
+  "field access on constructed value"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "\n"
+        "fn get_x(): i32 -> Point(1, 2).x\n");
+    expect(is_ok(result)) << "field access on construction should typecheck";
+  };
+
+  "value of struct type is not a constructor"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "\n"
+        "fn bad(p: Point): Point -> p(1, 2)\n");
+    expect(has_error_containing(result, "cannot call non-function"))
+        << "calling a struct value should not be treated as construction";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)
