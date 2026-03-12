@@ -392,6 +392,17 @@ future `mut self` form.
 
 ## 9. Iteration Protocol
 
+**Superseded by Task 13 (TASK_13_COROUTINES.md).** The concept-based
+iteration model below is retired. For-loop desugaring is now based on
+coroutine resume over `Generator<T>`, not concept method dispatch.
+`Iterable<T>` may re-enter as an API convention but is not the
+for-loop mechanism.
+
+The original design is preserved below for historical reference only.
+
+<details>
+<summary>Original design (retired)</summary>
+
 ### 9.1 Iterator concept
 
 ```dao
@@ -423,10 +434,6 @@ while _iter.has_next():
     body(x)
 ```
 
-The for-loop is not a special form. It is syntax sugar for the
-`Iterable`/`Iterator` protocol. Any type conforming to `Iterable`
-works in a for-loop.
-
 ### 9.4 Range
 
 ```dao
@@ -435,6 +442,8 @@ fn range(n: i32): Range
 
 `range` is a stdlib function returning a `Range` type that conforms
 to `Iterable<i32>`. It is not a language primitive.
+
+</details>
 
 ## 10. Interaction with Modes and Resources
 
@@ -471,9 +480,8 @@ allocated on the stack.
 
 ### 11.4 Iteration protocol
 
-14. Define `Iterator<T>` and `Iterable<T>` concepts in stdlib
-15. Implement for-loop desugaring to concept method calls
-16. Implement `Range` type with `Iterable<i32>` conformance
+**Superseded by Task 13 (TASK_13_COROUTINES.md).** For-loop desugaring
+is now based on coroutines, not concept method dispatch.
 
 ### 11.5 Receivers and methods
 

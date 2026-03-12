@@ -98,23 +98,23 @@ while _gen is not exhausted:
 This is a compiler-internal transformation, not expressible in surface
 Dao syntax. The `for...in` loop is the only way to consume a generator.
 
-## 6. Scalar Iteration
+## 6. Scalar Iteration (open question)
 
-`for i in 7:` must work. This requires `i32` (and other integer
-types) to be convertible to `Generator<i32>`.
+Whether `for i in 7:` should work is unresolved. Two approaches:
 
-Approach: compiler intrinsic conversion, not a user-defined concept
-conformance. When `for...in` encounters a non-Generator type, it
-checks for a known set of compiler-provided conversions:
-- `i32` -> `Generator<i32>` (produces 0, 1, ..., n-1)
-- Other integer types similarly
+**Option A — intrinsic conversion**: When `for...in` encounters a
+non-Generator integer type, the compiler implicitly converts it to
+`Generator<i32>` producing 0, 1, ..., n-1. This is bounded magic —
+the set of intrinsic conversions is fixed and small. Ergonomic, but
+adds implicit behavior.
 
-This is explicitly magic, but it is bounded magic — the set of
-intrinsic conversions is fixed and small.
+**Option B — explicit range**: Require `for i in range(7):` where
+`range` is a stdlib generator function. No implicit conversions.
+Cleaner semantics, slightly more verbose.
 
-Alternative considered: requiring `range(7)` instead of `for i in 7:`.
-This is cleaner but less ergonomic. The tradeoff is documented here
-and the decision is left open.
+The decision affects whether the compiler needs intrinsic type
+conversions for `for...in`, or whether `Generator<T>` is the only
+accepted type with no exceptions.
 
 ## 7. User-Defined Iterables
 
@@ -185,10 +185,10 @@ decision, not a language-level concern.
 6. Derive loop variable type T from `Generator<T>`
 7. Implement compiler-internal desugaring at HIR/MIR level
 
-### 11.3 Scalar conversion
+### 11.3 Scalar conversion (blocked on §6 decision)
 
-8. Implement intrinsic `i32` -> `Generator<i32>` conversion for
-   `for i in n:`
+8. If Option A: implement intrinsic `i32` -> `Generator<i32>` conversion
+9. If Option B: implement stdlib `range` generator function
 
 ### 11.4 Iterable concept (optional, non-blocking)
 
@@ -208,9 +208,9 @@ New desugaring:
 
 ## 13. Open Questions
 
-- Should `for i in 7:` be supported, or require `for i in range(7):`?
-- Should implicit conversion to `Generator<T>` exist, or must the user
-  call a method explicitly?
+- Scalar iteration: intrinsic conversion or explicit `range()`? (see §6)
+- Should implicit conversion to `Generator<T>` exist for user-defined
+  types, or must the user call a method explicitly? (see §7)
 - Should `Generator<T>` be exposed as a first-class type that users can
   pass around, store in variables, etc.?
 - What is the allocation strategy for generator frames?
