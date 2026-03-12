@@ -19,6 +19,13 @@ Reserved keywords:
 - false
 - and
 - or
+- concept
+- derived
+- as
+- extend
+- deny
+- self
+- where
 
 Reserved punctuation/operators:
 - :

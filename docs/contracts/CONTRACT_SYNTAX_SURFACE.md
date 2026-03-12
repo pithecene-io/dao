@@ -115,6 +115,8 @@ Rules:
 - `concept <name> :` introduces a concept (behavioral contract)
 - the body is an indented block of method signatures
 - methods use `self` as the receiver parameter
+- `self` is a reserved keyword; it is valid only as a method's first
+  parameter name and in expression position (e.g. `self.x`)
 - methods may have default implementations using `->` or block bodies
 - within a concept declaration, the concept name in type position refers
   to the conforming type (there is no `Self` keyword)
