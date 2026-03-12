@@ -53,7 +53,7 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     auto loc = source.line_col(tok.span.offset);
     tokens.push_back({
         {"kind", token_kind_name(tok.kind)},
-        {"category", token_category(tok.kind)},
+        {"category", token_category(tok)},
         {"offset", tok.span.offset},
         {"length", tok.span.length},
         {"line", loc.line},

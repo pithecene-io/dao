@@ -557,6 +557,12 @@ auto classify_tokens(const std::vector<Token>& tokens,
       continue;
     }
 
+    // `self` is lexed as Identifier but always highlights as a keyword.
+    if (tok.kind == TokenKind::Identifier && tok.text == "self") {
+      result.push_back({.span = tok.span, .kind = "keyword.self"});
+      continue;
+    }
+
     // For identifiers when a resolve result is available, check
     // resolve first — it gives authoritative use-site classification
     // that overrides structural guesses (e.g., QualifiedName leading

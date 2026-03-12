@@ -84,7 +84,7 @@ inline auto token_category(TokenKind kind) -> std::string_view {
   case TokenKind::RBracket:
     return "punctuation";
 
-  // Identifier
+  // Identifier — `self` handled in token_category(Token) overload.
   case TokenKind::Identifier:
     return "identifier";
 
@@ -107,6 +107,14 @@ inline auto token_category(TokenKind kind) -> std::string_view {
 inline auto is_synthetic_token(TokenKind kind) -> bool {
   return kind == TokenKind::Newline || kind == TokenKind::Indent || kind == TokenKind::Dedent ||
          kind == TokenKind::Eof;
+}
+
+/// Token-aware overload: handles contextual keywords like `self`.
+inline auto token_category(const Token& tok) -> std::string_view {
+  if (tok.kind == TokenKind::Identifier && tok.text == "self") {
+    return "keyword";
+  }
+  return token_category(tok.kind);
 }
 
 } // namespace dao::playground

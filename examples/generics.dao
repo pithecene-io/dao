@@ -1,0 +1,14 @@
+fn identity[T](x: T): T -> x
+
+fn first[T, U](a: T, b: U): T -> a
+
+fn apply[T](f: fn(T): T, x: T): T -> f(x)
+
+class Pair[A, B]:
+    left: A
+    right: B
+
+fn swap[A, B](p: Pair[A, B]): Pair[B, A]
+    return Pair[B, A](p.right, p.left)
+
+type IntPair = Pair[i32, i32]
