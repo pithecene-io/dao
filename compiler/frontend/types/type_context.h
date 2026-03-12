@@ -56,8 +56,8 @@ public:
   auto named_type(const void* decl_id, std::string_view name,
                   std::vector<const Type*> type_args) -> const TypeNamed*;
 
-  auto generic_param(std::string_view name, uint32_t index)
-      -> const TypeGenericParam*;
+  auto generic_param(const void* binder, std::string_view name,
+                     uint32_t index) -> const TypeGenericParam*;
 
   // --- Nominal constructors (not interned — each call allocates) ---
 
@@ -105,9 +105,10 @@ private:
 
   std::unordered_map<NamedKey, const TypeNamed*, NamedKeyHash> named_map_;
 
-  // Generic param key: (name, index).
+  // Generic param key: (binder, index). The binder pointer
+  // distinguishes T@0 from fn f<T> vs T@0 from fn g<T>.
   struct GenericParamKey {
-    std::string_view name;
+    const void* binder;
     uint32_t index;
 
     auto operator==(const GenericParamKey& other) const -> bool = default;

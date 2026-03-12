@@ -120,9 +120,12 @@ private:
 
 class TypeGenericParam : public Type {
 public:
-  TypeGenericParam(std::string_view name, uint32_t index)
-      : Type(TypeKind::GenericParam), name_(name), index_(index) {}
+  TypeGenericParam(const void* binder, std::string_view name, uint32_t index)
+      : Type(TypeKind::GenericParam), binder_(binder), name_(name),
+        index_(index) {}
 
+  /// The declaration (Decl*) that introduces this type parameter.
+  [[nodiscard]] auto binder() const -> const void* { return binder_; }
   [[nodiscard]] auto name() const -> std::string_view { return name_; }
   [[nodiscard]] auto index() const -> uint32_t { return index_; }
 
@@ -131,6 +134,7 @@ public:
   }
 
 private:
+  const void* binder_;
   std::string_view name_;
   uint32_t index_;
 };

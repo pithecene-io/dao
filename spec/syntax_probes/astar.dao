@@ -8,7 +8,7 @@ fn reconstruct_path(came_from: i32, start: i32, goal: i32): i32 -> 0
 
 fn heuristic(a: NodeId, b: NodeId): f64 -> 0.0
 
-fn a_star(g: Graph, start: NodeId, goal: NodeId): List[NodeId]
+fn a_star(g: Graph, start: NodeId, goal: NodeId): List<NodeId>
     resource memory Search =>
         let open = PriorityQueue[NodeId, f64]()
         let came_from = Map[NodeId, NodeId]()

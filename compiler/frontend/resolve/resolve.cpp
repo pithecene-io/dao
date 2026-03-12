@@ -25,6 +25,8 @@ auto symbol_kind_name(SymbolKind kind) -> const char* {
     return "Predeclared";
   case SymbolKind::LambdaParam:
     return "LambdaParam";
+  case SymbolKind::GenericParam:
+    return "GenericParam";
   }
   return "Unknown";
 }
@@ -197,9 +199,31 @@ private:
     }
   }
 
+  void declare_type_params(const std::vector<GenericParam>& type_params,
+                           Scope* scope, const Decl& decl) {
+    for (const auto& tp : type_params) {
+      if (scope->lookup_local(tp.name) != nullptr) {
+        diagnostics_.push_back(Diagnostic::error(
+            tp.name_span,
+            "duplicate type parameter '" + std::string(tp.name) + "'"));
+      } else {
+        auto* sym = ctx_.make_symbol(
+            SymbolKind::GenericParam, tp.name, tp.name_span, &decl);
+        scope->declare(tp.name, sym);
+      }
+      // Resolve constraint types.
+      for (const auto* constraint : tp.constraints) {
+        resolve_type(*constraint, scope);
+      }
+    }
+  }
+
   void resolve_function(const Decl& decl, Scope* parent) {
     const auto& fn = decl.as<FunctionDecl>();
     auto* fn_scope = ctx_.make_scope(ScopeKind::Function, parent);
+
+    // Declare generic type parameters (visible to params, return type, body).
+    declare_type_params(fn.type_params, fn_scope, decl);
 
     // Declare parameters.
     for (const auto& param : fn.params) {
@@ -239,6 +263,9 @@ private:
   void resolve_class(const Decl& decl, Scope* parent) {
     const auto& st = decl.as<ClassDecl>();
     auto* struct_scope = ctx_.make_scope(ScopeKind::Struct, parent);
+
+    // Declare generic type parameters (visible to field types).
+    declare_type_params(st.type_params, struct_scope, decl);
 
     for (const auto* field : st.fields) {
       if (struct_scope->lookup_local(field->name) != nullptr) {

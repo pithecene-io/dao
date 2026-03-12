@@ -80,6 +80,20 @@ struct TypecheckPipeline {
     }
     return nullptr;
   }
+
+  /// Collect typed function types for all FunctionDecls in order.
+  [[nodiscard]] auto fn_types() const -> std::vector<const Type*> {
+    std::vector<const Type*> result;
+    if (parse_result.file == nullptr) {
+      return result;
+    }
+    for (const auto* decl : parse_result.file->declarations) {
+      if (decl->kind() == NodeKind::FunctionDecl) {
+        result.push_back(check_result.typed.decl_type(decl));
+      }
+    }
+    return result;
+  }
 };
 
 } // namespace
@@ -461,6 +475,46 @@ suite<"typecheck_construct"> typecheck_construct = [] {
         "fn bad(p: Point): Point -> p(1, 2)\n");
     expect(has_error_containing(result, "cannot call non-function"))
         << "calling a struct value should not be treated as construction";
+  };
+};
+
+suite<"typecheck_generics"> typecheck_generics = [] {
+  "generic function type uses TypeGenericParam"_test = [] {
+    auto result = check_source("fn identity<T>(x: T): T -> x\n");
+    expect(result.diagnostics.empty()) << "generic function should typecheck";
+  };
+
+  "generic class with type param field"_test = [] {
+    auto result = check_source(
+        "class Box<T>:\n"
+        "    value: T\n");
+    expect(result.diagnostics.empty()) << "generic class should typecheck";
+  };
+
+  "separate declarations with same T produce distinct types"_test = [] {
+    TypecheckPipeline pipe(
+        "fn identity<T>(x: T): T -> x\n"
+        "fn wrap<T>(x: T): T -> x\n");
+    expect(is_ok(pipe.check_result))
+        << "both generic functions should typecheck";
+
+    auto fns = pipe.fn_types();
+    expect(fns.size() == 2_ul) << "must find two function decls";
+
+    const auto* fn_identity = static_cast<const TypeFunction*>(fns[0]);
+    const auto* fn_wrap = static_cast<const TypeFunction*>(fns[1]);
+    expect(fn_identity != nullptr);
+    expect(fn_wrap != nullptr);
+
+    // Both have fn(T): T shape, but the T types must be distinct objects
+    // because they belong to different binder declarations.
+    expect(fn_identity->param_types().size() == 1_ul);
+    expect(fn_wrap->param_types().size() == 1_ul);
+
+    const auto* t_from_identity = fn_identity->param_types()[0];
+    const auto* t_from_wrap = fn_wrap->param_types()[0];
+    expect(t_from_identity != t_from_wrap)
+        << "T from identity and T from wrap must be distinct TypeGenericParam objects";
   };
 };
 

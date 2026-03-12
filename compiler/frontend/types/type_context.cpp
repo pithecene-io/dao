@@ -40,7 +40,7 @@ auto TypeContext::NamedKeyHash::operator()(const NamedKey& key) const -> size_t 
 
 auto TypeContext::GenericParamKeyHash::operator()(const GenericParamKey& key) const
     -> size_t {
-  size_t h = std::hash<std::string_view>{}(key.name);
+  size_t h = std::hash<const void*>{}(key.binder);
   return hash_combine(h, std::hash<uint32_t>{}(key.index));
 }
 
@@ -108,12 +108,12 @@ auto TypeContext::named_type(const void* decl_id, std::string_view name,
   return it->second;
 }
 
-auto TypeContext::generic_param(std::string_view name, uint32_t index)
-    -> const TypeGenericParam* {
-  GenericParamKey key{name, index};
+auto TypeContext::generic_param(const void* binder, std::string_view name,
+                                uint32_t index) -> const TypeGenericParam* {
+  GenericParamKey key{binder, index};
   auto [it, inserted] = generic_param_map_.try_emplace(key, nullptr);
   if (inserted) {
-    it->second = arena_.alloc<TypeGenericParam>(name, index);
+    it->second = arena_.alloc<TypeGenericParam>(binder, name, index);
   }
   return it->second;
 }

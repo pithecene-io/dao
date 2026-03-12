@@ -11,8 +11,8 @@ File
     ExprBody
       IntLiteral 0
   FunctionDecl positive_squares
-    Param xs: List[i32]
-    ReturnType: List[i32]
+    Param xs: List<i32>
+    ReturnType: List<i32>
     ReturnStatement
       PipeExpr
         Identifier xs

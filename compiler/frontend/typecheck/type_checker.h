@@ -124,6 +124,7 @@ private:
   // --- Helpers ---
 
   auto is_lvalue(const Expr* expr) -> bool;
+  auto find_generic_param_index(const Symbol* sym) -> uint32_t;
 };
 
 // ---------------------------------------------------------------------------

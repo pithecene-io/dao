@@ -72,7 +72,14 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
     // Look up user-defined types via resolver symbols.
     auto it = resolve_.uses.find(node->span.offset);
     if (it != resolve_.uses.end()) {
-      return resolve_symbol_type(it->second);
+      const auto* sym = it->second;
+      // Generic type parameters resolve to TypeGenericParam.
+      if (sym->kind == SymbolKind::GenericParam) {
+        // Find the parameter index from the enclosing declaration.
+        uint32_t index = find_generic_param_index(sym);
+        return types_.generic_param(sym->decl, sym->name, index);
+      }
+      return resolve_symbol_type(sym);
     }
 
     error(node->span, "unknown type '" + std::string(name) + "'");
@@ -188,6 +195,13 @@ auto TypeChecker::resolve_symbol_type(const Symbol* sym) -> const Type* {
 
   case SymbolKind::LambdaParam:
     // Lambda params are typed contextually; handled in check_lambda.
+    break;
+
+  case SymbolKind::GenericParam:
+    // Generic type parameters resolve to TypeGenericParam. The index
+    // is derived from the parameter's position in the declaration.
+    // For now, return nullptr — generic params aren't yet type-checkable
+    // as values (they are types, not values).
     break;
 
   case SymbolKind::Field:
@@ -1078,6 +1092,30 @@ auto TypeChecker::is_lvalue(const Expr* expr) -> bool {
   default:
     return false;
   }
+}
+
+auto TypeChecker::find_generic_param_index(const Symbol* sym) -> uint32_t {
+  // The symbol's decl points to the enclosing Decl (FunctionDecl or ClassDecl).
+  if (sym->decl == nullptr) {
+    return 0;
+  }
+  const auto* decl = static_cast<const Decl*>(sym->decl);
+
+  const std::vector<GenericParam>* type_params = nullptr;
+  if (decl->is<FunctionDecl>()) {
+    type_params = &decl->as<FunctionDecl>().type_params;
+  } else if (decl->is<ClassDecl>()) {
+    type_params = &decl->as<ClassDecl>().type_params;
+  }
+
+  if (type_params != nullptr) {
+    for (uint32_t i = 0; i < type_params->size(); ++i) {
+      if ((*type_params)[i].name == sym->name) {
+        return i;
+      }
+    }
+  }
+  return 0;
 }
 
 // ---------------------------------------------------------------------------

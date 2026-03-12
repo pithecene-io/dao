@@ -44,14 +44,14 @@ void print_type(std::ostream& out, const Type* type) {
     const auto* n = static_cast<const TypeNamed*>(type);
     out << n->name();
     if (!n->type_args().empty()) {
-      out << '[';
+      out << '<';
       bool first = true;
       for (const auto* arg : n->type_args()) {
         if (!first) out << ", ";
         first = false;
         print_type(out, arg);
       }
-      out << ']';
+      out << '>';
     }
     break;
   }

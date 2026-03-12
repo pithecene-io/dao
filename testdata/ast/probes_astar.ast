@@ -21,7 +21,7 @@ File
     Param g: Graph
     Param start: NodeId
     Param goal: NodeId
-    ReturnType: List[NodeId]
+    ReturnType: List<NodeId>
     ResourceBlock memory Search
       LetStatement open
         CallExpr

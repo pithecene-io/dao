@@ -72,13 +72,38 @@ private:
     }, decl.payload);
   }
 
+  void print_type_params(const std::vector<GenericParam>& type_params) {
+    if (type_params.empty()) {
+      return;
+    }
+    out_ << "<";
+    for (size_t i = 0; i < type_params.size(); ++i) {
+      if (i > 0) {
+        out_ << ", ";
+      }
+      out_ << type_params[i].name;
+      if (!type_params[i].constraints.empty()) {
+        out_ << ": ";
+        for (size_t j = 0; j < type_params[i].constraints.size(); ++j) {
+          if (j > 0) {
+            out_ << " + ";
+          }
+          print_type_inline(*type_params[i].constraints[j]);
+        }
+      }
+    }
+    out_ << ">";
+  }
+
   void print_function_decl(const FunctionDecl& fn) {
     indent();
     if (fn.is_extern) {
-      out_ << "ExternFunctionDecl " << fn.name << "\n";
+      out_ << "ExternFunctionDecl " << fn.name;
     } else {
-      out_ << "FunctionDecl " << fn.name << "\n";
+      out_ << "FunctionDecl " << fn.name;
     }
+    print_type_params(fn.type_params);
+    out_ << "\n";
     Scope scope(depth_);
 
     for (const auto& param : fn.params) {
@@ -111,7 +136,9 @@ private:
 
   void print_class_decl(const ClassDecl& node) {
     indent();
-    out_ << "ClassDecl " << node.name << "\n";
+    out_ << "ClassDecl " << node.name;
+    print_type_params(node.type_params);
+    out_ << "\n";
     Scope scope(depth_);
     for (const auto* field : node.fields) {
       indent();
@@ -428,14 +455,14 @@ private:
         [&](const NamedType& named) {
           print_qualified_path(named.name);
           if (!named.type_args.empty()) {
-            out_ << "[";
+            out_ << "<";
             for (size_t i = 0; i < named.type_args.size(); ++i) {
               if (i > 0) {
                 out_ << ", ";
               }
               print_type_inline(*named.type_args[i]);
             }
-            out_ << "]";
+            out_ << ">";
           }
         },
         [&](const PointerType& ptr) {

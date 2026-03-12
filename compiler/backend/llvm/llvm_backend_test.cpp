@@ -25,6 +25,9 @@ using namespace dao;
 
 namespace {
 
+// Sentinel declaration identity for testing.
+const int kDeclSentinel = 1;
+
 /// Full pipeline: source → MIR → LLVM IR.
 struct LlvmTestPipeline {
   SourceBuffer source;
@@ -140,7 +143,7 @@ suite<"type_lowering"> type_lowering = [] {
     LlvmTypeLowering lowering(ctx);
     TypeContext types;
 
-    auto* gp = types.generic_param("T", 0);
+    auto* gp = types.generic_param(&kDeclSentinel, "T", 0);
     expect(lowering.lower(gp) == nullptr);
     expect(contains(lowering.error(), "generic"));
   };

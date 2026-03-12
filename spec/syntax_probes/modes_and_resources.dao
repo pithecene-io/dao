@@ -2,7 +2,7 @@ type NodeId = i32
 type List = i32
 type PriorityQueue = i32
 
-fn search(start: NodeId, goal: NodeId): List[NodeId]
+fn search(start: NodeId, goal: NodeId): List<NodeId>
     resource memory Search =>
         mode parallel =>
             let frontier = PriorityQueue[NodeId]()
