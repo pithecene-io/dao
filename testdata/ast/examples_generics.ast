@@ -1,0 +1,29 @@
+File
+  FunctionDecl identity<T>
+    Param x: T
+    ReturnType: T
+    ExprBody
+      Identifier x
+  FunctionDecl first<T, U>
+    Param a: T
+    Param b: U
+    ReturnType: T
+    ExprBody
+      Identifier a
+  FunctionDecl pick<T>
+    Param a: T
+    Param b: T
+    Param flag: bool
+    ReturnType: T
+    IfStatement
+      Condition
+        Identifier flag
+      Then
+        ReturnStatement
+          Identifier a
+    ReturnStatement
+      Identifier b
+  ClassDecl Pair<A, B>
+    Field left: A
+    Field right: B
+  AliasDecl IntPair = Pair<i32, i32>

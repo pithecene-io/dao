@@ -1,0 +1,49 @@
+File
+  ConceptDecl Printable
+    FunctionDecl to_string
+      Param self
+      ReturnType: string
+  ConceptDecl Equatable
+    FunctionDecl eq
+      Param self
+      Param other: Equatable
+      ReturnType: bool
+    FunctionDecl ne
+      Param self
+      Param other: Equatable
+      ReturnType: bool
+      ExprBody
+        UnaryExpr !
+          CallExpr
+            Callee
+              FieldExpr .eq
+                Identifier self
+            Args
+              Identifier other
+  DerivedConceptDecl Copyable
+    FunctionDecl copy
+      Param self
+      ReturnType: Copyable
+  ClassDecl Point
+    Field x: f64
+    Field y: f64
+    Conformance Printable
+      FunctionDecl to_string
+        Param self
+        ReturnType: string
+        ExprBody
+          StringLiteral "point"
+    Conformance Equatable
+      FunctionDecl eq
+        Param self
+        Param other: Equatable
+        ReturnType: bool
+        ExprBody
+          BoolLiteral true
+    Deny Copyable
+  ExtendDecl i32 as Printable
+    FunctionDecl to_string
+      Param self
+      ReturnType: string
+      ExprBody
+        StringLiteral "int"

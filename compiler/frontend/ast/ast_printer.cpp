@@ -110,8 +110,12 @@ private:
 
     for (const auto& param : fn.params) {
       indent();
-      out_ << "Param " << param.name << ": ";
-      print_type_inline(*param.type);
+      if (param.type != nullptr) {
+        out_ << "Param " << param.name << ": ";
+        print_type_inline(*param.type);
+      } else {
+        out_ << "Param " << param.name;
+      }
       out_ << "\n";
     }
 
