@@ -164,13 +164,13 @@ auto run_through_hir(const std::filesystem::path& path) -> HirResult {
   auto hir = dao::build_hir(*frontend.parsed.parse_result.file,
                             frontend.resolve, frontend.typecheck, hir_ctx);
 
-  if (hir.module == nullptr) {
+  auto filename = path.filename().string();
+  bool has_errors = print_error_diagnostics(filename, frontend.parsed.source,
+                                            hir.diagnostics);
+
+  if (hir.module == nullptr || has_errors) {
     std::exit(EXIT_FAILURE);
   }
-
-  auto filename = path.filename().string();
-  print_error_diagnostics(filename, frontend.parsed.source,
-                          hir.diagnostics);
 
   return {.frontend = std::move(frontend),
           .hir_ctx = std::move(hir_ctx),
