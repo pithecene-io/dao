@@ -17,15 +17,21 @@
 
 #include <llvm/Support/Program.h>
 
+#include <array>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace {
+
+// ---------------------------------------------------------------------------
+// File I/O
+// ---------------------------------------------------------------------------
 
 auto read_file(const std::filesystem::path& path) -> std::string {
   std::ifstream file(path);
@@ -35,6 +41,170 @@ auto read_file(const std::filesystem::path& path) -> std::string {
   }
   return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
+
+// ---------------------------------------------------------------------------
+// Diagnostic helpers
+// ---------------------------------------------------------------------------
+
+// Print all diagnostics as errors. Returns true if any were printed.
+auto print_error_diagnostics(std::string_view filename,
+                             const dao::SourceBuffer& source,
+                             std::span<const dao::Diagnostic> diags) -> bool {
+  for (const auto& diag : diags) {
+    auto loc = source.line_col(diag.span.offset);
+    std::cerr << filename << ":" << loc.line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
+  }
+  return !diags.empty();
+}
+
+// Print diagnostics with severity labels. Returns true if any errors.
+auto print_diagnostics(std::string_view filename,
+                       const dao::SourceBuffer& source,
+                       std::span<const dao::Diagnostic> diags) -> bool {
+  bool has_errors = false;
+  for (const auto& diag : diags) {
+    auto loc = source.line_col(diag.span.offset);
+    const auto* severity = diag.severity == dao::Severity::Error ? "error" : "warning";
+    std::cerr << filename << ":" << loc.line << ":" << loc.col
+              << ": " << severity << ": " << diag.message << "\n";
+    if (diag.severity == dao::Severity::Error) {
+      has_errors = true;
+    }
+  }
+  return has_errors;
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline stages
+// ---------------------------------------------------------------------------
+
+struct LexedFile {
+  dao::SourceBuffer source;
+  dao::LexResult lex_result;
+};
+
+auto lex_file(const std::filesystem::path& path) -> LexedFile {
+  auto contents = read_file(path);
+  dao::SourceBuffer source(path.filename().string(), std::move(contents));
+  auto lex_result = dao::lex(source);
+
+  if (print_error_diagnostics(path.filename().string(), source,
+                              lex_result.diagnostics)) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  return {.source = std::move(source), .lex_result = std::move(lex_result)};
+}
+
+struct ParsedFile {
+  dao::SourceBuffer source;
+  dao::LexResult lex_result;
+  dao::ParseResult parse_result;
+};
+
+auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
+  auto lexed = lex_file(path);
+  auto parse_result = dao::parse(lexed.lex_result.tokens);
+
+  if (print_error_diagnostics(path.filename().string(), lexed.source,
+                              parse_result.diagnostics)) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  return {.source = std::move(lexed.source),
+          .lex_result = std::move(lexed.lex_result),
+          .parse_result = std::move(parse_result)};
+}
+
+struct FrontendResult {
+  ParsedFile parsed;
+  dao::ResolveResult resolve;
+  dao::TypeContext types;
+  dao::TypeCheckResult typecheck;
+};
+
+// Run lex → parse → resolve → typecheck. Exits on error.
+auto run_frontend(const std::filesystem::path& path) -> FrontendResult {
+  auto parsed = lex_and_parse(path);
+  if (parsed.parse_result.file == nullptr) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  auto filename = path.filename().string();
+  auto resolve_result = dao::resolve(*parsed.parse_result.file);
+  bool has_errors = print_error_diagnostics(filename, parsed.source,
+                                            resolve_result.diagnostics);
+
+  dao::TypeContext types;
+  auto check_result =
+      dao::typecheck(*parsed.parse_result.file, resolve_result, types);
+  has_errors |= print_diagnostics(filename, parsed.source,
+                                  check_result.diagnostics);
+
+  if (has_errors) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  return {.parsed = std::move(parsed),
+          .resolve = std::move(resolve_result),
+          .types = std::move(types),
+          .typecheck = std::move(check_result)};
+}
+
+struct HirResult {
+  FrontendResult frontend;
+  dao::HirContext hir_ctx;
+  dao::HirBuildResult hir;
+};
+
+auto run_through_hir(const std::filesystem::path& path) -> HirResult {
+  auto frontend = run_frontend(path);
+  dao::HirContext hir_ctx;
+  auto hir = dao::build_hir(*frontend.parsed.parse_result.file,
+                            frontend.resolve, frontend.typecheck, hir_ctx);
+
+  if (hir.module == nullptr) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  auto filename = path.filename().string();
+  print_error_diagnostics(filename, frontend.parsed.source,
+                          hir.diagnostics);
+
+  return {.frontend = std::move(frontend),
+          .hir_ctx = std::move(hir_ctx),
+          .hir = std::move(hir)};
+}
+
+struct MirResult {
+  HirResult hir_result;
+  dao::MirContext mir_ctx;
+  dao::MirBuildResult mir;
+};
+
+auto run_through_mir(const std::filesystem::path& path) -> MirResult {
+  auto hir_result = run_through_hir(path);
+  dao::MirContext mir_ctx;
+  auto mir = dao::build_mir(*hir_result.hir.module, mir_ctx,
+                            hir_result.frontend.types);
+
+  auto filename = path.filename().string();
+  bool has_errors = print_error_diagnostics(
+      filename, hir_result.frontend.parsed.source, mir.diagnostics);
+
+  if (mir.module == nullptr || has_errors) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  return {.hir_result = std::move(hir_result),
+          .mir_ctx = std::move(mir_ctx),
+          .mir = std::move(mir)};
+}
+
+// ---------------------------------------------------------------------------
+// Command handlers
+// ---------------------------------------------------------------------------
 
 // Debug-only token dump. Output format is not stable and must not be
 // relied upon by tests, tooling, or documentation.
@@ -57,62 +227,10 @@ void cmd_lex(const std::filesystem::path& path) {
     std::cout << "\n";
   }
 
-  if (!result.diagnostics.empty()) {
-    for (const auto& diag : result.diagnostics) {
-      auto loc = source.line_col(diag.span.offset);
-      std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-                << ": error: " << diag.message << "\n";
-    }
+  if (print_error_diagnostics(path.filename().string(), source,
+                              result.diagnostics)) {
     std::exit(EXIT_FAILURE);
   }
-}
-
-struct LexedFile {
-  dao::SourceBuffer source;
-  dao::LexResult lex_result;
-};
-
-// Lex a file, printing diagnostics on failure.
-auto lex_file(const std::filesystem::path& path) -> LexedFile {
-  auto contents = read_file(path);
-  dao::SourceBuffer source(path.filename().string(), std::move(contents));
-  auto lex_result = dao::lex(source);
-
-  if (!lex_result.diagnostics.empty()) {
-    for (const auto& diag : lex_result.diagnostics) {
-      auto loc = source.line_col(diag.span.offset);
-      std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-                << ": error: " << diag.message << "\n";
-    }
-    std::exit(EXIT_FAILURE);
-  }
-
-  return {.source = std::move(source), .lex_result = std::move(lex_result)};
-}
-
-struct ParsedFile {
-  dao::SourceBuffer source;
-  dao::LexResult lex_result;
-  dao::ParseResult parse_result;
-};
-
-// Lex and parse a file, printing diagnostics on failure.
-auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
-  auto lexed = lex_file(path);
-  auto parse_result = dao::parse(lexed.lex_result.tokens);
-
-  if (!parse_result.diagnostics.empty()) {
-    for (const auto& diag : parse_result.diagnostics) {
-      auto loc = lexed.source.line_col(diag.span.offset);
-      std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-                << ": error: " << diag.message << "\n";
-    }
-    std::exit(EXIT_FAILURE);
-  }
-
-  return {.source = std::move(lexed.source),
-          .lex_result = std::move(lexed.lex_result),
-          .parse_result = std::move(parse_result)};
 }
 
 // Debug-only parse diagnostic dump. Output format is not stable.
@@ -121,6 +239,14 @@ void cmd_parse(const std::filesystem::path& path) {
   if (result.parse_result.file != nullptr) {
     std::cout << "File: " << result.parse_result.file->imports.size() << " imports, "
               << result.parse_result.file->declarations.size() << " declarations\n";
+  }
+}
+
+// Pretty-print AST. Output is deterministic and suitable for golden-file testing.
+void cmd_ast(const std::filesystem::path& path) {
+  auto result = lex_and_parse(path);
+  if (result.parse_result.file != nullptr) {
+    dao::print_ast(std::cout, *result.parse_result.file);
   }
 }
 
@@ -179,7 +305,7 @@ void cmd_resolve(const std::filesystem::path& path) {
     std::cout << "\n";
   }
 
-  // Print diagnostics.
+  // Print diagnostics (to stdout — this is a debug dump command).
   if (!resolve_result.diagnostics.empty()) {
     std::cout << "\nDiagnostics:\n";
     for (const auto& diag : resolve_result.diagnostics) {
@@ -192,217 +318,37 @@ void cmd_resolve(const std::filesystem::path& path) {
 
 // Run type checking and print diagnostics.
 void cmd_check(const std::filesystem::path& path) {
-  auto result = lex_and_parse(path);
-  if (result.parse_result.file == nullptr) {
-    return;
-  }
-
-  auto resolve_result = dao::resolve(*result.parse_result.file);
-
-  // Print resolve diagnostics.
-  for (const auto& diag : resolve_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-  }
-
-  dao::TypeContext types;
-  auto check_result =
-      dao::typecheck(*result.parse_result.file, resolve_result, types);
-
-  bool has_errors = !resolve_result.diagnostics.empty();
-
-  for (const auto& diag : check_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    auto severity = diag.severity == dao::Severity::Error ? "error" : "warning";
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": " << severity << ": " << diag.message << "\n";
-    if (diag.severity == dao::Severity::Error) {
-      has_errors = true;
-    }
-  }
-
-  if (has_errors) {
-    std::exit(EXIT_FAILURE);
-  }
-
+  run_frontend(path);
   std::cout << "ok\n";
 }
 
 // Build and print HIR. Output is deterministic.
 void cmd_hir(const std::filesystem::path& path) {
-  auto result = lex_and_parse(path);
-  if (result.parse_result.file == nullptr) {
-    return;
-  }
-
-  auto resolve_result = dao::resolve(*result.parse_result.file);
-
-  // Print resolve diagnostics.
-  for (const auto& diag : resolve_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-  }
-
-  dao::TypeContext types;
-  auto check_result =
-      dao::typecheck(*result.parse_result.file, resolve_result, types);
-
-  bool has_errors = !resolve_result.diagnostics.empty();
-
-  for (const auto& diag : check_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    auto severity = diag.severity == dao::Severity::Error ? "error" : "warning";
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": " << severity << ": " << diag.message << "\n";
-    if (diag.severity == dao::Severity::Error) {
-      has_errors = true;
-    }
-  }
-
-  if (has_errors) {
-    std::exit(EXIT_FAILURE);
-  }
-
-  dao::HirContext hir_ctx;
-  auto hir_result = dao::build_hir(*result.parse_result.file, resolve_result,
-                                   check_result, hir_ctx);
-
-  for (const auto& diag : hir_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-  }
-
-  if (hir_result.module != nullptr) {
-    dao::print_hir(std::cout, *hir_result.module);
+  auto result = run_through_hir(path);
+  if (result.hir.module != nullptr) {
+    dao::print_hir(std::cout, *result.hir.module);
   }
 }
 
 // Build and print MIR. Output is deterministic.
 void cmd_mir(const std::filesystem::path& path) {
-  auto result = lex_and_parse(path);
-  if (result.parse_result.file == nullptr) {
-    return;
-  }
-
-  auto resolve_result = dao::resolve(*result.parse_result.file);
-
-  for (const auto& diag : resolve_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-  }
-
-  dao::TypeContext types;
-  auto check_result =
-      dao::typecheck(*result.parse_result.file, resolve_result, types);
-
-  bool has_errors = !resolve_result.diagnostics.empty();
-
-  for (const auto& diag : check_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    auto severity = diag.severity == dao::Severity::Error ? "error" : "warning";
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": " << severity << ": " << diag.message << "\n";
-    if (diag.severity == dao::Severity::Error) {
-      has_errors = true;
-    }
-  }
-
-  if (has_errors) {
-    std::exit(EXIT_FAILURE);
-  }
-
-  dao::HirContext hir_ctx;
-  auto hir_result = dao::build_hir(*result.parse_result.file, resolve_result,
-                                   check_result, hir_ctx);
-
-  if (hir_result.module == nullptr) {
-    return;
-  }
-
-  dao::MirContext mir_ctx;
-  auto mir_result = dao::build_mir(*hir_result.module, mir_ctx, types);
-
-  for (const auto& diag : mir_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-  }
-
-  if (mir_result.module != nullptr) {
-    dao::print_mir(std::cout, *mir_result.module);
+  auto result = run_through_mir(path);
+  if (result.mir.module != nullptr) {
+    dao::print_mir(std::cout, *result.mir.module);
   }
 }
 
 // Build and emit LLVM IR. Output is deterministic.
 void cmd_llvm_ir(const std::filesystem::path& path) {
-  auto result = lex_and_parse(path);
-  if (result.parse_result.file == nullptr) {
-    return;
-  }
-
-  auto resolve_result = dao::resolve(*result.parse_result.file);
-
-  for (const auto& diag : resolve_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-  }
-
-  dao::TypeContext types;
-  auto check_result =
-      dao::typecheck(*result.parse_result.file, resolve_result, types);
-
-  bool has_errors = !resolve_result.diagnostics.empty();
-
-  for (const auto& diag : check_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    auto severity = diag.severity == dao::Severity::Error ? "error" : "warning";
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": " << severity << ": " << diag.message << "\n";
-    if (diag.severity == dao::Severity::Error) {
-      has_errors = true;
-    }
-  }
-
-  if (has_errors) {
-    std::exit(EXIT_FAILURE);
-  }
-
-  dao::HirContext hir_ctx;
-  auto hir_result = dao::build_hir(*result.parse_result.file, resolve_result,
-                                   check_result, hir_ctx);
-
-  if (hir_result.module == nullptr) {
-    return;
-  }
-
-  dao::MirContext mir_ctx;
-  auto mir_result = dao::build_mir(*hir_result.module, mir_ctx, types);
-
-  for (const auto& diag : mir_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-    has_errors = true;
-  }
-
-  if (mir_result.module == nullptr || has_errors) {
-    std::exit(EXIT_FAILURE);
-  }
+  auto mir = run_through_mir(path);
 
   llvm::LLVMContext llvm_ctx;
   dao::LlvmBackend backend(llvm_ctx);
-  auto llvm_result = backend.lower(*mir_result.module);
+  auto llvm_result = backend.lower(*mir.mir.module);
 
-  for (const auto& diag : llvm_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-  }
+  auto filename = path.filename().string();
+  print_error_diagnostics(filename, mir.hir_result.frontend.parsed.source,
+                          llvm_result.diagnostics);
 
   if (llvm_result.module == nullptr || !llvm_result.diagnostics.empty()) {
     std::exit(EXIT_FAILURE);
@@ -413,70 +359,15 @@ void cmd_llvm_ir(const std::filesystem::path& path) {
 
 // Compile a .dao file to a native executable.
 void cmd_build(const std::filesystem::path& path) {
-  auto result = lex_and_parse(path);
-  if (result.parse_result.file == nullptr) {
-    return;
-  }
-
-  auto resolve_result = dao::resolve(*result.parse_result.file);
-
-  for (const auto& diag : resolve_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-  }
-
-  dao::TypeContext types;
-  auto check_result =
-      dao::typecheck(*result.parse_result.file, resolve_result, types);
-
-  bool has_errors = !resolve_result.diagnostics.empty();
-
-  for (const auto& diag : check_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    auto severity = diag.severity == dao::Severity::Error ? "error" : "warning";
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": " << severity << ": " << diag.message << "\n";
-    if (diag.severity == dao::Severity::Error) {
-      has_errors = true;
-    }
-  }
-
-  if (has_errors) {
-    std::exit(EXIT_FAILURE);
-  }
-
-  dao::HirContext hir_ctx;
-  auto hir_result = dao::build_hir(*result.parse_result.file, resolve_result,
-                                   check_result, hir_ctx);
-
-  if (hir_result.module == nullptr) {
-    std::exit(EXIT_FAILURE);
-  }
-
-  dao::MirContext mir_ctx;
-  auto mir_result = dao::build_mir(*hir_result.module, mir_ctx, types);
-
-  for (const auto& diag : mir_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-    has_errors = true;
-  }
-
-  if (mir_result.module == nullptr || has_errors) {
-    std::exit(EXIT_FAILURE);
-  }
+  auto mir = run_through_mir(path);
 
   llvm::LLVMContext llvm_ctx;
   dao::LlvmBackend backend(llvm_ctx);
-  auto llvm_result = backend.lower(*mir_result.module);
+  auto llvm_result = backend.lower(*mir.mir.module);
 
-  for (const auto& diag : llvm_result.diagnostics) {
-    auto loc = result.source.line_col(diag.span.offset);
-    std::cerr << path.filename().string() << ":" << loc.line << ":" << loc.col
-              << ": error: " << diag.message << "\n";
-  }
+  auto filename = path.filename().string();
+  print_error_diagnostics(filename, mir.hir_result.frontend.parsed.source,
+                          llvm_result.diagnostics);
 
   if (llvm_result.module == nullptr || !llvm_result.diagnostics.empty()) {
     std::exit(EXIT_FAILURE);
@@ -497,10 +388,10 @@ void cmd_build(const std::filesystem::path& path) {
   // Link with system cc: object + runtime library → executable.
   auto output_path = path.parent_path() / path.stem();
 
-  auto cc = llvm::sys::findProgramByName("cc");
-  if (!cc) {
+  auto cc_path = llvm::sys::findProgramByName("cc");
+  if (!cc_path) {
     std::cerr << "error: cannot find 'cc' linker: "
-              << cc.getError().message() << "\n";
+              << cc_path.getError().message() << "\n";
     std::filesystem::remove(obj_path);
     std::exit(EXIT_FAILURE);
   }
@@ -509,7 +400,7 @@ void cmd_build(const std::filesystem::path& path) {
   auto obj_str = obj_path.string();
   auto out_str = output_path.string();
   std::vector<llvm::StringRef> args = {
-      *cc,
+      *cc_path,
       obj_str,
       DAO_RUNTIME_LIB,
       "-o",
@@ -518,7 +409,7 @@ void cmd_build(const std::filesystem::path& path) {
 
   std::string link_error;
   int link_status = llvm::sys::ExecuteAndWait(
-      *cc, args, /*Env=*/std::nullopt, /*Redirects=*/{},
+      *cc_path, args, /*Env=*/std::nullopt, /*Redirects=*/{},
       /*SecondsToWait=*/0, /*MemoryLimit=*/0, &link_error);
   std::filesystem::remove(obj_path);
 
@@ -534,173 +425,55 @@ void cmd_build(const std::filesystem::path& path) {
   std::cout << output_path.string() << "\n";
 }
 
-// Pretty-print AST. Output is deterministic and suitable for golden-file testing.
-void cmd_ast(const std::filesystem::path& path) {
-  auto result = lex_and_parse(path);
-  if (result.parse_result.file != nullptr) {
-    dao::print_ast(std::cout, *result.parse_result.file);
-  }
-}
+// ---------------------------------------------------------------------------
+// Command dispatch
+// ---------------------------------------------------------------------------
+
+using CommandFn = void (*)(const std::filesystem::path&);
+
+struct Command {
+  std::string_view name;
+  CommandFn handler;
+};
+
+constexpr auto commands = std::array{
+    Command{.name = "lex", .handler = cmd_lex},
+    Command{.name = "parse", .handler = cmd_parse},
+    Command{.name = "ast", .handler = cmd_ast},
+    Command{.name = "tokens", .handler = cmd_tokens},
+    Command{.name = "resolve", .handler = cmd_resolve},
+    Command{.name = "check", .handler = cmd_check},
+    Command{.name = "hir", .handler = cmd_hir},
+    Command{.name = "mir", .handler = cmd_mir},
+    Command{.name = "llvm-ir", .handler = cmd_llvm_ir},
+    Command{.name = "build", .handler = cmd_build},
+};
 
 } // namespace
 
 auto main(int argc, char* argv[]) -> int {
   if (argc < 2) {
-    std::cerr << "usage: daoc <command> <file>\n";
-    std::cerr << "commands: lex, parse, ast, tokens, resolve, check, hir, mir, llvm-ir, build\n";
+    std::cerr << "usage: daoc <command> <file>\n"
+              << "commands: lex, parse, ast, tokens, resolve, check, hir, mir, llvm-ir, build\n";
     return EXIT_FAILURE;
   }
 
   std::string_view arg1(argv[1]);
 
-  // daoc lex <file>
-  if (arg1 == "lex") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc lex <file>\n";
-      return EXIT_FAILURE;
+  for (const auto& [name, handler] : commands) {
+    if (arg1 == name) {
+      if (argc < 3) {
+        std::cerr << "usage: daoc " << name << " <file>\n";
+        return EXIT_FAILURE;
+      }
+      std::filesystem::path path(argv[2]);
+      if (!std::filesystem::exists(path)) {
+        std::cerr << "error: file not found: " << path << "\n";
+        return EXIT_FAILURE;
+      }
+      handler(path);
+      return EXIT_SUCCESS;
     }
-    std::filesystem::path path(argv[2]);
-    if (!std::filesystem::exists(path)) {
-      std::cerr << "error: file not found: " << path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_lex(path);
-    return EXIT_SUCCESS;
-  }
-
-  // daoc parse <file>
-  if (arg1 == "parse") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc parse <file>\n";
-      return EXIT_FAILURE;
-    }
-    std::filesystem::path parse_path(argv[2]);
-    if (!std::filesystem::exists(parse_path)) {
-      std::cerr << "error: file not found: " << parse_path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_parse(parse_path);
-    return EXIT_SUCCESS;
-  }
-
-  // daoc tokens <file>
-  if (arg1 == "tokens") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc tokens <file>\n";
-      return EXIT_FAILURE;
-    }
-    std::filesystem::path tokens_path(argv[2]);
-    if (!std::filesystem::exists(tokens_path)) {
-      std::cerr << "error: file not found: " << tokens_path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_tokens(tokens_path);
-    return EXIT_SUCCESS;
-  }
-
-  // daoc resolve <file>
-  if (arg1 == "resolve") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc resolve <file>\n";
-      return EXIT_FAILURE;
-    }
-    std::filesystem::path resolve_path(argv[2]);
-    if (!std::filesystem::exists(resolve_path)) {
-      std::cerr << "error: file not found: " << resolve_path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_resolve(resolve_path);
-    return EXIT_SUCCESS;
-  }
-
-  // daoc check <file>
-  if (arg1 == "check") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc check <file>\n";
-      return EXIT_FAILURE;
-    }
-    std::filesystem::path check_path(argv[2]);
-    if (!std::filesystem::exists(check_path)) {
-      std::cerr << "error: file not found: " << check_path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_check(check_path);
-    return EXIT_SUCCESS;
-  }
-
-  // daoc hir <file>
-  if (arg1 == "hir") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc hir <file>\n";
-      return EXIT_FAILURE;
-    }
-    std::filesystem::path hir_path(argv[2]);
-    if (!std::filesystem::exists(hir_path)) {
-      std::cerr << "error: file not found: " << hir_path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_hir(hir_path);
-    return EXIT_SUCCESS;
-  }
-
-  // daoc mir <file>
-  if (arg1 == "mir") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc mir <file>\n";
-      return EXIT_FAILURE;
-    }
-    std::filesystem::path mir_path(argv[2]);
-    if (!std::filesystem::exists(mir_path)) {
-      std::cerr << "error: file not found: " << mir_path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_mir(mir_path);
-    return EXIT_SUCCESS;
-  }
-
-  // daoc llvm-ir <file>
-  if (arg1 == "llvm-ir") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc llvm-ir <file>\n";
-      return EXIT_FAILURE;
-    }
-    std::filesystem::path llvm_ir_path(argv[2]);
-    if (!std::filesystem::exists(llvm_ir_path)) {
-      std::cerr << "error: file not found: " << llvm_ir_path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_llvm_ir(llvm_ir_path);
-    return EXIT_SUCCESS;
-  }
-
-  // daoc build <file>
-  if (arg1 == "build") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc build <file>\n";
-      return EXIT_FAILURE;
-    }
-    std::filesystem::path build_path(argv[2]);
-    if (!std::filesystem::exists(build_path)) {
-      std::cerr << "error: file not found: " << build_path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_build(build_path);
-    return EXIT_SUCCESS;
-  }
-
-  // daoc ast <file>
-  if (arg1 == "ast") {
-    if (argc < 3) {
-      std::cerr << "usage: daoc ast <file>\n";
-      return EXIT_FAILURE;
-    }
-    std::filesystem::path ast_path(argv[2]);
-    if (!std::filesystem::exists(ast_path)) {
-      std::cerr << "error: file not found: " << ast_path << "\n";
-      return EXIT_FAILURE;
-    }
-    cmd_ast(ast_path);
-    return EXIT_SUCCESS;
   }
 
   // daoc <file> — read and exit (Task 0 compat)
@@ -709,6 +482,6 @@ auto main(int argc, char* argv[]) -> int {
     std::cerr << "error: file not found: " << path << "\n";
     return EXIT_FAILURE;
   }
-  auto contents = read_file(path);
+  read_file(path);
   return EXIT_SUCCESS;
 }
