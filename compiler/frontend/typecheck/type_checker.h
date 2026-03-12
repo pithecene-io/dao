@@ -31,6 +31,7 @@ struct TypeCheckResult {
 
 struct CheckContext {
   const Type* return_type = nullptr; // enclosing function return type
+  const Type* self_type = nullptr;   // type of `self` in current scope (class/extend)
   std::unordered_set<std::string_view> active_modes; // e.g. "unsafe"
 };
 
@@ -55,6 +56,7 @@ public:
 private:
   TypeContext& types_;
   const ResolveResult& resolve_;
+  const FileNode* file_ = nullptr;
   TypedResults typed_;
   std::vector<Diagnostic> diagnostics_;
   CheckContext ctx_;
@@ -113,6 +115,9 @@ private:
       -> const Type*;
   auto check_pipe(const Expr* expr) -> const Type*;
   auto check_field(const Expr* expr) -> const Type*;
+  auto lookup_method(const Type* obj_type, std::string_view name)
+      -> const Type*;
+  void validate_receiver(const Decl* method, Span context_span);
   auto check_index(const Expr* expr) -> const Type*;
   auto check_lambda(const Expr* expr, const Type* expected) -> const Type*;
   auto check_list_literal(const Expr* expr) -> const Type*;
