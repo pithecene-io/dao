@@ -1,0 +1,26 @@
+concept Iterator:
+    fn has_next(self): bool
+    fn next(self): i32
+
+concept Iterable:
+    fn iter(self): RangeIter
+
+class RangeIter:
+    pos: i32
+    end: i32
+
+    as Iterator:
+        fn has_next(self): bool -> self.pos < self.end
+        fn next(self): i32 -> self.pos
+
+class Range:
+    n: i32
+
+    as Iterable:
+        fn iter(self): RangeIter -> RangeIter(0, self.n)
+
+fn sum(r: Range): i32
+    let total = 0
+    for x in r:
+        total = total + x
+    return total

@@ -1,0 +1,62 @@
+File
+  ConceptDecl Iterator
+    FunctionDecl has_next
+      Param self
+      ReturnType: bool
+    FunctionDecl next
+      Param self
+      ReturnType: i32
+  ConceptDecl Iterable
+    FunctionDecl iter
+      Param self
+      ReturnType: RangeIter
+  ClassDecl RangeIter
+    Field pos: i32
+    Field end: i32
+    Conformance Iterator
+      FunctionDecl has_next
+        Param self
+        ReturnType: bool
+        ExprBody
+          BinaryExpr <
+            FieldExpr .pos
+              Identifier self
+            FieldExpr .end
+              Identifier self
+      FunctionDecl next
+        Param self
+        ReturnType: i32
+        ExprBody
+          FieldExpr .pos
+            Identifier self
+  ClassDecl Range
+    Field n: i32
+    Conformance Iterable
+      FunctionDecl iter
+        Param self
+        ReturnType: RangeIter
+        ExprBody
+          CallExpr
+            Callee
+              Identifier RangeIter
+            Args
+              IntLiteral 0
+              FieldExpr .n
+                Identifier self
+  FunctionDecl sum
+    Param r: Range
+    ReturnType: i32
+    LetStatement total
+      IntLiteral 0
+    ForStatement x
+      Iterable
+        Identifier r
+      Assignment
+        Target
+          Identifier total
+        Value
+          BinaryExpr +
+            Identifier total
+            Identifier x
+    ReturnStatement
+      Identifier total
