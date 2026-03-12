@@ -27,6 +27,7 @@ enum class SymbolKind : std::uint8_t {
   Predeclared,  // compiler-known predeclared named type (string, void)
   LambdaParam,    // lambda |x| parameter
   GenericParam,   // type parameter in generic function/class
+  Concept,        // concept declaration
 };
 
 auto symbol_kind_name(SymbolKind kind) -> const char*;

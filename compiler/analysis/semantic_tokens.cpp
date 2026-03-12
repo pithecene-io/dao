@@ -522,6 +522,8 @@ auto resolve_use_category(SymbolKind kind) -> std::string_view {
     return "use.variable.param"; // reuse param category for lambda params
   case SymbolKind::GenericParam:
     return "use.type"; // generic type parameters classify as type uses
+  case SymbolKind::Concept:
+    return "use.type"; // concept references classify as type uses
   case SymbolKind::Builtin:
   case SymbolKind::Predeclared:
     return ""; // type-position symbols — classified by visit_type(), not here

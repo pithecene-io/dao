@@ -386,6 +386,63 @@ suite<"resolve_generics"> resolve_generics = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Concept resolution
+// ---------------------------------------------------------------------------
+
+suite<"resolve_concepts"> resolve_concepts = [] {
+  "concept name resolves as Concept symbol"_test = [] {
+    auto result = resolve_source("test",
+        "concept Printable:\n"
+        "    fn to_string(self): string\n");
+    expect(result.resolve_result.diagnostics.empty())
+        << "concept declaration should resolve cleanly";
+  };
+
+  "concept used as constraint resolves"_test = [] {
+    auto result = resolve_source("test",
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "fn print<T: Printable>(x: T): void\n"
+        "    return\n");
+    expect(result.resolve_result.diagnostics.empty())
+        << "concept constraint should resolve";
+    // The 'Printable' in the constraint should resolve to a Concept symbol.
+    auto constraint_offset = find_offset(result, "Printable", 1);
+    expect(use_resolves_to(result, constraint_offset, SymbolKind::Concept))
+        << "Printable constraint resolves to Concept symbol";
+  };
+
+  "conformance block resolves concept name"_test = [] {
+    auto result = resolve_source("test",
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "class Point:\n"
+        "    x: f64\n"
+        "    as Printable:\n"
+        "        fn to_string(self): string -> \"p\"\n");
+    expect(result.resolve_result.diagnostics.empty())
+        << "conformance block should resolve";
+    // 'Printable' after 'as' should resolve to Concept symbol.
+    auto conf_offset = find_offset(result, "Printable", 1);
+    expect(use_resolves_to(result, conf_offset, SymbolKind::Concept))
+        << "conformance concept name resolves to Concept symbol";
+  };
+
+  "extend declaration resolves concept and type"_test = [] {
+    auto result = resolve_source("test",
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n");
+    expect(result.resolve_result.diagnostics.empty())
+        << "extend declaration should resolve";
+    auto ext_offset = find_offset(result, "Printable", 1);
+    expect(use_resolves_to(result, ext_offset, SymbolKind::Concept))
+        << "extend concept name resolves to Concept symbol";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {

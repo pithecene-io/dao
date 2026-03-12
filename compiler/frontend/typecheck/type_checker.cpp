@@ -204,6 +204,10 @@ auto TypeChecker::resolve_symbol_type(const Symbol* sym) -> const Type* {
     // as values (they are types, not values).
     break;
 
+  case SymbolKind::Concept:
+    // Concept symbols are type-level; not values.
+    break;
+
   case SymbolKind::Field:
   case SymbolKind::Module:
     // Not yet handled.
