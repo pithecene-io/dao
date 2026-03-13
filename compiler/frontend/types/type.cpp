@@ -23,6 +23,8 @@ auto type_kind_name(TypeKind kind) -> const char* {
     return "Struct";
   case TypeKind::Enum:
     return "Enum";
+  case TypeKind::Generator:
+    return "Generator";
   }
   return "Unknown";
 }

@@ -208,6 +208,55 @@ Rules:
 - classes may have type parameters
 - conformance blocks may add `where` constraints
 
+## Generator Functions
+
+### Generator declaration
+
+```dao
+fn range(n: i32): Generator<i32>
+    let i = 0
+    while i < n:
+        yield i
+        i = i + 1
+```
+
+Rules:
+- `yield expr` is a statement that suspends the generator and produces
+  a value
+- `yield` is only valid inside a function whose return type is
+  `Generator<T>`
+- the yielded expression type must match the element type `T`
+- multiple `yield` statements in the same function must yield the same
+  type
+- `return` (without a value) terminates the generator early
+- `return value` is not valid in a generator function
+
+### Generator<T> type
+
+Rules:
+- `Coroutine` is the primitive resumable execution type
+- `Generator<T>` is an alias for a coroutine that yields `T` and
+  receives nothing
+- in surface syntax, `Generator<T>` is the spelling used for
+  generator return types; the underlying `Coroutine` primitive is
+  not yet directly expressible
+- `Generator<T>` requires exactly one type argument
+- `Generator<T>` is not user-definable
+- coroutine/generator operations (resume, check done, get value) are
+  compiler intrinsics not exposed as user-callable methods
+
+### For-in consumption
+
+```dao
+for x in range(10):
+    body(x)
+```
+
+Rules:
+- the iterable expression in `for...in` must have type `Generator<T>`
+- the loop variable is bound to element type `T`
+- `for...in` is the only way to consume a generator in surface syntax
+
 ## Non-Laws
 
 This contract does not yet freeze:
@@ -220,6 +269,13 @@ This contract does not yet freeze:
 - operator overloading syntax
 - associated types inside concepts
 - `sealed` modifier for concepts and classes
+- generator delegation (`yield from` or similar)
+- bidirectional coroutines (send values into a generator)
+- generator type inference from yield expressions without explicit
+  return type annotation
+- allocation strategy for generator frames
+- `Coroutine` as a directly expressible surface type
+- `Coroutine` parameterization (yield type, receive type, return type)
 
 ## Modes and Resources
 

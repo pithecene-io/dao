@@ -1131,6 +1131,90 @@ suite<"typecheck_prelude"> prelude_tests = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Generator and yield
+// ---------------------------------------------------------------------------
+
+suite<"typecheck_generator"> typecheck_generator = [] {
+  "generator function typechecks"_test = [] {
+    auto result = check_source(
+        "fn range(n: i32): Generator<i32>\n"
+        "    let i = 0\n"
+        "    while i < n:\n"
+        "        yield i\n"
+        "        i = i + 1\n");
+    expect(is_ok(result)) << "basic generator function should typecheck";
+  };
+
+  "yield type mismatch"_test = [] {
+    auto result = check_source(
+        "fn bad(): Generator<i32>\n"
+        "    yield 3.14\n");
+    expect(!is_ok(result)) << "yield type mismatch should error";
+    expect(has_error_containing(result, "yield type"))
+        << "should mention yield type mismatch";
+  };
+
+  "yield outside generator"_test = [] {
+    auto result = check_source(
+        "fn bad(): void\n"
+        "    yield 42\n");
+    expect(!is_ok(result)) << "yield outside generator should error";
+    expect(has_error_containing(result, "generator function"))
+        << "should mention generator function requirement";
+  };
+
+  "return value in generator"_test = [] {
+    auto result = check_source(
+        "fn bad(): Generator<i32>\n"
+        "    yield 1\n"
+        "    return 2\n");
+    expect(!is_ok(result)) << "return value in generator should error";
+    expect(has_error_containing(result, "return value"))
+        << "should mention return value restriction";
+  };
+
+  "bare return in generator"_test = [] {
+    auto result = check_source(
+        "fn range(n: i32): Generator<i32>\n"
+        "    let i = 0\n"
+        "    while i < n:\n"
+        "        yield i\n"
+        "        i = i + 1\n"
+        "    return\n");
+    expect(is_ok(result)) << "bare return in generator should be valid";
+  };
+
+  "for-in requires Generator"_test = [] {
+    auto result = check_source(
+        "fn range(n: i32): Generator<i32>\n"
+        "    yield n\n"
+        "fn main(): void\n"
+        "    for x in range(10):\n"
+        "        let y = x + 1\n");
+    expect(is_ok(result)) << "for-in over Generator should typecheck";
+  };
+
+  "for-in rejects non-Generator"_test = [] {
+    auto result = check_source(
+        "fn main(): void\n"
+        "    for x in 42:\n"
+        "        let y = x\n");
+    expect(!is_ok(result)) << "for-in over non-Generator should error";
+    expect(has_error_containing(result, "Generator<T>"))
+        << "should mention Generator<T> requirement";
+  };
+
+  "Generator type arg required"_test = [] {
+    auto result = check_source(
+        "fn bad(): Generator\n"
+        "    yield 1\n");
+    expect(!is_ok(result)) << "Generator without type arg should error";
+    expect(has_error_containing(result, "type argument"))
+        << "should mention type argument requirement";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)

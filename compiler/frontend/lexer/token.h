@@ -25,6 +25,7 @@ enum class TokenKind : std::uint8_t {
   KwFor,
   KwIn,
   KwReturn,
+  KwYield,
 
   // Keywords — execution / resource constructs
   KwMode,

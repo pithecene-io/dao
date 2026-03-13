@@ -118,6 +118,15 @@ auto TypeContext::generic_param(const void* binder, std::string_view name,
   return it->second;
 }
 
+auto TypeContext::generator_type(const Type* yield_type)
+    -> const TypeGenerator* {
+  auto [it, inserted] = generator_map_.try_emplace(yield_type, nullptr);
+  if (inserted) {
+    it->second = arena_.alloc<TypeGenerator>(yield_type);
+  }
+  return it->second;
+}
+
 // ---------------------------------------------------------------------------
 // Nominal constructors
 // ---------------------------------------------------------------------------

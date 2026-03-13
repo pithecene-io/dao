@@ -59,6 +59,8 @@ public:
   auto generic_param(const void* binder, std::string_view name,
                      uint32_t index) -> const TypeGenericParam*;
 
+  auto generator_type(const Type* yield_type) -> const TypeGenerator*;
+
   // --- Nominal constructors (not interned — each call allocates) ---
 
   auto make_struct(const void* decl_id, std::string_view name,
@@ -120,6 +122,8 @@ private:
 
   std::unordered_map<GenericParamKey, const TypeGenericParam*, GenericParamKeyHash>
       generic_param_map_;
+
+  std::unordered_map<const Type*, const TypeGenerator*> generator_map_;
 };
 
 } // namespace dao

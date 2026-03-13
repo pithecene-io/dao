@@ -70,6 +70,13 @@ void print_type(std::ostream& out, const Type* type) {
     out << e->name();
     break;
   }
+  case TypeKind::Generator: {
+    const auto* gen = static_cast<const TypeGenerator*>(type);
+    out << "Generator<";
+    print_type(out, gen->yield_type());
+    out << '>';
+    break;
+  }
   }
 }
 

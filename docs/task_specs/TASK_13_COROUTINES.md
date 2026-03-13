@@ -175,8 +175,9 @@ decision, not a language-level concern.
 1. Add `yield` keyword to lexer
 2. Parse `yield expr` as a statement
 3. Add `Generator<T>` as a compiler-provided type in the type system
-4. Typecheck generator functions: infer T from yield expressions,
-   validate return type
+4. Typecheck generator functions: validate yield type against explicit
+   `Generator<T>` return annotation (inference from yield expressions
+   is deferred; see CONTRACT_SYNTAX_SURFACE.md Non-Laws)
 
 ### 11.2 For-loop desugaring
 

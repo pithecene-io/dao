@@ -23,6 +23,7 @@ auto Stmt::kind() const -> NodeKind {
       [](const IfStatement&) { return NodeKind::IfStatement; },
       [](const WhileStatement&) { return NodeKind::WhileStatement; },
       [](const ForStatement&) { return NodeKind::ForStatement; },
+      [](const YieldStatement&) { return NodeKind::YieldStatement; },
       [](const ModeBlock&) { return NodeKind::ModeBlock; },
       [](const ResourceBlock&) { return NodeKind::ResourceBlock; },
       [](const ReturnStatement&) { return NodeKind::ReturnStatement; },
@@ -89,6 +90,8 @@ auto node_kind_name(NodeKind kind) -> const char* {
     return "WhileStatement";
   case NodeKind::ForStatement:
     return "ForStatement";
+  case NodeKind::YieldStatement:
+    return "YieldStatement";
   case NodeKind::ModeBlock:
     return "ModeBlock";
   case NodeKind::ResourceBlock:

@@ -50,6 +50,7 @@ constexpr std::string_view kBuiltinTypes[] = {
 constexpr std::string_view kPredeclaredTypes[] = {
     "string",
     "void",
+    "Generator",
 };
 
 // ---------------------------------------------------------------------------
@@ -453,6 +454,11 @@ private:
       for (const auto* s : res.body) {
         resolve_stmt(*s, res_scope);
       }
+      break;
+    }
+    case NodeKind::YieldStatement: {
+      const auto& yield = stmt.as<YieldStatement>();
+      resolve_expr(*yield.value, scope);
       break;
     }
     case NodeKind::ReturnStatement: {
