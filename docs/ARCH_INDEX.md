@@ -102,7 +102,8 @@ Execution support for lowered programs.
 
 Dao standard library surface and future implementation roots.
 
-- `core/` — foundational types/utilities
+- `core/` — foundational types/utilities (auto-imported as prelude)
+- `concepts/` — deferred concept definitions not yet auto-imported
 - `numerics/` — compute- and math-oriented surface
 - `io/` — explicit IO-facing surface
 
