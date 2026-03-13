@@ -256,6 +256,20 @@ Rules:
 - the iterable expression in `for...in` must have type `Generator<T>`
 - the loop variable is bound to element type `T`
 - `for...in` is the only way to consume a generator in surface syntax
+- `for...in` performs no implicit conversions: if the expression is not
+  `Generator<T>`, it is a type error
+- there is no compiler-blessed concept or protocol for `for...in`;
+  user-defined types must explicitly produce a `Generator<T>` via a
+  method call (e.g. `for x in my_list.iter():`)
+
+### Scalar iteration
+
+Rules:
+- `for i in 7:` is not valid; integers do not implicitly convert to
+  generators
+- `range` is a stdlib generator function: `for i in range(7):`
+- `range` has no special compiler status; it is an ordinary function
+  returning `Generator<i32>`
 
 ## Non-Laws
 
@@ -276,6 +290,10 @@ This contract does not yet freeze:
 - allocation strategy for generator frames
 - `Coroutine` as a directly expressible surface type
 - `Coroutine` parameterization (yield type, receive type, return type)
+- implicit `.iter()` call in `for...in` for types conforming to
+  `Iterable<T>` (deferred pending real-world usage observation)
+- `Iterable<T>` as a stdlib concept (API convention, not
+  compiler-blessed)
 
 ## Modes and Resources
 
