@@ -73,6 +73,12 @@ private:
   // Derived conformances: type -> list of derived concept Decls it auto-conforms to.
   std::unordered_map<const Type*, std::vector<const Decl*>> derived_conformances_;
 
+  // Concept self-type substitution: concept name -> conforming type.
+  // When set, resolve_type_node substitutes the concept name with the
+  // conforming type (§3.2: concept name in type position means the
+  // conforming type).
+  std::unordered_map<std::string_view, const Type*> concept_self_map_;
+
   // --- TypeNode -> Type* bridge ---
 
   auto resolve_type_node(const TypeNode* node) -> const Type*;

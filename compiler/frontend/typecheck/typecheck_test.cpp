@@ -970,6 +970,76 @@ suite<"typecheck_scalar_conformance"> typecheck_scalar_conformance = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Concept self-type resolution (§3.2 / §11.5 item 19)
+// ---------------------------------------------------------------------------
+
+suite<"typecheck_concept_self_type"> concept_self_type_tests = [] {
+  "concept name resolves to conforming type in derived method dispatch"_test =
+      [] {
+        auto result = check_source(
+            "derived concept Equatable:\n"
+            "    fn eq(self, other: Equatable): bool\n"
+            "extend i32 as Equatable:\n"
+            "    fn eq(self, other: i32): bool -> true\n"
+            "class Point:\n"
+            "    x: i32\n"
+            "    y: i32\n"
+            "fn same(a: Point, b: Point): bool -> a.eq(b)\n");
+        expect(is_ok(result))
+            << "concept name should resolve to conforming type (Point) "
+               "in derived method signature";
+      };
+
+  "concept name in return position resolves to conforming type"_test = [] {
+    auto result = check_source(
+        "derived concept Copyable:\n"
+        "    fn copy(self): Copyable\n"
+        "extend i32 as Copyable:\n"
+        "    fn copy(self): i32 -> self\n"
+        "class Pair:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "fn dup(p: Pair): Pair -> p.copy()\n");
+    expect(is_ok(result))
+        << "concept name in return type should resolve to conforming type";
+  };
+
+  "concept self-type does not leak across concepts"_test = [] {
+    auto result = check_source(
+        "derived concept Equatable:\n"
+        "    fn eq(self, other: Equatable): bool\n"
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Equatable:\n"
+        "    fn eq(self, other: i32): bool -> true\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> \"num\"\n"
+        "class Val:\n"
+        "    n: i32\n"
+        "fn same(a: Val, b: Val): bool -> a.eq(b)\n"
+        "fn show(v: Val): string -> v.to_string()\n");
+    expect(is_ok(result))
+        << "concept self-type should be scoped per concept";
+  };
+
+  "wrong argument type errors with concept self-type"_test = [] {
+    auto result = check_source(
+        "derived concept Equatable:\n"
+        "    fn eq(self, other: Equatable): bool\n"
+        "extend i32 as Equatable:\n"
+        "    fn eq(self, other: i32): bool -> true\n"
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "class Other:\n"
+        "    z: i32\n"
+        "fn bad(a: Point, b: Other): bool -> a.eq(b)\n");
+    expect(!is_ok(result))
+        << "passing wrong type to concept method should error";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)
