@@ -888,6 +888,88 @@ suite<"typecheck_methods"> typecheck_methods = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Scalar conformance via stdlib extend
+// ---------------------------------------------------------------------------
+
+suite<"typecheck_scalar_conformance"> typecheck_scalar_conformance = [] {
+  "extern intrinsic with extend conformance"_test = [] {
+    auto result = check_source(
+        "extern fn __i32_to_string(x: i32): string\n"
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> __i32_to_string(self)\n"
+        "fn show(x: i32): string -> x.to_string()\n");
+    expect(is_ok(result))
+        << "extern intrinsic backing extend conformance should typecheck";
+  };
+
+  "multiple scalar extends"_test = [] {
+    auto result = check_source(
+        "extern fn __i32_to_string(x: i32): string\n"
+        "extern fn __f64_to_string(x: f64): string\n"
+        "extern fn __bool_to_string(x: bool): string\n"
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> __i32_to_string(self)\n"
+        "extend f64 as Printable:\n"
+        "    fn to_string(self): string -> __f64_to_string(self)\n"
+        "extend bool as Printable:\n"
+        "    fn to_string(self): string -> __bool_to_string(self)\n"
+        "extend string as Printable:\n"
+        "    fn to_string(self): string -> self\n"
+        "fn show_int(x: i32): string -> x.to_string()\n"
+        "fn show_float(x: f64): string -> x.to_string()\n"
+        "fn show_bool(x: bool): string -> x.to_string()\n"
+        "fn show_str(x: string): string -> x.to_string()\n");
+    expect(is_ok(result))
+        << "all scalar extends should typecheck";
+  };
+
+  "print via extern and extend"_test = [] {
+    auto result = check_source(
+        "extern fn __i32_to_string(x: i32): string\n"
+        "extern fn __write_stdout(msg: string): void\n"
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> __i32_to_string(self)\n"
+        "fn print_i32(x: i32): void\n"
+        "    __write_stdout(x.to_string())\n");
+    expect(is_ok(result))
+        << "print via extern + extend should typecheck";
+  };
+
+  "derived conformance through scalar extend"_test = [] {
+    auto result = check_source(
+        "extern fn __i32_to_string(x: i32): string\n"
+        "derived concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend i32 as Printable:\n"
+        "    fn to_string(self): string -> __i32_to_string(self)\n"
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "fn show(p: Point): string -> p.to_string()\n");
+    expect(is_ok(result))
+        << "class should auto-derive Printable from extended i32 fields";
+  };
+
+  "self passes as intrinsic argument"_test = [] {
+    auto result = check_source(
+        "extern fn __f64_to_string(x: f64): string\n"
+        "concept Printable:\n"
+        "    fn to_string(self): string\n"
+        "extend f64 as Printable:\n"
+        "    fn to_string(self): string -> __f64_to_string(self)\n"
+        "fn show(x: f64): string -> x.to_string()\n");
+    expect(is_ok(result))
+        << "self should be passable to extern intrinsic";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)

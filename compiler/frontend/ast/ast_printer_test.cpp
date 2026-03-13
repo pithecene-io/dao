@@ -57,6 +57,27 @@ suite<"ast_golden_tests"> ast_golden_tests = [] {
     }
   };
 
+  "stdlib/core match golden files"_test = [] {
+    std::filesystem::path root(DAO_SOURCE_DIR);
+    auto golden_dir = root / "testdata" / "ast";
+
+    for (const auto& entry : std::filesystem::directory_iterator(root / "stdlib" / "core")) {
+      if (entry.path().extension() != ".dao") {
+        continue;
+      }
+      auto golden_path = golden_dir / ("stdlib_core_" + entry.path().stem().string() + ".ast");
+      expect(std::filesystem::exists(golden_path))
+          << "missing golden file for " << entry.path().filename().string();
+      if (!std::filesystem::exists(golden_path)) {
+        continue;
+      }
+
+      auto actual = ast_string(entry.path());
+      auto expected = read_file(golden_path);
+      expect(actual == expected) << "AST mismatch for " << entry.path().filename().string();
+    }
+  };
+
   "syntax probes match golden files"_test = [] {
     std::filesystem::path root(DAO_SOURCE_DIR);
     auto golden_dir = root / "testdata" / "ast";

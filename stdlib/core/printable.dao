@@ -1,0 +1,21 @@
+extern fn __i32_to_string(x: i32): string
+extern fn __f64_to_string(x: f64): string
+extern fn __bool_to_string(x: bool): string
+extern fn __write_stdout(msg: string): void
+
+derived concept Printable:
+    fn to_string(self): string
+
+extend i32 as Printable:
+    fn to_string(self): string -> __i32_to_string(self)
+
+extend f64 as Printable:
+    fn to_string(self): string -> __f64_to_string(self)
+
+extend bool as Printable:
+    fn to_string(self): string -> __bool_to_string(self)
+
+extend string as Printable:
+    fn to_string(self): string -> self
+
+fn print(msg: string): void -> __write_stdout(msg)
