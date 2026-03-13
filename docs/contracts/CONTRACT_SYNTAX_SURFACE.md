@@ -234,11 +234,16 @@ Rules:
 ### Generator<T> type
 
 Rules:
-- `Generator<T>` is a compiler-provided type, not user-definable
-- it represents a suspended coroutine that yields values of type `T`
+- `Coroutine` is the primitive resumable execution type
+- `Generator<T>` is an alias for a coroutine that yields `T` and
+  receives nothing
+- in surface syntax, `Generator<T>` is the spelling used for
+  generator return types; the underlying `Coroutine` primitive is
+  not yet directly expressible
 - `Generator<T>` requires exactly one type argument
-- generator operations (resume, check done, get value) are compiler
-  intrinsics not exposed as user-callable methods
+- `Generator<T>` is not user-definable
+- coroutine/generator operations (resume, check done, get value) are
+  compiler intrinsics not exposed as user-callable methods
 
 ### For-in consumption
 
@@ -269,6 +274,8 @@ This contract does not yet freeze:
 - generator type inference from yield expressions without explicit
   return type annotation
 - allocation strategy for generator frames
+- `Coroutine` as a directly expressible surface type
+- `Coroutine` parameterization (yield type, receive type, return type)
 
 ## Modes and Resources
 
