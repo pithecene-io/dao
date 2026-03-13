@@ -73,6 +73,10 @@ auto LlvmTypeLowering::lower(const Type* type) -> llvm::Type* {
     error_ = "enum lowering not yet implemented: " + std::string(e->name());
     return nullptr;
   }
+
+  case TypeKind::Generator:
+    error_ = "generator/coroutine type lowering not yet implemented";
+    return nullptr;
   }
 
   error_ = "unknown type kind";

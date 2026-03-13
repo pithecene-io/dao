@@ -1,7 +1,13 @@
+// NOLINTBEGIN(readability-identifier-length)
+// Short names `fn`, `p`, `it`, `id` are idiomatic in this file:
+//   - `fn`  = MIR function being lowered
+//   - `p`   = typed payload from std::visit
+//   - `it`  = iterator / map lookup
+//   - `id`  = MIR value identifier
+
 #include "backend/llvm/llvm_backend.h"
 
 #include "ir/mir/mir.h"
-#include "ir/mir/mir_kind.h"
 
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -30,70 +36,115 @@ namespace dao {
 
 LlvmBackend::LlvmBackend(llvm::LLVMContext& ctx) : ctx_(ctx), types_(ctx) {}
 
-auto LlvmBackend::lower(const MirModule& mir_module) -> LlvmBackendResult {
+auto LlvmBackend::lower(const MirModule& mir_module, uint32_t prelude_bytes)
+    -> LlvmBackendResult {
   module_ = std::make_unique<llvm::Module>("dao_module", ctx_);
   diagnostics_.clear();
 
-  // First pass: declare all functions (forward declarations).
-  for (const auto* fn : mir_module.functions) {
-    if (fn->symbol == nullptr) {
+  declare_functions(mir_module);
+  lower_bodies(mir_module, prelude_bytes);
+
+  // Kill the module if any hard errors remain.
+  bool has_errors = false;
+  for (const auto& diag : diagnostics_) {
+    if (diag.severity == Severity::Error) {
+      has_errors = true;
+      break;
+    }
+  }
+  if (has_errors) {
+    module_.reset();
+  }
+
+  return {.module = std::move(module_), .diagnostics = std::move(diagnostics_)};
+}
+
+// ---------------------------------------------------------------------------
+// Declaration pass — forward-declare all functions.
+// ---------------------------------------------------------------------------
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void LlvmBackend::declare_functions(const MirModule& mir_module) {
+  for (const auto* mir_fn : mir_module.functions) {
+    if (mir_fn->symbol == nullptr) {
       continue;
     }
 
     // Build LLVM function type.
-    auto* ret_type = types_.lower(fn->return_type);
+    auto* ret_type = types_.lower(mir_fn->return_type);
     if (ret_type == nullptr) {
-      emit_diagnostic(fn->span, "cannot lower return type: " + types_.error());
+      emit_diagnostic(mir_fn->span,
+                      "cannot lower return type: " + types_.error());
       continue;
     }
 
     std::vector<llvm::Type*> param_types;
-    for (const auto& local : fn->locals) {
+    for (const auto& local : mir_fn->locals) {
       if (!local.is_param) {
         break; // params come first
       }
-      auto* pt = types_.lower(local.type);
-      if (pt == nullptr) {
-        emit_diagnostic(local.span, "cannot lower param type: " + types_.error());
+      auto* lowered_param = types_.lower(local.type);
+      if (lowered_param == nullptr) {
+        emit_diagnostic(local.span,
+                        "cannot lower param type: " + types_.error());
         break;
       }
       // String params are passed by pointer for C ABI compatibility.
       if (LlvmTypeLowering::is_string_type(local.type)) {
-        pt = llvm::PointerType::getUnqual(pt);
+        lowered_param = llvm::PointerType::getUnqual(lowered_param);
       }
-      param_types.push_back(pt);
+      param_types.push_back(lowered_param);
     }
 
-    auto* fn_type = llvm::FunctionType::get(ret_type, param_types, /*isVarArg=*/false);
+    auto* fn_type =
+        llvm::FunctionType::get(ret_type, param_types, /*isVarArg=*/false);
     auto* llvm_fn = llvm::Function::Create(
         fn_type, llvm::Function::ExternalLinkage,
-        std::string(fn->symbol->name), module_.get());
+        std::string(mir_fn->symbol->name), module_.get());
 
     // Name parameters.
     size_t idx = 0;
     for (auto& arg : llvm_fn->args()) {
-      if (idx < fn->locals.size() && fn->locals[idx].is_param) {
-        if (fn->locals[idx].symbol != nullptr) {
-          arg.setName(std::string(fn->locals[idx].symbol->name));
+      if (idx < mir_fn->locals.size() && mir_fn->locals[idx].is_param) {
+        if (mir_fn->locals[idx].symbol != nullptr) {
+          arg.setName(std::string(mir_fn->locals[idx].symbol->name));
         }
       }
       ++idx;
     }
   }
+}
 
-  // Second pass: lower function bodies.
-  for (const auto* fn : mir_module.functions) {
-    if (!lower_function(*fn)) {
-      // Diagnostics already emitted.
+// ---------------------------------------------------------------------------
+// Body pass — lower function bodies; prelude failures are non-fatal.
+// ---------------------------------------------------------------------------
+
+void LlvmBackend::lower_bodies(const MirModule& mir_module,
+                                uint32_t prelude_bytes) {
+  for (const auto* mir_fn : mir_module.functions) {
+    size_t diag_before = diagnostics_.size();
+    if (!lower_function(*mir_fn)) {
+      bool is_prelude = mir_fn->span.offset < prelude_bytes;
+      if (is_prelude) {
+        // Prelude function body failed — remove body so it becomes a
+        // declaration. The rest of the module can still compile; if
+        // user code actually calls this function, linking will fail
+        // with a clear undefined-reference error.
+        if (mir_fn->symbol != nullptr) {
+          auto* llvm_fn =
+              module_->getFunction(std::string(mir_fn->symbol->name));
+          if (llvm_fn != nullptr && !llvm_fn->empty()) {
+            llvm_fn->deleteBody();
+          }
+        }
+        // Downgrade prelude errors to warnings.
+        for (size_t i = diag_before; i < diagnostics_.size(); ++i) {
+          diagnostics_[i].severity = Severity::Warning;
+        }
+      }
+      // User functions: diagnostics stay as errors (no downgrade).
     }
   }
-
-  // Do not return a partial module when lowering produced errors.
-  if (!diagnostics_.empty()) {
-    module_.reset();
-  }
-
-  return {.module = std::move(module_), .diagnostics = std::move(diagnostics_)};
 }
 
 void LlvmBackend::print_ir(std::ostream& out, const llvm::Module& module) {
@@ -133,10 +184,10 @@ auto LlvmBackend::emit_object(llvm::Module& module,
 
   module.setDataLayout(target_machine->createDataLayout());
 
-  std::error_code ec;
-  llvm::raw_fd_ostream dest(output_path, ec, llvm::sys::fs::OF_None);
-  if (ec) {
-    error_out = "failed to open output file: " + ec.message();
+  std::error_code err_code;
+  llvm::raw_fd_ostream dest(output_path, err_code, llvm::sys::fs::OF_None);
+  if (err_code) {
+    error_out = "failed to open output file: " + err_code.message();
     return false;
   }
 
@@ -182,17 +233,17 @@ auto LlvmBackend::lower_function(const MirFunction& fn) -> bool {
 
   // Create all basic blocks first (for forward branches).
   for (const auto* block : fn.blocks) {
-    auto* bb = llvm::BasicBlock::Create(
+    auto* llvm_block = llvm::BasicBlock::Create(
         ctx_, "bb" + std::to_string(block->id.id), llvm_fn);
-    state.blocks[block->id.id] = bb;
+    state.blocks[block->id.id] = llvm_block;
   }
 
   // Create entry block allocas for all locals.
   llvm::IRBuilder<> builder(ctx_);
   state.builder = &builder;
 
-  auto* entry_bb = state.blocks[fn.blocks[0]->id.id];
-  builder.SetInsertPoint(entry_bb);
+  auto* entry_block = state.blocks[fn.blocks[0]->id.id];
+  builder.SetInsertPoint(entry_block);
 
   // Allocate locals. Params get their alloca here too (store from arg below).
   for (const auto& local : fn.locals) {
@@ -206,6 +257,7 @@ auto LlvmBackend::lower_function(const MirFunction& fn) -> bool {
         local_type, nullptr,
         local.symbol != nullptr ? std::string(local.symbol->name) : "");
     state.locals[local.id.id] = alloca;
+    state.local_types[local.id.id] = local.type;
   }
 
   // Store function parameters into their allocas.
@@ -226,7 +278,7 @@ auto LlvmBackend::lower_function(const MirFunction& fn) -> bool {
 
   // Lower each block.
   for (const auto* block : fn.blocks) {
-    if (!lower_block(*block, fn, state)) {
+    if (!lower_block(*block, state)) {
       return false;
     }
   }
@@ -238,13 +290,13 @@ auto LlvmBackend::lower_function(const MirFunction& fn) -> bool {
 // Block lowering
 // ---------------------------------------------------------------------------
 
-auto LlvmBackend::lower_block(const MirBlock& block, const MirFunction& fn,
+auto LlvmBackend::lower_block(const MirBlock& block,
                                 FunctionState& state) -> bool {
-  auto* bb = state.blocks[block.id.id];
-  state.builder->SetInsertPoint(bb);
+  auto* target_block = state.blocks[block.id.id];
+  state.builder->SetInsertPoint(target_block);
 
   for (const auto* inst : block.insts) {
-    if (!lower_inst(*inst, fn, state)) {
+    if (!lower_inst(*inst, state)) {
       return false;
     }
   }
@@ -257,7 +309,7 @@ auto LlvmBackend::lower_block(const MirBlock& block, const MirFunction& fn,
 // ---------------------------------------------------------------------------
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-auto LlvmBackend::lower_inst(const MirInst& inst, const MirFunction& fn,
+auto LlvmBackend::lower_inst(const MirInst& inst,
                                FunctionState& state) -> bool {
   return std::visit(overloaded{
       [&](const MirConstInt& p)    { return lower_const_int(p, inst, state); },
@@ -266,8 +318,8 @@ auto LlvmBackend::lower_inst(const MirInst& inst, const MirFunction& fn,
       [&](const MirConstString& p) { return lower_const_string(p, inst, state); },
       [&](const MirUnary& p)       { return lower_unary(p, inst, state); },
       [&](const MirBinary& p)      { return lower_binary(p, inst, state); },
-      [&](const MirStore& p)       { return lower_store(p, inst, fn, state); },
-      [&](const MirLoad& p)        { return lower_load(p, inst, fn, state); },
+      [&](const MirStore& p)       { return lower_store(p, inst, state); },
+      [&](const MirLoad& p)        { return lower_load(p, inst, state); },
       [&](const MirFnRef& p)       { return lower_fn_ref(p, inst, state); },
       [&](const MirCall& p)        { return lower_call(p, inst, state); },
       [&](const MirConstruct& p)   { return lower_construct(p, inst, state); },
@@ -288,7 +340,7 @@ auto LlvmBackend::lower_inst(const MirInst& inst, const MirFunction& fn,
           return false;
         }
         if (!p.place->projections.empty()) {
-          auto* ptr = resolve_place(*p.place, fn, state);
+          auto* ptr = resolve_place(*p.place, state);
           if (ptr == nullptr) {
             emit_diagnostic(inst.span, "cannot resolve AddrOf projected place");
             return false;
@@ -407,7 +459,12 @@ auto LlvmBackend::lower_const_bool(const MirConstBool& p, const MirInst& inst,
 auto LlvmBackend::lower_const_string(const MirConstString& p, const MirInst& inst,
                                        FunctionState& state) -> bool {
   // Create a global constant for the string data.
-  auto str = std::string(p.value);
+  // Strip surrounding quotes — the lexer preserves them in the token text.
+  auto raw = p.value;
+  if (raw.size() >= 2 && raw.front() == '"' && raw.back() == '"') {
+    raw = raw.substr(1, raw.size() - 2);
+  }
+  auto str = std::string(raw);
   auto* str_constant = llvm::ConstantDataArray::getString(ctx_, str, /*AddNull=*/true);
   auto* global = new llvm::GlobalVariable(
       *module_, str_constant->getType(), /*isConstant=*/true,
@@ -582,8 +639,8 @@ auto LlvmBackend::lower_binary(const MirBinary& p, const MirInst& inst,
 // Place resolution — walk projection chains to an LLVM pointer.
 // ---------------------------------------------------------------------------
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto LlvmBackend::resolve_place(const MirPlace& place,
-                                 const MirFunction& fn,
                                  FunctionState& state) -> llvm::Value* {
   auto it = state.locals.find(place.local.id);
   if (it == state.locals.end()) {
@@ -596,11 +653,9 @@ auto LlvmBackend::resolve_place(const MirPlace& place,
   // produces a raw loaded pointer we still know the LLVM type for the
   // subsequent Field GEP.
   const Type* current_type = nullptr;
-  for (const auto& local : fn.locals) {
-    if (local.id.id == place.local.id) {
-      current_type = local.type;
-      break;
-    }
+  auto type_it = state.local_types.find(place.local.id);
+  if (type_it != state.local_types.end()) {
+    current_type = type_it->second;
   }
 
   for (const auto& proj : place.projections) {
@@ -660,7 +715,6 @@ auto LlvmBackend::resolve_place(const MirPlace& place,
 // ---------------------------------------------------------------------------
 
 auto LlvmBackend::lower_store(const MirStore& p, const MirInst& inst,
-                                const MirFunction& fn,
                                 FunctionState& state) -> bool {
   if (p.place == nullptr) {
     emit_diagnostic(inst.span, "store with null place");
@@ -680,7 +734,7 @@ auto LlvmBackend::lower_store(const MirStore& p, const MirInst& inst,
   }
 
   if (!p.place->projections.empty()) {
-    auto* ptr = resolve_place(*p.place, fn, state);
+    auto* ptr = resolve_place(*p.place, state);
     if (ptr == nullptr) {
       emit_diagnostic(inst.span, "cannot resolve projected store target");
       return false;
@@ -694,7 +748,6 @@ auto LlvmBackend::lower_store(const MirStore& p, const MirInst& inst,
 }
 
 auto LlvmBackend::lower_load(const MirLoad& p, const MirInst& inst,
-                               const MirFunction& fn,
                                FunctionState& state) -> bool {
   if (p.place == nullptr) {
     emit_diagnostic(inst.span, "load with null place");
@@ -708,7 +761,7 @@ auto LlvmBackend::lower_load(const MirLoad& p, const MirInst& inst,
   }
 
   if (!p.place->projections.empty()) {
-    auto* ptr = resolve_place(*p.place, fn, state);
+    auto* ptr = resolve_place(*p.place, state);
     if (ptr == nullptr) {
       emit_diagnostic(inst.span, "cannot resolve projected load source");
       return false;
@@ -885,6 +938,13 @@ auto LlvmBackend::lower_construct(const MirConstruct& p, const MirInst& inst,
 
 auto LlvmBackend::lower_return(const MirReturn& p, const MirInst& inst,
                                  FunctionState& state) -> bool {
+  // Void functions always emit ret void, even if MIR has a value
+  // (e.g. returning a void call result).
+  if (state.llvm_fn->getReturnType()->isVoidTy()) {
+    state.builder->CreateRetVoid();
+    return true;
+  }
+
   if (p.has_value) {
     auto* val = get_value(p.value, state);
     if (val == nullptr) {
@@ -929,3 +989,5 @@ auto LlvmBackend::lower_cond_br(const MirCondBr& p, const MirInst& inst,
 }
 
 } // namespace dao
+
+// NOLINTEND(readability-identifier-length)
