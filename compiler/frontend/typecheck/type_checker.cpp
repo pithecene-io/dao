@@ -381,14 +381,14 @@ auto TypeChecker::type_conforms_to(const Type* type,
 
   // Check extend declarations.
   if (file_ != nullptr) {
-    const auto& concept_name = concept_decl->as<ConceptDecl>().name;
+    const auto& cpt_name = concept_decl->as<ConceptDecl>().name;
     for (const auto* decl : file_->declarations) {
       if (decl->kind() != NodeKind::ExtendDecl) {
         continue;
       }
       const auto& ext = decl->as<ExtendDecl>();
       const auto* target = resolve_type_node(ext.target_type);
-      if (target == type && ext.concept_name == concept_name) {
+      if (target == type && ext.concept_name == cpt_name) {
         return true;
       }
     }

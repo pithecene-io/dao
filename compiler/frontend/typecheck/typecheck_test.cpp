@@ -27,6 +27,20 @@ auto check_source(const std::string& source) -> TypeCheckResult {
   return typecheck(*parse_result.file, resolve_result, types);
 }
 
+/// Check user source with prelude source strings prepended.
+/// Uses source concatenation (same approach as the driver).
+auto check_with_prelude(const std::string& user_source,
+                        std::span<const std::string> prelude_sources)
+    -> TypeCheckResult {
+  std::string combined;
+  for (const auto& pre : prelude_sources) {
+    combined += pre;
+    combined += '\n';
+  }
+  combined += user_source;
+  return check_source(combined);
+}
+
 /// Returns true if any diagnostic message contains the substring.
 auto has_error_containing(const TypeCheckResult& result, std::string_view sub)
     -> bool {
@@ -1037,6 +1051,83 @@ suite<"typecheck_concept_self_type"> concept_self_type_tests = [] {
         "fn bad(a: Point, b: Other): bool -> a.eq(b)\n");
     expect(!is_ok(result))
         << "passing wrong type to concept method should error";
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Prelude auto-import
+// ---------------------------------------------------------------------------
+
+suite<"typecheck_prelude"> prelude_tests = [] {
+  // Common prelude source fragments.
+  const std::string printable_prelude =
+      "extern fn __i32_to_string(x: i32): string\n"
+      "derived concept Printable:\n"
+      "    fn to_string(self): string\n"
+      "extend i32 as Printable:\n"
+      "    fn to_string(self): string -> __i32_to_string(self)\n";
+  const std::string equatable_prelude =
+      "extern fn __i32_eq(a: i32, b: i32): bool\n"
+      "derived concept Equatable:\n"
+      "    fn eq(self, other: Equatable): bool\n"
+      "extend i32 as Equatable:\n"
+      "    fn eq(self, other: i32): bool -> __i32_eq(self, other)\n";
+  const std::string print_prelude =
+      "extern fn __write_stdout(msg: string): void\n"
+      "fn print(msg: string): void -> __write_stdout(msg)\n";
+
+  "prelude concept visible in user code"_test = [&] {
+    std::array preludes{printable_prelude};
+    auto result = check_with_prelude(
+        "class Point:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "fn show(p: Point): string -> p.to_string()\n",
+        preludes);
+    expect(is_ok(result))
+        << "prelude concept should enable derived method dispatch";
+  };
+
+  "prelude extern fn callable from user code"_test = [&] {
+    std::array preludes{print_prelude};
+    auto result = check_with_prelude(
+        "fn hello(): void -> print(\"hi\")\n",
+        preludes);
+    expect(is_ok(result))
+        << "prelude function should be callable without import";
+  };
+
+  "prelude extend enables scalar method calls"_test = [&] {
+    std::array preludes{equatable_prelude};
+    auto result = check_with_prelude(
+        "fn same(a: i32, b: i32): bool -> a.eq(b)\n",
+        preludes);
+    expect(is_ok(result))
+        << "prelude extend should enable scalar method calls";
+  };
+
+  "user code can define types deriving from prelude concepts"_test = [&] {
+    std::array preludes{equatable_prelude};
+    auto result = check_with_prelude(
+        "class Pair:\n"
+        "    x: i32\n"
+        "    y: i32\n"
+        "fn same(a: Pair, b: Pair): bool -> a.eq(b)\n",
+        preludes);
+    expect(is_ok(result))
+        << "user class should auto-derive from prelude concept";
+  };
+
+  "multiple prelude files compose"_test = [&] {
+    std::array preludes{printable_prelude, equatable_prelude};
+    auto result = check_with_prelude(
+        "class Val:\n"
+        "    n: i32\n"
+        "fn show(v: Val): string -> v.to_string()\n"
+        "fn same(a: Val, b: Val): bool -> a.eq(b)\n",
+        preludes);
+    expect(is_ok(result))
+        << "multiple prelude files should compose correctly";
   };
 };
 
