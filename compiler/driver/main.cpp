@@ -280,6 +280,25 @@ auto run_through_mir(const std::filesystem::path& path) -> MirResult {
           .mir = std::move(mir)};
 }
 
+// Lower MIR to LLVM IR, check diagnostics, and exit on error.
+auto lower_to_llvm(const MirResult& mir, llvm::LLVMContext& llvm_ctx,
+                   const std::filesystem::path& path) -> dao::LlvmBackendResult {
+  dao::LlvmBackend backend(llvm_ctx);
+  auto result = backend.lower(*mir.mir.module,
+                               mir.hir_result.frontend.prelude_bytes);
+
+  auto filename = path.filename().string();
+  bool has_errors = print_diagnostics(filename, mir.hir_result.frontend.parsed.source,
+                                      result.diagnostics,
+                                      mir.hir_result.frontend.prelude_lines);
+
+  if (result.module == nullptr || has_errors) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Command handlers
 // ---------------------------------------------------------------------------
@@ -444,41 +463,16 @@ void cmd_mir(const std::filesystem::path& path) {
 // Build and emit LLVM IR. Output is deterministic.
 void cmd_llvm_ir(const std::filesystem::path& path) {
   auto mir = run_through_mir(path);
-
   llvm::LLVMContext llvm_ctx;
-  dao::LlvmBackend backend(llvm_ctx);
-  auto llvm_result = backend.lower(*mir.mir.module,
-                                   mir.hir_result.frontend.prelude_bytes);
-
-  auto filename = path.filename().string();
-  bool has_errors = print_diagnostics(filename, mir.hir_result.frontend.parsed.source,
-                                      llvm_result.diagnostics,
-                                      mir.hir_result.frontend.prelude_lines);
-
-  if (llvm_result.module == nullptr || has_errors) {
-    std::exit(EXIT_FAILURE);
-  }
-
+  auto llvm_result = lower_to_llvm(mir, llvm_ctx, path);
   dao::LlvmBackend::print_ir(std::cout, *llvm_result.module);
 }
 
 // Compile a .dao file to a native executable.
 void cmd_build(const std::filesystem::path& path) {
   auto mir = run_through_mir(path);
-
   llvm::LLVMContext llvm_ctx;
-  dao::LlvmBackend backend(llvm_ctx);
-  auto llvm_result = backend.lower(*mir.mir.module,
-                                   mir.hir_result.frontend.prelude_bytes);
-
-  auto filename = path.filename().string();
-  bool has_errors = print_diagnostics(filename, mir.hir_result.frontend.parsed.source,
-                                      llvm_result.diagnostics,
-                                      mir.hir_result.frontend.prelude_lines);
-
-  if (llvm_result.module == nullptr || has_errors) {
-    std::exit(EXIT_FAILURE);
-  }
+  auto llvm_result = lower_to_llvm(mir, llvm_ctx, path);
 
   // Initialize LLVM targets and emit object file.
   dao::LlvmBackend::initialize_targets();

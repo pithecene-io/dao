@@ -15,6 +15,7 @@
 #include <llvm/IR/Module.h>
 
 #include <boost/ut.hpp>
+#include <algorithm>
 #include <sstream>
 #include <string>
 
@@ -70,7 +71,11 @@ struct LlvmTestPipeline {
   }
 
   [[nodiscard]] auto has_errors() const -> bool {
-    return !llvm_result.diagnostics.empty();
+    return std::any_of(llvm_result.diagnostics.begin(),
+                       llvm_result.diagnostics.end(),
+                       [](const Diagnostic& diag) {
+                         return diag.severity == Severity::Error;
+                       });
   }
 };
 

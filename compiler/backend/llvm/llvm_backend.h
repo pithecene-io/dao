@@ -1,3 +1,4 @@
+// NOLINTBEGIN(readability-identifier-length)
 #ifndef DAO_BACKEND_LLVM_LLVM_BACKEND_H
 #define DAO_BACKEND_LLVM_LLVM_BACKEND_H
 
@@ -37,7 +38,13 @@ class LlvmBackend {
 public:
   explicit LlvmBackend(llvm::LLVMContext& ctx);
 
-  auto lower(const MirModule& mir_module) -> LlvmBackendResult;
+  // Lower a MirModule to LLVM IR. prelude_bytes indicates the byte
+  // offset boundary: functions whose source span starts before this
+  // offset are prelude functions and may have their bodies dropped
+  // (with a warning) if they use unsupported constructs. Functions
+  // beyond this offset are user code and produce hard errors.
+  auto lower(const MirModule& mir_module, uint32_t prelude_bytes = 0)
+      -> LlvmBackendResult;
 
   // Emit textual LLVM IR to a stream.
   static void print_ir(std::ostream& out, const llvm::Module& module);
@@ -70,6 +77,9 @@ private:
     // MIR LocalId → LLVM alloca (for named locals / params)
     std::unordered_map<uint32_t, llvm::AllocaInst*> locals;
 
+    // MIR LocalId → semantic Type* (for place resolution)
+    std::unordered_map<uint32_t, const Type*> local_types;
+
     // MIR MirValueId → LLVM Value* (for SSA temporaries)
     std::unordered_map<uint32_t, llvm::Value*> values;
 
@@ -80,9 +90,13 @@ private:
     std::unordered_map<uint32_t, llvm::BasicBlock*> blocks;
   };
 
-  auto lower_block(const MirBlock& block, const MirFunction& fn,
+  // Top-level lowering phases (called by lower()).
+  void declare_functions(const MirModule& mir_module);
+  void lower_bodies(const MirModule& mir_module, uint32_t prelude_bytes);
+
+  auto lower_block(const MirBlock& block,
                     FunctionState& state) -> bool;
-  auto lower_inst(const MirInst& inst, const MirFunction& fn,
+  auto lower_inst(const MirInst& inst,
                    FunctionState& state) -> bool;
 
   // Typed instruction lowering helpers
@@ -99,9 +113,9 @@ private:
   auto lower_binary(const MirBinary& p, const MirInst& inst,
                     FunctionState& state) -> bool;
   auto lower_store(const MirStore& p, const MirInst& inst,
-                   const MirFunction& fn, FunctionState& state) -> bool;
+                   FunctionState& state) -> bool;
   auto lower_load(const MirLoad& p, const MirInst& inst,
-                  const MirFunction& fn, FunctionState& state) -> bool;
+                  FunctionState& state) -> bool;
   auto lower_field_access(const MirFieldAccess& p, const MirInst& inst,
                           FunctionState& state) -> bool;
   auto lower_fn_ref(const MirFnRef& p, const MirInst& inst,
@@ -118,7 +132,7 @@ private:
                      FunctionState& state) -> bool;
 
   // Place resolution — walk projection chains to an LLVM pointer.
-  auto resolve_place(const MirPlace& place, const MirFunction& fn,
+  auto resolve_place(const MirPlace& place,
                       FunctionState& state) -> llvm::Value*;
 
   // Value lookup
@@ -128,3 +142,4 @@ private:
 } // namespace dao
 
 #endif // DAO_BACKEND_LLVM_LLVM_BACKEND_H
+// NOLINTEND(readability-identifier-length)
