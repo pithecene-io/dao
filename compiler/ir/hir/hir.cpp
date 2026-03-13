@@ -22,6 +22,7 @@ auto HirStmt::kind() const -> HirKind {
       [](const HirWhile&) { return HirKind::While; },
       [](const HirFor&) { return HirKind::For; },
       [](const HirReturn&) { return HirKind::Return; },
+      [](const HirYield&) { return HirKind::Yield; },
       [](const HirExprStmt&) { return HirKind::ExprStmt; },
       [](const HirMode&) { return HirKind::Mode; },
       [](const HirResource&) { return HirKind::Resource; },
@@ -61,6 +62,7 @@ auto hir_kind_name(HirKind kind) -> const char* {
   case HirKind::While:         return "While";
   case HirKind::For:           return "For";
   case HirKind::Return:        return "Return";
+  case HirKind::Yield:         return "Yield";
   case HirKind::ExprStmt:      return "ExprStmt";
   case HirKind::Mode:          return "Mode";
   case HirKind::Resource:      return "Resource";

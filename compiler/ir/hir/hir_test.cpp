@@ -357,6 +357,40 @@ suite<"hir_edge"> hir_edge = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Generator / yield
+// ---------------------------------------------------------------------------
+
+suite<"hir_generator"> hir_generator = [] {
+  "yield lowers to HirYield"_test = [] {
+    HirTestPipeline p(
+        "fn range(n: i32): Generator<i32>\n"
+        "    let i = 0\n"
+        "    while i < n:\n"
+        "        yield i\n"
+        "        i = i + 1\n");
+    auto dump = p.dump();
+    expect(contains(dump, "Function range : Generator<i32>")) << dump;
+    expect(contains(dump, "Yield")) << dump;
+    expect(contains(dump, "SymbolRef i : i32")) << dump;
+  };
+
+  "for-in over generator lowers to HirFor"_test = [] {
+    HirTestPipeline p(
+        "fn range(n: i32): Generator<i32>\n"
+        "    yield n\n"
+        "fn main(): i32\n"
+        "    let total = 0\n"
+        "    for x in range(10):\n"
+        "        total = total + x\n"
+        "    return total\n");
+    auto dump = p.dump();
+    expect(contains(dump, "For x")) << dump;
+    expect(contains(dump, "Iterable")) << dump;
+    expect(contains(dump, "Call : Generator<i32>")) << dump;
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)

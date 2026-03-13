@@ -39,6 +39,9 @@ enum class MirInstKind : std::uint8_t {
   IterHasNext,
   IterNext,
 
+  // Coroutine
+  Yield,
+
   // Mode/resource regions
   ModeEnter,
   ModeExit,

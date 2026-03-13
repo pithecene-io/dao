@@ -341,6 +341,10 @@ auto LlvmBackend::lower_inst(const MirInst& inst, const MirFunction& fn,
         emit_diagnostic(inst.span, "iteration lowering not yet implemented");
         return false;
       },
+      [&](const MirYieldInst&) -> bool {
+        emit_diagnostic(inst.span, "yield/coroutine lowering not yet implemented");
+        return false;
+      },
       [&](const MirLambdaInst&) -> bool {
         emit_diagnostic(inst.span, "lambda lowering not yet implemented");
         return false;

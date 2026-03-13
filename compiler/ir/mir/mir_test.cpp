@@ -373,6 +373,40 @@ suite<"mir_edge"> mir_edge = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Generator / yield
+// ---------------------------------------------------------------------------
+
+suite<"mir_generator"> mir_generator = [] {
+  "yield lowers to MirYield"_test = [] {
+    MirTestPipeline pipe(
+        "fn range(n: i32): Generator<i32>\n"
+        "    let i = 0\n"
+        "    while i < n:\n"
+        "        yield i\n"
+        "        i = i + 1\n");
+    auto dump = pipe.dump();
+    expect(contains(dump, "yield %")) << dump;
+  };
+
+  "for-in over generator extracts element type"_test = [] {
+    MirTestPipeline pipe(
+        "fn range(n: i32): Generator<i32>\n"
+        "    yield n\n"
+        "fn main(): i32\n"
+        "    let total = 0\n"
+        "    for x in range(10):\n"
+        "        total = total + x\n"
+        "    return total\n");
+    auto dump = pipe.dump();
+    expect(contains(dump, "iter_init")) << dump;
+    expect(contains(dump, "iter_has_next")) << dump;
+    // iter_next should produce i32, not Generator<i32>
+    expect(contains(dump, "iter_next")) << dump;
+    expect(contains(dump, ": i32")) << dump;
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)

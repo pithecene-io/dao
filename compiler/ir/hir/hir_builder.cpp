@@ -202,6 +202,12 @@ auto HirBuilder::lower_stmt(const Stmt* stmt) -> HirStmt* {
                     std::move(body)});
   }
 
+  case NodeKind::YieldStatement: {
+    const auto& yield = stmt->as<YieldStatement>();
+    auto* value = lower_expr(yield.value);
+    return ctx_.alloc<HirStmt>(stmt->span, HirYield{value});
+  }
+
   case NodeKind::ReturnStatement: {
     const auto& ret = stmt->as<ReturnStatement>();
     HirExpr* value = nullptr;

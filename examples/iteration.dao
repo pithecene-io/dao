@@ -1,26 +1,31 @@
-concept Iterator:
-    fn has_next(self): bool
-    fn next(self): i32
+fn range(n: i32): Generator<i32>
+    let i = 0
+    while i < n:
+        yield i
+        i = i + 1
 
-concept Iterable:
-    fn iter(self): RangeIter
+fn squares(n: i32): Generator<i32>
+    let i = 0
+    while i < n:
+        yield i * i
+        i = i + 1
 
-class RangeIter:
-    pos: i32
-    end: i32
-
-    as Iterator:
-        fn has_next(self): bool -> self.pos < self.end
-        fn next(self): i32 -> self.pos
-
-class Range:
-    n: i32
-
-    as Iterable:
-        fn iter(self): RangeIter -> RangeIter(0, self.n)
-
-fn sum(r: Range): i32
+fn sum_squares(n: i32): i32
     let total = 0
-    for x in r:
+    for x in squares(n):
         total = total + x
+    return total
+
+fn count_positive(gen: Generator<i32>): i32
+    let count = 0
+    for x in gen:
+        if x > 0:
+            count = count + 1
+    return count
+
+fn nested_iteration(): i32
+    let total = 0
+    for i in range(3):
+        for j in range(3):
+            total = total + i + j
     return total

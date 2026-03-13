@@ -163,6 +163,9 @@ private:
         [&](const MirIterNext& p) {
           out_ << "iter_next %" << p.iter_operand.id;
         },
+        [&](const MirYieldInst& p) {
+          out_ << "yield %" << p.value.id;
+        },
         [&](const MirModeEnter& p) {
           out_ << "mode_enter " << p.region_name;
         },
