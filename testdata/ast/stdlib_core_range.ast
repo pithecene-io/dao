@@ -1,0 +1,20 @@
+File
+  FunctionDecl range
+    Param n: i32
+    ReturnType: Generator<i32>
+    LetStatement i
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          Identifier n
+      YieldStatement
+        Identifier i
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
