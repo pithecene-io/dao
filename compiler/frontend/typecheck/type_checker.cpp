@@ -84,6 +84,14 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
         uint32_t index = find_generic_param_index(sym);
         return types_.generic_param(sym->decl, sym->name, index);
       }
+      // Concept name in type position: substitute the conforming type
+      // when inside a context that has set concept_self_map_ (§3.2).
+      if (sym->kind == SymbolKind::Concept) {
+        auto csm = concept_self_map_.find(sym->name);
+        if (csm != concept_self_map_.end()) {
+          return csm->second;
+        }
+      }
       return resolve_symbol_type(sym);
     }
 
@@ -1313,17 +1321,24 @@ auto TypeChecker::lookup_method(const Type* obj_type,
   }
 
   // 3. Search derived conformances — concept method signatures.
+  //    Set concept_self_map_ so that the concept name in type position
+  //    resolves to the receiver type (§3.2).
   auto derived_it = derived_conformances_.find(obj_type);
   if (derived_it != derived_conformances_.end()) {
+    auto saved_csm = concept_self_map_;
     for (const auto* concept_decl : derived_it->second) {
       const auto& cpt = concept_decl->as<ConceptDecl>();
+      concept_self_map_[cpt.name] = obj_type;
       for (const auto* method_decl : cpt.methods) {
         const auto& method = method_decl->as<FunctionDecl>();
         if (method.name == name) {
-          return method_fn_type(method);
+          auto result = method_fn_type(method);
+          concept_self_map_ = saved_csm;
+          return result;
         }
       }
     }
+    concept_self_map_ = saved_csm;
   }
 
   return nullptr;
