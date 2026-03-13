@@ -117,39 +117,92 @@ auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
           .parse_result = std::move(parse_result)};
 }
 
+// ---------------------------------------------------------------------------
+// Prelude loading — stdlib/core/*.dao source is prepended to user source
+// so prelude symbols are available without explicit import.
+// ---------------------------------------------------------------------------
+
+auto load_prelude_source() -> std::string {
+  std::filesystem::path root(DAO_SOURCE_DIR);
+  auto stdlib_core = root / "stdlib" / "core";
+  std::string prelude;
+
+  if (!std::filesystem::exists(stdlib_core)) {
+    return prelude;
+  }
+
+  for (const auto& entry : std::filesystem::directory_iterator(stdlib_core)) {
+    if (entry.path().extension() != ".dao") {
+      continue;
+    }
+    prelude += read_file(entry.path());
+    prelude += '\n';
+  }
+  return prelude;
+}
+
 struct FrontendResult {
   ParsedFile parsed;
   dao::ResolveResult resolve;
   dao::TypeContext types;
   dao::TypeCheckResult typecheck;
+  uint32_t prelude_lines = 0; // line offset for diagnostic adjustment
 };
 
 // Run lex → parse → resolve → typecheck. Exits on error.
 auto run_frontend(const std::filesystem::path& path) -> FrontendResult {
-  auto parsed = lex_and_parse(path);
-  if (parsed.parse_result.file == nullptr) {
+  // Load and prepend stdlib prelude source.
+  auto prelude_source = load_prelude_source();
+  auto user_source = read_file(path);
+
+  // Count prelude lines for diagnostic offset adjustment.
+  uint32_t prelude_lines = 0;
+  for (char chr : prelude_source) {
+    if (chr == '\n') {
+      ++prelude_lines;
+    }
+  }
+
+  auto combined_source = prelude_source + user_source;
+  dao::SourceBuffer source(path.filename().string(),
+                           std::move(combined_source));
+  auto lex_result = dao::lex(source);
+
+  if (print_error_diagnostics(path.filename().string(), source,
+                              lex_result.diagnostics)) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  auto parse_result = dao::parse(lex_result.tokens);
+  if (parse_result.file == nullptr ||
+      print_error_diagnostics(path.filename().string(), source,
+                              parse_result.diagnostics)) {
     std::exit(EXIT_FAILURE);
   }
 
   auto filename = path.filename().string();
-  auto resolve_result = dao::resolve(*parsed.parse_result.file);
-  bool has_errors = print_error_diagnostics(filename, parsed.source,
+  auto resolve_result = dao::resolve(*parse_result.file);
+  bool has_errors = print_error_diagnostics(filename, source,
                                             resolve_result.diagnostics);
 
   dao::TypeContext types;
   auto check_result =
-      dao::typecheck(*parsed.parse_result.file, resolve_result, types);
-  has_errors |= print_diagnostics(filename, parsed.source,
-                                  check_result.diagnostics);
+      dao::typecheck(*parse_result.file, resolve_result, types);
+  has_errors |= print_diagnostics(filename, source, check_result.diagnostics);
 
   if (has_errors) {
     std::exit(EXIT_FAILURE);
   }
 
-  return {.parsed = std::move(parsed),
+  ParsedFile parsed_file{.source = std::move(source),
+                         .lex_result = std::move(lex_result),
+                         .parse_result = std::move(parse_result)};
+
+  return {.parsed = std::move(parsed_file),
           .resolve = std::move(resolve_result),
           .types = std::move(types),
-          .typecheck = std::move(check_result)};
+          .typecheck = std::move(check_result),
+          .prelude_lines = prelude_lines};
 }
 
 struct HirResult {
