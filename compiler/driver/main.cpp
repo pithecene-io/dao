@@ -450,11 +450,11 @@ void cmd_llvm_ir(const std::filesystem::path& path) {
   auto llvm_result = backend.lower(*mir.mir.module);
 
   auto filename = path.filename().string();
-  print_error_diagnostics(filename, mir.hir_result.frontend.parsed.source,
-                          llvm_result.diagnostics,
-                          mir.hir_result.frontend.prelude_lines);
+  bool has_errors = print_diagnostics(filename, mir.hir_result.frontend.parsed.source,
+                                      llvm_result.diagnostics,
+                                      mir.hir_result.frontend.prelude_lines);
 
-  if (llvm_result.module == nullptr || !llvm_result.diagnostics.empty()) {
+  if (llvm_result.module == nullptr || has_errors) {
     std::exit(EXIT_FAILURE);
   }
 
@@ -470,11 +470,11 @@ void cmd_build(const std::filesystem::path& path) {
   auto llvm_result = backend.lower(*mir.mir.module);
 
   auto filename = path.filename().string();
-  print_error_diagnostics(filename, mir.hir_result.frontend.parsed.source,
-                          llvm_result.diagnostics,
-                          mir.hir_result.frontend.prelude_lines);
+  bool has_errors = print_diagnostics(filename, mir.hir_result.frontend.parsed.source,
+                                      llvm_result.diagnostics,
+                                      mir.hir_result.frontend.prelude_lines);
 
-  if (llvm_result.module == nullptr || !llvm_result.diagnostics.empty()) {
+  if (llvm_result.module == nullptr || has_errors) {
     std::exit(EXIT_FAILURE);
   }
 

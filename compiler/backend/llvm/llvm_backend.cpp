@@ -82,14 +82,37 @@ auto LlvmBackend::lower(const MirModule& mir_module) -> LlvmBackendResult {
   }
 
   // Second pass: lower function bodies.
+  size_t diag_count_before = diagnostics_.size();
   for (const auto* fn : mir_module.functions) {
+    size_t diag_before = diagnostics_.size();
     if (!lower_function(*fn)) {
-      // Diagnostics already emitted.
+      // Function body failed — remove body, leaving it as a declaration.
+      // This allows the rest of the module to compile; calling this
+      // function will produce a link error, which is honest.
+      if (fn->symbol != nullptr) {
+        auto* llvm_fn = module_->getFunction(std::string(fn->symbol->name));
+        if (llvm_fn != nullptr && !llvm_fn->empty()) {
+          llvm_fn->deleteBody();
+        }
+      }
+      // Downgrade body-lowering errors to warnings so they don't kill
+      // the module.
+      for (size_t i = diag_before; i < diagnostics_.size(); ++i) {
+        diagnostics_[i].severity = Severity::Warning;
+      }
     }
   }
 
-  // Do not return a partial module when lowering produced errors.
-  if (!diagnostics_.empty()) {
+  // Only kill the module if new hard errors were emitted (not warnings
+  // from failed function bodies).
+  bool has_errors = false;
+  for (size_t i = diag_count_before; i < diagnostics_.size(); ++i) {
+    if (diagnostics_[i].severity == Severity::Error) {
+      has_errors = true;
+      break;
+    }
+  }
+  if (has_errors) {
     module_.reset();
   }
 
@@ -407,7 +430,12 @@ auto LlvmBackend::lower_const_bool(const MirConstBool& p, const MirInst& inst,
 auto LlvmBackend::lower_const_string(const MirConstString& p, const MirInst& inst,
                                        FunctionState& state) -> bool {
   // Create a global constant for the string data.
-  auto str = std::string(p.value);
+  // Strip surrounding quotes — the lexer preserves them in the token text.
+  auto raw = p.value;
+  if (raw.size() >= 2 && raw.front() == '"' && raw.back() == '"') {
+    raw = raw.substr(1, raw.size() - 2);
+  }
+  auto str = std::string(raw);
   auto* str_constant = llvm::ConstantDataArray::getString(ctx_, str, /*AddNull=*/true);
   auto* global = new llvm::GlobalVariable(
       *module_, str_constant->getType(), /*isConstant=*/true,
@@ -885,6 +913,13 @@ auto LlvmBackend::lower_construct(const MirConstruct& p, const MirInst& inst,
 
 auto LlvmBackend::lower_return(const MirReturn& p, const MirInst& inst,
                                  FunctionState& state) -> bool {
+  // Void functions always emit ret void, even if MIR has a value
+  // (e.g. returning a void call result).
+  if (state.llvm_fn->getReturnType()->isVoidTy()) {
+    state.builder->CreateRetVoid();
+    return true;
+  }
+
   if (p.has_value) {
     auto* val = get_value(p.value, state);
     if (val == nullptr) {
