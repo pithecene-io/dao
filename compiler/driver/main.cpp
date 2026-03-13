@@ -447,7 +447,8 @@ void cmd_llvm_ir(const std::filesystem::path& path) {
 
   llvm::LLVMContext llvm_ctx;
   dao::LlvmBackend backend(llvm_ctx);
-  auto llvm_result = backend.lower(*mir.mir.module);
+  auto llvm_result = backend.lower(*mir.mir.module,
+                                   mir.hir_result.frontend.prelude_bytes);
 
   auto filename = path.filename().string();
   bool has_errors = print_diagnostics(filename, mir.hir_result.frontend.parsed.source,
@@ -467,7 +468,8 @@ void cmd_build(const std::filesystem::path& path) {
 
   llvm::LLVMContext llvm_ctx;
   dao::LlvmBackend backend(llvm_ctx);
-  auto llvm_result = backend.lower(*mir.mir.module);
+  auto llvm_result = backend.lower(*mir.mir.module,
+                                   mir.hir_result.frontend.prelude_bytes);
 
   auto filename = path.filename().string();
   bool has_errors = print_diagnostics(filename, mir.hir_result.frontend.parsed.source,
