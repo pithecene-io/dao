@@ -95,6 +95,10 @@ struct HirReturn {
   HirExpr* value; // nullable for bare return
 };
 
+struct HirYield {
+  HirExpr* value;
+};
+
 struct HirExprStmt {
   HirExpr* expr;
 };
@@ -113,7 +117,7 @@ struct HirResource {
 
 using HirStmtPayload = std::variant<
     HirLet, HirAssign, HirIf, HirWhile, HirFor,
-    HirReturn, HirExprStmt, HirMode, HirResource>;
+    HirReturn, HirYield, HirExprStmt, HirMode, HirResource>;
 
 // ---------------------------------------------------------------------------
 // Expression payloads

@@ -98,6 +98,8 @@ struct MirIterInit    { MirValueId iter_operand; };
 struct MirIterHasNext { MirValueId iter_operand; };
 struct MirIterNext    { MirValueId iter_operand; };
 
+struct MirYieldInst   { MirValueId value; };
+
 struct MirModeEnter     { HirModeKind mode_kind; std::string_view region_name; };
 struct MirModeExit      { HirModeKind mode_kind; };
 struct MirResourceEnter { std::string_view region_kind; std::string_view region_name; };
@@ -121,6 +123,7 @@ using MirPayload = std::variant<
     MirFieldAccess, MirIndexAccess,
     MirFnRef, MirCall, MirConstruct,
     MirIterInit, MirIterHasNext, MirIterNext,
+    MirYieldInst,
     MirModeEnter, MirModeExit, MirResourceEnter, MirResourceExit,
     MirLambdaInst,
     MirBr, MirCondBr, MirReturn>;

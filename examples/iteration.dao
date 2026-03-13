@@ -1,0 +1,31 @@
+fn range(n: i32): Generator<i32>
+    let i = 0
+    while i < n:
+        yield i
+        i = i + 1
+
+fn squares(n: i32): Generator<i32>
+    let i = 0
+    while i < n:
+        yield i * i
+        i = i + 1
+
+fn sum_squares(n: i32): i32
+    let total = 0
+    for x in squares(n):
+        total = total + x
+    return total
+
+fn count_positive(gen: Generator<i32>): i32
+    let count = 0
+    for x in gen:
+        if x > 0:
+            count = count + 1
+    return count
+
+fn nested_iteration(): i32
+    let total = 0
+    for i in range(3):
+        for j in range(3):
+            total = total + i + j
+    return total

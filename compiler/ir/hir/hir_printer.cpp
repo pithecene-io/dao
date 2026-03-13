@@ -198,6 +198,12 @@ private:
             print_expr(*node.value);
           }
         },
+        [&](const HirYield& node) {
+          indent();
+          out_ << "Yield\n";
+          Scope scope(depth_);
+          print_expr(*node.value);
+        },
         [&](const HirExprStmt& node) {
           indent();
           out_ << "ExprStmt\n";

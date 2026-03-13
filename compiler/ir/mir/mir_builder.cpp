@@ -238,7 +238,12 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
         auto iter_val = emit_value(
             hir_for.iterable->type, stmt.span, MirIterInit{iter_src});
 
+        // Extract element type T from Generator<T>.
         const Type* var_type = hir_for.iterable->type;
+        if (var_type != nullptr && var_type->kind() == TypeKind::Generator) {
+          var_type =
+              static_cast<const TypeGenerator*>(var_type)->yield_type();
+        }
         auto var_local =
             declare_local(hir_for.var_symbol, var_type, stmt.span);
 
@@ -270,6 +275,10 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
         }
 
         switch_to_block(exit_bb);
+      },
+      [&](const HirYield& yield) {
+        auto val = lower_expr_value(*yield.value);
+        emit_effect(stmt.span, MirYieldInst{val});
       },
       [&](const HirReturn& ret) {
         MirValueId ret_val;

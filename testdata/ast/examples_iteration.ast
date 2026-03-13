@@ -1,0 +1,114 @@
+File
+  FunctionDecl range
+    Param n: i32
+    ReturnType: Generator<i32>
+    LetStatement i
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          Identifier n
+      YieldStatement
+        Identifier i
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+  FunctionDecl squares
+    Param n: i32
+    ReturnType: Generator<i32>
+    LetStatement i
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          Identifier n
+      YieldStatement
+        BinaryExpr *
+          Identifier i
+          Identifier i
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+  FunctionDecl sum_squares
+    Param n: i32
+    ReturnType: i32
+    LetStatement total
+      IntLiteral 0
+    ForStatement x
+      Iterable
+        CallExpr
+          Callee
+            Identifier squares
+          Args
+            Identifier n
+      Assignment
+        Target
+          Identifier total
+        Value
+          BinaryExpr +
+            Identifier total
+            Identifier x
+    ReturnStatement
+      Identifier total
+  FunctionDecl count_positive
+    Param gen: Generator<i32>
+    ReturnType: i32
+    LetStatement count
+      IntLiteral 0
+    ForStatement x
+      Iterable
+        Identifier gen
+      IfStatement
+        Condition
+          BinaryExpr >
+            Identifier x
+            IntLiteral 0
+        Then
+          Assignment
+            Target
+              Identifier count
+            Value
+              BinaryExpr +
+                Identifier count
+                IntLiteral 1
+    ReturnStatement
+      Identifier count
+  FunctionDecl nested_iteration
+    ReturnType: i32
+    LetStatement total
+      IntLiteral 0
+    ForStatement i
+      Iterable
+        CallExpr
+          Callee
+            Identifier range
+          Args
+            IntLiteral 3
+      ForStatement j
+        Iterable
+          CallExpr
+            Callee
+              Identifier range
+            Args
+              IntLiteral 3
+        Assignment
+          Target
+            Identifier total
+          Value
+            BinaryExpr +
+              BinaryExpr +
+                Identifier total
+                Identifier i
+              Identifier j
+    ReturnStatement
+      Identifier total
