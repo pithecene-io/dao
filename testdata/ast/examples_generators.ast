@@ -1,0 +1,94 @@
+File
+  FunctionDecl range
+    Param n: i32
+    ReturnType: Generator<i32>
+    LetStatement i
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          Identifier n
+      YieldStatement
+        Identifier i
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+  FunctionDecl countdown
+    Param from: i32
+    ReturnType: Generator<i32>
+    LetStatement i
+      Identifier from
+    WhileStatement
+      Condition
+        BinaryExpr >
+          Identifier i
+          IntLiteral 0
+      YieldStatement
+        Identifier i
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr -
+            Identifier i
+            IntLiteral 1
+  FunctionDecl evens
+    Param n: i32
+    ReturnType: Generator<i32>
+    LetStatement i
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          Identifier n
+      YieldStatement
+        BinaryExpr *
+          Identifier i
+          IntLiteral 2
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+  FunctionDecl sum_range
+    Param n: i32
+    ReturnType: i32
+    LetStatement total
+      IntLiteral 0
+    ForStatement x
+      Iterable
+        CallExpr
+          Callee
+            Identifier range
+          Args
+            Identifier n
+      Assignment
+        Target
+          Identifier total
+        Value
+          BinaryExpr +
+            Identifier total
+            Identifier x
+    ReturnStatement
+      Identifier total
+  FunctionDecl first_even
+    ReturnType: i32
+    ForStatement x
+      Iterable
+        CallExpr
+          Callee
+            Identifier evens
+          Args
+            IntLiteral 5
+      ReturnStatement
+        Identifier x
+    ReturnStatement
+      IntLiteral 0
