@@ -210,9 +210,9 @@ New desugaring:
 
 ## 13. Open Questions
 
-- Scalar iteration: intrinsic conversion or explicit `range()`? (see §6)
-- Should implicit conversion to `Generator<T>` exist for user-defined
-  types, or must the user call a method explicitly? (see §7)
-- Should `Generator<T>` be exposed as a first-class type that users can
-  pass around, store in variables, etc.?
+- ~~Scalar iteration: intrinsic conversion or explicit `range()`?~~
+  **Decided (§6): explicit `range()`, no intrinsic conversion.**
+- ~~Should implicit conversion to `Generator<T>` exist for user-defined
+  types, or must the user call a method explicitly?~~
+  **Decided (§7): explicit `.iter()` call, no implicit conversion.**
 - What is the allocation strategy for generator frames?
