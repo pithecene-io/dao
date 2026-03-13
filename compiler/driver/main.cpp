@@ -49,10 +49,12 @@ auto read_file(const std::filesystem::path& path) -> std::string {
 // Print all diagnostics as errors. Returns true if any were printed.
 auto print_error_diagnostics(std::string_view filename,
                              const dao::SourceBuffer& source,
-                             std::span<const dao::Diagnostic> diags) -> bool {
+                             std::span<const dao::Diagnostic> diags,
+                             uint32_t line_offset = 0) -> bool {
   for (const auto& diag : diags) {
     auto loc = source.line_col(diag.span.offset);
-    std::cerr << filename << ":" << loc.line << ":" << loc.col
+    auto line = loc.line > line_offset ? loc.line - line_offset : loc.line;
+    std::cerr << filename << ":" << line << ":" << loc.col
               << ": error: " << diag.message << "\n";
   }
   return !diags.empty();
@@ -61,12 +63,14 @@ auto print_error_diagnostics(std::string_view filename,
 // Print diagnostics with severity labels. Returns true if any errors.
 auto print_diagnostics(std::string_view filename,
                        const dao::SourceBuffer& source,
-                       std::span<const dao::Diagnostic> diags) -> bool {
+                       std::span<const dao::Diagnostic> diags,
+                       uint32_t line_offset = 0) -> bool {
   bool has_errors = false;
   for (const auto& diag : diags) {
     auto loc = source.line_col(diag.span.offset);
+    auto line = loc.line > line_offset ? loc.line - line_offset : loc.line;
     const auto* severity = diag.severity == dao::Severity::Error ? "error" : "warning";
-    std::cerr << filename << ":" << loc.line << ":" << loc.col
+    std::cerr << filename << ":" << line << ":" << loc.col
               << ": " << severity << ": " << diag.message << "\n";
     if (diag.severity == dao::Severity::Error) {
       has_errors = true;
@@ -141,68 +145,87 @@ auto load_prelude_source() -> std::string {
   return prelude;
 }
 
-struct FrontendResult {
+struct PreludeParsedFile {
   ParsedFile parsed;
-  dao::ResolveResult resolve;
-  dao::TypeContext types;
-  dao::TypeCheckResult typecheck;
-  uint32_t prelude_lines = 0; // line offset for diagnostic adjustment
+  uint32_t prelude_lines = 0;
+  uint32_t prelude_bytes = 0;
 };
 
-// Run lex → parse → resolve → typecheck. Exits on error.
-auto run_frontend(const std::filesystem::path& path) -> FrontendResult {
-  // Load and prepend stdlib prelude source.
+auto lex_and_parse_with_prelude(const std::filesystem::path& path)
+    -> PreludeParsedFile {
   auto prelude_source = load_prelude_source();
   auto user_source = read_file(path);
 
-  // Count prelude lines for diagnostic offset adjustment.
   uint32_t prelude_lines = 0;
   for (char chr : prelude_source) {
     if (chr == '\n') {
       ++prelude_lines;
     }
   }
+  auto prelude_bytes = static_cast<uint32_t>(prelude_source.size());
 
-  auto combined_source = prelude_source + user_source;
-  dao::SourceBuffer source(path.filename().string(),
-                           std::move(combined_source));
+  auto combined = prelude_source + user_source;
+  dao::SourceBuffer source(path.filename().string(), std::move(combined));
   auto lex_result = dao::lex(source);
 
   if (print_error_diagnostics(path.filename().string(), source,
-                              lex_result.diagnostics)) {
+                              lex_result.diagnostics, prelude_lines)) {
     std::exit(EXIT_FAILURE);
   }
 
   auto parse_result = dao::parse(lex_result.tokens);
-  if (parse_result.file == nullptr ||
-      print_error_diagnostics(path.filename().string(), source,
-                              parse_result.diagnostics)) {
+  if (print_error_diagnostics(path.filename().string(), source,
+                              parse_result.diagnostics, prelude_lines)) {
+    std::exit(EXIT_FAILURE);
+  }
+
+  return {.parsed = {.source = std::move(source),
+                     .lex_result = std::move(lex_result),
+                     .parse_result = std::move(parse_result)},
+          .prelude_lines = prelude_lines,
+          .prelude_bytes = prelude_bytes};
+}
+
+struct FrontendResult {
+  ParsedFile parsed;
+  dao::ResolveResult resolve;
+  dao::TypeContext types;
+  dao::TypeCheckResult typecheck;
+  uint32_t prelude_lines = 0;
+  uint32_t prelude_bytes = 0;
+};
+
+// Run lex → parse → resolve → typecheck. Exits on error.
+auto run_frontend(const std::filesystem::path& path) -> FrontendResult {
+  auto preparsed = lex_and_parse_with_prelude(path);
+
+  if (preparsed.parsed.parse_result.file == nullptr) {
     std::exit(EXIT_FAILURE);
   }
 
   auto filename = path.filename().string();
-  auto resolve_result = dao::resolve(*parse_result.file);
-  bool has_errors = print_error_diagnostics(filename, source,
-                                            resolve_result.diagnostics);
+  auto resolve_result = dao::resolve(*preparsed.parsed.parse_result.file);
+  bool has_errors = print_error_diagnostics(
+      filename, preparsed.parsed.source, resolve_result.diagnostics,
+      preparsed.prelude_lines);
 
   dao::TypeContext types;
-  auto check_result =
-      dao::typecheck(*parse_result.file, resolve_result, types);
-  has_errors |= print_diagnostics(filename, source, check_result.diagnostics);
+  auto check_result = dao::typecheck(*preparsed.parsed.parse_result.file,
+                                     resolve_result, types);
+  has_errors |= print_diagnostics(filename, preparsed.parsed.source,
+                                  check_result.diagnostics,
+                                  preparsed.prelude_lines);
 
   if (has_errors) {
     std::exit(EXIT_FAILURE);
   }
 
-  ParsedFile parsed_file{.source = std::move(source),
-                         .lex_result = std::move(lex_result),
-                         .parse_result = std::move(parse_result)};
-
-  return {.parsed = std::move(parsed_file),
+  return {.parsed = std::move(preparsed.parsed),
           .resolve = std::move(resolve_result),
           .types = std::move(types),
           .typecheck = std::move(check_result),
-          .prelude_lines = prelude_lines};
+          .prelude_lines = preparsed.prelude_lines,
+          .prelude_bytes = preparsed.prelude_bytes};
 }
 
 struct HirResult {
@@ -219,7 +242,8 @@ auto run_through_hir(const std::filesystem::path& path) -> HirResult {
 
   auto filename = path.filename().string();
   bool has_errors = print_error_diagnostics(filename, frontend.parsed.source,
-                                            hir.diagnostics);
+                                            hir.diagnostics,
+                                            frontend.prelude_lines);
 
   if (hir.module == nullptr || has_errors) {
     std::exit(EXIT_FAILURE);
@@ -244,7 +268,8 @@ auto run_through_mir(const std::filesystem::path& path) -> MirResult {
 
   auto filename = path.filename().string();
   bool has_errors = print_error_diagnostics(
-      filename, hir_result.frontend.parsed.source, mir.diagnostics);
+      filename, hir_result.frontend.parsed.source, mir.diagnostics,
+      hir_result.frontend.prelude_lines);
 
   if (mir.module == nullptr || has_errors) {
     std::exit(EXIT_FAILURE);
@@ -305,67 +330,92 @@ void cmd_ast(const std::filesystem::path& path) {
 
 // Emit semantic token classification. Output is deterministic.
 void cmd_tokens(const std::filesystem::path& path) {
-  auto result = lex_and_parse(path);
+  auto result = lex_and_parse_with_prelude(path);
 
   // Run name resolution for resolve-driven classifications.
   dao::ResolveResult resolve_result;
-  if (result.parse_result.file != nullptr) {
-    resolve_result = dao::resolve(*result.parse_result.file);
+  if (result.parsed.parse_result.file != nullptr) {
+    resolve_result = dao::resolve(*result.parsed.parse_result.file);
   }
 
-  auto sem_tokens =
-      dao::classify_tokens(result.lex_result.tokens, result.parse_result.file, &resolve_result);
+  auto sem_tokens = dao::classify_tokens(result.parsed.lex_result.tokens,
+                                         result.parsed.parse_result.file,
+                                         &resolve_result);
 
   for (const auto& tok : sem_tokens) {
-    auto loc = result.source.line_col(tok.span.offset);
-    auto text = result.source.text(tok.span);
-    std::cout << loc.line << ":" << loc.col << " " << tok.kind << " " << text << "\n";
+    if (tok.span.offset < result.prelude_bytes) {
+      continue;
+    }
+    auto loc = result.parsed.source.line_col(tok.span.offset);
+    auto line = loc.line > result.prelude_lines ? loc.line - result.prelude_lines : loc.line;
+    auto text = result.parsed.source.text(tok.span);
+    std::cout << line << ":" << loc.col << " " << tok.kind << " " << text << "\n";
   }
 }
 
 // Run name resolution and print results.
 void cmd_resolve(const std::filesystem::path& path) {
-  auto result = lex_and_parse(path);
-  if (result.parse_result.file == nullptr) {
+  auto result = lex_and_parse_with_prelude(path);
+  if (result.parsed.parse_result.file == nullptr) {
     return;
   }
 
-  auto resolve_result = dao::resolve(*result.parse_result.file);
+  auto resolve_result = dao::resolve(*result.parsed.parse_result.file);
 
-  // Print declared symbols.
+  // Print declared symbols (user region only).
   std::cout << "Symbols:\n";
   for (const auto& sym : resolve_result.context.symbols()) {
+    if (sym->decl_span.offset < result.prelude_bytes) {
+      continue;
+    }
     std::cout << "  " << dao::symbol_kind_name(sym->kind) << " " << sym->name;
     if (sym->decl_span.length > 0) {
-      auto decl_loc = result.source.line_col(sym->decl_span.offset);
-      std::cout << " [" << decl_loc.line << ":" << decl_loc.col << "]";
+      auto decl_loc = result.parsed.source.line_col(sym->decl_span.offset);
+      auto line = decl_loc.line > result.prelude_lines
+                      ? decl_loc.line - result.prelude_lines
+                      : decl_loc.line;
+      std::cout << " [" << line << ":" << decl_loc.col << "]";
     }
     std::cout << "\n";
   }
 
-  // Print uses (resolved references).
+  // Print uses in user region (resolved references).
   std::cout << "\nUses:\n";
   for (const auto& [offset, sym] : resolve_result.uses) {
-    auto loc = result.source.line_col(offset);
-    std::cout << "  " << loc.line << ":" << loc.col << " "
-              << result.source.text(dao::Span{.offset = offset,
-                                              .length = static_cast<uint32_t>(sym->name.size())})
+    if (offset < result.prelude_bytes) {
+      continue;
+    }
+    auto loc = result.parsed.source.line_col(offset);
+    auto line = loc.line > result.prelude_lines ? loc.line - result.prelude_lines : loc.line;
+    std::cout << "  " << line << ":" << loc.col << " "
+              << result.parsed.source.text(
+                     dao::Span{.offset = offset,
+                               .length = static_cast<uint32_t>(sym->name.size())})
               << " -> " << dao::symbol_kind_name(sym->kind) << " " << sym->name;
     if (sym->decl_span.length > 0) {
-      auto decl_loc = result.source.line_col(sym->decl_span.offset);
-      std::cout << " [" << decl_loc.line << ":" << decl_loc.col << "]";
+      auto decl_loc = result.parsed.source.line_col(sym->decl_span.offset);
+      auto decl_line = decl_loc.line > result.prelude_lines
+                           ? decl_loc.line - result.prelude_lines
+                           : decl_loc.line;
+      std::cout << " [" << decl_line << ":" << decl_loc.col << "]";
     }
     std::cout << "\n";
   }
 
-  // Print diagnostics (to stdout — this is a debug dump command).
-  if (!resolve_result.diagnostics.empty()) {
-    std::cout << "\nDiagnostics:\n";
-    for (const auto& diag : resolve_result.diagnostics) {
-      auto loc = result.source.line_col(diag.span.offset);
-      std::cout << "  " << path.filename().string() << ":" << loc.line << ":" << loc.col
-                << ": error: " << diag.message << "\n";
+  // Print diagnostics in user region (to stdout — this is a debug dump command).
+  bool has_user_diags = false;
+  for (const auto& diag : resolve_result.diagnostics) {
+    if (diag.span.offset < result.prelude_bytes) {
+      continue;
     }
+    if (!has_user_diags) {
+      std::cout << "\nDiagnostics:\n";
+      has_user_diags = true;
+    }
+    auto loc = result.parsed.source.line_col(diag.span.offset);
+    auto line = loc.line > result.prelude_lines ? loc.line - result.prelude_lines : loc.line;
+    std::cout << "  " << path.filename().string() << ":" << line << ":" << loc.col
+              << ": error: " << diag.message << "\n";
   }
 }
 
@@ -401,7 +451,8 @@ void cmd_llvm_ir(const std::filesystem::path& path) {
 
   auto filename = path.filename().string();
   print_error_diagnostics(filename, mir.hir_result.frontend.parsed.source,
-                          llvm_result.diagnostics);
+                          llvm_result.diagnostics,
+                          mir.hir_result.frontend.prelude_lines);
 
   if (llvm_result.module == nullptr || !llvm_result.diagnostics.empty()) {
     std::exit(EXIT_FAILURE);
@@ -420,7 +471,8 @@ void cmd_build(const std::filesystem::path& path) {
 
   auto filename = path.filename().string();
   print_error_diagnostics(filename, mir.hir_result.frontend.parsed.source,
-                          llvm_result.diagnostics);
+                          llvm_result.diagnostics,
+                          mir.hir_result.frontend.prelude_lines);
 
   if (llvm_result.module == nullptr || !llvm_result.diagnostics.empty()) {
     std::exit(EXIT_FAILURE);
