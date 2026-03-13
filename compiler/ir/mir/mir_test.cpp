@@ -361,8 +361,10 @@ suite<"mir_edge"> mir_edge = [] {
 
   "for loop lowers to iter instructions"_test = [] {
     MirTestPipeline pipe(
-        "fn test(xs: i32): i32\n"
-        "    for item in xs:\n"
+        "fn gen(n: i32): Generator<i32>\n"
+        "    yield n\n"
+        "fn test(): i32\n"
+        "    for item in gen(10):\n"
         "        let y: i32 = item\n"
         "    return 0\n");
     auto dump = pipe.dump();
