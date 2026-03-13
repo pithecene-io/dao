@@ -98,42 +98,42 @@ while _gen is not exhausted:
 This is a compiler-internal transformation, not expressible in surface
 Dao syntax. The `for...in` loop is the only way to consume a generator.
 
-## 6. Scalar Iteration (open question)
+## 6. Scalar Iteration (decided: Option B)
 
-Whether `for i in 7:` should work is unresolved. Two approaches:
+`for i in 7:` is not valid. Integers do not implicitly convert to
+generators. The stdlib provides `range` as an ordinary generator
+function:
 
-**Option A — intrinsic conversion**: When `for...in` encounters a
-non-Generator integer type, the compiler implicitly converts it to
-`Generator<i32>` producing 0, 1, ..., n-1. This is bounded magic —
-the set of intrinsic conversions is fixed and small. Ergonomic, but
-adds implicit behavior.
+```dao
+for i in range(7):
+    body(i)
+```
 
-**Option B — explicit range**: Require `for i in range(7):` where
-`range` is a stdlib generator function. No implicit conversions.
-Cleaner semantics, slightly more verbose.
+`range` has no special compiler status. It is a regular function
+returning `Generator<i32>`.
 
-The decision affects whether the compiler needs intrinsic type
-conversions for `for...in`, or whether `Generator<T>` is the only
-accepted type with no exceptions.
+Rationale: no implicit conversions in `for...in`. The compiler
+accepts exactly `Generator<T>` with no exceptions.
 
-## 7. User-Defined Iterables
+## 7. User-Defined Iterables (decided: explicit call)
 
-Users who want their type to work with `for...in` have two options:
+User-defined types that want to work with `for...in` must provide a
+method returning `Generator<T>`. The caller calls it explicitly:
 
-1. **Provide a method that returns a Generator<T>**: The caller writes
-   `for x in my_thing.items():` explicitly.
+```dao
+for x in my_list.iter():
+    body(x)
+```
 
-2. **Implicit conversion to Generator<T>**: If the language supports
-   implicit conversions (design TBD), a type could implicitly convert
-   to `Generator<T>`, enabling `for x in my_thing:`.
+The compiler does not implicitly call `.iter()` or look up any
+concept conformance. `for...in` sees `Generator<T>` or it is a type
+error.
 
-Option 1 requires no new language machinery. Option 2 is more
-ergonomic but requires an implicit conversion mechanism.
-
-Note: This is where a concept like `Iterable` could re-enter — not
-as a magic protocol for `for...in`, but as a standard concept that
-types conform to for API consistency. The `for` loop consumes
-`Generator<T>`, and `Iterable` types know how to produce one.
+An `Iterable<T>` concept may be provided in stdlib for API
+consistency, but it is not compiler-blessed and `for` does not
+recognize it. Implicit `.iter()` desugaring is deferred pending
+real-world usage observation (see CONTRACT_SYNTAX_SURFACE.md
+Non-Laws).
 
 ## 8. Interaction with Concepts
 
@@ -186,15 +186,16 @@ decision, not a language-level concern.
 6. Derive loop variable type T from `Generator<T>`
 7. Implement compiler-internal desugaring at HIR/MIR level
 
-### 11.3 Scalar conversion (blocked on §6 decision)
+### 11.3 Stdlib `range` function (§6 decided: Option B)
 
-8. If Option A: implement intrinsic `i32` -> `Generator<i32>` conversion
-9. If Option B: implement stdlib `range` generator function
+8. Implement `range` as a stdlib generator function in
+   `stdlib/core/range.dao`
+9. Include in prelude auto-import
 
 ### 11.4 Iterable concept (optional, non-blocking)
 
-9. Define stdlib `Iterable<T>` concept returning `Generator<T>`
-10. This is API convention, not language machinery
+10. Define stdlib `Iterable<T>` concept returning `Generator<T>`
+11. This is API convention only — `for...in` does not recognize it
 
 ## 12. Syntax Inventory
 
