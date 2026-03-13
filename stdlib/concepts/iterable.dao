@@ -1,0 +1,2 @@
+concept Iterable<T>:
+    fn iter(self): Generator<T>
