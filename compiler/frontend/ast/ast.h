@@ -60,6 +60,7 @@ enum class NodeKind : std::uint8_t {
   IfStatement,
   WhileStatement,
   ForStatement,
+  YieldStatement,
   ModeBlock,
   ResourceBlock,
   ReturnStatement,
@@ -290,6 +291,10 @@ struct ResourceBlock {
   std::vector<Stmt*> body;
 };
 
+struct YieldStatement {
+  Expr* value;
+};
+
 struct ReturnStatement {
   Expr* value; // nullable for bare return
 };
@@ -300,7 +305,8 @@ struct ExpressionStatement {
 
 using StmtPayload = std::variant<
     LetStatement, Assignment, IfStatement, WhileStatement, ForStatement,
-    ModeBlock, ResourceBlock, ReturnStatement, ExpressionStatement>;
+    YieldStatement, ModeBlock, ResourceBlock, ReturnStatement,
+    ExpressionStatement>;
 
 // ---------------------------------------------------------------------------
 // Expression payloads

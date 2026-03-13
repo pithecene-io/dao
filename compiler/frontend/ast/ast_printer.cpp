@@ -307,6 +307,12 @@ private:
             print_stmt(*s);
           }
         },
+        [&](const YieldStatement& node) {
+          indent();
+          out_ << "YieldStatement\n";
+          Scope scope(depth_);
+          print_expr(*node.value);
+        },
         [&](const ReturnStatement& node) {
           indent();
           out_ << "ReturnStatement\n";

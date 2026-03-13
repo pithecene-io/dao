@@ -74,6 +74,19 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
       return types_.named_type(nullptr, "string", {});
     }
 
+    // Generator<T> — compiler-provided coroutine type.
+    if (name == "Generator") {
+      if (named.type_args.size() != 1) {
+        error(node->span, "Generator requires exactly one type argument");
+        return nullptr;
+      }
+      const auto* yield_type = resolve_type_node(named.type_args[0]);
+      if (yield_type == nullptr) {
+        return nullptr;
+      }
+      return types_.generator_type(yield_type);
+    }
+
     // Look up user-defined types via resolver symbols.
     auto it = resolve_.uses.find(node->span.offset);
     if (it != resolve_.uses.end()) {
@@ -667,6 +680,9 @@ void TypeChecker::check_statement(const Stmt* stmt) {
   case NodeKind::ForStatement:
     check_for(stmt);
     break;
+  case NodeKind::YieldStatement:
+    check_yield(stmt);
+    break;
   case NodeKind::ModeBlock:
     check_mode_block(stmt);
     break;
@@ -773,20 +789,51 @@ void TypeChecker::check_while(const Stmt* stmt) {
 void TypeChecker::check_for(const Stmt* stmt) {
   const auto& fo = stmt->as<ForStatement>();
 
-  // For now, iteration semantics are not frozen. Accept the iterable
-  // expression but do not enforce element type derivation.
   const auto* iter_type = check_expr(fo.iterable);
-  (void)iter_type;
 
-  // Bind loop variable — for now treat as untyped placeholder.
+  // The iterable expression must produce Generator<T>.
+  const Type* elem_type = nullptr;
+  if (iter_type != nullptr) {
+    if (iter_type->kind() == TypeKind::Generator) {
+      elem_type = static_cast<const TypeGenerator*>(iter_type)->yield_type();
+    } else {
+      error(fo.iterable->span,
+            "for-in requires Generator<T>, got '" + print_type(iter_type) + "'");
+    }
+  }
+
+  // Bind loop variable to the element type.
   auto decl_it = decl_symbols_.find(fo.var_span.offset);
-  if (decl_it != decl_symbols_.end()) {
-    // TODO: derive element type from iterable once iteration is frozen.
-    // For now, leave as nullptr (untyped).
-    (void)decl_it;
+  if (decl_it != decl_symbols_.end() && elem_type != nullptr) {
+    symbol_types_[decl_it->second] = elem_type;
+    typed_.set_local_type(stmt, elem_type);
   }
 
   check_body(fo.body);
+}
+
+void TypeChecker::check_yield(const Stmt* stmt) {
+  const auto& yield = stmt->as<YieldStatement>();
+  const auto* value_type = check_expr(yield.value);
+
+  // yield is only valid inside a generator function (return type is Generator<T>).
+  if (ctx_.return_type == nullptr ||
+      ctx_.return_type->kind() != TypeKind::Generator) {
+    error(stmt->span, "yield is only valid inside a generator function");
+    return;
+  }
+
+  // The yielded value must match the Generator's element type.
+  const auto* gen = static_cast<const TypeGenerator*>(ctx_.return_type);
+  const auto* expected = gen->yield_type();
+  if (value_type != nullptr && expected != nullptr && value_type != expected) {
+    error(yield.value->span,
+          "yield type '" + print_type(value_type) +
+              "' does not match Generator element type '" +
+              print_type(expected) + "'");
+  }
+
+  typed_.set_local_type(stmt, value_type);
 }
 
 void TypeChecker::check_mode_block(const Stmt* stmt) {
@@ -806,19 +853,27 @@ void TypeChecker::check_resource_block(const Stmt* stmt) {
 void TypeChecker::check_return(const Stmt* stmt) {
   const auto& ret = stmt->as<ReturnStatement>();
 
+  // In generator functions, only bare return is valid (early termination).
+  bool in_generator = ctx_.return_type != nullptr &&
+                      ctx_.return_type->kind() == TypeKind::Generator;
+
   if (ret.value != nullptr) {
     const auto* val_type = check_expr(ret.value);
-    if (val_type != nullptr && ctx_.return_type != nullptr &&
-        !is_assignable(val_type, ctx_.return_type)) {
+    if (in_generator) {
+      error(ret.value->span,
+            "'return value' is not valid in a generator function; "
+            "use yield to produce values");
+    } else if (val_type != nullptr && ctx_.return_type != nullptr &&
+               !is_assignable(val_type, ctx_.return_type)) {
       error(ret.value->span,
             "return type '" + print_type(val_type) +
                 "' does not match function return type '" +
                 print_type(ctx_.return_type) + "'");
     }
   } else {
-    // Bare return — only valid for void functions.
+    // Bare return — valid for void functions and generator functions.
     if (ctx_.return_type != nullptr &&
-        ctx_.return_type->kind() != TypeKind::Void) {
+        ctx_.return_type->kind() != TypeKind::Void && !in_generator) {
       error(stmt->span,
             "bare return in function returning '" +
                 print_type(ctx_.return_type) + "'");

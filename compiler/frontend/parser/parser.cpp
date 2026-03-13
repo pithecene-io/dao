@@ -533,6 +533,8 @@ private:
       return parse_resource_block();
     case TokenKind::KwReturn:
       return parse_return_statement();
+    case TokenKind::KwYield:
+      return parse_yield_statement();
     default:
       break;
     }
@@ -654,6 +656,14 @@ private:
         span,
         ResourceBlock{kind_tok.text, kind_tok.span, name_tok.text,
                       name_tok.span, std::move(body)});
+  }
+
+  auto parse_yield_statement() -> Stmt* {
+    const auto& kw = consume(TokenKind::KwYield);
+    auto* value = parse_expression();
+    match(TokenKind::Newline);
+    Span span = span_from(kw.span);
+    return ctx_.alloc<Stmt>(span, YieldStatement{value});
   }
 
   auto parse_return_statement() -> Stmt* {

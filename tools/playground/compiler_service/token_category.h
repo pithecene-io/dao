@@ -25,6 +25,7 @@ inline auto token_category(TokenKind kind) -> std::string_view {
   case TokenKind::KwFor:
   case TokenKind::KwIn:
   case TokenKind::KwReturn:
+  case TokenKind::KwYield:
   case TokenKind::KwMode:
   case TokenKind::KwResource:
   case TokenKind::KwAnd:

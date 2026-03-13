@@ -14,6 +14,7 @@ enum class TypeKind : std::uint8_t {
   GenericParam,
   Struct,
   Enum,
+  Generator, // compiler-provided Generator<T> coroutine type
 };
 
 auto type_kind_name(TypeKind kind) -> const char*;

@@ -195,6 +195,23 @@ private:
   std::vector<EnumVariant> variants_;
 };
 
+// Generator<T> — compiler-provided coroutine type. Not user-definable.
+// See TASK_13_COROUTINES.md §4.
+class TypeGenerator : public Type {
+public:
+  explicit TypeGenerator(const Type* yield_type)
+      : Type(TypeKind::Generator), yield_type_(yield_type) {}
+
+  [[nodiscard]] auto yield_type() const -> const Type* { return yield_type_; }
+
+  static auto classof(const Type* t) -> bool {
+    return t->kind() == TypeKind::Generator;
+  }
+
+private:
+  const Type* yield_type_;
+};
+
 } // namespace dao
 
 #endif // DAO_FRONTEND_TYPES_TYPE_H
