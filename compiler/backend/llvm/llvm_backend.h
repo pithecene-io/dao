@@ -91,11 +91,8 @@ private:
 
     // --- Generator iteration state (consumer side) ---
 
-    // MIR ValueId (from IterInit) → resume function for that generator
-    std::unordered_map<uint32_t, llvm::Function*> iter_resume_fns;
-
-    // MIR ValueId (from IterInit) → yield type (T in Generator<T>)
-    std::unordered_map<uint32_t, const Type*> iter_yield_types;
+    // MIR ValueId (from IterInit) → { frame_ptr, resume_fn_ptr } pair
+    std::unordered_map<uint32_t, std::pair<llvm::Value*, llvm::Value*>> iter_state;
 
     // --- Generator function state (producer side) ---
 

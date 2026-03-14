@@ -714,8 +714,8 @@ suite<"generators"> generators = [] {
         "  return 0\n");
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
-    // Init function: returns an opaque pointer.
-    expect(contains(ir, "define ptr @single()")) << ir;
+    // Init function: returns a generator fat pair.
+    expect(contains(ir, "define %dao.generator @single()")) << ir;
     // Resume function: takes ptr, returns void.
     expect(contains(ir, "define void @single.resume(ptr")) << ir;
   };
@@ -732,7 +732,8 @@ suite<"generators"> generators = [] {
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
     expect(contains(ir, "__dao_gen_alloc")) << ir;
-    expect(contains(ir, "ret ptr")) << ir;
+    // Init returns a { ptr, ptr } generator pair.
+    expect(contains(ir, "ret %dao.generator")) << ir;
   };
 
   "generator resume has state dispatch"_test = [] {
@@ -764,7 +765,7 @@ suite<"generators"> generators = [] {
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
     // Consumer calls resume, reads done flag, reads yield slot.
-    expect(contains(ir, "call void @nums.resume")) << ir;
+    expect(contains(ir, "call void %")) << ir;
     expect(contains(ir, "done.ptr")) << ir;
     expect(contains(ir, "yield.val")) << ir;
     // Destroy calls __dao_gen_free.
@@ -828,11 +829,30 @@ suite<"generators"> generators = [] {
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
     // Init function takes params.
-    expect(contains(ir, "define ptr @range(i32 %start, i32 %end)")) << ir;
+    expect(contains(ir, "define %dao.generator @range(i32 %start, i32 %end)")) << ir;
     // Resume function.
     expect(contains(ir, "define void @range.resume(ptr")) << ir;
     // Frame type exists.
     expect(contains(ir, "dao.gen.range")) << ir;
+  };
+
+  "generator through storage"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn single(): Generator<i32>\n"
+        "  yield 42\n"
+        "\n"
+        "fn main(): i32\n"
+        "  let g: Generator<i32> = single()\n"
+        "  for x in g:\n"
+        "    return x\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors: " << ir;
+    // Generator pair survives store/load through local.
+    expect(contains(ir, "%dao.generator")) << ir;
+    expect(contains(ir, "gen.frame")) << ir;
+    expect(contains(ir, "gen.resume")) << ir;
+    expect(contains(ir, "__dao_gen_free")) << ir;
   };
 };
 
