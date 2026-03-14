@@ -1,2 +1,10 @@
+[env]
+# Cap build parallelism at 4 or nproc, whichever is smaller.
+# Override locally via mise.local.toml or shell export.
+DAO_BUILD_JOBS = "{% set cpus = num_cpus() | int %}{% if cpus > 4 %}4{% else %}{{ cpus }}{% endif %}"
+CMAKE_BUILD_PARALLEL_LEVEL = "{{ env.DAO_BUILD_JOBS }}"
+MAKEFLAGS = "-j{{ env.DAO_BUILD_JOBS }}"
+
 [tools]
 conan = "2.26.2"
+"aqua:go-task/task" = "3.40.1"

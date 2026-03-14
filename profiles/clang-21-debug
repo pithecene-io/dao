@@ -9,4 +9,5 @@ os=Linux
 
 [conf]
 tools.build:compiler_executables={"c": "clang", "cpp": "clang++"}
+tools.build:jobs={{ os.getenv("DAO_BUILD_JOBS", default="4") }}
 termcap/*:tools.build:cflags=["-std=gnu11"]

@@ -29,5 +29,6 @@ examples/astar
 examples/pipelines
 examples/unsafe
 
-# Local Claude Code instructions
+# Local machine config
 CLAUDE.local.md
+mise.local.toml
