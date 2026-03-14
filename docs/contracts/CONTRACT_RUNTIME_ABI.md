@@ -121,11 +121,31 @@ Properties:
 
 ### Generator type representation
 
-`Generator<T>` is represented at the ABI boundary as an opaque pointer
-to a compiler-generated frame struct. The frame layout is private to the
-backend and may vary per generator function. Consumer code accesses the
-generator exclusively through the `__dao_gen_*` hooks and
-compiler-generated resume functions.
+`Generator<T>` is represented at the ABI boundary as a fat pair:
+
+```
+%dao.generator = type { ptr, ptr }
+```
+
+C-equivalent:
+
+```c
+struct dao_generator {
+    void *frame;
+    void (*resume)(void *frame);
+};
+```
+
+Properties:
+
+- `frame` points to a compiler-generated frame struct allocated by
+  `__dao_gen_alloc`. The frame layout is private to the backend and
+  may vary per generator function.
+- `resume` is a pointer to the generator's resume function, which
+  advances the generator to its next yield point when called with
+  the frame pointer.
+- Consumer code accesses the generator exclusively through the
+  `__dao_gen_*` hooks and the resume function pointer.
 
 ## Ownership and lifetime rules
 

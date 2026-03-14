@@ -88,7 +88,7 @@ auto main(int argc, char* argv[]) -> int {
   std::cout << "  frontend: " << frontend_dir << "\n";
   std::cout << "  examples: " << examples_dir << "\n";
 
-  if (!svr.listen("0.0.0.0", port)) {
+  if (!svr.listen("127.0.0.1", port)) {
     std::cerr << "error: failed to start server on port " << port << "\n";
     return EXIT_FAILURE;
   }

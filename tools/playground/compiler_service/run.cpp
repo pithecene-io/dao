@@ -17,6 +17,7 @@
 #include <nlohmann/json.hpp>
 
 #include <array>
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -264,8 +265,11 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
     return;
   }
 
-  // Emit object file.
-  auto tmp_dir = std::filesystem::temp_directory_path() / "dao_playground";
+  // Emit object file in a per-request temp directory.
+  static std::atomic<uint64_t> request_id{0};
+  auto run_id = std::to_string(request_id.fetch_add(1));
+  auto tmp_dir =
+      std::filesystem::temp_directory_path() / "dao_playground" / run_id;
   std::filesystem::create_directories(tmp_dir);
   auto obj_path = tmp_dir / "playground.o";
   auto exe_path = tmp_dir / "playground_exe";
@@ -381,10 +385,9 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
     stderr_text += exec_error;
   }
 
-  // Clean up.
-  std::filesystem::remove(exe_path);
-  std::filesystem::remove(stdout_path);
-  std::filesystem::remove(stderr_path);
+  // Clean up per-request directory.
+  std::error_code ec;
+  std::filesystem::remove_all(tmp_dir, ec);
 
   nlohmann::json response = {
       {"stdout", stdout_text},
