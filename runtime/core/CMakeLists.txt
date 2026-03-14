@@ -2,6 +2,7 @@ add_library(dao_runtime STATIC
   io.c
   equality.c
   convert.c
+  generator.c
 )
 
 # This is C code, not C++.

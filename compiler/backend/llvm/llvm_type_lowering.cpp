@@ -75,8 +75,8 @@ auto LlvmTypeLowering::lower(const Type* type) -> llvm::Type* {
   }
 
   case TypeKind::Generator:
-    error_ = "generator/coroutine type lowering not yet implemented";
-    return nullptr;
+    // Generator<T> is an opaque pointer to a compiler-generated frame.
+    return llvm::PointerType::getUnqual(ctx_);
   }
 
   error_ = "unknown type kind";

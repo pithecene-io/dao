@@ -38,6 +38,7 @@ enum class MirInstKind : std::uint8_t {
   IterInit,
   IterHasNext,
   IterNext,
+  IterDestroy,
 
   // Coroutine
   Yield,

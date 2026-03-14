@@ -267,6 +267,11 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
         place->local = var_local;
         emit_effect(stmt.span, MirStore{place, next_val});
 
+        // Push iterator cleanup so early returns inside the body
+        // emit MirIterDestroy before the return terminator.
+        active_regions_.push_back(
+            ActiveRegion{MirIterDestroy{iter_val}, stmt.span});
+
         for (const auto* s : hir_for.body) {
           lower_stmt(*s);
         }
@@ -274,7 +279,11 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
           emit_terminator(stmt.span, MirBr{cond_bb->id});
         }
 
+        active_regions_.pop_back();
+
         switch_to_block(exit_bb);
+        // Free the generator frame on the normal loop-exit path.
+        emit_effect(stmt.span, MirIterDestroy{iter_val});
       },
       [&](const HirYield& yield) {
         auto val = lower_expr_value(*yield.value);

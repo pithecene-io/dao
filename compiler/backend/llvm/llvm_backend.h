@@ -74,8 +74,8 @@ private:
     llvm::Function* llvm_fn = nullptr;
     llvm::IRBuilder<>* builder = nullptr;
 
-    // MIR LocalId → LLVM alloca (for named locals / params)
-    std::unordered_map<uint32_t, llvm::AllocaInst*> locals;
+    // MIR LocalId → LLVM pointer (alloca for normal fns, frame GEP for generators)
+    std::unordered_map<uint32_t, llvm::Value*> locals;
 
     // MIR LocalId → semantic Type* (for place resolution)
     std::unordered_map<uint32_t, const Type*> local_types;
@@ -88,6 +88,25 @@ private:
 
     // MIR BlockId → LLVM BasicBlock*
     std::unordered_map<uint32_t, llvm::BasicBlock*> blocks;
+
+    // --- Generator iteration state (consumer side) ---
+
+    // MIR ValueId (from IterInit) → resume function for that generator
+    std::unordered_map<uint32_t, llvm::Function*> iter_resume_fns;
+
+    // MIR ValueId (from IterInit) → yield type (T in Generator<T>)
+    std::unordered_map<uint32_t, const Type*> iter_yield_types;
+
+    // --- Generator function state (producer side) ---
+
+    // Frame pointer (alloca/heap ptr) for the generator being lowered.
+    llvm::Value* gen_frame_ptr = nullptr;
+
+    // Frame struct type for the generator being lowered.
+    llvm::StructType* gen_frame_type = nullptr;
+
+    // Yield-point state index counter.
+    uint32_t gen_next_state = 1;
   };
 
   // Top-level lowering phases (called by lower()).
@@ -130,6 +149,23 @@ private:
                 FunctionState& state) -> bool;
   auto lower_cond_br(const MirCondBr& p, const MirInst& inst,
                      FunctionState& state) -> bool;
+
+  // Generator function lowering
+  static auto is_generator_function(const MirFunction& fn) -> bool;
+  auto create_generator_frame_type(const MirFunction& fn)
+      -> llvm::StructType*;
+  auto lower_generator_init(const MirFunction& fn) -> bool;
+  auto lower_generator_resume(const MirFunction& fn) -> bool;
+
+  // Iterator instruction lowering (consumer side)
+  auto lower_iter_init(const MirIterInit& p, const MirInst& inst,
+                       FunctionState& state) -> bool;
+  auto lower_iter_has_next(const MirIterHasNext& p, const MirInst& inst,
+                           FunctionState& state) -> bool;
+  auto lower_iter_next(const MirIterNext& p, const MirInst& inst,
+                       FunctionState& state) -> bool;
+  auto lower_iter_destroy(const MirIterDestroy& p, const MirInst& inst,
+                          FunctionState& state) -> bool;
 
   // Place resolution — walk projection chains to an LLVM pointer.
   auto resolve_place(const MirPlace& place,

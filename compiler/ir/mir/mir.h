@@ -97,6 +97,7 @@ struct MirConstruct { const TypeStruct* struct_type; std::vector<MirValueId>* fi
 struct MirIterInit    { MirValueId iter_operand; };
 struct MirIterHasNext { MirValueId iter_operand; };
 struct MirIterNext    { MirValueId iter_operand; };
+struct MirIterDestroy { MirValueId iter_operand; };
 
 struct MirYieldInst   { MirValueId value; };
 
@@ -122,7 +123,7 @@ using MirPayload = std::variant<
     MirStore, MirLoad, MirAddrOf,
     MirFieldAccess, MirIndexAccess,
     MirFnRef, MirCall, MirConstruct,
-    MirIterInit, MirIterHasNext, MirIterNext,
+    MirIterInit, MirIterHasNext, MirIterNext, MirIterDestroy,
     MirYieldInst,
     MirModeEnter, MirModeExit, MirResourceEnter, MirResourceExit,
     MirLambdaInst,

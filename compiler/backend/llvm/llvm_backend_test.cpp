@@ -698,6 +698,144 @@ suite<"runtime_abi"> runtime_abi = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Generator / coroutine lowering
+// ---------------------------------------------------------------------------
+
+suite<"generators"> generators = [] {
+  "generator declares init and resume functions"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn single(): Generator<i32>\n"
+        "  yield 42\n"
+        "\n"
+        "fn main(): i32\n"
+        "  for x in single():\n"
+        "    return x\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Init function: returns an opaque pointer.
+    expect(contains(ir, "define ptr @single()")) << ir;
+    // Resume function: takes ptr, returns void.
+    expect(contains(ir, "define void @single.resume(ptr")) << ir;
+  };
+
+  "generator init allocates frame"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn single(): Generator<i32>\n"
+        "  yield 1\n"
+        "\n"
+        "fn main(): i32\n"
+        "  for x in single():\n"
+        "    return x\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "__dao_gen_alloc")) << ir;
+    expect(contains(ir, "ret ptr")) << ir;
+  };
+
+  "generator resume has state dispatch"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn single(): Generator<i32>\n"
+        "  yield 42\n"
+        "\n"
+        "fn main(): i32\n"
+        "  for x in single():\n"
+        "    return x\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "switch i32")) << ir;
+    expect(contains(ir, "yield.ptr")) << ir;
+  };
+
+  "for-loop over generator produces iterator ops"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn nums(): Generator<i32>\n"
+        "  yield 1\n"
+        "  yield 2\n"
+        "\n"
+        "fn main(): i32\n"
+        "  let sum: i32 = 0\n"
+        "  for x in nums():\n"
+        "    sum = sum + x\n"
+        "  return sum\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Consumer calls resume, reads done flag, reads yield slot.
+    expect(contains(ir, "call void @nums.resume")) << ir;
+    expect(contains(ir, "done.ptr")) << ir;
+    expect(contains(ir, "yield.val")) << ir;
+    // Destroy calls __dao_gen_free.
+    expect(contains(ir, "__dao_gen_free")) << ir;
+  };
+
+  "early return from for-loop frees generator frame"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn single(): Generator<i32>\n"
+        "  yield 42\n"
+        "\n"
+        "fn main(): i32\n"
+        "  for x in single():\n"
+        "    return x\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // The early-return path must call __dao_gen_free before returning.
+    // Count occurrences: one for the early-return path, one for the
+    // normal loop-exit path.
+    size_t count = 0;
+    std::string::size_type pos = 0;
+    while ((pos = ir.find("__dao_gen_free", pos)) != std::string::npos) {
+      ++count;
+      ++pos;
+    }
+    expect(count >= 2u) << "expected >=2 gen_free calls (early + normal), got "
+                        << count << "\n" << ir;
+  };
+
+  "init passes alignof to gen_alloc"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn single(): Generator<i32>\n"
+        "  yield 1\n"
+        "\n"
+        "fn main(): i32\n"
+        "  for x in single():\n"
+        "    return x\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Alignment is computed via GEP-from-null offsetof trick, not
+    // hardcoded.  LLVM constant-folds the GEP to a ConstantExpr,
+    // so we check for the { i8, %frame } wrapper struct pattern.
+    expect(contains(ir, "{ i8, %dao.gen.single }")) << ir;
+  };
+
+  "range generator with params"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn range(start: i32, end: i32): Generator<i32>\n"
+        "  let i: i32 = start\n"
+        "  while i < end:\n"
+        "    yield i\n"
+        "    i = i + 1\n"
+        "\n"
+        "fn main(): i32\n"
+        "  let sum: i32 = 0\n"
+        "  for x in range(0, 5):\n"
+        "    sum = sum + x\n"
+        "  return sum\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Init function takes params.
+    expect(contains(ir, "define ptr @range(i32 %start, i32 %end)")) << ir;
+    // Resume function.
+    expect(contains(ir, "define void @range.resume(ptr")) << ir;
+    // Frame type exists.
+    expect(contains(ir, "dao.gen.range")) << ir;
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)
