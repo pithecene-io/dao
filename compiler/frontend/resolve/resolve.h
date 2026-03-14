@@ -20,7 +20,10 @@ struct ResolveResult {
 // Run name resolution over a parsed file.
 // The FileNode must remain valid for the lifetime of the returned result
 // (symbol name string_views point into the AST's source buffer).
-auto resolve(const FileNode& file) -> ResolveResult;
+// prelude_bytes indicates the byte offset boundary: declarations whose
+// source span starts before this offset are prelude (stdlib) code and
+// are exempt from user-code naming restrictions.
+auto resolve(const FileNode& file, uint32_t prelude_bytes = 0) -> ResolveResult;
 
 } // namespace dao
 

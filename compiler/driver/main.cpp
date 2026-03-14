@@ -204,7 +204,8 @@ auto run_frontend(const std::filesystem::path& path) -> FrontendResult {
   }
 
   auto filename = path.filename().string();
-  auto resolve_result = dao::resolve(*preparsed.parsed.parse_result.file);
+  auto resolve_result = dao::resolve(*preparsed.parsed.parse_result.file,
+                                     preparsed.prelude_bytes);
   bool has_errors = print_error_diagnostics(
       filename, preparsed.parsed.source, resolve_result.diagnostics,
       preparsed.prelude_lines);
@@ -354,7 +355,8 @@ void cmd_tokens(const std::filesystem::path& path) {
   // Run name resolution for resolve-driven classifications.
   dao::ResolveResult resolve_result;
   if (result.parsed.parse_result.file != nullptr) {
-    resolve_result = dao::resolve(*result.parsed.parse_result.file);
+    resolve_result = dao::resolve(*result.parsed.parse_result.file,
+                                    result.prelude_bytes);
   }
 
   auto sem_tokens = dao::classify_tokens(result.parsed.lex_result.tokens,
@@ -379,7 +381,8 @@ void cmd_resolve(const std::filesystem::path& path) {
     return;
   }
 
-  auto resolve_result = dao::resolve(*result.parsed.parse_result.file);
+  auto resolve_result = dao::resolve(*result.parsed.parse_result.file,
+                                     result.prelude_bytes);
 
   // Print declared symbols (user region only).
   std::cout << "Symbols:\n";

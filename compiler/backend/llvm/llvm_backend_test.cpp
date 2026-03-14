@@ -45,19 +45,20 @@ struct LlvmTestPipeline {
   llvm::LLVMContext llvm_ctx;
   LlvmBackendResult llvm_result;
 
-  explicit LlvmTestPipeline(const std::string& src)
+  explicit LlvmTestPipeline(const std::string& src,
+                            uint32_t prelude_bytes = 0)
       : source("test.dao", std::string(src)),
         lex_result(lex(source)),
         parse_result(parse(lex_result.tokens)) {
     if (parse_result.file != nullptr) {
-      resolve_result = resolve(*parse_result.file);
+      resolve_result = resolve(*parse_result.file, prelude_bytes);
       check_result = typecheck(*parse_result.file, resolve_result, types);
       hir_result = build_hir(*parse_result.file, resolve_result, check_result, hir_ctx);
       if (hir_result.module != nullptr) {
         mir_result = build_mir(*hir_result.module, mir_ctx, types);
         if (mir_result.module != nullptr) {
           LlvmBackend backend(llvm_ctx);
-          llvm_result = backend.lower(*mir_result.module);
+          llvm_result = backend.lower(*mir_result.module, prelude_bytes);
         }
       }
     }
@@ -665,16 +666,35 @@ suite<"runtime_abi"> runtime_abi = [] {
   };
 
   "prelude print generates correct runtime call"_test = [] {
+    // The extern declaration is "prelude" — mark its region so the
+    // resolver allows the __dao_ prefix.
+    constexpr std::string_view prelude =
+        "extern fn __dao_io_write_stdout(msg: string): void\n";
     LlvmTestPipeline pipe(
-        "extern fn __dao_io_write_stdout(msg: string): void\n"
+        std::string(prelude) +
         "fn print(msg: string): void -> __dao_io_write_stdout(msg)\n"
         "\n"
         "fn main(): void\n"
-        "  print(\"hello\")\n");
+        "  print(\"hello\")\n",
+        static_cast<uint32_t>(prelude.size()));
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
     expect(contains(ir, "__dao_io_write_stdout")) << ir;
     expect(contains(ir, "dao.string")) << ir;
+  };
+
+  "runtime hooks pre-declared by backend unconditionally"_test = [] {
+    // Even without any prelude extern declarations, runtime hooks
+    // should be present in the module because LlvmBackend::lower()
+    // calls LlvmRuntimeHooks::declare_all() unconditionally.
+    LlvmTestPipeline pipe(
+        "fn main(): void\n"
+        "  return\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "declare void @__dao_io_write_stdout")) << ir;
+    expect(contains(ir, "declare i1 @__dao_eq_i32")) << ir;
+    expect(contains(ir, "declare i1 @__dao_eq_f64")) << ir;
   };
 };
 

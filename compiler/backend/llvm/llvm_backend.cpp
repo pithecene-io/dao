@@ -7,6 +7,7 @@
 
 #include "backend/llvm/llvm_backend.h"
 
+#include "backend/llvm/llvm_runtime_hooks.h"
 #include "ir/mir/mir.h"
 
 #include <llvm/IR/Constants.h>
@@ -41,6 +42,11 @@ auto LlvmBackend::lower(const MirModule& mir_module, uint32_t prelude_bytes)
   module_ = std::make_unique<llvm::Module>("dao_module", ctx_);
   diagnostics_.clear();
 
+  // Declare runtime hooks with canonical signatures before processing
+  // MIR functions. This makes LlvmRuntimeHooks the authoritative source.
+  LlvmRuntimeHooks hooks(*module_, types_);
+  hooks.declare_all();
+
   declare_functions(mir_module, prelude_bytes);
   lower_bodies(mir_module, prelude_bytes);
 
@@ -68,6 +74,12 @@ void LlvmBackend::declare_functions(const MirModule& mir_module,
                                      uint32_t prelude_bytes) {
   for (const auto* mir_fn : mir_module.functions) {
     if (mir_fn->symbol == nullptr) {
+      continue;
+    }
+
+    // Runtime hooks are already declared by LlvmRuntimeHooks with
+    // canonical signatures — skip re-declaration from MIR externs.
+    if (LlvmRuntimeHooks::is_runtime_hook(mir_fn->symbol->name)) {
       continue;
     }
 

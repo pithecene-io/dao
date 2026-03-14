@@ -443,6 +443,40 @@ suite<"resolve_concepts"> resolve_concepts = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Reserved prefix enforcement
+// ---------------------------------------------------------------------------
+
+suite<"reserved_prefix"> reserved_prefix = [] {
+  "reserved __dao_ prefix rejected in user code"_test = [] {
+    auto result = resolve_source("test.dao",
+        "fn __dao_evil(): void\n"
+        "  return\n");
+    expect(result.resolve_result.diagnostics.size() == 1_u)
+        << "should reject __dao_ prefix";
+    expect(result.resolve_result.diagnostics[0].message.find("__dao_")
+           != std::string::npos)
+        << "error message mentions __dao_";
+  };
+
+  "reserved __dao_ prefix allowed in prelude region"_test = [] {
+    // Simulate prelude: the extern declaration is within the prelude region.
+    std::string source =
+        "extern fn __dao_eq_i32(a: i32, b: i32): bool\n"
+        "fn main(): void\n"
+        "  return\n";
+    SourceBuffer buf("test.dao", std::string(source));
+    auto lex_result = lex(buf);
+    auto parse_result = parse(lex_result.tokens);
+    // prelude_bytes covers the extern declaration line (45 chars + newline).
+    auto resolve_result = resolve(*parse_result.file, 46);
+    for (const auto& diag : resolve_result.diagnostics) {
+      expect(diag.message.find("__dao_") == std::string::npos)
+          << "prelude __dao_ should not be rejected: " << diag.message;
+    }
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {
