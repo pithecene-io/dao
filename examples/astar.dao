@@ -2,10 +2,22 @@ type NodeId = i32
 
 fn heuristic(a: NodeId, b: NodeId): i32 -> a + b
 
-fn reconstruct_path(came_from: i32, start: NodeId, goal: NodeId): i32 -> start + goal
+fn reconstruct_path(came_from: i32, start: NodeId, goal: NodeId): i32
+  return start + goal
 
 fn a_star(start: NodeId, goal: NodeId): i32
-    if start == goal:
-        return reconstruct_path(0, start, goal)
-    let cost: i32 = heuristic(start, goal)
-    return cost
+  if start == goal:
+    return reconstruct_path(0, start, goal)
+  let cost: i32 = heuristic(start, goal)
+  return cost
+
+fn main(): i32
+  let cost: i32 = a_star(3, 7)
+  print("a_star(3, 7) cost:")
+  print_i32(cost)
+
+  let same: i32 = a_star(5, 5)
+  print("a_star(5, 5) cost:")
+  print_i32(same)
+
+  return 0

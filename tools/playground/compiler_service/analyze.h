@@ -3,9 +3,12 @@
 
 #include <httplib.h>
 
+#include <filesystem>
+
 namespace dao::playground {
 
-void handle_analyze(const httplib::Request& req, httplib::Response& res);
+void handle_analyze(const httplib::Request& req, httplib::Response& res,
+                    const std::filesystem::path& repo_root);
 
 } // namespace dao::playground
 

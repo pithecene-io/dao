@@ -18,13 +18,45 @@
 
 #include <nlohmann/json.hpp>
 
+#include <fstream>
 #include <sstream>
 #include <string>
 
 namespace dao::playground {
 
+namespace {
+
+auto read_file(const std::filesystem::path& path) -> std::string {
+  std::ifstream file(path);
+  if (!file) {
+    return {};
+  }
+  return {std::istreambuf_iterator<char>(file),
+          std::istreambuf_iterator<char>()};
+}
+
+auto load_prelude(const std::filesystem::path& repo_root) -> std::string {
+  auto stdlib_core = repo_root / "stdlib" / "core";
+  std::string prelude;
+  if (!std::filesystem::exists(stdlib_core)) {
+    return prelude;
+  }
+  for (const auto& entry :
+       std::filesystem::directory_iterator(stdlib_core)) {
+    if (entry.path().extension() != ".dao") {
+      continue;
+    }
+    prelude += read_file(entry.path());
+    prelude += '\n';
+  }
+  return prelude;
+}
+
+} // namespace
+
 // NOLINTBEGIN(readability-magic-numbers)
-void handle_analyze(const httplib::Request& req, httplib::Response& res) {
+void handle_analyze(const httplib::Request& req, httplib::Response& res,
+                    const std::filesystem::path& repo_root) {
   nlohmann::json request;
   try {
     request = nlohmann::json::parse(req.body);
@@ -40,37 +72,56 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     return;
   }
 
-  auto source_text = request["source"].get<std::string>();
-  SourceBuffer source("<playground>", std::move(source_text));
+  // Load prelude and prepend to user source.
+  auto prelude_source = load_prelude(repo_root);
+  auto prelude_bytes = static_cast<uint32_t>(prelude_source.size());
+  uint32_t prelude_lines = 0;
+  for (char chr : prelude_source) {
+    if (chr == '\n') {
+      ++prelude_lines;
+    }
+  }
+
+  auto user_source = request["source"].get<std::string>();
+  auto combined = prelude_source + user_source;
+  SourceBuffer source("<playground>", std::move(combined));
   auto lex_result = lex(source);
 
-  // Build token array (filtering synthetic tokens).
+  // Build token array (filtering synthetic tokens, skipping prelude tokens).
   nlohmann::json tokens = nlohmann::json::array();
   for (const auto& tok : lex_result.tokens) {
     if (is_synthetic_token(tok.kind)) {
       continue;
     }
+    if (tok.span.offset < prelude_bytes) {
+      continue;
+    }
     auto loc = source.line_col(tok.span.offset);
+    auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
     tokens.push_back({
         {"kind", token_kind_name(tok.kind)},
         {"category", token_category(tok.kind)},
-        {"offset", tok.span.offset},
+        {"offset", tok.span.offset - prelude_bytes},
         {"length", tok.span.length},
-        {"line", loc.line},
+        {"line", line},
         {"col", loc.col},
         {"text", std::string(tok.text)},
     });
   }
 
-  // Collect diagnostics from lexer.
+  // Collect diagnostics from lexer (skip prelude-origin).
   nlohmann::json diagnostics = nlohmann::json::array();
   for (const auto& diag : lex_result.diagnostics) {
+    if (diag.span.offset < prelude_bytes) {
+      continue;
+    }
     auto loc = source.line_col(diag.span.offset);
+    auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
     diagnostics.push_back({
         {"severity", "error"},
-        {"offset", diag.span.offset},
+        {"offset", diag.span.offset - prelude_bytes},
         {"length", diag.span.length},
-        {"line", loc.line},
+        {"line", line},
         {"col", loc.col},
         {"message", diag.message},
     });
@@ -83,12 +134,16 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     parse_result = parse(lex_result.tokens);
 
     for (const auto& diag : parse_result.diagnostics) {
+      if (diag.span.offset < prelude_bytes) {
+        continue;
+      }
       auto loc = source.line_col(diag.span.offset);
+      auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
       diagnostics.push_back({
           {"severity", "error"},
-          {"offset", diag.span.offset},
+          {"offset", diag.span.offset - prelude_bytes},
           {"length", diag.span.length},
-          {"line", loc.line},
+          {"line", line},
           {"col", loc.col},
           {"message", diag.message},
       });
@@ -109,15 +164,19 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
   ResolveResult resolve_result;
   bool lex_parse_clean = diagnostics.empty() && parse_result.file != nullptr;
   if (lex_parse_clean) {
-    resolve_result = resolve(*parse_result.file);
+    resolve_result = resolve(*parse_result.file, prelude_bytes);
 
     for (const auto& diag : resolve_result.diagnostics) {
+      if (diag.span.offset < prelude_bytes) {
+        continue;
+      }
       auto loc = source.line_col(diag.span.offset);
+      auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
       diagnostics.push_back({
           {"severity", "error"},
-          {"offset", diag.span.offset},
+          {"offset", diag.span.offset - prelude_bytes},
           {"length", diag.span.length},
-          {"line", loc.line},
+          {"line", line},
           {"col", loc.col},
           {"message", diag.message},
       });
@@ -132,12 +191,16 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
     auto sem_tokens =
         classify_tokens(lex_result.tokens, parse_result.file, &resolve_result);
     for (const auto& stok : sem_tokens) {
+      if (stok.span.offset < prelude_bytes) {
+        continue;
+      }
       auto loc = source.line_col(stok.span.offset);
+      auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
       semantic_tokens_json.push_back({
           {"kind", stok.kind},
-          {"offset", stok.span.offset},
+          {"offset", stok.span.offset - prelude_bytes},
           {"length", stok.span.length},
-          {"line", loc.line},
+          {"line", line},
           {"col", loc.col},
       });
     }
@@ -158,13 +221,17 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
 
     bool has_errors = false;
     for (const auto& diag : check_result.diagnostics) {
+      if (diag.span.offset < prelude_bytes) {
+        continue;
+      }
       auto loc = source.line_col(diag.span.offset);
+      auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
       diagnostics.push_back({
           {"severity",
            diag.severity == Severity::Error ? "error" : "warning"},
-          {"offset", diag.span.offset},
+          {"offset", diag.span.offset - prelude_bytes},
           {"length", diag.span.length},
-          {"line", loc.line},
+          {"line", line},
           {"col", loc.col},
           {"message", diag.message},
       });
@@ -179,12 +246,16 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
                                   check_result, hir_ctx);
 
       for (const auto& diag : hir_result.diagnostics) {
+        if (diag.span.offset < prelude_bytes) {
+          continue;
+        }
         auto loc = source.line_col(diag.span.offset);
+        auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
         diagnostics.push_back({
             {"severity", "error"},
-            {"offset", diag.span.offset},
+            {"offset", diag.span.offset - prelude_bytes},
             {"length", diag.span.length},
-            {"line", loc.line},
+            {"line", line},
             {"col", loc.col},
             {"message", diag.message},
         });
@@ -200,12 +271,16 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
             build_mir(*hir_result.module, mir_ctx, types);
 
         for (const auto& diag : mir_result.diagnostics) {
+          if (diag.span.offset < prelude_bytes) {
+            continue;
+          }
           auto loc = source.line_col(diag.span.offset);
+          auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
           diagnostics.push_back({
               {"severity", "error"},
-              {"offset", diag.span.offset},
+              {"offset", diag.span.offset - prelude_bytes},
               {"length", diag.span.length},
-              {"line", loc.line},
+              {"line", line},
               {"col", loc.col},
               {"message", diag.message},
           });
@@ -219,15 +294,24 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res) {
           // LLVM IR lowering — gate on MIR success.
           llvm::LLVMContext llvm_ctx;
           LlvmBackend llvm_backend(llvm_ctx);
-          auto llvm_result = llvm_backend.lower(*mir_result.module);
+          auto llvm_result = llvm_backend.lower(*mir_result.module, prelude_bytes);
 
           for (const auto& diag : llvm_result.diagnostics) {
+            if (diag.severity == Severity::Warning &&
+                diag.span.offset < prelude_bytes) {
+              continue;
+            }
+            if (diag.span.offset < prelude_bytes) {
+              continue;
+            }
             auto loc = source.line_col(diag.span.offset);
+            auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
             diagnostics.push_back({
-                {"severity", "error"},
-                {"offset", diag.span.offset},
+                {"severity",
+                 diag.severity == Severity::Error ? "error" : "warning"},
+                {"offset", diag.span.offset - prelude_bytes},
                 {"length", diag.span.length},
-                {"line", loc.line},
+                {"line", line},
                 {"col", loc.col},
                 {"message", diag.message},
             });
