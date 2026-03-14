@@ -1,0 +1,43 @@
+fn abs(x: i32): i32
+  if x < 0:
+    return 0 - x
+  return x
+
+fn max(a: i32, b: i32): i32
+  if a > b:
+    return a
+  return b
+
+fn factorial(n: i32): i32
+  let result: i32 = 1
+  let i: i32 = 1
+  while i <= n:
+    result = result * i
+    i = i + 1
+  return result
+
+fn fibonacci(n: i32): i32
+  let a: i32 = 0
+  let b: i32 = 1
+  let i: i32 = 0
+  while i < n:
+    let tmp: i32 = b
+    b = a + b
+    a = tmp
+    i = i + 1
+  return a
+
+fn main(): i32
+  print("abs(-7):")
+  print_i32(abs(0 - 7))
+
+  print("max(3, 8):")
+  print_i32(max(3, 8))
+
+  print("factorial(6):")
+  print_i32(factorial(6))
+
+  print("fibonacci(10):")
+  print_i32(fibonacci(10))
+
+  return 0

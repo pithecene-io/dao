@@ -1,28 +1,28 @@
-fn range(n: i32): Generator<i32>
-    let i = 0
-    while i < n:
-        yield i
-        i = i + 1
-
 fn countdown(from: i32): Generator<i32>
-    let i = from
-    while i > 0:
-        yield i
-        i = i - 1
+  let i: i32 = from
+  while i > 0:
+    yield i
+    i = i - 1
 
 fn evens(n: i32): Generator<i32>
-    let i = 0
-    while i < n:
-        yield i * 2
-        i = i + 1
+  let i: i32 = 0
+  while i < n:
+    yield i * 2
+    i = i + 1
 
-fn sum_range(n: i32): i32
-    let total = 0
-    for x in range(n):
-        total = total + x
-    return total
+fn main(): i32
+  print("countdown from 5:")
+  for x in countdown(5):
+    print_i32(x)
 
-fn first_even(): i32
-    for x in evens(5):
-        return x
-    return 0
+  print("first 4 even numbers:")
+  for x in evens(4):
+    print_i32(x)
+
+  print("sum of range(5):")
+  let total: i32 = 0
+  for i in range(5):
+    total = total + i
+  print_i32(total)
+
+  return 0

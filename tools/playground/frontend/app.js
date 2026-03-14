@@ -9,7 +9,7 @@ import {
   Decoration,
   EditorView,
   ViewPlugin,
-} from "https://esm.sh/@codemirror/view@6.39.16";
+} from "https://esm.sh/@codemirror/view@6.39.16?deps=@codemirror/state@6.5.4";
 import {
   oneDark,
 } from "https://esm.sh/@codemirror/theme-one-dark@6.1.3?deps=@codemirror/state@6.5.4,@codemirror/view@6.39.16";
@@ -224,8 +224,97 @@ async function loadExamples() {
 }
 
 // ---------------------------------------------------------------------------
-// Tab switching
+// Run (compile + execute)
 // ---------------------------------------------------------------------------
+
+let runInFlight = false;
+
+async function doRun() {
+  if (runInFlight) return;
+  runInFlight = true;
+
+  const btn = document.getElementById("run-btn");
+  const output = document.getElementById("console-output");
+  btn.disabled = true;
+  btn.textContent = "⏳ Running…";
+  output.className = "";
+  output.textContent = "Compiling…";
+
+  const source = editor.state.doc.toString();
+
+  try {
+    const resp = await fetch("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source }),
+    });
+
+    if (!resp.ok) {
+      output.className = "console-error";
+      output.textContent = `Server error: ${resp.status}`;
+      return;
+    }
+
+    const data = await resp.json();
+
+    // Always update diagnostics from the run endpoint (clears stale errors).
+    renderDiagnostics(data.diagnostics || []);
+
+    if (data.exit_code === -1) {
+      // Compilation failed.
+      output.className = "console-error";
+      output.textContent = data.diagnostics && data.diagnostics.length > 0
+        ? "Compilation failed. See diagnostics."
+        : "Compilation failed (internal error).";
+      return;
+    }
+
+    // Build console text.
+    let text = "";
+    if (data.stdout) {
+      text += data.stdout;
+    }
+    if (data.stderr) {
+      if (text) text += "\n";
+      text += data.stderr;
+    }
+
+    if (data.exit_code !== 0) {
+      if (text) text += "\n";
+      text += `\nProcess exited with code ${data.exit_code}`;
+      output.className = "console-error";
+    } else {
+      output.className = "console-ok";
+    }
+
+    output.textContent = text || "(no output)";
+  } catch (err) {
+    output.className = "console-error";
+    output.textContent = `Run failed: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "▶ Run";
+    runInFlight = false;
+  }
+}
+
+document.getElementById("run-btn").addEventListener("click", doRun);
+
+// Ctrl+Enter / Cmd+Enter to run.
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    doRun();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// IR panel toggle + tab switching
+// ---------------------------------------------------------------------------
+
+document.getElementById("ir-toggle").addEventListener("click", () => {
+  document.getElementById("ir-panel").classList.toggle("expanded");
+});
 
 document.querySelector(".panel-tabs").addEventListener("click", (e) => {
   const tab = e.target.closest(".tab");
@@ -235,7 +324,7 @@ document.querySelector(".panel-tabs").addEventListener("click", (e) => {
   document.querySelectorAll(".panel-tabs .tab").forEach((t) =>
     t.classList.toggle("active", t === tab)
   );
-  document.querySelectorAll("#ir-panel .tab-content").forEach((c) =>
+  document.querySelectorAll("#ir-body .tab-content").forEach((c) =>
     c.classList.toggle("active", c.id === `${target}-output`)
   );
 });

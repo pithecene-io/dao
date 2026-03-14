@@ -2,4 +2,16 @@ fn double(x: i32): i32 -> x * 2
 
 fn increment(x: i32): i32 -> x + 1
 
+fn negate(x: i32): i32 -> 0 - x
+
 fn transform(x: i32): i32 -> x |> double |> increment
+
+fn main(): i32
+  print("5 |> double |> increment:")
+  print_i32(transform(5))
+
+  print("3 |> double |> negate:")
+  let result: i32 = 3 |> double |> negate
+  print_i32(result)
+
+  return 0
