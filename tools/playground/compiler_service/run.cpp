@@ -217,6 +217,13 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
   collect_diagnostics(diagnostics, source, hir_result.diagnostics,
                       prelude_bytes, prelude_lines);
   if (hir_result.module == nullptr) {
+    if (diagnostics.empty()) {
+      diagnostics.push_back({
+          {"severity", "error"}, {"offset", 0}, {"length", 0},
+          {"line", 1}, {"col", 1},
+          {"message", "HIR lowering failed (possible prelude error)"},
+      });
+    }
     nlohmann::json response = {
         {"stdout", ""},
         {"stderr", ""},
@@ -233,6 +240,13 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
   collect_diagnostics(diagnostics, source, mir_result.diagnostics,
                       prelude_bytes, prelude_lines);
   if (mir_result.module == nullptr) {
+    if (diagnostics.empty()) {
+      diagnostics.push_back({
+          {"severity", "error"}, {"offset", 0}, {"length", 0},
+          {"line", 1}, {"col", 1},
+          {"message", "MIR lowering failed (possible prelude error)"},
+      });
+    }
     nlohmann::json response = {
         {"stdout", ""},
         {"stderr", ""},

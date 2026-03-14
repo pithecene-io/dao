@@ -299,6 +299,15 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
           });
         }
 
+        if (mir_result.module == nullptr &&
+            !has_user_error(mir_result.diagnostics, prelude_bytes)) {
+          diagnostics.push_back({
+              {"severity", "error"}, {"offset", 0}, {"length", 0},
+              {"line", 1}, {"col", 1},
+              {"message", "MIR lowering failed (possible prelude error)"},
+          });
+        }
+
         if (mir_result.module != nullptr) {
           std::ostringstream mir_out;
           print_mir(mir_out, *mir_result.module);
@@ -337,6 +346,12 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
             llvm_ir_text = llvm_out.str();
           }
         }
+      } else if (!has_user_error(hir_result.diagnostics, prelude_bytes)) {
+        diagnostics.push_back({
+            {"severity", "error"}, {"offset", 0}, {"length", 0},
+            {"line", 1}, {"col", 1},
+            {"message", "HIR lowering failed (possible prelude error)"},
+        });
       }
     }
   }
