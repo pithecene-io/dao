@@ -1,17 +1,17 @@
 File
-  ExternFunctionDecl __i32_eq
+  ExternFunctionDecl __dao_eq_i32
     Param a: i32
     Param b: i32
     ReturnType: bool
-  ExternFunctionDecl __f64_eq
+  ExternFunctionDecl __dao_eq_f64
     Param a: f64
     Param b: f64
     ReturnType: bool
-  ExternFunctionDecl __bool_eq
+  ExternFunctionDecl __dao_eq_bool
     Param a: bool
     Param b: bool
     ReturnType: bool
-  ExternFunctionDecl __string_eq
+  ExternFunctionDecl __dao_eq_string
     Param a: string
     Param b: string
     ReturnType: bool
@@ -28,7 +28,7 @@ File
       ExprBody
         CallExpr
           Callee
-            Identifier __i32_eq
+            Identifier __dao_eq_i32
           Args
             Identifier self
             Identifier other
@@ -40,7 +40,7 @@ File
       ExprBody
         CallExpr
           Callee
-            Identifier __f64_eq
+            Identifier __dao_eq_f64
           Args
             Identifier self
             Identifier other
@@ -52,7 +52,7 @@ File
       ExprBody
         CallExpr
           Callee
-            Identifier __bool_eq
+            Identifier __dao_eq_bool
           Args
             Identifier self
             Identifier other
@@ -64,7 +64,7 @@ File
       ExprBody
         CallExpr
           Callee
-            Identifier __string_eq
+            Identifier __dao_eq_string
           Args
             Identifier self
             Identifier other

@@ -91,7 +91,7 @@ private:
   };
 
   // Top-level lowering phases (called by lower()).
-  void declare_functions(const MirModule& mir_module);
+  void declare_functions(const MirModule& mir_module, uint32_t prelude_bytes);
   void lower_bodies(const MirModule& mir_module, uint32_t prelude_bytes);
 
   auto lower_block(const MirBlock& block,

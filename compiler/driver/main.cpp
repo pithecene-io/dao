@@ -204,7 +204,8 @@ auto run_frontend(const std::filesystem::path& path) -> FrontendResult {
   }
 
   auto filename = path.filename().string();
-  auto resolve_result = dao::resolve(*preparsed.parsed.parse_result.file);
+  auto resolve_result = dao::resolve(*preparsed.parsed.parse_result.file,
+                                     preparsed.prelude_bytes);
   bool has_errors = print_error_diagnostics(
       filename, preparsed.parsed.source, resolve_result.diagnostics,
       preparsed.prelude_lines);
@@ -287,9 +288,23 @@ auto lower_to_llvm(const MirResult& mir, llvm::LLVMContext& llvm_ctx,
   auto result = backend.lower(*mir.mir.module,
                                mir.hir_result.frontend.prelude_bytes);
 
+  // Filter out prelude-origin warnings — they are expected (e.g. range's
+  // generator return type can't be lowered yet) and not actionable by
+  // the user. Prelude errors were already downgraded to warnings by the
+  // backend, so any warning in the prelude region is safe to suppress.
+  auto prelude_bytes = mir.hir_result.frontend.prelude_bytes;
+  std::vector<dao::Diagnostic> user_diags;
+  for (const auto& diag : result.diagnostics) {
+    if (diag.severity == dao::Severity::Warning &&
+        diag.span.offset < prelude_bytes) {
+      continue;
+    }
+    user_diags.push_back(diag);
+  }
+
   auto filename = path.filename().string();
   bool has_errors = print_diagnostics(filename, mir.hir_result.frontend.parsed.source,
-                                      result.diagnostics,
+                                      user_diags,
                                       mir.hir_result.frontend.prelude_lines);
 
   if (result.module == nullptr || has_errors) {
@@ -354,7 +369,8 @@ void cmd_tokens(const std::filesystem::path& path) {
   // Run name resolution for resolve-driven classifications.
   dao::ResolveResult resolve_result;
   if (result.parsed.parse_result.file != nullptr) {
-    resolve_result = dao::resolve(*result.parsed.parse_result.file);
+    resolve_result = dao::resolve(*result.parsed.parse_result.file,
+                                    result.prelude_bytes);
   }
 
   auto sem_tokens = dao::classify_tokens(result.parsed.lex_result.tokens,
@@ -379,7 +395,8 @@ void cmd_resolve(const std::filesystem::path& path) {
     return;
   }
 
-  auto resolve_result = dao::resolve(*result.parsed.parse_result.file);
+  auto resolve_result = dao::resolve(*result.parsed.parse_result.file,
+                                     result.prelude_bytes);
 
   // Print declared symbols (user region only).
   std::cout << "Symbols:\n";

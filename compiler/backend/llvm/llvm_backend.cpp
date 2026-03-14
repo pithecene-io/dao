@@ -7,6 +7,7 @@
 
 #include "backend/llvm/llvm_backend.h"
 
+#include "backend/llvm/llvm_runtime_hooks.h"
 #include "ir/mir/mir.h"
 
 #include <llvm/IR/Constants.h>
@@ -41,7 +42,12 @@ auto LlvmBackend::lower(const MirModule& mir_module, uint32_t prelude_bytes)
   module_ = std::make_unique<llvm::Module>("dao_module", ctx_);
   diagnostics_.clear();
 
-  declare_functions(mir_module);
+  // Declare runtime hooks with canonical signatures before processing
+  // MIR functions. This makes LlvmRuntimeHooks the authoritative source.
+  LlvmRuntimeHooks hooks(*module_, types_);
+  hooks.declare_all();
+
+  declare_functions(mir_module, prelude_bytes);
   lower_bodies(mir_module, prelude_bytes);
 
   // Kill the module if any hard errors remain.
@@ -64,17 +70,29 @@ auto LlvmBackend::lower(const MirModule& mir_module, uint32_t prelude_bytes)
 // ---------------------------------------------------------------------------
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void LlvmBackend::declare_functions(const MirModule& mir_module) {
+void LlvmBackend::declare_functions(const MirModule& mir_module,
+                                     uint32_t prelude_bytes) {
   for (const auto* mir_fn : mir_module.functions) {
     if (mir_fn->symbol == nullptr) {
+      continue;
+    }
+
+    // Runtime hooks are already declared by LlvmRuntimeHooks with
+    // canonical signatures — skip re-declaration from MIR externs.
+    if (LlvmRuntimeHooks::is_runtime_hook(mir_fn->symbol->name)) {
       continue;
     }
 
     // Build LLVM function type.
     auto* ret_type = types_.lower(mir_fn->return_type);
     if (ret_type == nullptr) {
+      size_t diag_idx = diagnostics_.size();
       emit_diagnostic(mir_fn->span,
                       "cannot lower return type: " + types_.error());
+      // Downgrade to warning for prelude functions.
+      if (mir_fn->span.offset < prelude_bytes) {
+        diagnostics_[diag_idx].severity = Severity::Warning;
+      }
       continue;
     }
 

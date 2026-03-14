@@ -20,7 +20,7 @@ Normative behavior lives in `CLAUDE.md` and `docs/contracts/`.
 Contracts and explanatory material.
 
 - `ARCH_INDEX.md` — this file
-- `contracts/` — normative contracts for structure, syntax, execution contexts, compiler architecture, bootstrap/interop posture, and tooling boundaries
+- `contracts/` — normative contracts for structure, syntax, execution contexts, compiler architecture, bootstrap/interop posture, tooling boundaries, and runtime ABI
 - `ROADMAP.md` — staged implementation plan from frontend skeleton to self-hosting, tooling maturity, and GPU expansion
 - `IMPLEMENTATION_PLAN.md` — concrete task sequence, toolchain decisions, and delivery order for Tasks 0–5
 - `task_specs/` — detailed per-task design specs for Tasks 6+
@@ -73,7 +73,7 @@ Compiler-internal target-agnostic representations.
 
 Target-specific lowering.
 
-- `llvm/` — initial backend target: MIR→LLVM IR lowering, type lowering, function/block/instruction emission, textual IR output, native object emission
+- `llvm/` — initial backend target: MIR→LLVM IR lowering, type lowering, runtime hook declarations, function/block/instruction emission, textual IR output, native object emission
 
 ### `compiler/driver/`
 
@@ -93,7 +93,7 @@ CLI, playground, and LSP.
 
 Execution support for lowered programs.
 
-- `core/` — minimal C runtime linked into every executable (builtin function implementations)
+- `core/` — minimal native runtime linked into every executable: ABI declarations (`dao_abi.h`), IO hooks (`io.c`), equality hooks (`equality.c`), scalar-to-string conversion hooks (`convert.c`)
 - `memory/` — scoped resource and allocation-domain support
 - `modes/` — runtime integration for `mode` semantics
 - `gpu/` — GPU/runtime bindings and execution support

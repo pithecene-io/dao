@@ -59,9 +59,10 @@ constexpr std::string_view kPredeclaredTypes[] = {
 
 class Resolver {
 public:
-  auto run(const FileNode& file) -> ResolveResult {
+  auto run(const FileNode& file, uint32_t prelude_bytes) -> ResolveResult {
     // Create the file scope and pre-populate builtins.
     file_scope_ = ctx_.make_scope(ScopeKind::File, nullptr);
+    prelude_bytes_ = prelude_bytes;
     populate_builtins();
 
     // Pass 1: Collect top-level declarations and imports.
@@ -81,6 +82,7 @@ private:
   ResolveContext ctx_;
   Scope* file_scope_ = nullptr;
   std::unordered_map<uint32_t, Symbol*> uses_;
+  uint32_t prelude_bytes_ = 0;
   std::vector<Diagnostic> diagnostics_;
 
   // --- Builtin population ---
@@ -176,6 +178,17 @@ private:
       // conformance to an existing type. Resolved in pass 2.
       return;
     default:
+      return;
+    }
+
+    // Reject user-code declarations that use the reserved __dao_ prefix.
+    // Prelude (stdlib) declarations are exempt — they legitimately declare
+    // runtime hooks under this prefix.
+    if (name.starts_with("__dao_") && name_span.offset >= prelude_bytes_) {
+      diagnostics_.push_back(Diagnostic::error(
+          name_span,
+          "'" + std::string(name) +
+              "': the '__dao_' prefix is reserved for compiler/runtime use"));
       return;
     }
 
@@ -654,9 +667,9 @@ private:
 // Public API
 // ---------------------------------------------------------------------------
 
-auto resolve(const FileNode& file) -> ResolveResult {
+auto resolve(const FileNode& file, uint32_t prelude_bytes) -> ResolveResult {
   Resolver resolver;
-  return resolver.run(file);
+  return resolver.run(file, prelude_bytes);
 }
 
 } // namespace dao

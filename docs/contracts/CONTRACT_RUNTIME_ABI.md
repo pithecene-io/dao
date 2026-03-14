@@ -1,0 +1,190 @@
+# CONTRACT_RUNTIME_ABI.md
+
+## Purpose
+
+Defines the Dao compiler/runtime ABI: the explicit boundary between
+compiler-generated code and runtime support functions required for
+program execution.
+
+This contract is normative. It is the authoritative specification for
+runtime-facing value shapes, hook naming, calling conventions, and
+ownership rules.
+
+## Scope
+
+This contract covers the **hosted-native** execution path only. It
+defines the minimum runtime surface required for compiler-generated
+binaries to execute using the Dao prelude (`stdlib/core/`) without
+user-written host-language glue.
+
+Out of scope:
+
+- scoped resource-domain memory semantics
+- parallel/GPU execution runtime
+- scheduler/executor architecture
+- allocator design
+- filesystem/network/IO beyond stdout
+
+## Strategic posture
+
+Dao owns the semantics. The runtime ABI is Dao-defined.
+
+The current runtime implementation language is C. This is a bootstrap
+decision, not a permanent architectural commitment. The native
+substrate must remain narrow enough that:
+
+- the implementation language can change (C, Rust, Zig, C++, etc.)
+- the foreign substrate shrinks over time as Dao matures
+- runtime policy and stdlib logic move upward into Dao itself
+- eventual self-hosting requires only a thin irreducible native layer
+
+Nothing in this contract cements C as Dao's permanent runtime language.
+
+## Runtime hook naming policy
+
+All Dao runtime hooks use the prefix `__dao_` followed by a
+domain-qualified name. This prefix is reserved for compiler/runtime
+use and must not appear in user code.
+
+Naming pattern: `__dao_<domain>_<operation>`
+
+Domains:
+
+| Domain     | Scope                                      |
+|------------|--------------------------------------------|
+| `io`       | Output, input (currently stdout only)      |
+| `eq`       | Equality comparison                        |
+| `conv`     | Value-to-value conversion (e.g. to_string) |
+
+Examples:
+
+| Hook                      | Signature (Dao surface)              |
+|---------------------------|--------------------------------------|
+| `__dao_io_write_stdout`   | `(msg: string): void`                |
+| `__dao_eq_i32`            | `(a: i32, b: i32): bool`            |
+| `__dao_eq_f64`            | `(a: f64, b: f64): bool`            |
+| `__dao_eq_bool`           | `(a: bool, b: bool): bool`          |
+| `__dao_eq_string`         | `(a: string, b: string): bool`      |
+| `__dao_conv_i32_to_string`| `(x: i32): string`                   |
+| `__dao_conv_f64_to_string`| `(x: f64): string`                   |
+| `__dao_conv_bool_to_string`| `(x: bool): string`                 |
+
+These are the **only** runtime hooks in the current supported slice.
+New hooks require updating this contract before implementation.
+
+## Canonical value representations
+
+### Scalar types
+
+| Dao type | LLVM IR type | C type     | Passing convention |
+|----------|-------------|------------|--------------------|
+| `i32`    | `i32`       | `int32_t`  | by value           |
+| `f64`    | `double`    | `double`   | by value           |
+| `bool`   | `i1`        | `bool`     | by value           |
+| `void`   | `void`      | `void`     | N/A                |
+
+### String type
+
+The Dao string is represented at the ABI boundary as a struct:
+
+```
+%dao.string = type { ptr, i64 }
+```
+
+C-equivalent:
+
+```c
+struct dao_string {
+    const char *ptr;
+    int64_t     len;
+};
+```
+
+Properties:
+
+- `ptr` points to a contiguous byte sequence of `len` bytes
+- not required to be null-terminated at the ABI boundary
+- `len` is the byte count, not a character or codepoint count
+- empty strings are valid (`ptr` may be null when `len` is 0)
+- string literals may point to static (read-only) storage
+
+### String passing convention
+
+- **Parameters**: string arguments are passed **by pointer** to the
+  struct (`const struct dao_string *`). The compiler emits a temporary
+  alloca and passes its address.
+- **Return values**: string-returning hooks return the struct **by
+  value** (`struct dao_string`). The caller receives a copy.
+
+## Ownership and lifetime rules
+
+For the current supported hook slice:
+
+1. **No ownership transfer.** Runtime hooks that receive strings
+   (printing, equality) borrow the data for the duration of the call.
+   The caller retains ownership.
+
+2. **Literals are static.** String literals emitted by the compiler
+   reside in static storage and are valid for the lifetime of the
+   process.
+
+3. **Conversion results use transient storage.** Scalar-to-string
+   conversion hooks (`__dao_conv_*_to_string`) return a `dao_string`
+   whose `ptr` points to thread-local transient storage. The result
+   is valid until the next call to the same conversion hook on the
+   same thread. Callers must consume or copy the result before the
+   next conversion call.
+
+4. **No caller-managed deallocation.** No hook in the current slice
+   requires the caller to free memory. If future hooks introduce
+   allocation, this contract must be updated first.
+
+## Stability
+
+### Stable (frozen for current slice)
+
+- `__dao_` naming prefix and domain-qualified pattern
+- `dao_string` struct layout (`{ ptr, i64 }`)
+- scalar type mappings (i32, f64, bool, void)
+- string passing convention (by-pointer in, by-value out)
+- all hooks listed in the table above
+
+### Provisional (may evolve)
+
+- additional scalar types (i8, i16, i64, u8, u16, u32, u64, f32)
+- additional conversion hooks
+- string concatenation / manipulation hooks
+- memory allocation hooks
+- mode/resource runtime hooks
+
+## Authoritative sources
+
+The single authoritative home for runtime hook names and signatures
+is the contract table above.
+
+Implementation must agree:
+
+| Layer                  | Must match contract |
+|------------------------|---------------------|
+| `stdlib/core/*.dao`    | extern declarations |
+| `runtime/core/`        | C implementations   |
+| LLVM backend hook layer| LLVM declarations   |
+| backend tests          | ABI assertions      |
+
+Disagreement between any layer and this contract is a bug.
+
+## Self-hosting posture
+
+This ABI contract describes what the compiler expects from its
+runtime support layer. It does not prescribe the implementation
+language.
+
+Future migration path:
+
+- **Near term**: Dao-defined ABI, C reference implementation
+- **Mid term**: same ABI, implementation language may change
+- **Long term**: Dao-hosted runtime/stdlib with only a thin
+  irreducible native substrate (e.g. syscall wrappers)
+
+The native substrate should shrink over time as Dao gains the
+capability to implement more of its own runtime.
