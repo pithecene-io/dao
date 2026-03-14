@@ -21,6 +21,7 @@ void LlvmRuntimeHooks::declare_all() {
   declare_io_hooks();
   declare_equality_hooks();
   declare_conversion_hooks();
+  declare_generator_hooks();
 }
 
 auto LlvmRuntimeHooks::is_runtime_hook(std::string_view name) -> bool {
@@ -94,6 +95,25 @@ void LlvmRuntimeHooks::declare_conversion_hooks() {
   auto* i1 = llvm::Type::getInt1Ty(ctx);
   ensure_declared(runtime_hooks::kConvBoolToString,
                   llvm::FunctionType::get(str_type, {i1}, false));
+}
+
+// ---------------------------------------------------------------------------
+// Generator hooks
+// ---------------------------------------------------------------------------
+
+void LlvmRuntimeHooks::declare_generator_hooks() {
+  auto& ctx = module_.getContext();
+  auto* ptr = llvm::PointerType::getUnqual(ctx);
+  auto* i64 = llvm::Type::getInt64Ty(ctx);
+  auto* void_ty = llvm::Type::getVoidTy(ctx);
+
+  // __dao_gen_alloc(size: i64, align: i64): ptr
+  ensure_declared(runtime_hooks::kGenAlloc,
+                  llvm::FunctionType::get(ptr, {i64, i64}, false));
+
+  // __dao_gen_free(ptr): void
+  ensure_declared(runtime_hooks::kGenFree,
+                  llvm::FunctionType::get(void_ty, {ptr}, false));
 }
 
 // ---------------------------------------------------------------------------

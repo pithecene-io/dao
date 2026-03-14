@@ -130,6 +130,17 @@ void LlvmBackend::declare_functions(const MirModule& mir_module,
       }
       ++idx;
     }
+
+    // For generator functions, also declare the resume function.
+    if (is_generator_function(*mir_fn)) {
+      auto* ptr_type = llvm::PointerType::getUnqual(ctx_);
+      auto* void_type = llvm::Type::getVoidTy(ctx_);
+      auto* resume_fn_type =
+          llvm::FunctionType::get(void_type, {ptr_type}, /*isVarArg=*/false);
+      llvm::Function::Create(
+          resume_fn_type, llvm::Function::ExternalLinkage,
+          std::string(mir_fn->symbol->name) + ".resume", module_.get());
+    }
   }
 }
 
@@ -141,7 +152,10 @@ void LlvmBackend::lower_bodies(const MirModule& mir_module,
                                 uint32_t prelude_bytes) {
   for (const auto* mir_fn : mir_module.functions) {
     size_t diag_before = diagnostics_.size();
-    if (!lower_function(*mir_fn)) {
+    bool fn_ok = is_generator_function(*mir_fn)
+        ? lower_generator_init(*mir_fn) && lower_generator_resume(*mir_fn)
+        : lower_function(*mir_fn);
+    if (!fn_ok) {
       bool is_prelude = mir_fn->span.offset < prelude_bytes;
       if (is_prelude) {
         // Prelude function body failed — remove body so it becomes a
@@ -399,20 +413,14 @@ auto LlvmBackend::lower_inst(const MirInst& inst,
         emit_diagnostic(inst.span, "index access lowering not yet implemented");
         return false;
       },
-      [&](const MirIterInit&) -> bool {
-        emit_diagnostic(inst.span, "iteration lowering not yet implemented");
-        return false;
-      },
-      [&](const MirIterHasNext&) -> bool {
-        emit_diagnostic(inst.span, "iteration lowering not yet implemented");
-        return false;
-      },
-      [&](const MirIterNext&) -> bool {
-        emit_diagnostic(inst.span, "iteration lowering not yet implemented");
-        return false;
-      },
+      [&](const MirIterInit& p)    { return lower_iter_init(p, inst, state); },
+      [&](const MirIterHasNext& p) { return lower_iter_has_next(p, inst, state); },
+      [&](const MirIterNext& p)    { return lower_iter_next(p, inst, state); },
+      [&](const MirIterDestroy& p) { return lower_iter_destroy(p, inst, state); },
       [&](const MirYieldInst&) -> bool {
-        emit_diagnostic(inst.span, "yield/coroutine lowering not yet implemented");
+        // Yield is handled inline by lower_generator_resume; reaching
+        // this visitor means yield appeared outside a generator context.
+        emit_diagnostic(inst.span, "yield outside generator function");
         return false;
       },
       [&](const MirLambdaInst&) -> bool {
@@ -899,6 +907,17 @@ auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
   if (!callee_fn->getReturnType()->isVoidTy() && inst.result.valid()) {
     state.values[inst.result.id] = call;
     state.value_types[inst.result.id] = inst.type;
+
+    // Track generator resume function for downstream iter_init.
+    if (inst.type != nullptr && inst.type->kind() == TypeKind::Generator) {
+      auto resume_name = std::string(callee_fn->getName()) + ".resume";
+      auto* resume_fn = module_->getFunction(resume_name);
+      if (resume_fn != nullptr) {
+        state.iter_resume_fns[inst.result.id] = resume_fn;
+        const auto* gen = static_cast<const TypeGenerator*>(inst.type);
+        state.iter_yield_types[inst.result.id] = gen->yield_type();
+      }
+    }
   }
   return true;
 }
@@ -956,6 +975,15 @@ auto LlvmBackend::lower_construct(const MirConstruct& p, const MirInst& inst,
 
 auto LlvmBackend::lower_return(const MirReturn& p, const MirInst& inst,
                                  FunctionState& state) -> bool {
+  // Generator resume: mark done and return void.
+  if (state.gen_frame_ptr != nullptr) {
+    auto* done_ptr = state.builder->CreateStructGEP(
+        state.gen_frame_type, state.gen_frame_ptr, 1, "done.ptr");
+    state.builder->CreateStore(state.builder->getTrue(), done_ptr);
+    state.builder->CreateRetVoid();
+    return true;
+  }
+
   // Void functions always emit ret void, even if MIR has a value
   // (e.g. returning a void call result).
   if (state.llvm_fn->getReturnType()->isVoidTy()) {
@@ -1003,6 +1031,412 @@ auto LlvmBackend::lower_cond_br(const MirCondBr& p, const MirInst& inst,
   }
 
   state.builder->CreateCondBr(cond, then_it->second, else_it->second);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Generator detection
+// ---------------------------------------------------------------------------
+
+auto LlvmBackend::is_generator_function(const MirFunction& fn) -> bool {
+  return fn.return_type != nullptr &&
+         fn.return_type->kind() == TypeKind::Generator;
+}
+
+// ---------------------------------------------------------------------------
+// Generator frame type construction
+// ---------------------------------------------------------------------------
+
+auto LlvmBackend::create_generator_frame_type(const MirFunction& fn)
+    -> llvm::StructType* {
+  auto frame_name = "dao.gen." + std::string(fn.symbol->name);
+
+  // Return cached type if already created.
+  auto* existing = llvm::StructType::getTypeByName(ctx_, frame_name);
+  if (existing != nullptr) {
+    return existing;
+  }
+
+  const auto* gen_type = static_cast<const TypeGenerator*>(fn.return_type);
+  auto* yield_llvm = types_.lower(gen_type->yield_type());
+  if (yield_llvm == nullptr) {
+    return nullptr;
+  }
+
+  // Frame layout: { i32 state, i1 done, T yield_slot, locals... }
+  std::vector<llvm::Type*> fields;
+  fields.push_back(llvm::Type::getInt32Ty(ctx_));  // 0: state
+  fields.push_back(llvm::Type::getInt1Ty(ctx_));   // 1: done
+  fields.push_back(yield_llvm);                     // 2: yield_slot
+
+  for (const auto& local : fn.locals) {
+    auto* lt = types_.lower(local.type);
+    if (lt == nullptr) {
+      return nullptr;
+    }
+    fields.push_back(lt);
+  }
+
+  return llvm::StructType::create(ctx_, fields, frame_name);
+}
+
+// ---------------------------------------------------------------------------
+// Generator init function lowering
+// ---------------------------------------------------------------------------
+
+auto LlvmBackend::lower_generator_init(const MirFunction& fn) -> bool {
+  if (fn.symbol == nullptr || fn.is_extern) {
+    return true;
+  }
+
+  auto* init_fn = module_->getFunction(std::string(fn.symbol->name));
+  if (init_fn == nullptr) {
+    emit_diagnostic(fn.span, "generator init function not declared");
+    return false;
+  }
+
+  auto* frame_type = create_generator_frame_type(fn);
+  if (frame_type == nullptr) {
+    emit_diagnostic(fn.span, "cannot create generator frame type");
+    return false;
+  }
+
+  auto* entry = llvm::BasicBlock::Create(ctx_, "entry", init_fn);
+  llvm::IRBuilder<> builder(ctx_);
+  builder.SetInsertPoint(entry);
+
+  // Compute frame size via GEP-from-null trick (target-independent).
+  auto* i64_ty = llvm::Type::getInt64Ty(ctx_);
+  auto* null_ptr =
+      llvm::ConstantPointerNull::get(llvm::PointerType::getUnqual(ctx_));
+  auto* size_gep = builder.CreateGEP(
+      frame_type, null_ptr,
+      {llvm::ConstantInt::get(i64_ty, 1)}, "sizeof.gep");
+  auto* frame_size =
+      builder.CreatePtrToInt(size_gep, i64_ty, "frame.size");
+  auto* frame_align = llvm::ConstantInt::get(i64_ty, 8);
+
+  // Call __dao_gen_alloc(size, align).
+  auto* alloc_fn =
+      module_->getFunction(std::string(runtime_hooks::kGenAlloc));
+  auto* frame_ptr = builder.CreateCall(
+      alloc_fn->getFunctionType(), alloc_fn,
+      {frame_size, frame_align}, "frame");
+
+  // Store state = 0.
+  auto* state_ptr =
+      builder.CreateStructGEP(frame_type, frame_ptr, 0, "state.ptr");
+  builder.CreateStore(
+      llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx_), 0), state_ptr);
+
+  // Store done = false.
+  auto* done_ptr =
+      builder.CreateStructGEP(frame_type, frame_ptr, 1, "done.ptr");
+  builder.CreateStore(builder.getFalse(), done_ptr);
+
+  // Store parameters into frame (fields 3+).
+  uint32_t frame_field = 3;
+  for (auto& arg : init_fn->args()) {
+    auto* field_ptr = builder.CreateStructGEP(
+        frame_type, frame_ptr, frame_field, "param.ptr");
+    builder.CreateStore(&arg, field_ptr);
+    ++frame_field;
+  }
+
+  // Return the frame pointer.
+  builder.CreateRet(frame_ptr);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Generator resume function lowering
+// ---------------------------------------------------------------------------
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+auto LlvmBackend::lower_generator_resume(const MirFunction& fn) -> bool {
+  if (fn.symbol == nullptr || fn.is_extern) {
+    return true;
+  }
+
+  auto resume_name = std::string(fn.symbol->name) + ".resume";
+  auto* resume_fn = module_->getFunction(resume_name);
+  if (resume_fn == nullptr) {
+    emit_diagnostic(fn.span,
+                    "resume function not declared: " + resume_name);
+    return false;
+  }
+
+  auto* frame_type = create_generator_frame_type(fn);
+  if (frame_type == nullptr) {
+    emit_diagnostic(fn.span, "cannot create generator frame type");
+    return false;
+  }
+
+  auto* frame_arg = resume_fn->getArg(0);
+  frame_arg->setName("frame");
+
+  FunctionState state;
+  state.llvm_fn = resume_fn;
+  state.gen_frame_ptr = frame_arg;
+  state.gen_frame_type = frame_type;
+
+  llvm::IRBuilder<> builder(ctx_);
+  state.builder = &builder;
+
+  // --- Pre-scan: count yield points ---
+  uint32_t yield_count = 0;
+  for (const auto* block : fn.blocks) {
+    for (const auto* inst : block->insts) {
+      if (std::holds_alternative<MirYieldInst>(inst->payload)) {
+        ++yield_count;
+      }
+    }
+  }
+
+  // --- Create entry block first (must be first for LLVM entry) ---
+  auto* entry_bb = llvm::BasicBlock::Create(ctx_, "entry", resume_fn);
+
+  // --- Create LLVM blocks for MIR blocks ---
+  for (const auto* block : fn.blocks) {
+    auto* llvm_block = llvm::BasicBlock::Create(
+        ctx_, "bb" + std::to_string(block->id.id), resume_fn);
+    state.blocks[block->id.id] = llvm_block;
+  }
+
+  // --- Create resume blocks for each yield point ---
+  std::vector<llvm::BasicBlock*> resume_blocks;
+  for (uint32_t i = 0; i < yield_count; ++i) {
+    auto* bb = llvm::BasicBlock::Create(
+        ctx_, "resume." + std::to_string(i + 1), resume_fn);
+    resume_blocks.push_back(bb);
+  }
+
+  auto* unreachable_bb =
+      llvm::BasicBlock::Create(ctx_, "unreachable", resume_fn);
+
+  // --- Entry block: compute frame GEPs for locals, then dispatch ---
+  builder.SetInsertPoint(entry_bb);
+
+  // Set up frame-based locals (GEPs at field indices 3+).
+  uint32_t frame_field = 3;
+  for (const auto& local : fn.locals) {
+    auto name = local.symbol != nullptr
+        ? std::string(local.symbol->name) + ".ptr"
+        : "local." + std::to_string(local.id.id) + ".ptr";
+    auto* gep = builder.CreateStructGEP(
+        frame_type, frame_arg, frame_field, name);
+    state.locals[local.id.id] = gep;
+    state.local_types[local.id.id] = local.type;
+    ++frame_field;
+  }
+
+  // Load state and dispatch.
+  auto* state_ptr = builder.CreateStructGEP(
+      frame_type, frame_arg, 0, "state.ptr");
+  auto* state_val = builder.CreateLoad(
+      llvm::Type::getInt32Ty(ctx_), state_ptr, "state");
+
+  auto* sw = builder.CreateSwitch(
+      state_val, unreachable_bb, yield_count + 1);
+  sw->addCase(builder.getInt32(0),
+              state.blocks[fn.blocks[0]->id.id]);
+  for (uint32_t i = 0; i < yield_count; ++i) {
+    sw->addCase(builder.getInt32(i + 1), resume_blocks[i]);
+  }
+
+  // --- Unreachable block: set done, ret void ---
+  builder.SetInsertPoint(unreachable_bb);
+  auto* done_unr = builder.CreateStructGEP(
+      frame_type, frame_arg, 1, "done.ptr");
+  builder.CreateStore(builder.getTrue(), done_unr);
+  builder.CreateRetVoid();
+
+  // --- Lower MIR blocks with yield splitting ---
+  uint32_t yield_idx = 0;
+  for (const auto* block : fn.blocks) {
+    builder.SetInsertPoint(state.blocks[block->id.id]);
+
+    for (const auto* inst : block->insts) {
+      const auto* yp = std::get_if<MirYieldInst>(&inst->payload);
+      if (yp != nullptr) {
+        // Store value to yield slot (frame field 2).
+        auto* val = get_value(yp->value, state);
+        if (val == nullptr) {
+          emit_diagnostic(inst->span, "yield value not found");
+          return false;
+        }
+        auto* yield_ptr = builder.CreateStructGEP(
+            frame_type, frame_arg, 2, "yield.ptr");
+        builder.CreateStore(val, yield_ptr);
+
+        // Store next state number.
+        auto* st_ptr = builder.CreateStructGEP(
+            frame_type, frame_arg, 0, "state.ptr");
+        builder.CreateStore(
+            builder.getInt32(yield_idx + 1), st_ptr);
+
+        // Return to caller.
+        builder.CreateRetVoid();
+
+        // Remaining instructions continue in resume block.
+        builder.SetInsertPoint(resume_blocks[yield_idx]);
+        ++yield_idx;
+      } else {
+        if (!lower_inst(*inst, state)) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Iterator operations (consumer side)
+// ---------------------------------------------------------------------------
+
+auto LlvmBackend::lower_iter_init(const MirIterInit& p, const MirInst& inst,
+                                    FunctionState& state) -> bool {
+  auto* frame_ptr = get_value(p.iter_operand, state);
+  if (frame_ptr == nullptr) {
+    emit_diagnostic(inst.span, "iter_init: generator value not found");
+    return false;
+  }
+
+  // Look up the resume function tracked from the call that produced
+  // the generator frame.
+  auto resume_it = state.iter_resume_fns.find(p.iter_operand.id);
+  if (resume_it == state.iter_resume_fns.end()) {
+    emit_diagnostic(inst.span, "iter_init: cannot find resume function");
+    return false;
+  }
+  auto* resume_fn = resume_it->second;
+
+  // Call resume to advance to the first yield point (or completion).
+  state.builder->CreateCall(
+      resume_fn->getFunctionType(), resume_fn, {frame_ptr});
+
+  // Propagate tracking to iter_init result for has_next/next/destroy.
+  state.values[inst.result.id] = frame_ptr;
+  state.value_types[inst.result.id] = inst.type;
+  state.iter_resume_fns[inst.result.id] = resume_fn;
+
+  auto yield_it = state.iter_yield_types.find(p.iter_operand.id);
+  if (yield_it != state.iter_yield_types.end()) {
+    state.iter_yield_types[inst.result.id] = yield_it->second;
+  }
+
+  return true;
+}
+
+auto LlvmBackend::lower_iter_has_next(const MirIterHasNext& p,
+                                        const MirInst& inst,
+                                        FunctionState& state) -> bool {
+  auto* frame_ptr = get_value(p.iter_operand, state);
+  if (frame_ptr == nullptr) {
+    emit_diagnostic(inst.span, "iter_has_next: iterator not found");
+    return false;
+  }
+
+  auto yield_it = state.iter_yield_types.find(p.iter_operand.id);
+  if (yield_it == state.iter_yield_types.end()) {
+    emit_diagnostic(inst.span, "iter_has_next: unknown yield type");
+    return false;
+  }
+  auto* yield_llvm = types_.lower(yield_it->second);
+  if (yield_llvm == nullptr) {
+    emit_diagnostic(inst.span,
+                    "iter_has_next: cannot lower yield type: " +
+                    types_.error());
+    return false;
+  }
+
+  // Consumer view of the frame header: { i32 state, i1 done, T yield_slot }.
+  auto* view = llvm::StructType::get(ctx_, {
+      llvm::Type::getInt32Ty(ctx_),
+      llvm::Type::getInt1Ty(ctx_),
+      yield_llvm});
+
+  auto* done_ptr =
+      state.builder->CreateStructGEP(view, frame_ptr, 1, "done.ptr");
+  auto* done = state.builder->CreateLoad(
+      llvm::Type::getInt1Ty(ctx_), done_ptr, "done");
+  auto* has_next = state.builder->CreateNot(done, "has_next");
+
+  state.values[inst.result.id] = has_next;
+  state.value_types[inst.result.id] = inst.type;
+  return true;
+}
+
+auto LlvmBackend::lower_iter_next(const MirIterNext& p,
+                                     const MirInst& inst,
+                                     FunctionState& state) -> bool {
+  auto* frame_ptr = get_value(p.iter_operand, state);
+  if (frame_ptr == nullptr) {
+    emit_diagnostic(inst.span, "iter_next: iterator not found");
+    return false;
+  }
+
+  auto yield_it = state.iter_yield_types.find(p.iter_operand.id);
+  if (yield_it == state.iter_yield_types.end()) {
+    emit_diagnostic(inst.span, "iter_next: unknown yield type");
+    return false;
+  }
+  auto* yield_llvm = types_.lower(yield_it->second);
+  if (yield_llvm == nullptr) {
+    emit_diagnostic(inst.span,
+                    "iter_next: cannot lower yield type: " +
+                    types_.error());
+    return false;
+  }
+
+  // Consumer view of the frame header: { i32 state, i1 done, T yield_slot }.
+  auto* view = llvm::StructType::get(ctx_, {
+      llvm::Type::getInt32Ty(ctx_),
+      llvm::Type::getInt1Ty(ctx_),
+      yield_llvm});
+
+  // Read current yield value.
+  auto* yield_ptr =
+      state.builder->CreateStructGEP(view, frame_ptr, 2, "yield.ptr");
+  auto* yield_val = state.builder->CreateLoad(
+      yield_llvm, yield_ptr, "yield.val");
+
+  // Call resume to advance to next yield point.
+  auto resume_it = state.iter_resume_fns.find(p.iter_operand.id);
+  if (resume_it == state.iter_resume_fns.end()) {
+    emit_diagnostic(inst.span, "iter_next: cannot find resume function");
+    return false;
+  }
+  state.builder->CreateCall(
+      resume_it->second->getFunctionType(),
+      resume_it->second, {frame_ptr});
+
+  state.values[inst.result.id] = yield_val;
+  state.value_types[inst.result.id] = inst.type;
+  return true;
+}
+
+auto LlvmBackend::lower_iter_destroy(const MirIterDestroy& p,
+                                       const MirInst& inst,
+                                       FunctionState& state) -> bool {
+  auto* frame_ptr = get_value(p.iter_operand, state);
+  if (frame_ptr == nullptr) {
+    emit_diagnostic(inst.span, "iter_destroy: iterator not found");
+    return false;
+  }
+
+  auto* free_fn =
+      module_->getFunction(std::string(runtime_hooks::kGenFree));
+  if (free_fn == nullptr) {
+    emit_diagnostic(inst.span,
+                    "iter_destroy: __dao_gen_free not declared");
+    return false;
+  }
+
+  state.builder->CreateCall(
+      free_fn->getFunctionType(), free_fn, {frame_ptr});
   return true;
 }
 

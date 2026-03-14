@@ -55,6 +55,7 @@ Domains:
 | `io`       | Output, input (currently stdout only)      |
 | `eq`       | Equality comparison                        |
 | `conv`     | Value-to-value conversion (e.g. to_string) |
+| `gen`      | Generator frame allocation and lifetime    |
 
 Examples:
 
@@ -68,6 +69,8 @@ Examples:
 | `__dao_conv_i32_to_string`| `(x: i32): string`                   |
 | `__dao_conv_f64_to_string`| `(x: f64): string`                   |
 | `__dao_conv_bool_to_string`| `(x: bool): string`                 |
+| `__dao_gen_alloc`         | `(size: i64, align: i64): *void`     |
+| `__dao_gen_free`          | `(ptr: *void): void`                 |
 
 These are the **only** runtime hooks in the current supported slice.
 New hooks require updating this contract before implementation.
@@ -116,6 +119,14 @@ Properties:
 - **Return values**: string-returning hooks return the struct **by
   value** (`struct dao_string`). The caller receives a copy.
 
+### Generator type representation
+
+`Generator<T>` is represented at the ABI boundary as an opaque pointer
+to a compiler-generated frame struct. The frame layout is private to the
+backend and may vary per generator function. Consumer code accesses the
+generator exclusively through the `__dao_gen_*` hooks and
+compiler-generated resume functions.
+
 ## Ownership and lifetime rules
 
 For the current supported hook slice:
@@ -135,9 +146,10 @@ For the current supported hook slice:
    same thread. Callers must consume or copy the result before the
    next conversion call.
 
-4. **No caller-managed deallocation.** No hook in the current slice
-   requires the caller to free memory. If future hooks introduce
-   allocation, this contract must be updated first.
+4. **Generator frames are caller-managed.** Generator frames are
+   allocated by `__dao_gen_alloc` and must be freed by
+   `__dao_gen_free` when the iterator is no longer needed. The
+   compiler inserts the free call at for-loop exit.
 
 ## Stability
 

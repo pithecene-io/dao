@@ -43,11 +43,16 @@ inline constexpr std::string_view kConvI32ToString  = "__dao_conv_i32_to_string"
 inline constexpr std::string_view kConvF64ToString  = "__dao_conv_f64_to_string";
 inline constexpr std::string_view kConvBoolToString = "__dao_conv_bool_to_string";
 
+// Generator domain
+inline constexpr std::string_view kGenAlloc = "__dao_gen_alloc";
+inline constexpr std::string_view kGenFree  = "__dao_gen_free";
+
 // All hook names, for iteration / validation.
 inline constexpr std::string_view kAllHooks[] = {
     kWriteStdout,
     kEqI32,    kEqF64,    kEqBool,    kEqString,
     kConvI32ToString, kConvF64ToString, kConvBoolToString,
+    kGenAlloc, kGenFree,
 };
 
 } // namespace runtime_hooks
@@ -74,6 +79,7 @@ private:
   void declare_io_hooks();
   void declare_equality_hooks();
   void declare_conversion_hooks();
+  void declare_generator_hooks();
 
   // Helper: get-or-create a function declaration.
   auto ensure_declared(std::string_view name, llvm::FunctionType* fn_type)

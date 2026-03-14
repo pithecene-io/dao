@@ -275,6 +275,8 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
         }
 
         switch_to_block(exit_bb);
+        // Free the generator frame when the for-loop exits.
+        emit_effect(stmt.span, MirIterDestroy{iter_val});
       },
       [&](const HirYield& yield) {
         auto val = lower_expr_value(*yield.value);

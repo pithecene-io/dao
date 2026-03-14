@@ -64,6 +64,18 @@ struct dao_string __dao_conv_i32_to_string(int32_t x);
 struct dao_string __dao_conv_f64_to_string(double x);
 struct dao_string __dao_conv_bool_to_string(bool x);
 
+// ---------------------------------------------------------------------------
+// Runtime hook declarations — Generator domain
+// ---------------------------------------------------------------------------
+
+// Allocate a generator frame of the given size and alignment.
+// Returns a zeroed block. The caller (compiler-generated init function)
+// populates the frame after allocation.
+void *__dao_gen_alloc(int64_t size, int64_t align);
+
+// Free a generator frame previously allocated by __dao_gen_alloc.
+void __dao_gen_free(void *ptr);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
