@@ -1105,16 +1105,29 @@ auto LlvmBackend::lower_generator_init(const MirFunction& fn) -> bool {
   llvm::IRBuilder<> builder(ctx_);
   builder.SetInsertPoint(entry);
 
-  // Compute frame size via GEP-from-null trick (target-independent).
+  // Compute sizeof(frame) and alignof(frame) via GEP-from-null tricks
+  // (target-independent — correct regardless of data layout).
   auto* i64_ty = llvm::Type::getInt64Ty(ctx_);
   auto* null_ptr =
       llvm::ConstantPointerNull::get(llvm::PointerType::getUnqual(ctx_));
+
+  // sizeof: offset of element 1 from a null pointer.
   auto* size_gep = builder.CreateGEP(
       frame_type, null_ptr,
       {llvm::ConstantInt::get(i64_ty, 1)}, "sizeof.gep");
   auto* frame_size =
       builder.CreatePtrToInt(size_gep, i64_ty, "frame.size");
-  auto* frame_align = llvm::ConstantInt::get(i64_ty, 8);
+
+  // alignof: offsetof(struct { i8; frame_type }, field_1).
+  auto* align_wrap = llvm::StructType::get(
+      ctx_, {llvm::Type::getInt8Ty(ctx_), frame_type});
+  auto* align_gep = builder.CreateGEP(
+      align_wrap, null_ptr,
+      {llvm::ConstantInt::get(i64_ty, 0),
+       llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx_), 1)},
+      "alignof.gep");
+  auto* frame_align =
+      builder.CreatePtrToInt(align_gep, i64_ty, "frame.align");
 
   // Call __dao_gen_alloc(size, align).
   auto* alloc_fn =

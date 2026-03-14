@@ -771,6 +771,47 @@ suite<"generators"> generators = [] {
     expect(contains(ir, "__dao_gen_free")) << ir;
   };
 
+  "early return from for-loop frees generator frame"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn single(): Generator<i32>\n"
+        "  yield 42\n"
+        "\n"
+        "fn main(): i32\n"
+        "  for x in single():\n"
+        "    return x\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // The early-return path must call __dao_gen_free before returning.
+    // Count occurrences: one for the early-return path, one for the
+    // normal loop-exit path.
+    size_t count = 0;
+    std::string::size_type pos = 0;
+    while ((pos = ir.find("__dao_gen_free", pos)) != std::string::npos) {
+      ++count;
+      ++pos;
+    }
+    expect(count >= 2u) << "expected >=2 gen_free calls (early + normal), got "
+                        << count << "\n" << ir;
+  };
+
+  "init passes alignof to gen_alloc"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn single(): Generator<i32>\n"
+        "  yield 1\n"
+        "\n"
+        "fn main(): i32\n"
+        "  for x in single():\n"
+        "    return x\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Alignment is computed via GEP-from-null offsetof trick, not
+    // hardcoded.  LLVM constant-folds the GEP to a ConstantExpr,
+    // so we check for the { i8, %frame } wrapper struct pattern.
+    expect(contains(ir, "{ i8, %dao.gen.single }")) << ir;
+  };
+
   "range generator with params"_test = [] {
     LlvmTestPipeline pipe(
         "fn range(start: i32, end: i32): Generator<i32>\n"
