@@ -41,7 +41,7 @@ auto LlvmBackend::lower(const MirModule& mir_module, uint32_t prelude_bytes)
   module_ = std::make_unique<llvm::Module>("dao_module", ctx_);
   diagnostics_.clear();
 
-  declare_functions(mir_module);
+  declare_functions(mir_module, prelude_bytes);
   lower_bodies(mir_module, prelude_bytes);
 
   // Kill the module if any hard errors remain.
@@ -64,7 +64,8 @@ auto LlvmBackend::lower(const MirModule& mir_module, uint32_t prelude_bytes)
 // ---------------------------------------------------------------------------
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void LlvmBackend::declare_functions(const MirModule& mir_module) {
+void LlvmBackend::declare_functions(const MirModule& mir_module,
+                                     uint32_t prelude_bytes) {
   for (const auto* mir_fn : mir_module.functions) {
     if (mir_fn->symbol == nullptr) {
       continue;
@@ -73,8 +74,13 @@ void LlvmBackend::declare_functions(const MirModule& mir_module) {
     // Build LLVM function type.
     auto* ret_type = types_.lower(mir_fn->return_type);
     if (ret_type == nullptr) {
+      size_t diag_idx = diagnostics_.size();
       emit_diagnostic(mir_fn->span,
                       "cannot lower return type: " + types_.error());
+      // Downgrade to warning for prelude functions.
+      if (mir_fn->span.offset < prelude_bytes) {
+        diagnostics_[diag_idx].severity = Severity::Warning;
+      }
       continue;
     }
 

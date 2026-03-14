@@ -1,4 +1,5 @@
 #include "backend/llvm/llvm_backend.h"
+#include "backend/llvm/llvm_runtime_hooks.h"
 #include "backend/llvm/llvm_type_lowering.h"
 #include "frontend/diagnostics/source.h"
 #include "frontend/lexer/lexer.h"
@@ -585,6 +586,95 @@ suite<"construction"> construction = [] {
     expect(!pipe.has_errors()) << "no backend errors";
     expect(contains(ir, "insertvalue")) << ir;
     expect(contains(ir, "%dao.Point")) << ir;
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Runtime ABI — hook declarations and string shape
+// ---------------------------------------------------------------------------
+
+suite<"runtime_abi"> runtime_abi = [] {
+  "runtime hooks are declared with correct signatures"_test = [] {
+    llvm::LLVMContext ctx;
+    auto module = std::make_unique<llvm::Module>("abi_test", ctx);
+    LlvmTypeLowering types(ctx);
+    LlvmRuntimeHooks hooks(*module, types);
+    hooks.declare_all();
+
+    // IO hook
+    auto* write_fn = module->getFunction("__dao_io_write_stdout");
+    expect(write_fn != nullptr) << "write_stdout declared";
+    expect(write_fn->getReturnType()->isVoidTy()) << "returns void";
+    expect(write_fn->arg_size() == 1u) << "1 param";
+    expect(write_fn->getArg(0)->getType()->isPointerTy()) << "string ptr param";
+
+    // Equality hooks
+    auto* eq_i32 = module->getFunction("__dao_eq_i32");
+    expect(eq_i32 != nullptr) << "eq_i32 declared";
+    expect(eq_i32->getReturnType()->isIntegerTy(1)) << "returns i1";
+    expect(eq_i32->arg_size() == 2u) << "2 params";
+
+    auto* eq_f64 = module->getFunction("__dao_eq_f64");
+    expect(eq_f64 != nullptr) << "eq_f64 declared";
+    expect(eq_f64->getReturnType()->isIntegerTy(1)) << "returns i1";
+
+    auto* eq_bool = module->getFunction("__dao_eq_bool");
+    expect(eq_bool != nullptr) << "eq_bool declared";
+
+    auto* eq_str = module->getFunction("__dao_eq_string");
+    expect(eq_str != nullptr) << "eq_string declared";
+    expect(eq_str->arg_size() == 2u) << "2 ptr params";
+
+    // Conversion hooks
+    auto* conv_i32 = module->getFunction("__dao_conv_i32_to_string");
+    expect(conv_i32 != nullptr) << "conv_i32_to_string declared";
+    expect(conv_i32->getReturnType()->isStructTy()) << "returns dao.string";
+    expect(conv_i32->arg_size() == 1u) << "1 param";
+
+    auto* conv_f64 = module->getFunction("__dao_conv_f64_to_string");
+    expect(conv_f64 != nullptr) << "conv_f64_to_string declared";
+
+    auto* conv_bool = module->getFunction("__dao_conv_bool_to_string");
+    expect(conv_bool != nullptr) << "conv_bool_to_string declared";
+  };
+
+  "string ABI shape matches contract"_test = [] {
+    llvm::LLVMContext ctx;
+    LlvmTypeLowering types(ctx);
+
+    auto* str_type = types.string_type();
+    expect(str_type != nullptr) << "string type exists";
+    expect(str_type->isStructTy()) << "is struct";
+    expect(str_type->getStructName() == "dao.string") << "named dao.string";
+    expect(str_type->getNumElements() == 2u) << "2 fields: ptr + len";
+    expect(str_type->getElementType(0)->isPointerTy()) << "field 0 is ptr";
+    expect(str_type->getElementType(1)->isIntegerTy(64)) << "field 1 is i64";
+  };
+
+  "is_runtime_hook recognizes all hooks"_test = [] {
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_io_write_stdout"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_eq_i32"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_eq_f64"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_eq_bool"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_eq_string"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_conv_i32_to_string"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_conv_f64_to_string"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_conv_bool_to_string"));
+    expect(!LlvmRuntimeHooks::is_runtime_hook("__write_stdout"));
+    expect(!LlvmRuntimeHooks::is_runtime_hook("user_function"));
+  };
+
+  "prelude print generates correct runtime call"_test = [] {
+    LlvmTestPipeline pipe(
+        "extern fn __dao_io_write_stdout(msg: string): void\n"
+        "fn print(msg: string): void -> __dao_io_write_stdout(msg)\n"
+        "\n"
+        "fn main(): void\n"
+        "  print(\"hello\")\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "__dao_io_write_stdout")) << ir;
+    expect(contains(ir, "dao.string")) << ir;
   };
 };
 

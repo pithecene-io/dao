@@ -1,19 +1,19 @@
-extern fn __i32_eq(a: i32, b: i32): bool
-extern fn __f64_eq(a: f64, b: f64): bool
-extern fn __bool_eq(a: bool, b: bool): bool
-extern fn __string_eq(a: string, b: string): bool
+extern fn __dao_eq_i32(a: i32, b: i32): bool
+extern fn __dao_eq_f64(a: f64, b: f64): bool
+extern fn __dao_eq_bool(a: bool, b: bool): bool
+extern fn __dao_eq_string(a: string, b: string): bool
 
 derived concept Equatable:
     fn eq(self, other: Equatable): bool
 
 extend i32 as Equatable:
-    fn eq(self, other: i32): bool -> __i32_eq(self, other)
+    fn eq(self, other: i32): bool -> __dao_eq_i32(self, other)
 
 extend f64 as Equatable:
-    fn eq(self, other: f64): bool -> __f64_eq(self, other)
+    fn eq(self, other: f64): bool -> __dao_eq_f64(self, other)
 
 extend bool as Equatable:
-    fn eq(self, other: bool): bool -> __bool_eq(self, other)
+    fn eq(self, other: bool): bool -> __dao_eq_bool(self, other)
 
 extend string as Equatable:
-    fn eq(self, other: string): bool -> __string_eq(self, other)
+    fn eq(self, other: string): bool -> __dao_eq_string(self, other)

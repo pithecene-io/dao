@@ -1,14 +1,14 @@
 File
-  ExternFunctionDecl __i32_to_string
+  ExternFunctionDecl __dao_conv_i32_to_string
     Param x: i32
     ReturnType: string
-  ExternFunctionDecl __f64_to_string
+  ExternFunctionDecl __dao_conv_f64_to_string
     Param x: f64
     ReturnType: string
-  ExternFunctionDecl __bool_to_string
+  ExternFunctionDecl __dao_conv_bool_to_string
     Param x: bool
     ReturnType: string
-  ExternFunctionDecl __write_stdout
+  ExternFunctionDecl __dao_io_write_stdout
     Param msg: string
     ReturnType: void
   DerivedConceptDecl Printable
@@ -22,7 +22,7 @@ File
       ExprBody
         CallExpr
           Callee
-            Identifier __i32_to_string
+            Identifier __dao_conv_i32_to_string
           Args
             Identifier self
   ExtendDecl f64 as Printable
@@ -32,7 +32,7 @@ File
       ExprBody
         CallExpr
           Callee
-            Identifier __f64_to_string
+            Identifier __dao_conv_f64_to_string
           Args
             Identifier self
   ExtendDecl bool as Printable
@@ -42,7 +42,7 @@ File
       ExprBody
         CallExpr
           Callee
-            Identifier __bool_to_string
+            Identifier __dao_conv_bool_to_string
           Args
             Identifier self
   ExtendDecl string as Printable
@@ -57,6 +57,6 @@ File
     ExprBody
       CallExpr
         Callee
-          Identifier __write_stdout
+          Identifier __dao_io_write_stdout
         Args
           Identifier msg
