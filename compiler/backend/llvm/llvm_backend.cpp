@@ -908,16 +908,6 @@ auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
     state.values[inst.result.id] = call;
     state.value_types[inst.result.id] = inst.type;
 
-    // Track generator resume function for downstream iter_init.
-    if (inst.type != nullptr && inst.type->kind() == TypeKind::Generator) {
-      auto resume_name = std::string(callee_fn->getName()) + ".resume";
-      auto* resume_fn = module_->getFunction(resume_name);
-      if (resume_fn != nullptr) {
-        state.iter_resume_fns[inst.result.id] = resume_fn;
-        const auto* gen = static_cast<const TypeGenerator*>(inst.type);
-        state.iter_yield_types[inst.result.id] = gen->yield_type();
-      }
-    }
   }
   return true;
 }
@@ -1156,8 +1146,17 @@ auto LlvmBackend::lower_generator_init(const MirFunction& fn) -> bool {
     ++frame_field;
   }
 
-  // Return the frame pointer.
-  builder.CreateRet(frame_ptr);
+  // Build the generator fat pair: { ptr frame, ptr resume_fn }.
+  auto* resume_fn =
+      module_->getFunction(std::string(fn.symbol->name) + ".resume");
+  auto* gen_type = types_.generator_type();
+  llvm::Value* gen_val = llvm::UndefValue::get(gen_type);
+  gen_val =
+      builder.CreateInsertValue(gen_val, frame_ptr, 0, "gen.frame");
+  gen_val =
+      builder.CreateInsertValue(gen_val, resume_fn, 1, "gen.resume");
+
+  builder.CreateRet(gen_val);
   return true;
 }
 
@@ -1311,34 +1310,31 @@ auto LlvmBackend::lower_generator_resume(const MirFunction& fn) -> bool {
 
 auto LlvmBackend::lower_iter_init(const MirIterInit& p, const MirInst& inst,
                                     FunctionState& state) -> bool {
-  auto* frame_ptr = get_value(p.iter_operand, state);
-  if (frame_ptr == nullptr) {
+  auto* gen_val = get_value(p.iter_operand, state);
+  if (gen_val == nullptr) {
     emit_diagnostic(inst.span, "iter_init: generator value not found");
     return false;
   }
 
-  // Look up the resume function tracked from the call that produced
-  // the generator frame.
-  auto resume_it = state.iter_resume_fns.find(p.iter_operand.id);
-  if (resume_it == state.iter_resume_fns.end()) {
-    emit_diagnostic(inst.span, "iter_init: cannot find resume function");
-    return false;
-  }
-  auto* resume_fn = resume_it->second;
+  // Extract frame pointer and resume function from the generator pair.
+  auto* frame_ptr =
+      state.builder->CreateExtractValue(gen_val, 0, "gen.frame");
+  auto* resume_ptr =
+      state.builder->CreateExtractValue(gen_val, 1, "gen.resume");
+
+  // Build the resume function type: void(ptr).
+  auto* ptr_type = llvm::PointerType::getUnqual(ctx_);
+  auto* void_type = llvm::Type::getVoidTy(ctx_);
+  auto* resume_fn_type =
+      llvm::FunctionType::get(void_type, {ptr_type}, /*isVarArg=*/false);
 
   // Call resume to advance to the first yield point (or completion).
-  state.builder->CreateCall(
-      resume_fn->getFunctionType(), resume_fn, {frame_ptr});
+  state.builder->CreateCall(resume_fn_type, resume_ptr, {frame_ptr});
 
   // Propagate tracking to iter_init result for has_next/next/destroy.
   state.values[inst.result.id] = frame_ptr;
   state.value_types[inst.result.id] = inst.type;
-  state.iter_resume_fns[inst.result.id] = resume_fn;
-
-  auto yield_it = state.iter_yield_types.find(p.iter_operand.id);
-  if (yield_it != state.iter_yield_types.end()) {
-    state.iter_yield_types[inst.result.id] = yield_it->second;
-  }
+  state.iter_state[inst.result.id] = {frame_ptr, resume_ptr};
 
   return true;
 }
@@ -1346,18 +1342,21 @@ auto LlvmBackend::lower_iter_init(const MirIterInit& p, const MirInst& inst,
 auto LlvmBackend::lower_iter_has_next(const MirIterHasNext& p,
                                         const MirInst& inst,
                                         FunctionState& state) -> bool {
-  auto* frame_ptr = get_value(p.iter_operand, state);
-  if (frame_ptr == nullptr) {
+  auto iter_it = state.iter_state.find(p.iter_operand.id);
+  if (iter_it == state.iter_state.end()) {
     emit_diagnostic(inst.span, "iter_has_next: iterator not found");
     return false;
   }
+  auto* frame_ptr = iter_it->second.first;
 
-  auto yield_it = state.iter_yield_types.find(p.iter_operand.id);
-  if (yield_it == state.iter_yield_types.end()) {
-    emit_diagnostic(inst.span, "iter_has_next: unknown yield type");
+  // Derive yield type from the iter_operand's semantic type (Generator<T>).
+  const auto* operand_type = state.value_types[p.iter_operand.id];
+  if (operand_type == nullptr || operand_type->kind() != TypeKind::Generator) {
+    emit_diagnostic(inst.span, "iter_has_next: operand is not a Generator");
     return false;
   }
-  auto* yield_llvm = types_.lower(yield_it->second);
+  const auto* gen = static_cast<const TypeGenerator*>(operand_type);
+  auto* yield_llvm = types_.lower(gen->yield_type());
   if (yield_llvm == nullptr) {
     emit_diagnostic(inst.span,
                     "iter_has_next: cannot lower yield type: " +
@@ -1385,18 +1384,22 @@ auto LlvmBackend::lower_iter_has_next(const MirIterHasNext& p,
 auto LlvmBackend::lower_iter_next(const MirIterNext& p,
                                      const MirInst& inst,
                                      FunctionState& state) -> bool {
-  auto* frame_ptr = get_value(p.iter_operand, state);
-  if (frame_ptr == nullptr) {
+  auto iter_it = state.iter_state.find(p.iter_operand.id);
+  if (iter_it == state.iter_state.end()) {
     emit_diagnostic(inst.span, "iter_next: iterator not found");
     return false;
   }
+  auto* frame_ptr = iter_it->second.first;
+  auto* resume_ptr = iter_it->second.second;
 
-  auto yield_it = state.iter_yield_types.find(p.iter_operand.id);
-  if (yield_it == state.iter_yield_types.end()) {
-    emit_diagnostic(inst.span, "iter_next: unknown yield type");
+  // Derive yield type from the iter_operand's semantic type (Generator<T>).
+  const auto* operand_type = state.value_types[p.iter_operand.id];
+  if (operand_type == nullptr || operand_type->kind() != TypeKind::Generator) {
+    emit_diagnostic(inst.span, "iter_next: operand is not a Generator");
     return false;
   }
-  auto* yield_llvm = types_.lower(yield_it->second);
+  const auto* gen = static_cast<const TypeGenerator*>(operand_type);
+  auto* yield_llvm = types_.lower(gen->yield_type());
   if (yield_llvm == nullptr) {
     emit_diagnostic(inst.span,
                     "iter_next: cannot lower yield type: " +
@@ -1416,15 +1419,12 @@ auto LlvmBackend::lower_iter_next(const MirIterNext& p,
   auto* yield_val = state.builder->CreateLoad(
       yield_llvm, yield_ptr, "yield.val");
 
-  // Call resume to advance to next yield point.
-  auto resume_it = state.iter_resume_fns.find(p.iter_operand.id);
-  if (resume_it == state.iter_resume_fns.end()) {
-    emit_diagnostic(inst.span, "iter_next: cannot find resume function");
-    return false;
-  }
-  state.builder->CreateCall(
-      resume_it->second->getFunctionType(),
-      resume_it->second, {frame_ptr});
+  // Call resume (indirect) to advance to next yield point.
+  auto* ptr_type = llvm::PointerType::getUnqual(ctx_);
+  auto* void_type = llvm::Type::getVoidTy(ctx_);
+  auto* resume_fn_type =
+      llvm::FunctionType::get(void_type, {ptr_type}, /*isVarArg=*/false);
+  state.builder->CreateCall(resume_fn_type, resume_ptr, {frame_ptr});
 
   state.values[inst.result.id] = yield_val;
   state.value_types[inst.result.id] = inst.type;
@@ -1434,11 +1434,12 @@ auto LlvmBackend::lower_iter_next(const MirIterNext& p,
 auto LlvmBackend::lower_iter_destroy(const MirIterDestroy& p,
                                        const MirInst& inst,
                                        FunctionState& state) -> bool {
-  auto* frame_ptr = get_value(p.iter_operand, state);
-  if (frame_ptr == nullptr) {
-    emit_diagnostic(inst.span, "iter_destroy: iterator not found");
+  auto iter_it = state.iter_state.find(p.iter_operand.id);
+  if (iter_it == state.iter_state.end()) {
+    emit_diagnostic(inst.span, "iter_destroy: iterator state not found");
     return false;
   }
+  auto* frame_ptr = iter_it->second.first;
 
   auto* free_fn =
       module_->getFunction(std::string(runtime_hooks::kGenFree));

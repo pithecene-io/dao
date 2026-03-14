@@ -75,8 +75,8 @@ auto LlvmTypeLowering::lower(const Type* type) -> llvm::Type* {
   }
 
   case TypeKind::Generator:
-    // Generator<T> is an opaque pointer to a compiler-generated frame.
-    return llvm::PointerType::getUnqual(ctx_);
+    // Generator<T> is a fat pair: { ptr frame, ptr resume_fn }.
+    return generator_type();
   }
 
   error_ = "unknown type kind";
@@ -121,6 +121,18 @@ auto LlvmTypeLowering::string_type() -> llvm::StructType* {
         "dao.string");
   }
   return string_type_;
+}
+
+auto LlvmTypeLowering::generator_type() -> llvm::StructType* {
+  if (generator_type_ == nullptr) {
+    // Generator representation: { ptr frame, ptr resume_fn }.
+    // The frame pointer points to a compiler-generated struct;
+    // the resume pointer is the generator's resume function.
+    auto* ptr_type = llvm::PointerType::getUnqual(ctx_);
+    generator_type_ = llvm::StructType::create(
+        ctx_, {ptr_type, ptr_type}, "dao.generator");
+  }
+  return generator_type_;
 }
 
 auto LlvmTypeLowering::lower_builtin(BuiltinKind kind) -> llvm::Type* {

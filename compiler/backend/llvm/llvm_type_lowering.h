@@ -36,12 +36,16 @@ public:
   // Get the LLVM string representation type: { i8*, i64 } (ptr + length).
   auto string_type() -> llvm::StructType*;
 
+  // Get the LLVM generator representation type: { ptr frame, ptr resume_fn }.
+  auto generator_type() -> llvm::StructType*;
+
   // Access the last lowering error (empty if none).
   [[nodiscard]] auto error() const -> const std::string& { return error_; }
 
 private:
   llvm::LLVMContext& ctx_;
   llvm::StructType* string_type_ = nullptr;
+  llvm::StructType* generator_type_ = nullptr;
   std::string error_;
 
   // Cache for struct type lowering to break cycles.
