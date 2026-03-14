@@ -82,6 +82,17 @@ void collect_diagnostics(nlohmann::json& out, const SourceBuffer& source,
   }
 }
 
+// Check whether any diagnostic originates from user code.
+auto has_user_error(const std::vector<Diagnostic>& diags,
+                    uint32_t prelude_bytes) -> bool {
+  for (const auto& diag : diags) {
+    if (diag.span.offset >= prelude_bytes) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Read entire file into string, for capturing process output.
 auto slurp(const std::filesystem::path& path) -> std::string {
   std::ifstream file(path, std::ios::binary);
@@ -137,7 +148,7 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
 
   collect_diagnostics(diagnostics, source, lex_result.diagnostics,
                       prelude_bytes, prelude_lines);
-  if (!lex_result.diagnostics.empty()) {
+  if (has_user_error(lex_result.diagnostics, prelude_bytes)) {
     nlohmann::json response = {
         {"stdout", ""},
         {"stderr", ""},
@@ -151,7 +162,7 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
   auto parse_result = parse(lex_result.tokens);
   collect_diagnostics(diagnostics, source, parse_result.diagnostics,
                       prelude_bytes, prelude_lines);
-  if (!parse_result.diagnostics.empty() ||
+  if (has_user_error(parse_result.diagnostics, prelude_bytes) ||
       parse_result.file == nullptr) {
     nlohmann::json response = {
         {"stdout", ""},
@@ -166,7 +177,7 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
   auto resolve_result = resolve(*parse_result.file, prelude_bytes);
   collect_diagnostics(diagnostics, source, resolve_result.diagnostics,
                       prelude_bytes, prelude_lines);
-  if (!resolve_result.diagnostics.empty()) {
+  if (has_user_error(resolve_result.diagnostics, prelude_bytes)) {
     nlohmann::json response = {
         {"stdout", ""},
         {"stderr", ""},
@@ -182,7 +193,8 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
       typecheck(*parse_result.file, resolve_result, types);
   bool has_errors = false;
   for (const auto& diag : check_result.diagnostics) {
-    if (diag.severity == Severity::Error) {
+    if (diag.span.offset >= prelude_bytes &&
+        diag.severity == Severity::Error) {
       has_errors = true;
     }
   }

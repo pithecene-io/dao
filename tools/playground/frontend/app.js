@@ -257,15 +257,15 @@ async function doRun() {
 
     const data = await resp.json();
 
-    // Show diagnostics from the run endpoint if present.
-    if (data.diagnostics && data.diagnostics.length > 0) {
-      renderDiagnostics(data.diagnostics);
-    }
+    // Always update diagnostics from the run endpoint (clears stale errors).
+    renderDiagnostics(data.diagnostics || []);
 
-    if (data.exit_code === -1 && data.diagnostics && data.diagnostics.length > 0) {
-      // Compilation failed — show diagnostics summary in console.
+    if (data.exit_code === -1) {
+      // Compilation failed.
       output.className = "console-error";
-      output.textContent = "Compilation failed. See diagnostics.";
+      output.textContent = data.diagnostics && data.diagnostics.length > 0
+        ? "Compilation failed. See diagnostics."
+        : "Compilation failed (internal error).";
       return;
     }
 

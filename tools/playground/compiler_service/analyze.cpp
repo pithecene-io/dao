@@ -52,6 +52,17 @@ auto load_prelude(const std::filesystem::path& repo_root) -> std::string {
   return prelude;
 }
 
+// Check whether any diagnostic originates from user code.
+auto has_user_error(const std::vector<Diagnostic>& diags,
+                    uint32_t prelude_bytes) -> bool {
+  for (const auto& diag : diags) {
+    if (diag.span.offset >= prelude_bytes) {
+      return true;
+    }
+  }
+  return false;
+}
+
 } // namespace
 
 // NOLINTBEGIN(readability-magic-numbers)
@@ -130,7 +141,7 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
   // Only parse if lexing succeeded — matches CLI behavior.
   std::string ast_text;
   ParseResult parse_result;
-  if (lex_result.diagnostics.empty()) {
+  if (!has_user_error(lex_result.diagnostics, prelude_bytes)) {
     parse_result = parse(lex_result.tokens);
 
     for (const auto& diag : parse_result.diagnostics) {
@@ -162,7 +173,9 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
   // semantic token classification — partial resolve results still
   // improve highlighting for the tokens that did resolve.
   ResolveResult resolve_result;
-  bool lex_parse_clean = diagnostics.empty() && parse_result.file != nullptr;
+  bool lex_parse_clean = !has_user_error(lex_result.diagnostics, prelude_bytes) &&
+                         !has_user_error(parse_result.diagnostics, prelude_bytes) &&
+                         parse_result.file != nullptr;
   if (lex_parse_clean) {
     resolve_result = resolve(*parse_result.file, prelude_bytes);
 
@@ -214,7 +227,7 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
   std::string llvm_ir_text;
   TypeContext types;
   bool resolve_clean =
-      lex_parse_clean && resolve_result.diagnostics.empty();
+      lex_parse_clean && !has_user_error(resolve_result.diagnostics, prelude_bytes);
   if (resolve_clean) {
     auto check_result =
         typecheck(*parse_result.file, resolve_result, types);
@@ -318,7 +331,7 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
           }
 
           if (llvm_result.module != nullptr &&
-              llvm_result.diagnostics.empty()) {
+              !has_user_error(llvm_result.diagnostics, prelude_bytes)) {
             std::ostringstream llvm_out;
             LlvmBackend::print_ir(llvm_out, *llvm_result.module);
             llvm_ir_text = llvm_out.str();
