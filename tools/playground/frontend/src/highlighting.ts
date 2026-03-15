@@ -1,4 +1,9 @@
-import { Decoration, EditorView, ViewPlugin } from "@codemirror/view";
+import {
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  type ViewUpdate,
+} from "@codemirror/view";
 import type { SemanticToken } from "./types";
 
 // Module-private token state. Updated by setTokens(), read by the plugin.
@@ -63,11 +68,8 @@ export const tokenHighlighter = ViewPlugin.fromClass(
       this.decorations = buildDecorations(view);
     }
 
-    update() {
-      // Rebuild whenever the view updates (tokens may have changed).
-      // This is cheap when tokens haven't changed since Decoration.set
-      // short-circuits on identical input.
-      this.decorations = buildDecorations(arguments[0].view);
+    update(vu: ViewUpdate) {
+      this.decorations = buildDecorations(vu.view);
     }
   },
   {

@@ -67,11 +67,12 @@ tasks:
     desc: Start playground in dev mode (Vite HMR on :5173, backend on :8090)
     deps: [build]
     cmds:
+      - cd tools/playground/frontend && npm ci --ignore-scripts
       - |
+        trap 'kill $BACKEND_PID 2>/dev/null' EXIT INT TERM
         {{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground &
         BACKEND_PID=$!
         cd tools/playground/frontend && npx vite
-        kill $BACKEND_PID 2>/dev/null || true
 
   format:
     desc: Run clang-format on all source files
