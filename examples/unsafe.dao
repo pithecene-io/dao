@@ -1,7 +1,13 @@
-fn read(ptr: *i32): i32
-    let value: i32
+fn read_ptr(ptr: *i32): i32
+  let value: i32 = 0
+  mode unsafe =>
+    value = *ptr
+  return value
 
-    mode unsafe =>
-        value = *ptr
-
-    return value
+fn main(): i32
+  let x: i32 = 42
+  mode unsafe =>
+    let val: i32 = read_ptr(&x)
+    print("read via pointer:")
+    print_i32(val)
+  return 0

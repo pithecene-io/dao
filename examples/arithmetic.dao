@@ -1,0 +1,41 @@
+fn square(x: i32): i32 -> x * x
+
+fn cube(x: i32): i32 -> x * x * x
+
+fn is_even(x: i32): bool -> x == (x / 2) * 2
+
+fn clamp(x: i32, lo: i32, hi: i32): i32
+  if x < lo:
+    return lo
+  if x > hi:
+    return hi
+  return x
+
+fn sum_range(a: i32, b: i32): i32
+  let total: i32 = 0
+  let i: i32 = a
+  while i < b:
+    total = total + i
+    i = i + 1
+  return total
+
+fn main(): i32
+  print("square(7):")
+  print_i32(square(7))
+
+  print("cube(3):")
+  print_i32(cube(3))
+
+  print("is_even(4):")
+  print_bool(is_even(4))
+
+  print("is_even(7):")
+  print_bool(is_even(7))
+
+  print("clamp(15, 0, 10):")
+  print_i32(clamp(15, 0, 10))
+
+  print("sum_range(1, 11):")
+  print_i32(sum_range(1, 11))
+
+  return 0

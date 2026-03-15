@@ -1,5 +1,6 @@
 #include "analyze.h"
 #include "examples.h"
+#include "run.h"
 
 #include <httplib.h>
 
@@ -41,12 +42,15 @@ auto main(int argc, char* argv[]) -> int {
     return EXIT_FAILURE;
   }
 
+  // Initialize LLVM targets once for /api/run.
+  dao::playground::init_run_support();
+
   httplib::Server svr;
 
   // API endpoints.
   // NOLINTBEGIN(modernize-use-trailing-return-type)
-  svr.Post("/api/analyze", [](const httplib::Request& req, httplib::Response& res) {
-    dao::playground::handle_analyze(req, res);
+  svr.Post("/api/analyze", [&root](const httplib::Request& req, httplib::Response& res) {
+    dao::playground::handle_analyze(req, res, root);
   });
 
   svr.Get("/api/examples", [&examples_dir](const httplib::Request& req, httplib::Response& res) {
@@ -57,6 +61,10 @@ auto main(int argc, char* argv[]) -> int {
           [&examples_dir](const httplib::Request& req, httplib::Response& res) {
             dao::playground::handle_example_get(req, res, examples_dir);
           });
+
+  svr.Post("/api/run", [&root](const httplib::Request& req, httplib::Response& res) {
+    dao::playground::handle_run(req, res, root);
+  });
   // NOLINTEND(modernize-use-trailing-return-type)
 
   // Serve frontend static files.
@@ -80,7 +88,7 @@ auto main(int argc, char* argv[]) -> int {
   std::cout << "  frontend: " << frontend_dir << "\n";
   std::cout << "  examples: " << examples_dir << "\n";
 
-  if (!svr.listen("0.0.0.0", port)) {
+  if (!svr.listen("127.0.0.1", port)) {
     std::cerr << "error: failed to start server on port " << port << "\n";
     return EXIT_FAILURE;
   }

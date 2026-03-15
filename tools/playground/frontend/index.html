@@ -13,6 +13,7 @@
       <select id="example-select">
         <option value="">— load example —</option>
       </select>
+      <button id="run-btn" title="Compile &amp; run (Ctrl+Enter)">▶ Run</button>
     </div>
   </header>
   <main>
@@ -21,21 +22,30 @@
       <div id="editor-container"></div>
     </div>
     <div id="right-panels">
-      <div id="ir-panel">
-        <div class="panel-tabs">
-          <button class="tab active" data-tab="ast">AST</button>
-          <button class="tab" data-tab="hir">HIR</button>
-          <button class="tab" data-tab="mir">MIR</button>
-          <button class="tab" data-tab="llvm-ir">LLVM IR</button>
-        </div>
-        <pre id="ast-output" class="tab-content active"></pre>
-        <pre id="hir-output" class="tab-content"></pre>
-        <pre id="mir-output" class="tab-content"></pre>
-        <pre id="llvm-ir-output" class="tab-content"></pre>
+      <div id="console-panel">
+        <div class="panel-header">Console</div>
+        <pre id="console-output" class="console-idle">Press ▶ Run or Ctrl+Enter</pre>
       </div>
       <div id="diagnostics-panel">
         <div class="panel-header">Diagnostics</div>
         <div id="diagnostics-output"></div>
+      </div>
+      <div id="ir-panel">
+        <button id="ir-toggle" class="panel-header collapsible-header">
+          <span class="collapse-arrow">▶</span> Compiler IR
+        </button>
+        <div id="ir-body" class="collapsed">
+          <div class="panel-tabs">
+            <button class="tab active" data-tab="ast">AST</button>
+            <button class="tab" data-tab="hir">HIR</button>
+            <button class="tab" data-tab="mir">MIR</button>
+            <button class="tab" data-tab="llvm-ir">LLVM IR</button>
+          </div>
+          <pre id="ast-output" class="tab-content active"></pre>
+          <pre id="hir-output" class="tab-content"></pre>
+          <pre id="mir-output" class="tab-content"></pre>
+          <pre id="llvm-ir-output" class="tab-content"></pre>
+        </div>
       </div>
     </div>
   </main>
