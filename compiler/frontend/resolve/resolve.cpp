@@ -370,9 +370,31 @@ private:
       uses_[ext.concept_span.offset] = sym;
     }
 
-    // Resolve method signatures.
+    // Extract target type name for method symbol mangling.
+    std::string target_name;
+    if (ext.target_type != nullptr &&
+        ext.target_type->is<NamedType>()) {
+      const auto& named = ext.target_type->as<NamedType>();
+      for (size_t seg = 0; seg < named.name.segments.size(); ++seg) {
+        if (seg > 0) { target_name += "::"; }
+        target_name += named.name.segments[seg];
+      }
+    }
+
+    // Resolve method signatures and create Function symbols.
     for (const auto* method : ext.methods) {
       resolve_function(*method, parent);
+
+      // Create a Function symbol with mangled name so HIR/MIR can
+      // reference this extend method as a real function.
+      // Name format: "<type>.<method>" (e.g. "i32.to_string").
+      if (!target_name.empty()) {
+        const auto& fn_decl = method->as<FunctionDecl>();
+        auto mangled_name = ctx_.intern(
+            target_name + "." + std::string(fn_decl.name));
+        ctx_.make_symbol(SymbolKind::Function, mangled_name,
+                         fn_decl.name_span, method);
+      }
     }
   }
 
