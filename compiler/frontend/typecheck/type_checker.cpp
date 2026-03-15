@@ -1280,6 +1280,54 @@ auto TypeChecker::substitute_generics(
 }
 
 // ---------------------------------------------------------------------------
+// Shared generic constraint verification
+// ---------------------------------------------------------------------------
+
+void TypeChecker::verify_concept_constraints(
+    const Expr* callee_expr, Span error_span,
+    const std::unordered_map<uint32_t, const Type*>& bindings) {
+  if (bindings.empty() || !callee_expr->is<IdentifierExpr>()) {
+    return;
+  }
+  auto sym_it = resolve_.uses.find(callee_expr->span.offset);
+  if (sym_it == resolve_.uses.end() ||
+      sym_it->second->kind != SymbolKind::Function ||
+      sym_it->second->decl == nullptr) {
+    return;
+  }
+  const auto* fn_decl = static_cast<const Decl*>(sym_it->second->decl);
+  if (!fn_decl->is<FunctionDecl>()) {
+    return;
+  }
+  const auto& func = fn_decl->as<FunctionDecl>();
+  for (const auto& gp_decl : func.type_params) {
+    auto idx = static_cast<uint32_t>(&gp_decl - func.type_params.data());
+    auto binding_it = bindings.find(idx);
+    if (binding_it == bindings.end()) {
+      continue;
+    }
+    for (const auto* constraint : gp_decl.constraints) {
+      auto csym_it = resolve_.uses.find(constraint->span.offset);
+      if (csym_it == resolve_.uses.end() ||
+          csym_it->second->kind != SymbolKind::Concept ||
+          csym_it->second->decl == nullptr) {
+        continue;
+      }
+      const auto* concept_decl =
+          static_cast<const Decl*>(csym_it->second->decl);
+      if (!type_conforms_to(binding_it->second, concept_decl)) {
+        error(error_span,
+              "type '" + print_type(binding_it->second) +
+                  "' does not satisfy concept '" +
+                  std::string(csym_it->second->name) +
+                  "' required by generic parameter '" +
+                  std::string(gp_decl.name) + "'");
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Call expressions
 // ---------------------------------------------------------------------------
 
@@ -1339,45 +1387,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
                         call.args[i]->span);
   }
 
-  // Verify concept constraints on inferred generic bindings.
-  if (!type_bindings.empty() && call.callee->is<IdentifierExpr>()) {
-    auto sym_it = resolve_.uses.find(call.callee->span.offset);
-    if (sym_it != resolve_.uses.end() &&
-        sym_it->second->kind == SymbolKind::Function &&
-        sym_it->second->decl != nullptr) {
-      const auto* fn_decl =
-          static_cast<const Decl*>(sym_it->second->decl);
-      if (fn_decl->is<FunctionDecl>()) {
-        const auto& fn = fn_decl->as<FunctionDecl>();
-        for (const auto& gp_decl : fn.type_params) {
-          // Find the index for this generic param.
-          auto idx = static_cast<uint32_t>(&gp_decl - fn.type_params.data());
-          auto binding_it = type_bindings.find(idx);
-          if (binding_it == type_bindings.end()) {
-            continue;
-          }
-          for (const auto* constraint : gp_decl.constraints) {
-            auto csym_it = resolve_.uses.find(constraint->span.offset);
-            if (csym_it == resolve_.uses.end() ||
-                csym_it->second->kind != SymbolKind::Concept ||
-                csym_it->second->decl == nullptr) {
-              continue;
-            }
-            const auto* concept_decl =
-                static_cast<const Decl*>(csym_it->second->decl);
-            if (!type_conforms_to(binding_it->second, concept_decl)) {
-              error(expr->span,
-                    "type '" + print_type(binding_it->second) +
-                        "' does not satisfy concept '" +
-                        std::string(csym_it->second->name) +
-                        "' required by generic parameter '" +
-                        std::string(gp_decl.name) + "'");
-            }
-          }
-        }
-      }
-    }
-  }
+  verify_concept_constraints(call.callee, expr->span, type_bindings);
 
   // Substitute generic params in the return type.
   return substitute_generics(fn_type->return_type(), type_bindings);
@@ -1460,45 +1470,7 @@ auto TypeChecker::check_pipe(const Expr* expr) -> const Type* {
   std::unordered_map<uint32_t, const Type*> type_bindings;
   infer_type_bindings(params[0], lhs_type, type_bindings, pipe.left->span);
 
-  // Verify concept constraints on inferred bindings.
-  if (!type_bindings.empty() && pipe.right->is<IdentifierExpr>()) {
-    auto sym_it = resolve_.uses.find(pipe.right->span.offset);
-    if (sym_it != resolve_.uses.end() &&
-        sym_it->second->kind == SymbolKind::Function &&
-        sym_it->second->decl != nullptr) {
-      const auto* fn_decl =
-          static_cast<const Decl*>(sym_it->second->decl);
-      if (fn_decl->is<FunctionDecl>()) {
-        const auto& callee_fn = fn_decl->as<FunctionDecl>();
-        for (const auto& gp_decl : callee_fn.type_params) {
-          auto idx = static_cast<uint32_t>(
-              &gp_decl - callee_fn.type_params.data());
-          auto binding_it = type_bindings.find(idx);
-          if (binding_it == type_bindings.end()) {
-            continue;
-          }
-          for (const auto* constraint : gp_decl.constraints) {
-            auto csym_it = resolve_.uses.find(constraint->span.offset);
-            if (csym_it == resolve_.uses.end() ||
-                csym_it->second->kind != SymbolKind::Concept ||
-                csym_it->second->decl == nullptr) {
-              continue;
-            }
-            const auto* concept_decl =
-                static_cast<const Decl*>(csym_it->second->decl);
-            if (!type_conforms_to(binding_it->second, concept_decl)) {
-              error(expr->span,
-                    "type '" + print_type(binding_it->second) +
-                        "' does not satisfy concept '" +
-                        std::string(csym_it->second->name) +
-                        "' required by generic parameter '" +
-                        std::string(gp_decl.name) + "'");
-            }
-          }
-        }
-      }
-    }
-  }
+  verify_concept_constraints(pipe.right, expr->span, type_bindings);
 
   // Substitute generic params in the return type.
   return substitute_generics(fn_type->return_type(), type_bindings);

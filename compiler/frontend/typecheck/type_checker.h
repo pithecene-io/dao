@@ -166,6 +166,9 @@ private:
   auto substitute_generics(const Type* type,
                            const std::unordered_map<uint32_t, const Type*>& bindings)
       -> const Type*;
+  void verify_concept_constraints(
+      const Expr* callee_expr, Span error_span,
+      const std::unordered_map<uint32_t, const Type*>& bindings);
   auto check_construct(const Expr* expr, const TypeStruct* struct_type)
       -> const Type*;
   auto check_pipe(const Expr* expr) -> const Type*;
