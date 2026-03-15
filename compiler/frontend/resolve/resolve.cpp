@@ -371,15 +371,33 @@ private:
     }
 
     // Extract target type name for method symbol mangling.
-    std::string target_name;
-    if (ext.target_type != nullptr &&
-        ext.target_type->is<NamedType>()) {
-      const auto& named = ext.target_type->as<NamedType>();
-      for (size_t seg = 0; seg < named.name.segments.size(); ++seg) {
-        if (seg > 0) { target_name += "::"; }
-        target_name += named.name.segments[seg];
+    // Must include type arguments to match print_type() output used
+    // by the monomorphization fixup (e.g. "Generator<i32>.method").
+    auto format_type_node = [](const TypeNode* node, auto& self) -> std::string {
+      if (node == nullptr) { return {}; }
+      if (node->is<NamedType>()) {
+        const auto& named = node->as<NamedType>();
+        std::string result;
+        for (size_t seg = 0; seg < named.name.segments.size(); ++seg) {
+          if (seg > 0) { result += "::"; }
+          result += named.name.segments[seg];
+        }
+        if (!named.type_args.empty()) {
+          result += "<";
+          for (size_t arg = 0; arg < named.type_args.size(); ++arg) {
+            if (arg > 0) { result += ", "; }
+            result += self(named.type_args[arg], self);
+          }
+          result += ">";
+        }
+        return result;
       }
-    }
+      if (node->is<PointerType>()) {
+        return "*" + self(node->as<PointerType>().pointee, self);
+      }
+      return {};
+    };
+    auto target_name = format_type_node(ext.target_type, format_type_node);
 
     // Resolve method signatures and create Function symbols.
     for (const auto* method : ext.methods) {
