@@ -5,7 +5,18 @@ namespace dao {
 auto is_assignable(const Type* source, const Type* target) -> bool {
   // Exact semantic type equality via pointer identity.
   // Canonical types are interned, so pointer equality is correct.
-  return source == target;
+  if (source == target) {
+    return true;
+  }
+
+  // A generic type parameter accepts any concrete type.
+  // Concept constraint checking is handled separately during
+  // conformance resolution — is_assignable only checks shape.
+  if (target->kind() == TypeKind::GenericParam) {
+    return true;
+  }
+
+  return false;
 }
 
 auto is_numeric(const Type* type) -> bool {

@@ -1174,18 +1174,39 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
     return nullptr;
   }
 
+  // Check arguments and infer generic type bindings from call site.
+  // type_bindings maps generic param index → concrete type.
+  std::unordered_map<uint32_t, const Type*> type_bindings;
+
   for (size_t i = 0; i < params.size(); ++i) {
     const auto* arg_type = check_expr(call.args[i]);
-    if (arg_type != nullptr && params[i] != nullptr &&
-        !is_assignable(arg_type, params[i])) {
+    if (arg_type == nullptr || params[i] == nullptr) {
+      continue;
+    }
+    if (!is_assignable(arg_type, params[i])) {
       error(call.args[i]->span,
             "argument type '" + print_type(arg_type) +
                 "' is not assignable to parameter type '" +
                 print_type(params[i]) + "'");
     }
+    // Record binding: generic param → concrete argument type.
+    if (params[i]->kind() == TypeKind::GenericParam) {
+      const auto* gp = static_cast<const TypeGenericParam*>(params[i]);
+      type_bindings[gp->index()] = arg_type;
+    }
   }
 
-  return fn_type->return_type();
+  // Substitute generic return type if it's a type parameter.
+  const auto* ret = fn_type->return_type();
+  if (ret != nullptr && ret->kind() == TypeKind::GenericParam) {
+    const auto* gp = static_cast<const TypeGenericParam*>(ret);
+    auto it = type_bindings.find(gp->index());
+    if (it != type_bindings.end()) {
+      return it->second;
+    }
+  }
+
+  return ret;
 }
 
 // ---------------------------------------------------------------------------
@@ -1375,7 +1396,52 @@ auto TypeChecker::lookup_method(const Type* obj_type,
     }
   }
 
-  // 3. Search derived conformances — concept method signatures.
+  // 3. If the receiver is a generic type parameter, search its concept
+  //    constraints for the method. This allows `x.to_string()` inside
+  //    `fn show<T: Printable>(x: T)` to resolve against Printable's methods.
+  if (obj_type->kind() == TypeKind::GenericParam) {
+    const auto* gp = static_cast<const TypeGenericParam*>(obj_type);
+    if (gp->binder() != nullptr) {
+      const auto* decl_node = static_cast<const Decl*>(gp->binder());
+      const std::vector<GenericParam>* type_params = nullptr;
+      if (decl_node->is<FunctionDecl>()) {
+        type_params = &decl_node->as<FunctionDecl>().type_params;
+      } else if (decl_node->is<ClassDecl>()) {
+        type_params = &decl_node->as<ClassDecl>().type_params;
+      }
+      if (type_params != nullptr && gp->index() < type_params->size()) {
+        const auto& gp_decl = (*type_params)[gp->index()];
+        for (const auto* constraint : gp_decl.constraints) {
+          // Resolve constraint to a concept symbol.
+          auto sym_it =
+              resolve_.uses.find(constraint->span.offset);
+          if (sym_it == resolve_.uses.end() ||
+              sym_it->second->kind != SymbolKind::Concept) {
+            continue;
+          }
+          const auto* cpt_decl =
+              static_cast<const Decl*>(sym_it->second->decl);
+          if (cpt_decl == nullptr || !cpt_decl->is<ConceptDecl>()) {
+            continue;
+          }
+          const auto& cpt = cpt_decl->as<ConceptDecl>();
+          for (const auto* method_decl : cpt.methods) {
+            const auto& method = method_decl->as<FunctionDecl>();
+            if (method.name == name) {
+              // Build return type with self mapped to the generic param.
+              auto saved_csm = concept_self_map_;
+              concept_self_map_[cpt.name] = obj_type;
+              auto result = method_fn_type(method);
+              concept_self_map_ = saved_csm;
+              return result;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 4. Search derived conformances — concept method signatures.
   //    Set concept_self_map_ so that the concept name in type position
   //    resolves to the receiver type (§3.2).
   auto derived_it = derived_conformances_.find(obj_type);
