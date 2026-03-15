@@ -370,9 +370,49 @@ private:
       uses_[ext.concept_span.offset] = sym;
     }
 
-    // Resolve method signatures.
+    // Extract target type name for method symbol mangling.
+    // Must include type arguments to match print_type() output used
+    // by the monomorphization fixup (e.g. "Generator<i32>.method").
+    auto format_type_node = [](const TypeNode* node, auto& self) -> std::string {
+      if (node == nullptr) { return {}; }
+      if (node->is<NamedType>()) {
+        const auto& named = node->as<NamedType>();
+        std::string result;
+        for (size_t seg = 0; seg < named.name.segments.size(); ++seg) {
+          if (seg > 0) { result += "::"; }
+          result += named.name.segments[seg];
+        }
+        if (!named.type_args.empty()) {
+          result += "<";
+          for (size_t arg = 0; arg < named.type_args.size(); ++arg) {
+            if (arg > 0) { result += ", "; }
+            result += self(named.type_args[arg], self);
+          }
+          result += ">";
+        }
+        return result;
+      }
+      if (node->is<PointerType>()) {
+        return "*" + self(node->as<PointerType>().pointee, self);
+      }
+      return {};
+    };
+    auto target_name = format_type_node(ext.target_type, format_type_node);
+
+    // Resolve method signatures and create Function symbols.
     for (const auto* method : ext.methods) {
       resolve_function(*method, parent);
+
+      // Create a Function symbol with mangled name so HIR/MIR can
+      // reference this extend method as a real function.
+      // Name format: "<type>.<method>" (e.g. "i32.to_string").
+      if (!target_name.empty()) {
+        const auto& fn_decl = method->as<FunctionDecl>();
+        auto mangled_name = ctx_.intern(
+            target_name + "." + std::string(fn_decl.name));
+        ctx_.make_symbol(SymbolKind::Function, mangled_name,
+                         fn_decl.name_span, method);
+      }
     }
   }
 

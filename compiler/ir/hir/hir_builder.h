@@ -42,6 +42,7 @@ private:
   const ResolveResult& resolve_;
   const TypeCheckResult& typed_;
   std::vector<Diagnostic> diagnostics_;
+  std::vector<HirDecl*> extend_decls_; // extend methods lowered as functions
 
   // decl_span.offset -> Symbol* for declaration-site lookups.
   std::unordered_map<uint32_t, const Symbol*> decl_symbols_;

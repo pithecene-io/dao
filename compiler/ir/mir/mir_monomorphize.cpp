@@ -238,6 +238,100 @@ auto clone_function(const MirFunction* src, const TypeSubst& subst,
 }
 
 // ---------------------------------------------------------------------------
+// Post-clone fixup: resolve method calls on non-struct types.
+//
+// After monomorphization substitutes T → i32, a MirFieldAccess on an
+// i32-typed value (e.g. x.to_string) should become a MirFnRef to the
+// extend method "i32.to_string". This scans for FieldAccess instructions
+// whose object type is not a struct and replaces them with FnRef to the
+// mangled extend method, looking it up in the module's function list.
+// ---------------------------------------------------------------------------
+
+void fixup_method_calls(MirFunction* fn, const MirModule& module,
+                        MirContext& ctx, TypeContext& types) {
+  // Build a name → (symbol, function) lookup from the module's functions.
+  struct FnEntry {
+    const Symbol* symbol;
+    const MirFunction* mir_fn;
+  };
+  std::unordered_map<std::string, FnEntry> fn_by_name;
+  for (const auto* mod_fn : module.functions) {
+    if (mod_fn->symbol != nullptr) {
+      fn_by_name[std::string(mod_fn->symbol->name)] = {mod_fn->symbol, mod_fn};
+    }
+  }
+
+  for (auto* block : fn->blocks) {
+    for (auto* inst : block->insts) {
+      auto* field = std::get_if<MirFieldAccess>(&inst->payload);
+      if (field == nullptr) {
+        continue;
+      }
+
+      // Find the type of the object being accessed.
+      const Type* obj_type = nullptr;
+      for (const auto* blk : fn->blocks) {
+        for (const auto* search : blk->insts) {
+          if (search->result.id == field->object.id) {
+            obj_type = search->type;
+            break;
+          }
+        }
+        if (obj_type != nullptr) {
+          break;
+        }
+      }
+
+      // Skip struct types — those are real field accesses.
+      if (obj_type == nullptr || obj_type->kind() == TypeKind::Struct) {
+        continue;
+      }
+
+      // Build mangled method name: "<type>.<field>".
+      auto method_name =
+          print_type(obj_type) + "." + std::string(field->field);
+      auto sym_it = fn_by_name.find(method_name);
+      if (sym_it == fn_by_name.end()) {
+        continue;
+      }
+
+      // Save the object value before replacing the payload.
+      auto object_val = field->object;
+      const auto& entry = sym_it->second;
+
+      // Replace FieldAccess with FnRef to the extend method.
+      // Update the instruction type to the method's function type,
+      // matching what MirBuilder would produce for a direct FnRef.
+      inst->payload = MirFnRef{entry.symbol};
+
+      // Build the function type from the extend method's MIR signature.
+      std::vector<const Type*> param_types;
+      for (const auto& local : entry.mir_fn->locals) {
+        if (!local.is_param) { break; }
+        param_types.push_back(local.type);
+      }
+      inst->type = types.function_type(
+          std::move(param_types), entry.mir_fn->return_type);
+
+      // Find the MirCall that uses this instruction's result as callee
+      // and prepend the object as the first argument (self).
+      for (auto* call_block : fn->blocks) {
+        for (auto* call_inst : call_block->insts) {
+          auto* call = std::get_if<MirCall>(&call_inst->payload);
+          if (call == nullptr || call->callee.id != inst->result.id) {
+            continue;
+          }
+          if (call->args == nullptr) {
+            call->args = ctx.alloc<std::vector<MirValueId>>();
+          }
+          call->args->insert(call->args->begin(), object_val);
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Infer type substitution from a call site.
 // ---------------------------------------------------------------------------
 
@@ -437,6 +531,9 @@ auto monomorphize(MirModule& module, MirContext& ctx,
           // Clone the generic function with type substitution.
           auto* specialized =
               clone_function(git->second, subst, new_sym, ctx, types);
+
+          // Resolve method calls on newly-concrete types.
+          fixup_method_calls(specialized, module, ctx, types);
 
           // Register in cache and add to module.
           spec_cache[key] = specialized;

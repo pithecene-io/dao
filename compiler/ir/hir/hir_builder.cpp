@@ -35,6 +35,11 @@ auto HirBuilder::build(const FileNode& file) -> HirBuildResult {
     }
   }
 
+  // Append extend methods lowered as standalone functions.
+  for (auto* ext_decl : extend_decls_) {
+    decls.push_back(ext_decl);
+  }
+
   auto* mod = ctx_.alloc<HirModule>(file.span, std::move(decls));
   return {.module = mod, .diagnostics = std::move(diagnostics_)};
 }
@@ -49,6 +54,19 @@ auto HirBuilder::lower_decl(const Decl* decl) -> HirDecl* {
     return lower_function(decl);
   case NodeKind::ClassDecl:
     return lower_class(decl);
+  case NodeKind::ExtendDecl: {
+    // Lower each extend method as a standalone function.
+    // These are emitted as real functions so method dispatch can
+    // reference them via MirFnRef.
+    const auto& ext = decl->as<ExtendDecl>();
+    for (const auto* method : ext.methods) {
+      auto* hir_fn = lower_function(method);
+      if (hir_fn != nullptr) {
+        extend_decls_.push_back(hir_fn);
+      }
+    }
+    return nullptr; // extend itself isn't a declaration
+  }
   default:
     return nullptr;
   }

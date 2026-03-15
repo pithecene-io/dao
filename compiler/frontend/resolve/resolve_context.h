@@ -5,6 +5,7 @@
 #include "frontend/resolve/symbol.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace dao {
@@ -39,9 +40,17 @@ public:
     return symbols_;
   }
 
+  /// Intern a string so it outlives any string_view pointing to it.
+  /// Returns a stable string_view into owned storage.
+  auto intern(std::string str) -> std::string_view {
+    strings_.push_back(std::make_unique<std::string>(std::move(str)));
+    return *strings_.back();
+  }
+
 private:
   std::vector<std::unique_ptr<Symbol>> symbols_;
   std::vector<std::unique_ptr<Scope>> scopes_;
+  std::vector<std::unique_ptr<std::string>> strings_;
 };
 
 } // namespace dao

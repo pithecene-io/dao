@@ -340,6 +340,48 @@ void TypeChecker::register_declarations(const FileNode& file) {
       break;
     }
 
+    case NodeKind::ExtendDecl: {
+      // Register extend methods as typed functions so HIR lowering
+      // can find their type info via decl_type().
+      const auto& ext = decl->as<ExtendDecl>();
+      const auto* target_type = resolve_type_node(ext.target_type);
+      for (const auto* method : ext.methods) {
+        const auto& method_fn = method->as<FunctionDecl>();
+        std::vector<const Type*> param_types;
+        bool valid = true;
+        for (const auto& param : method_fn.params) {
+          if (param.name == "self" && param.type == nullptr) {
+            // Bare self — use the extend target type.
+            if (target_type != nullptr) {
+              param_types.push_back(target_type);
+            } else {
+              valid = false;
+              param_types.push_back(nullptr);
+            }
+          } else {
+            const auto* param_type = resolve_type_node(param.type);
+            if (param_type == nullptr) {
+              valid = false;
+            }
+            param_types.push_back(param_type);
+          }
+        }
+        const auto* ret = method_fn.return_type != nullptr
+                              ? resolve_type_node(method_fn.return_type)
+                              : types_.void_type();
+        if (valid && ret != nullptr) {
+          const auto* fn_type =
+              types_.function_type(std::move(param_types), ret);
+          auto decl_it = decl_symbols_.find(method_fn.name_span.offset);
+          if (decl_it != decl_symbols_.end()) {
+            symbol_types_[decl_it->second] = fn_type;
+          }
+          typed_.set_decl_type(method, fn_type);
+        }
+      }
+      break;
+    }
+
     default:
       break;
     }
