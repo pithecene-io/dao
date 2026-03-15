@@ -126,11 +126,18 @@ private:
   auto check_binary(const Expr* expr) -> const Type*;
   auto check_unary(const Expr* expr) -> const Type*;
   auto check_call(const Expr* expr) -> const Type*;
+  void infer_type_bindings(const Type* pattern, const Type* concrete,
+                           std::unordered_map<uint32_t, const Type*>& bindings,
+                           Span error_span);
+  auto substitute_generics(const Type* type,
+                           const std::unordered_map<uint32_t, const Type*>& bindings)
+      -> const Type*;
   auto check_construct(const Expr* expr, const TypeStruct* struct_type)
       -> const Type*;
   auto check_pipe(const Expr* expr) -> const Type*;
   auto check_field(const Expr* expr) -> const Type*;
-  auto lookup_method(const Type* obj_type, std::string_view name)
+  auto lookup_method(const Type* obj_type, std::string_view name,
+                     const Decl** resolved_decl = nullptr)
       -> const Type*;
   void validate_receiver(const Decl* method, Span context_span);
   auto check_index(const Expr* expr) -> const Type*;

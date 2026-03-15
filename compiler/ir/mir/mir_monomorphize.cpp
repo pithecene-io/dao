@@ -241,6 +241,44 @@ auto clone_function(const MirFunction* src, const TypeSubst& subst,
 // Infer type substitution from a call site.
 // ---------------------------------------------------------------------------
 
+// Recursively extract generic param bindings by matching a pattern type
+// (which may contain TypeGenericParam) against a concrete type.
+void infer_bindings_recursive(const Type* pattern, const Type* concrete,
+                              TypeSubst& subst) {
+  if (pattern == nullptr || concrete == nullptr) {
+    return;
+  }
+
+  if (pattern->kind() == TypeKind::GenericParam) {
+    const auto* gp = static_cast<const TypeGenericParam*>(pattern);
+    subst[gp->index()] = concrete; // last-write-wins at MIR level
+    return;
+  }
+
+  if (pattern->kind() == TypeKind::Pointer &&
+      concrete->kind() == TypeKind::Pointer) {
+    infer_bindings_recursive(
+        static_cast<const TypePointer*>(pattern)->pointee(),
+        static_cast<const TypePointer*>(concrete)->pointee(), subst);
+  } else if (pattern->kind() == TypeKind::Generator &&
+             concrete->kind() == TypeKind::Generator) {
+    infer_bindings_recursive(
+        static_cast<const TypeGenerator*>(pattern)->yield_type(),
+        static_cast<const TypeGenerator*>(concrete)->yield_type(), subst);
+  } else if (pattern->kind() == TypeKind::Function &&
+             concrete->kind() == TypeKind::Function) {
+    const auto* fp = static_cast<const TypeFunction*>(pattern);
+    const auto* fc = static_cast<const TypeFunction*>(concrete);
+    if (fp->param_types().size() == fc->param_types().size()) {
+      for (size_t i = 0; i < fp->param_types().size(); ++i) {
+        infer_bindings_recursive(fp->param_types()[i],
+                                 fc->param_types()[i], subst);
+      }
+      infer_bindings_recursive(fp->return_type(), fc->return_type(), subst);
+    }
+  }
+}
+
 auto infer_substitution(const MirFunction* generic_fn,
                         const std::vector<const Type*>& arg_types)
     -> TypeSubst {
@@ -250,11 +288,8 @@ auto infer_substitution(const MirFunction* generic_fn,
     if (!local.is_param) {
       break;
     }
-    if (param_count < arg_types.size() &&
-        local.type != nullptr &&
-        local.type->kind() == TypeKind::GenericParam) {
-      const auto* gp = static_cast<const TypeGenericParam*>(local.type);
-      subst[gp->index()] = arg_types[param_count];
+    if (param_count < arg_types.size() && local.type != nullptr) {
+      infer_bindings_recursive(local.type, arg_types[param_count], subst);
     }
     ++param_count;
   }

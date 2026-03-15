@@ -306,6 +306,35 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
       }
     }
 
+    // Method call desugaring: x.method(args) → method(x, args)
+    // when the type checker resolved the FieldExpr as a method.
+    if (call.callee->is<FieldExpr>()) {
+      const auto* method_decl = typed_.typed.method_resolution(call.callee);
+      if (method_decl != nullptr) {
+        const auto& field = call.callee->as<FieldExpr>();
+        // Look up the method function's symbol by matching the Decl*.
+        const Symbol* method_sym = nullptr;
+        for (const auto& sym_ptr : resolve_.context.symbols()) {
+          if (sym_ptr->kind == SymbolKind::Function && sym_ptr->decl == method_decl) {
+            method_sym = sym_ptr.get();
+            break;
+          }
+        }
+        if (method_sym != nullptr) {
+          auto* callee_ref = ctx_.alloc<HirExpr>(
+              call.callee->span, expr_type(call.callee),
+              HirSymbolRef{method_sym});
+          std::vector<HirExpr*> args;
+          args.push_back(lower_expr(field.object)); // self
+          for (const auto* arg : call.args) {
+            args.push_back(lower_expr(arg));
+          }
+          return ctx_.alloc<HirExpr>(span, type,
+                                      HirCall{callee_ref, std::move(args)});
+        }
+      }
+    }
+
     // Normal function call.
     auto* callee = lower_expr(call.callee);
     std::vector<HirExpr*> args;

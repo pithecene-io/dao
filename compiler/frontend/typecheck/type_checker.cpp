@@ -1135,6 +1135,106 @@ auto TypeChecker::check_unary(const Expr* expr) -> const Type* {
 }
 
 // ---------------------------------------------------------------------------
+// Generic type inference and substitution helpers
+// ---------------------------------------------------------------------------
+
+void TypeChecker::infer_type_bindings(
+    const Type* pattern, const Type* concrete,
+    std::unordered_map<uint32_t, const Type*>& bindings, Span error_span) {
+  if (pattern == nullptr || concrete == nullptr) {
+    return;
+  }
+
+  if (pattern->kind() == TypeKind::GenericParam) {
+    const auto* gp = static_cast<const TypeGenericParam*>(pattern);
+    auto it = bindings.find(gp->index());
+    if (it != bindings.end()) {
+      // Already bound — check consistency.
+      if (it->second != concrete) {
+        error(error_span,
+              "conflicting types for generic parameter '" +
+                  std::string(gp->name()) + "': '" +
+                  print_type(it->second) + "' vs '" +
+                  print_type(concrete) + "'");
+      }
+    } else {
+      bindings[gp->index()] = concrete;
+    }
+    return;
+  }
+
+  // Structural recursion for composite types.
+  if (pattern->kind() == TypeKind::Pointer &&
+      concrete->kind() == TypeKind::Pointer) {
+    infer_type_bindings(
+        static_cast<const TypePointer*>(pattern)->pointee(),
+        static_cast<const TypePointer*>(concrete)->pointee(),
+        bindings, error_span);
+  } else if (pattern->kind() == TypeKind::Generator &&
+             concrete->kind() == TypeKind::Generator) {
+    infer_type_bindings(
+        static_cast<const TypeGenerator*>(pattern)->yield_type(),
+        static_cast<const TypeGenerator*>(concrete)->yield_type(),
+        bindings, error_span);
+  } else if (pattern->kind() == TypeKind::Function &&
+             concrete->kind() == TypeKind::Function) {
+    const auto* fp = static_cast<const TypeFunction*>(pattern);
+    const auto* fc = static_cast<const TypeFunction*>(concrete);
+    if (fp->param_types().size() == fc->param_types().size()) {
+      for (size_t j = 0; j < fp->param_types().size(); ++j) {
+        infer_type_bindings(fp->param_types()[j], fc->param_types()[j],
+                            bindings, error_span);
+      }
+      infer_type_bindings(fp->return_type(), fc->return_type(),
+                          bindings, error_span);
+    }
+  }
+}
+
+auto TypeChecker::substitute_generics(
+    const Type* type,
+    const std::unordered_map<uint32_t, const Type*>& bindings)
+    -> const Type* {
+  if (type == nullptr || bindings.empty()) {
+    return type;
+  }
+
+  switch (type->kind()) {
+  case TypeKind::GenericParam: {
+    const auto* gp = static_cast<const TypeGenericParam*>(type);
+    auto it = bindings.find(gp->index());
+    return it != bindings.end() ? it->second : type;
+  }
+  case TypeKind::Pointer: {
+    const auto* ptr = static_cast<const TypePointer*>(type);
+    const auto* sub = substitute_generics(ptr->pointee(), bindings);
+    return sub == ptr->pointee() ? type : types_.pointer_to(sub);
+  }
+  case TypeKind::Generator: {
+    const auto* gen = static_cast<const TypeGenerator*>(type);
+    const auto* sub = substitute_generics(gen->yield_type(), bindings);
+    return sub == gen->yield_type() ? type : types_.generator_type(sub);
+  }
+  case TypeKind::Function: {
+    const auto* fn = static_cast<const TypeFunction*>(type);
+    bool changed = false;
+    std::vector<const Type*> params;
+    params.reserve(fn->param_types().size());
+    for (const auto* param : fn->param_types()) {
+      const auto* sub = substitute_generics(param, bindings);
+      if (sub != param) changed = true;
+      params.push_back(sub);
+    }
+    const auto* ret = substitute_generics(fn->return_type(), bindings);
+    if (ret != fn->return_type()) changed = true;
+    return changed ? types_.function_type(std::move(params), ret) : type;
+  }
+  default:
+    return type;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Call expressions
 // ---------------------------------------------------------------------------
 
@@ -1189,24 +1289,13 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
                 "' is not assignable to parameter type '" +
                 print_type(params[i]) + "'");
     }
-    // Record binding: generic param → concrete argument type.
-    if (params[i]->kind() == TypeKind::GenericParam) {
-      const auto* gp = static_cast<const TypeGenericParam*>(params[i]);
-      type_bindings[gp->index()] = arg_type;
-    }
+    // Infer generic bindings by structural matching.
+    infer_type_bindings(params[i], arg_type, type_bindings,
+                        call.args[i]->span);
   }
 
-  // Substitute generic return type if it's a type parameter.
-  const auto* ret = fn_type->return_type();
-  if (ret != nullptr && ret->kind() == TypeKind::GenericParam) {
-    const auto* gp = static_cast<const TypeGenericParam*>(ret);
-    auto it = type_bindings.find(gp->index());
-    if (it != type_bindings.end()) {
-      return it->second;
-    }
-  }
-
-  return ret;
+  // Substitute generic params in the return type.
+  return substitute_generics(fn_type->return_type(), type_bindings);
 }
 
 // ---------------------------------------------------------------------------
@@ -1307,8 +1396,12 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
   }
 
   // Try method lookup on any type (struct conformances + extend decls).
-  const auto* method_type = lookup_method(obj_type, field.field);
+  const Decl* method_decl = nullptr;
+  const auto* method_type = lookup_method(obj_type, field.field, &method_decl);
   if (method_type != nullptr) {
+    if (method_decl != nullptr) {
+      typed_.set_method_resolution(expr, method_decl);
+    }
     return method_type;
   }
 
@@ -1329,7 +1422,8 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
 // ---------------------------------------------------------------------------
 
 auto TypeChecker::lookup_method(const Type* obj_type,
-                                std::string_view name) -> const Type* {
+                                std::string_view name,
+                                const Decl** resolved_decl) -> const Type* {
   // Helper: given a FunctionDecl method, build a function type with
   // the self parameter removed (receiver is already bound).
   auto method_fn_type = [&](const FunctionDecl& method) -> const Type* {
@@ -1368,6 +1462,9 @@ auto TypeChecker::lookup_method(const Type* obj_type,
           for (const auto* method_decl : conf.methods) {
             const auto& method = method_decl->as<FunctionDecl>();
             if (method.name == name) {
+              if (resolved_decl != nullptr) {
+                *resolved_decl = method_decl;
+              }
               return method_fn_type(method);
             }
           }
@@ -1390,6 +1487,9 @@ auto TypeChecker::lookup_method(const Type* obj_type,
       for (const auto* method_decl : ext.methods) {
         const auto& method = method_decl->as<FunctionDecl>();
         if (method.name == name) {
+          if (resolved_decl != nullptr) {
+            *resolved_decl = method_decl;
+          }
           return method_fn_type(method);
         }
       }
@@ -1442,17 +1542,33 @@ auto TypeChecker::lookup_method(const Type* obj_type,
   }
 
   // 4. Search derived conformances — concept method signatures.
-  //    Set concept_self_map_ so that the concept name in type position
-  //    resolves to the receiver type (§3.2).
+  //    When a match is found, try to resolve the concrete extend
+  //    implementation for method dispatch lowering.
   auto derived_it = derived_conformances_.find(obj_type);
   if (derived_it != derived_conformances_.end()) {
     auto saved_csm = concept_self_map_;
     for (const auto* concept_decl : derived_it->second) {
       const auto& cpt = concept_decl->as<ConceptDecl>();
       concept_self_map_[cpt.name] = obj_type;
-      for (const auto* method_decl : cpt.methods) {
-        const auto& method = method_decl->as<FunctionDecl>();
+      for (const auto* cpt_method_decl : cpt.methods) {
+        const auto& method = cpt_method_decl->as<FunctionDecl>();
         if (method.name == name) {
+          // Find the extend implementation for this type + method.
+          if (resolved_decl != nullptr && file_ != nullptr) {
+            for (const auto* decl : file_->declarations) {
+              if (decl->kind() != NodeKind::ExtendDecl) continue;
+              const auto& ext = decl->as<ExtendDecl>();
+              const auto* target = resolve_type_node(ext.target_type);
+              if (target != obj_type) continue;
+              for (const auto* ext_method : ext.methods) {
+                if (ext_method->as<FunctionDecl>().name == name) {
+                  *resolved_decl = ext_method;
+                  break;
+                }
+              }
+              if (*resolved_decl != nullptr) break;
+            }
+          }
           auto result = method_fn_type(method);
           concept_self_map_ = saved_csm;
           return result;
