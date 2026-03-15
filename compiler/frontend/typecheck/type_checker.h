@@ -79,6 +79,40 @@ private:
   // conforming type).
   std::unordered_map<std::string_view, const Type*> concept_self_map_;
 
+  // RAII guard for concept_self_map_ save/restore.
+  struct ConceptSelfMapGuard {
+    std::unordered_map<std::string_view, const Type*>& map;
+    std::unordered_map<std::string_view, const Type*> saved;
+    ConceptSelfMapGuard(std::unordered_map<std::string_view, const Type*>& m)
+        : map(m), saved(m) {}
+    ~ConceptSelfMapGuard() { map = saved; }
+  };
+
+  // Pre-built method lookup table: (type*, method_name) -> {fn_type, decl}.
+  struct MethodEntry {
+    const Type* fn_type;      // method function type (self removed)
+    const Decl* method_decl;  // the FunctionDecl node for HIR resolution
+  };
+
+  struct MethodKey {
+    const Type* type;
+    std::string_view name;
+    auto operator==(const MethodKey&) const -> bool = default;
+  };
+
+  struct MethodKeyHash {
+    auto operator()(const MethodKey& key) const -> size_t {
+      auto h1 = std::hash<const void*>{}(key.type);
+      auto h2 = std::hash<std::string_view>{}(key.name);
+      return h1 ^ (h2 * 0x9e3779b97f4a7c15ULL + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+    }
+  };
+
+  std::unordered_map<MethodKey, MethodEntry, MethodKeyHash> method_table_;
+
+  void build_method_table(const FileNode& file);
+  auto build_method_fn_type(const FunctionDecl& method) -> const Type*;
+
   // --- TypeNode -> Type* bridge ---
 
   auto resolve_type_node(const TypeNode* node) -> const Type*;
@@ -132,6 +166,9 @@ private:
   auto substitute_generics(const Type* type,
                            const std::unordered_map<uint32_t, const Type*>& bindings)
       -> const Type*;
+  void verify_concept_constraints(
+      const Expr* callee_expr, Span error_span,
+      const std::unordered_map<uint32_t, const Type*>& bindings);
   auto check_construct(const Expr* expr, const TypeStruct* struct_type)
       -> const Type*;
   auto check_pipe(const Expr* expr) -> const Type*;

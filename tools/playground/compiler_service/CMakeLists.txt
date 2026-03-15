@@ -5,6 +5,7 @@ add_executable(dao_playground
   main.cpp
   analyze.cpp
   examples.cpp
+  pipeline.cpp
   run.cpp
 )
 

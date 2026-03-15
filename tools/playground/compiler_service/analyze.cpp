@@ -1,4 +1,5 @@
 #include "analyze.h"
+#include "pipeline.h"
 #include "token_category.h"
 
 #include "analysis/semantic_tokens.h"
@@ -18,52 +19,10 @@
 
 #include <nlohmann/json.hpp>
 
-#include <fstream>
 #include <sstream>
 #include <string>
 
 namespace dao::playground {
-
-namespace {
-
-auto read_file(const std::filesystem::path& path) -> std::string {
-  std::ifstream file(path);
-  if (!file) {
-    return {};
-  }
-  return {std::istreambuf_iterator<char>(file),
-          std::istreambuf_iterator<char>()};
-}
-
-auto load_prelude(const std::filesystem::path& repo_root) -> std::string {
-  auto stdlib_core = repo_root / "stdlib" / "core";
-  std::string prelude;
-  if (!std::filesystem::exists(stdlib_core)) {
-    return prelude;
-  }
-  for (const auto& entry :
-       std::filesystem::directory_iterator(stdlib_core)) {
-    if (entry.path().extension() != ".dao") {
-      continue;
-    }
-    prelude += read_file(entry.path());
-    prelude += '\n';
-  }
-  return prelude;
-}
-
-// Check whether any diagnostic originates from user code.
-auto has_user_error(const std::vector<Diagnostic>& diags,
-                    uint32_t prelude_bytes) -> bool {
-  for (const auto& diag : diags) {
-    if (diag.span.offset >= prelude_bytes) {
-      return true;
-    }
-  }
-  return false;
-}
-
-} // namespace
 
 // NOLINTBEGIN(readability-magic-numbers)
 void handle_analyze(const httplib::Request& req, httplib::Response& res,
@@ -86,12 +45,7 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
   // Load prelude and prepend to user source.
   auto prelude_source = load_prelude(repo_root);
   auto prelude_bytes = static_cast<uint32_t>(prelude_source.size());
-  uint32_t prelude_lines = 0;
-  for (char chr : prelude_source) {
-    if (chr == '\n') {
-      ++prelude_lines;
-    }
-  }
+  auto prelude_lines = count_lines(prelude_source);
 
   auto user_source = request["source"].get<std::string>();
   auto combined = prelude_source + user_source;
@@ -301,11 +255,8 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
 
         if (mir_result.module == nullptr &&
             !has_user_error(mir_result.diagnostics, prelude_bytes)) {
-          diagnostics.push_back({
-              {"severity", "error"}, {"offset", 0}, {"length", 0},
-              {"line", 1}, {"col", 1},
-              {"message", "MIR lowering failed (possible prelude error)"},
-          });
+          diagnostics.push_back(
+              make_internal_error("MIR lowering failed (possible prelude error)"));
         }
 
         if (mir_result.module != nullptr) {
@@ -347,11 +298,8 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
           }
         }
       } else if (!has_user_error(hir_result.diagnostics, prelude_bytes)) {
-        diagnostics.push_back({
-            {"severity", "error"}, {"offset", 0}, {"length", 0},
-            {"line", 1}, {"col", 1},
-            {"message", "HIR lowering failed (possible prelude error)"},
-        });
+        diagnostics.push_back(
+            make_internal_error("HIR lowering failed (possible prelude error)"));
       }
     }
   }

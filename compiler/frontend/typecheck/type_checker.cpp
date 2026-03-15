@@ -31,6 +31,9 @@ auto TypeChecker::check(const FileNode& file) -> TypeCheckResult {
   // Pass 1c: compute derived conformances for all classes.
   compute_derived_conformances(file);
 
+  // Pass 1d: build pre-computed method lookup table.
+  build_method_table(file);
+
   // Pass 2: check all declaration bodies.
   for (const auto* decl : file.declarations) {
     check_declaration(decl);
@@ -1277,6 +1280,54 @@ auto TypeChecker::substitute_generics(
 }
 
 // ---------------------------------------------------------------------------
+// Shared generic constraint verification
+// ---------------------------------------------------------------------------
+
+void TypeChecker::verify_concept_constraints(
+    const Expr* callee_expr, Span error_span,
+    const std::unordered_map<uint32_t, const Type*>& bindings) {
+  if (bindings.empty() || !callee_expr->is<IdentifierExpr>()) {
+    return;
+  }
+  auto sym_it = resolve_.uses.find(callee_expr->span.offset);
+  if (sym_it == resolve_.uses.end() ||
+      sym_it->second->kind != SymbolKind::Function ||
+      sym_it->second->decl == nullptr) {
+    return;
+  }
+  const auto* fn_decl = static_cast<const Decl*>(sym_it->second->decl);
+  if (!fn_decl->is<FunctionDecl>()) {
+    return;
+  }
+  const auto& func = fn_decl->as<FunctionDecl>();
+  for (const auto& gp_decl : func.type_params) {
+    auto idx = static_cast<uint32_t>(&gp_decl - func.type_params.data());
+    auto binding_it = bindings.find(idx);
+    if (binding_it == bindings.end()) {
+      continue;
+    }
+    for (const auto* constraint : gp_decl.constraints) {
+      auto csym_it = resolve_.uses.find(constraint->span.offset);
+      if (csym_it == resolve_.uses.end() ||
+          csym_it->second->kind != SymbolKind::Concept ||
+          csym_it->second->decl == nullptr) {
+        continue;
+      }
+      const auto* concept_decl =
+          static_cast<const Decl*>(csym_it->second->decl);
+      if (!type_conforms_to(binding_it->second, concept_decl)) {
+        error(error_span,
+              "type '" + print_type(binding_it->second) +
+                  "' does not satisfy concept '" +
+                  std::string(csym_it->second->name) +
+                  "' required by generic parameter '" +
+                  std::string(gp_decl.name) + "'");
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Call expressions
 // ---------------------------------------------------------------------------
 
@@ -1336,45 +1387,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
                         call.args[i]->span);
   }
 
-  // Verify concept constraints on inferred generic bindings.
-  if (!type_bindings.empty() && call.callee->is<IdentifierExpr>()) {
-    auto sym_it = resolve_.uses.find(call.callee->span.offset);
-    if (sym_it != resolve_.uses.end() &&
-        sym_it->second->kind == SymbolKind::Function &&
-        sym_it->second->decl != nullptr) {
-      const auto* fn_decl =
-          static_cast<const Decl*>(sym_it->second->decl);
-      if (fn_decl->is<FunctionDecl>()) {
-        const auto& fn = fn_decl->as<FunctionDecl>();
-        for (const auto& gp_decl : fn.type_params) {
-          // Find the index for this generic param.
-          auto idx = static_cast<uint32_t>(&gp_decl - fn.type_params.data());
-          auto binding_it = type_bindings.find(idx);
-          if (binding_it == type_bindings.end()) {
-            continue;
-          }
-          for (const auto* constraint : gp_decl.constraints) {
-            auto csym_it = resolve_.uses.find(constraint->span.offset);
-            if (csym_it == resolve_.uses.end() ||
-                csym_it->second->kind != SymbolKind::Concept ||
-                csym_it->second->decl == nullptr) {
-              continue;
-            }
-            const auto* concept_decl =
-                static_cast<const Decl*>(csym_it->second->decl);
-            if (!type_conforms_to(binding_it->second, concept_decl)) {
-              error(expr->span,
-                    "type '" + print_type(binding_it->second) +
-                        "' does not satisfy concept '" +
-                        std::string(csym_it->second->name) +
-                        "' required by generic parameter '" +
-                        std::string(gp_decl.name) + "'");
-            }
-          }
-        }
-      }
-    }
-  }
+  verify_concept_constraints(call.callee, expr->span, type_bindings);
 
   // Substitute generic params in the return type.
   return substitute_generics(fn_type->return_type(), type_bindings);
@@ -1457,45 +1470,7 @@ auto TypeChecker::check_pipe(const Expr* expr) -> const Type* {
   std::unordered_map<uint32_t, const Type*> type_bindings;
   infer_type_bindings(params[0], lhs_type, type_bindings, pipe.left->span);
 
-  // Verify concept constraints on inferred bindings.
-  if (!type_bindings.empty() && pipe.right->is<IdentifierExpr>()) {
-    auto sym_it = resolve_.uses.find(pipe.right->span.offset);
-    if (sym_it != resolve_.uses.end() &&
-        sym_it->second->kind == SymbolKind::Function &&
-        sym_it->second->decl != nullptr) {
-      const auto* fn_decl =
-          static_cast<const Decl*>(sym_it->second->decl);
-      if (fn_decl->is<FunctionDecl>()) {
-        const auto& callee_fn = fn_decl->as<FunctionDecl>();
-        for (const auto& gp_decl : callee_fn.type_params) {
-          auto idx = static_cast<uint32_t>(
-              &gp_decl - callee_fn.type_params.data());
-          auto binding_it = type_bindings.find(idx);
-          if (binding_it == type_bindings.end()) {
-            continue;
-          }
-          for (const auto* constraint : gp_decl.constraints) {
-            auto csym_it = resolve_.uses.find(constraint->span.offset);
-            if (csym_it == resolve_.uses.end() ||
-                csym_it->second->kind != SymbolKind::Concept ||
-                csym_it->second->decl == nullptr) {
-              continue;
-            }
-            const auto* concept_decl =
-                static_cast<const Decl*>(csym_it->second->decl);
-            if (!type_conforms_to(binding_it->second, concept_decl)) {
-              error(expr->span,
-                    "type '" + print_type(binding_it->second) +
-                        "' does not satisfy concept '" +
-                        std::string(csym_it->second->name) +
-                        "' required by generic parameter '" +
-                        std::string(gp_decl.name) + "'");
-            }
-          }
-        }
-      }
-    }
-  }
+  verify_concept_constraints(pipe.right, expr->span, type_bindings);
 
   // Substitute generic params in the return type.
   return substitute_generics(fn_type->return_type(), type_bindings);
@@ -1545,87 +1520,140 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
 }
 
 // ---------------------------------------------------------------------------
-// Method lookup — search conformance blocks and extend declarations
+// build_method_fn_type — build a function type for a method with self removed.
+// ---------------------------------------------------------------------------
+
+auto TypeChecker::build_method_fn_type(const FunctionDecl& method)
+    -> const Type* {
+  std::vector<const Type*> param_types;
+  bool valid = true;
+  for (size_t i = 0; i < method.params.size(); ++i) {
+    if (i == 0 && method.params[i].name == "self") {
+      continue; // skip receiver
+    }
+    const auto* pt = resolve_type_node(method.params[i].type);
+    if (pt == nullptr) {
+      valid = false;
+    }
+    param_types.push_back(pt);
+  }
+  const auto* ret = method.return_type != nullptr
+                        ? resolve_type_node(method.return_type)
+                        : types_.void_type();
+  if (!valid || ret == nullptr) {
+    return nullptr;
+  }
+  return types_.function_type(std::move(param_types), ret);
+}
+
+// ---------------------------------------------------------------------------
+// build_method_table — pre-populate method_table_ for O(1) lookup.
+// Called once after compute_derived_conformances().
+// ---------------------------------------------------------------------------
+
+void TypeChecker::build_method_table(const FileNode& file) {
+  // 1. Struct conformance block methods.
+  for (const auto* decl : file.declarations) {
+    if (decl->kind() != NodeKind::ClassDecl) {
+      continue;
+    }
+    const auto& cls = decl->as<ClassDecl>();
+    auto decl_it = decl_symbols_.find(cls.name_span.offset);
+    if (decl_it == decl_symbols_.end()) {
+      continue;
+    }
+    const auto* struct_type = resolve_symbol_type(decl_it->second);
+    if (struct_type == nullptr || struct_type->kind() != TypeKind::Struct) {
+      continue;
+    }
+    for (const auto& conf : cls.conformances) {
+      for (const auto* method_decl : conf.methods) {
+        const auto& method = method_decl->as<FunctionDecl>();
+        MethodKey key{struct_type, method.name};
+        if (method_table_.find(key) == method_table_.end()) {
+          const auto* fn_type = build_method_fn_type(method);
+          method_table_.insert({key, {fn_type, method_decl}});
+        }
+      }
+    }
+  }
+
+  // 2. Top-level extend declarations.
+  for (const auto* decl : file.declarations) {
+    if (decl->kind() != NodeKind::ExtendDecl) {
+      continue;
+    }
+    const auto& ext = decl->as<ExtendDecl>();
+    const auto* target = resolve_type_node(ext.target_type);
+    if (target == nullptr) {
+      continue;
+    }
+    for (const auto* method_decl : ext.methods) {
+      const auto& method = method_decl->as<FunctionDecl>();
+      MethodKey key{target, method.name};
+      if (method_table_.find(key) == method_table_.end()) {
+        const auto* fn_type = build_method_fn_type(method);
+        method_table_.insert({key, {fn_type, method_decl}});
+      }
+    }
+  }
+
+  // 3. Derived conformance concept methods.
+  //    For each (type, derived_concept), register each concept method
+  //    with the type. Resolve the concrete extend implementation for dispatch.
+  for (const auto& [type, concepts] : derived_conformances_) {
+    for (const auto* concept_decl : concepts) {
+      const auto& cpt = concept_decl->as<ConceptDecl>();
+      ConceptSelfMapGuard guard(concept_self_map_);
+      concept_self_map_[cpt.name] = type;
+      for (const auto* cpt_method_decl : cpt.methods) {
+        const auto& method = cpt_method_decl->as<FunctionDecl>();
+        MethodKey key{type, method.name};
+        if (method_table_.find(key) != method_table_.end()) {
+          continue;
+        }
+        const auto* fn_type = build_method_fn_type(method);
+        // Find the concrete extend implementation for HIR lowering.
+        const Decl* impl_decl = nullptr;
+        for (const auto* decl : file.declarations) {
+          if (decl->kind() != NodeKind::ExtendDecl) continue;
+          const auto& ext = decl->as<ExtendDecl>();
+          const auto* target = resolve_type_node(ext.target_type);
+          if (target != type) continue;
+          for (const auto* ext_method : ext.methods) {
+            if (ext_method->as<FunctionDecl>().name == method.name) {
+              impl_decl = ext_method;
+              break;
+            }
+          }
+          if (impl_decl != nullptr) break;
+        }
+        method_table_.insert(
+            {key, {fn_type, impl_decl != nullptr ? impl_decl : cpt_method_decl}});
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Method lookup — table-driven with generic param fallback
 // ---------------------------------------------------------------------------
 
 auto TypeChecker::lookup_method(const Type* obj_type,
                                 std::string_view name,
                                 const Decl** resolved_decl) -> const Type* {
-  // Helper: given a FunctionDecl method, build a function type with
-  // the self parameter removed (receiver is already bound).
-  auto method_fn_type = [&](const FunctionDecl& method) -> const Type* {
-    std::vector<const Type*> param_types;
-    bool valid = true;
-    for (size_t i = 0; i < method.params.size(); ++i) {
-      if (i == 0 && method.params[i].name == "self") {
-        continue; // skip receiver
-      }
-      const auto* pt = resolve_type_node(method.params[i].type);
-      if (pt == nullptr) {
-        valid = false;
-      }
-      param_types.push_back(pt);
+  // O(1) table lookup for concrete types (covers struct conformance blocks,
+  // extend declarations, and derived conformance methods).
+  auto it = method_table_.find(MethodKey{obj_type, name});
+  if (it != method_table_.end()) {
+    if (resolved_decl != nullptr) {
+      *resolved_decl = it->second.method_decl;
     }
-    const auto* ret = method.return_type != nullptr
-                          ? resolve_type_node(method.return_type)
-                          : types_.void_type();
-    if (!valid || ret == nullptr) {
-      return nullptr;
-    }
-    return types_.function_type(std::move(param_types), ret);
-  };
-
-  // 1. If the type is a struct, search its own conformance blocks.
-  if (obj_type->kind() == TypeKind::Struct) {
-    const auto* struct_type =
-        static_cast<const TypeStruct*>(obj_type);
-    const auto* decl_sym =
-        static_cast<const Symbol*>(struct_type->decl_id());
-    if (decl_sym != nullptr && decl_sym->decl != nullptr) {
-      const auto* decl_node = static_cast<const Decl*>(decl_sym->decl);
-      if (decl_node->is<ClassDecl>()) {
-        const auto& cls = decl_node->as<ClassDecl>();
-        for (const auto& conf : cls.conformances) {
-          for (const auto* method_decl : conf.methods) {
-            const auto& method = method_decl->as<FunctionDecl>();
-            if (method.name == name) {
-              if (resolved_decl != nullptr) {
-                *resolved_decl = method_decl;
-              }
-              return method_fn_type(method);
-            }
-          }
-        }
-      }
-    }
+    return it->second.fn_type;
   }
 
-  // 2. Search top-level extend declarations targeting this type.
-  if (file_ != nullptr) {
-    for (const auto* decl : file_->declarations) {
-      if (decl->kind() != NodeKind::ExtendDecl) {
-        continue;
-      }
-      const auto& ext = decl->as<ExtendDecl>();
-      const auto* target = resolve_type_node(ext.target_type);
-      if (target != obj_type) {
-        continue;
-      }
-      for (const auto* method_decl : ext.methods) {
-        const auto& method = method_decl->as<FunctionDecl>();
-        if (method.name == name) {
-          if (resolved_decl != nullptr) {
-            *resolved_decl = method_decl;
-          }
-          return method_fn_type(method);
-        }
-      }
-    }
-  }
-
-  // 3. If the receiver is a generic type parameter, search its concept
-  //    constraints for the method. This allows `x.to_string()` inside
-  //    `fn show<T: Printable>(x: T)` to resolve against Printable's methods.
+  // Generic type parameter constraint search — this can't be pre-built
+  // because it's parameterized on the receiver type variable.
   if (obj_type->kind() == TypeKind::GenericParam) {
     const auto* gp = static_cast<const TypeGenericParam*>(obj_type);
     if (gp->binder() != nullptr) {
@@ -1639,7 +1667,6 @@ auto TypeChecker::lookup_method(const Type* obj_type,
       if (type_params != nullptr && gp->index() < type_params->size()) {
         const auto& gp_decl = (*type_params)[gp->index()];
         for (const auto* constraint : gp_decl.constraints) {
-          // Resolve constraint to a concept symbol.
           auto sym_it =
               resolve_.uses.find(constraint->span.offset);
           if (sym_it == resolve_.uses.end() ||
@@ -1655,54 +1682,14 @@ auto TypeChecker::lookup_method(const Type* obj_type,
           for (const auto* method_decl : cpt.methods) {
             const auto& method = method_decl->as<FunctionDecl>();
             if (method.name == name) {
-              // Build return type with self mapped to the generic param.
-              auto saved_csm = concept_self_map_;
+              ConceptSelfMapGuard guard(concept_self_map_);
               concept_self_map_[cpt.name] = obj_type;
-              auto result = method_fn_type(method);
-              concept_self_map_ = saved_csm;
-              return result;
+              return build_method_fn_type(method);
             }
           }
         }
       }
     }
-  }
-
-  // 4. Search derived conformances — concept method signatures.
-  //    When a match is found, try to resolve the concrete extend
-  //    implementation for method dispatch lowering.
-  auto derived_it = derived_conformances_.find(obj_type);
-  if (derived_it != derived_conformances_.end()) {
-    auto saved_csm = concept_self_map_;
-    for (const auto* concept_decl : derived_it->second) {
-      const auto& cpt = concept_decl->as<ConceptDecl>();
-      concept_self_map_[cpt.name] = obj_type;
-      for (const auto* cpt_method_decl : cpt.methods) {
-        const auto& method = cpt_method_decl->as<FunctionDecl>();
-        if (method.name == name) {
-          // Find the extend implementation for this type + method.
-          if (resolved_decl != nullptr && file_ != nullptr) {
-            for (const auto* decl : file_->declarations) {
-              if (decl->kind() != NodeKind::ExtendDecl) continue;
-              const auto& ext = decl->as<ExtendDecl>();
-              const auto* target = resolve_type_node(ext.target_type);
-              if (target != obj_type) continue;
-              for (const auto* ext_method : ext.methods) {
-                if (ext_method->as<FunctionDecl>().name == name) {
-                  *resolved_decl = ext_method;
-                  break;
-                }
-              }
-              if (*resolved_decl != nullptr) break;
-            }
-          }
-          auto result = method_fn_type(method);
-          concept_self_map_ = saved_csm;
-          return result;
-        }
-      }
-    }
-    concept_self_map_ = saved_csm;
   }
 
   return nullptr;

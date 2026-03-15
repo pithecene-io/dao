@@ -26,7 +26,12 @@ CMakeUserPresets.json
 # Compiled executables from daoc build
 examples/hello
 examples/astar
+examples/arithmetic
+examples/control_flow
+examples/generators
+examples/iteration
 examples/pipelines
+examples/structs
 examples/unsafe
 
 # Playground frontend
