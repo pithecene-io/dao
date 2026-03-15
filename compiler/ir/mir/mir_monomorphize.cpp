@@ -261,6 +261,27 @@ void fixup_method_calls(MirFunction* fn, const MirModule& module,
     }
   }
 
+  // Build value-type index: MirValueId.id → Type* for O(1) lookups.
+  std::unordered_map<uint32_t, const Type*> value_types;
+  for (const auto* blk : fn->blocks) {
+    for (const auto* inst : blk->insts) {
+      if (inst->result.valid() && inst->type != nullptr) {
+        value_types[inst->result.id] = inst->type;
+      }
+    }
+  }
+
+  // Build callee-use index: FnRef result id → list of MirCall instructions.
+  std::unordered_map<uint32_t, std::vector<MirInst*>> callee_uses;
+  for (auto* blk : fn->blocks) {
+    for (auto* inst : blk->insts) {
+      auto* call = std::get_if<MirCall>(&inst->payload);
+      if (call != nullptr) {
+        callee_uses[call->callee.id].push_back(inst);
+      }
+    }
+  }
+
   for (auto* block : fn->blocks) {
     for (auto* inst : block->insts) {
       auto* field = std::get_if<MirFieldAccess>(&inst->payload);
@@ -268,18 +289,11 @@ void fixup_method_calls(MirFunction* fn, const MirModule& module,
         continue;
       }
 
-      // Find the type of the object being accessed.
+      // Look up the type of the object being accessed.
       const Type* obj_type = nullptr;
-      for (const auto* blk : fn->blocks) {
-        for (const auto* search : blk->insts) {
-          if (search->result.id == field->object.id) {
-            obj_type = search->type;
-            break;
-          }
-        }
-        if (obj_type != nullptr) {
-          break;
-        }
+      auto vt_it = value_types.find(field->object.id);
+      if (vt_it != value_types.end()) {
+        obj_type = vt_it->second;
       }
 
       // Skip struct types — those are real field accesses.
@@ -313,12 +327,13 @@ void fixup_method_calls(MirFunction* fn, const MirModule& module,
       inst->type = types.function_type(
           std::move(param_types), entry.mir_fn->return_type);
 
-      // Find the MirCall that uses this instruction's result as callee
+      // Find the MirCall(s) that use this instruction's result as callee
       // and prepend the object as the first argument (self).
-      for (auto* call_block : fn->blocks) {
-        for (auto* call_inst : call_block->insts) {
+      auto use_it = callee_uses.find(inst->result.id);
+      if (use_it != callee_uses.end()) {
+        for (auto* call_inst : use_it->second) {
           auto* call = std::get_if<MirCall>(&call_inst->payload);
-          if (call == nullptr || call->callee.id != inst->result.id) {
+          if (call == nullptr) {
             continue;
           }
           if (call->args == nullptr) {
@@ -408,6 +423,112 @@ auto subst_to_type_args(const TypeSubst& subst) -> std::vector<const Type*> {
   return args;
 }
 
+// ---------------------------------------------------------------------------
+// Build a value-type index for a function: MirValueId.id → Type*.
+// ---------------------------------------------------------------------------
+
+auto build_value_types(const MirFunction* fn)
+    -> std::unordered_map<uint32_t, const Type*> {
+  std::unordered_map<uint32_t, const Type*> value_types;
+  for (const auto* blk : fn->blocks) {
+    for (const auto* inst : blk->insts) {
+      if (inst->result.valid() && inst->type != nullptr) {
+        value_types[inst->result.id] = inst->type;
+      }
+    }
+  }
+  return value_types;
+}
+
+// ---------------------------------------------------------------------------
+// Process a single call site that references a generic function.
+// Returns true if a new specialization was created.
+// ---------------------------------------------------------------------------
+
+auto specialize_call_site(
+    MirInst* inst, MirFnRef* fn_ref, const MirBlock* block,
+    size_t inst_idx,
+    const std::unordered_map<uint32_t, const Type*>& value_types,
+    const std::unordered_map<const Symbol*, MirFunction*>& generic_fns,
+    std::unordered_map<SpecKey, MirFunction*, SpecKeyHash>& spec_cache,
+    MirModule& module, MirContext& ctx, TypeContext& types) -> bool {
+
+  auto git = generic_fns.find(fn_ref->symbol);
+  if (git == generic_fns.end()) {
+    return false;
+  }
+
+  // Find the matching MirCall instruction that uses this FnRef.
+  const MirCall* call_payload = nullptr;
+  for (size_t j = inst_idx + 1; j < block->insts.size(); ++j) {
+    auto* candidate = std::get_if<MirCall>(&block->insts[j]->payload);
+    if (candidate != nullptr &&
+        candidate->callee.id == inst->result.id) {
+      call_payload = candidate;
+      break;
+    }
+  }
+
+  if (call_payload == nullptr || call_payload->args == nullptr) {
+    return false;
+  }
+
+  // Collect argument types from the value-type index.
+  std::vector<const Type*> arg_types;
+  arg_types.reserve(call_payload->args->size());
+  for (auto arg_id : *call_payload->args) {
+    auto vt_it = value_types.find(arg_id.id);
+    arg_types.push_back(vt_it != value_types.end() ? vt_it->second
+                                                    : nullptr);
+  }
+
+  // Infer substitution from argument types.
+  auto subst = infer_substitution(git->second, arg_types);
+  if (subst.empty()) {
+    return false;
+  }
+
+  auto type_args = subst_to_type_args(subst);
+  SpecKey key{git->second, type_args};
+
+  // Check cache.
+  auto cache_it = spec_cache.find(key);
+  if (cache_it != spec_cache.end()) {
+    // Rewrite the FnRef to point at the cached specialization.
+    fn_ref->symbol = cache_it->second->symbol;
+    inst->type = substitute_type(inst->type, subst, types);
+    return false; // no new specialization
+  }
+
+  // Create mangled symbol.
+  // Allocate name string on arena so it outlives this scope.
+  auto* name_str = ctx.alloc<std::string>(
+      mangle_name(git->second->symbol->name, type_args));
+
+  auto* new_sym = ctx.alloc<Symbol>();
+  new_sym->kind = SymbolKind::Function;
+  new_sym->name = std::string_view(*name_str);
+  new_sym->decl_span = git->second->symbol->decl_span;
+  new_sym->decl = git->second->symbol->decl;
+
+  // Clone the generic function with type substitution.
+  auto* specialized =
+      clone_function(git->second, subst, new_sym, ctx, types);
+
+  // Resolve method calls on newly-concrete types.
+  fixup_method_calls(specialized, module, ctx, types);
+
+  // Register in cache and add to module.
+  spec_cache[key] = specialized;
+  module.functions.push_back(specialized);
+
+  // Rewrite the FnRef.
+  fn_ref->symbol = new_sym;
+  inst->type = substitute_type(inst->type, subst, types);
+
+  return true;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -433,9 +554,6 @@ auto monomorphize(MirModule& module, MirContext& ctx,
   // Specialization cache: (generic fn, type args) → specialized fn.
   std::unordered_map<SpecKey, MirFunction*, SpecKeyHash> spec_cache;
 
-  // Arena-owned name strings for mangled symbols.
-  // (Stored as char arrays in MirContext arena.)
-
   // Phase 2+3+4: iterate until no new specializations are produced.
   bool changed = true;
   while (changed) {
@@ -447,6 +565,9 @@ auto monomorphize(MirModule& module, MirContext& ctx,
         continue;
       }
 
+      // Build per-function value-type index for O(1) arg type lookups.
+      auto value_types = build_value_types(fn);
+
       for (auto* block : fn->blocks) {
         for (size_t inst_idx = 0; inst_idx < block->insts.size();
              ++inst_idx) {
@@ -456,94 +577,11 @@ auto monomorphize(MirModule& module, MirContext& ctx,
             continue;
           }
 
-          auto git = generic_fns.find(fn_ref->symbol);
-          if (git == generic_fns.end()) {
-            continue;
+          if (specialize_call_site(inst, fn_ref, block, inst_idx,
+                                   value_types, generic_fns, spec_cache,
+                                   module, ctx, types)) {
+            changed = true;
           }
-
-          // Found a call to a generic function. Find the matching
-          // MirCall instruction that uses this FnRef.
-          const MirCall* call_payload = nullptr;
-          for (size_t j = inst_idx + 1; j < block->insts.size(); ++j) {
-            auto* candidate = std::get_if<MirCall>(
-                &block->insts[j]->payload);
-            if (candidate != nullptr &&
-                candidate->callee.id == inst->result.id) {
-              call_payload = candidate;
-              break;
-            }
-          }
-
-          if (call_payload == nullptr || call_payload->args == nullptr) {
-            continue;
-          }
-
-          // Collect argument types from the call.
-          std::vector<const Type*> arg_types;
-          arg_types.reserve(call_payload->args->size());
-          for (auto arg_id : *call_payload->args) {
-            // Find the instruction that produces this value to
-            // get its type.
-            const Type* arg_type = nullptr;
-            for (const auto* blk : fn->blocks) {
-              for (const auto* search_inst : blk->insts) {
-                if (search_inst->result.id == arg_id.id) {
-                  arg_type = search_inst->type;
-                  break;
-                }
-              }
-              if (arg_type != nullptr) {
-                break;
-              }
-            }
-            arg_types.push_back(arg_type);
-          }
-
-          // Infer substitution from argument types.
-          auto subst = infer_substitution(git->second, arg_types);
-          if (subst.empty()) {
-            continue;
-          }
-
-          auto type_args = subst_to_type_args(subst);
-          SpecKey key{git->second, type_args};
-
-          // Check cache.
-          auto cache_it = spec_cache.find(key);
-          if (cache_it != spec_cache.end()) {
-            // Rewrite the FnRef to point at the cached specialization.
-            fn_ref->symbol = cache_it->second->symbol;
-            inst->type = substitute_type(inst->type, subst, types);
-            continue;
-          }
-
-          // Create mangled symbol.
-          // Allocate name string on arena so it outlives this scope.
-          auto* name_str = ctx.alloc<std::string>(
-              mangle_name(git->second->symbol->name, type_args));
-
-          auto* new_sym = ctx.alloc<Symbol>();
-          new_sym->kind = SymbolKind::Function;
-          new_sym->name = std::string_view(*name_str);
-          new_sym->decl_span = git->second->symbol->decl_span;
-          new_sym->decl = git->second->symbol->decl;
-
-          // Clone the generic function with type substitution.
-          auto* specialized =
-              clone_function(git->second, subst, new_sym, ctx, types);
-
-          // Resolve method calls on newly-concrete types.
-          fixup_method_calls(specialized, module, ctx, types);
-
-          // Register in cache and add to module.
-          spec_cache[key] = specialized;
-          module.functions.push_back(specialized);
-
-          // Rewrite the FnRef.
-          fn_ref->symbol = new_sym;
-          inst->type = substitute_type(inst->type, subst, types);
-
-          changed = true;
         }
       }
     }
