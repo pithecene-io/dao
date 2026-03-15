@@ -2,6 +2,7 @@
 #define DAO_FRONTEND_TYPECHECK_TYPED_RESULTS_H
 
 #include "frontend/ast/ast.h"
+#include "frontend/resolve/symbol.h"
 #include "frontend/types/type.h"
 
 #include <unordered_map>
@@ -55,10 +56,25 @@ public:
     return it != decl_types_.end() ? it->second : nullptr;
   }
 
+  // --- Method resolution (field access → method function symbol) ---
+
+  // --- Method resolution (field expr → resolved method FunctionDecl) ---
+
+  void set_method_resolution(const Expr* field_expr, const Decl* method_decl) {
+    method_resolutions_[field_expr] = method_decl;
+  }
+
+  [[nodiscard]] auto method_resolution(const Expr* field_expr) const
+      -> const Decl* {
+    auto it = method_resolutions_.find(field_expr);
+    return it != method_resolutions_.end() ? it->second : nullptr;
+  }
+
 private:
   std::unordered_map<const Expr*, const Type*> expr_types_;
   std::unordered_map<const Stmt*, const Type*> local_types_;
   std::unordered_map<const Decl*, const Type*> decl_types_;
+  std::unordered_map<const Expr*, const Decl*> method_resolutions_;
 };
 
 } // namespace dao

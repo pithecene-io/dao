@@ -3,9 +3,46 @@
 namespace dao {
 
 auto is_assignable(const Type* source, const Type* target) -> bool {
-  // Exact semantic type equality via pointer identity.
-  // Canonical types are interned, so pointer equality is correct.
-  return source == target;
+  if (source == target) {
+    return true;
+  }
+
+  // A generic type parameter accepts any concrete type.
+  // Concept constraint checking is handled separately in check_call.
+  if (target->kind() == TypeKind::GenericParam) {
+    return true;
+  }
+
+  // Structural recursion for composite types containing generic params.
+  if (source->kind() == target->kind()) {
+    switch (target->kind()) {
+    case TypeKind::Pointer:
+      return is_assignable(
+          static_cast<const TypePointer*>(source)->pointee(),
+          static_cast<const TypePointer*>(target)->pointee());
+    case TypeKind::Generator:
+      return is_assignable(
+          static_cast<const TypeGenerator*>(source)->yield_type(),
+          static_cast<const TypeGenerator*>(target)->yield_type());
+    case TypeKind::Function: {
+      const auto* sf = static_cast<const TypeFunction*>(source);
+      const auto* tf = static_cast<const TypeFunction*>(target);
+      if (sf->param_types().size() != tf->param_types().size()) {
+        return false;
+      }
+      for (size_t i = 0; i < sf->param_types().size(); ++i) {
+        if (!is_assignable(sf->param_types()[i], tf->param_types()[i])) {
+          return false;
+        }
+      }
+      return is_assignable(sf->return_type(), tf->return_type());
+    }
+    default:
+      break;
+    }
+  }
+
+  return false;
 }
 
 auto is_numeric(const Type* type) -> bool {

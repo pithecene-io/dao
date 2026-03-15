@@ -11,6 +11,7 @@
 #include "backend/llvm/llvm_backend.h"
 #include "ir/mir/mir_builder.h"
 #include "ir/mir/mir_context.h"
+#include "ir/mir/mir_monomorphize.h"
 #include "ir/mir/mir_printer.h"
 
 #include <llvm/IR/LLVMContext.h>
@@ -274,6 +275,15 @@ auto run_through_mir(const std::filesystem::path& path) -> MirResult {
 
   if (mir.module == nullptr || has_errors) {
     std::exit(EXIT_FAILURE);
+  }
+
+  // Monomorphize generic functions before LLVM lowering.
+  auto mono_result =
+      dao::monomorphize(*mir.module, mir_ctx, hir_result.frontend.types);
+  if (!mono_result.diagnostics.empty()) {
+    print_error_diagnostics(filename, hir_result.frontend.parsed.source,
+                            mono_result.diagnostics,
+                            hir_result.frontend.prelude_lines);
   }
 
   return {.hir_result = std::move(hir_result),

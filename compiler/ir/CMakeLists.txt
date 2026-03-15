@@ -4,6 +4,7 @@ add_library(dao_ir STATIC
   hir/hir_printer.cpp
   mir/mir.cpp
   mir/mir_builder.cpp
+  mir/mir_monomorphize.cpp
   mir/mir_printer.cpp
 )
 
