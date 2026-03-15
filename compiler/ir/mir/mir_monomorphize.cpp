@@ -248,12 +248,16 @@ auto clone_function(const MirFunction* src, const TypeSubst& subst,
 // ---------------------------------------------------------------------------
 
 void fixup_method_calls(MirFunction* fn, const MirModule& module,
-                        MirContext& ctx) {
-  // Build a name → symbol lookup from the module's functions.
-  std::unordered_map<std::string, const Symbol*> fn_by_name;
+                        MirContext& ctx, TypeContext& types) {
+  // Build a name → (symbol, function) lookup from the module's functions.
+  struct FnEntry {
+    const Symbol* symbol;
+    const MirFunction* mir_fn;
+  };
+  std::unordered_map<std::string, FnEntry> fn_by_name;
   for (const auto* mod_fn : module.functions) {
     if (mod_fn->symbol != nullptr) {
-      fn_by_name[std::string(mod_fn->symbol->name)] = mod_fn->symbol;
+      fn_by_name[std::string(mod_fn->symbol->name)] = {mod_fn->symbol, mod_fn};
     }
   }
 
@@ -293,9 +297,21 @@ void fixup_method_calls(MirFunction* fn, const MirModule& module,
 
       // Save the object value before replacing the payload.
       auto object_val = field->object;
+      const auto& entry = sym_it->second;
 
       // Replace FieldAccess with FnRef to the extend method.
-      inst->payload = MirFnRef{sym_it->second};
+      // Update the instruction type to the method's function type,
+      // matching what MirBuilder would produce for a direct FnRef.
+      inst->payload = MirFnRef{entry.symbol};
+
+      // Build the function type from the extend method's MIR signature.
+      std::vector<const Type*> param_types;
+      for (const auto& local : entry.mir_fn->locals) {
+        if (!local.is_param) { break; }
+        param_types.push_back(local.type);
+      }
+      inst->type = types.function_type(
+          std::move(param_types), entry.mir_fn->return_type);
 
       // Find the MirCall that uses this instruction's result as callee
       // and prepend the object as the first argument (self).
@@ -517,7 +533,7 @@ auto monomorphize(MirModule& module, MirContext& ctx,
               clone_function(git->second, subst, new_sym, ctx, types);
 
           // Resolve method calls on newly-concrete types.
-          fixup_method_calls(specialized, module, ctx);
+          fixup_method_calls(specialized, module, ctx, types);
 
           // Register in cache and add to module.
           spec_cache[key] = specialized;
