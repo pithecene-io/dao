@@ -6,5 +6,6 @@ CMAKE_BUILD_PARALLEL_LEVEL = "{{ env.DAO_BUILD_JOBS }}"
 MAKEFLAGS = "-j{{ env.DAO_BUILD_JOBS }}"
 
 [tools]
+node = "22"
 conan = "2.26.2"
 "aqua:go-task/task" = "3.40.1"

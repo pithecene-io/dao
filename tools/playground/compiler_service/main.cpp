@@ -35,7 +35,7 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   auto examples_dir = root / "examples";
-  auto frontend_dir = root / "tools" / "playground" / "frontend";
+  auto frontend_dir = root / "tools" / "playground" / "frontend" / "dist";
 
   if (!std::filesystem::exists(frontend_dir)) {
     std::cerr << "error: frontend directory not found: " << frontend_dir << "\n";

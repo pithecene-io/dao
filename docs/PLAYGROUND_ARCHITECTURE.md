@@ -39,6 +39,16 @@ It is intended to evolve toward a lightweight web-based IDE.
 - incremental compilation status
 - future debugger / runtime visualizations where warranted
 
+## Frontend Toolchain
+
+- **Bundler**: Vite (dev server with HMR, production build to `dist/`)
+- **Language**: TypeScript (strict mode)
+- **Editor**: CodeMirror 6 (npm, not CDN)
+- **Dev workflow**: `task playground-dev` runs Vite dev server (port 5173)
+  proxying `/api/*` to C++ backend (port 8090)
+- **Prod workflow**: `task playground` builds frontend with Vite then starts
+  C++ server serving `dist/`
+
 ## Architectural Rule
 
 The playground must reuse compiler analysis rather than maintaining its own
