@@ -68,7 +68,7 @@ Source-facing compiler pipeline.
 Compiler-internal target-agnostic representations.
 
 - `hir/` — typed, symbol-linked HIR: arena-owned node hierarchy, AST-to-HIR builder, and debug printer
-- `mir/` — basic-block MIR with typed instructions, place/value distinction, HIR-to-MIR builder, and debug printer
+- `mir/` — basic-block MIR with typed instructions, place/value distinction, HIR-to-MIR builder, monomorphization pass, and debug printer
 
 ### `compiler/backend/`
 
@@ -122,7 +122,7 @@ Fixtures and golden inputs/outputs for future parser/compiler tests.
 Developer-surface tooling built on compiler analysis.
 
 - `playground/` — first-class web playground and future web-IDE surface
-  - `compiler_service/` — HTTP server wrapping the compiler frontend (cpp-httplib + nlohmann/json)
+  - `compiler_service/` — HTTP server wrapping the compiler frontend (cpp-httplib + nlohmann/json); shared pipeline utilities in `pipeline.h/.cpp`
   - `frontend/` — Vite + TypeScript with CodeMirror 6; dev mode uses HMR with API proxy, prod builds to `dist/` served by the compiler service
 - `lsp/` — Language Server Protocol implementation
 - `formatter/` — reserved canonical formatter root
