@@ -123,7 +123,7 @@ Developer-surface tooling built on compiler analysis.
 
 - `playground/` — first-class web playground and future web-IDE surface
   - `compiler_service/` — HTTP server wrapping the compiler frontend (cpp-httplib + nlohmann/json)
-  - `frontend/` — vanilla HTML/CSS/JS with CodeMirror 6 for structural token highlighting, AST panel, and diagnostics panel
+  - `frontend/` — Vite + TypeScript with CodeMirror 6; dev mode uses HMR with API proxy, prod builds to `dist/` served by the compiler service
 - `lsp/` — Language Server Protocol implementation
 - `formatter/` — reserved canonical formatter root
 - `diagnostics/` — presentation and diagnostics tooling experiments

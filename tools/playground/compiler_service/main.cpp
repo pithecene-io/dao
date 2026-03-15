@@ -35,11 +35,12 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   auto examples_dir = root / "examples";
-  auto frontend_dir = root / "tools" / "playground" / "frontend";
+  auto frontend_dir = root / "tools" / "playground" / "frontend" / "dist";
 
-  if (!std::filesystem::exists(frontend_dir)) {
-    std::cerr << "error: frontend directory not found: " << frontend_dir << "\n";
-    return EXIT_FAILURE;
+  bool serve_frontend = std::filesystem::exists(frontend_dir);
+  if (!serve_frontend) {
+    std::cerr << "warning: frontend dist not found: " << frontend_dir << "\n";
+    std::cerr << "  API endpoints will work; use Vite dev server for the UI.\n";
   }
 
   // Initialize LLVM targets once for /api/run.
@@ -67,25 +68,27 @@ auto main(int argc, char* argv[]) -> int {
   });
   // NOLINTEND(modernize-use-trailing-return-type)
 
-  // Serve frontend static files.
-  auto index_path = frontend_dir / "index.html";
-  svr.set_mount_point("/", frontend_dir.string());
+  // Serve frontend static files when dist/ exists (prod mode).
+  if (serve_frontend) {
+    auto index_path = frontend_dir / "index.html";
+    svr.set_mount_point("/", frontend_dir.string());
 
-  // Explicit root handler to prevent any redirect behavior.
-  // NOLINTNEXTLINE(modernize-use-trailing-return-type)
-  svr.Get("/", [index_path](const httplib::Request& /*req*/, httplib::Response& res) {
-    std::ifstream file(index_path);
-    if (!file) {
-      res.status = 500; // NOLINT(readability-magic-numbers)
-      res.set_content("index.html not found", "text/plain");
-      return;
-    }
-    std::string body{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-    res.set_content(body, "text/html");
-  });
+    // Explicit root handler to prevent any redirect behavior.
+    // NOLINTNEXTLINE(modernize-use-trailing-return-type)
+    svr.Get("/", [index_path](const httplib::Request& /*req*/, httplib::Response& res) {
+      std::ifstream file(index_path);
+      if (!file) {
+        res.status = 500; // NOLINT(readability-magic-numbers)
+        res.set_content("index.html not found", "text/plain");
+        return;
+      }
+      std::string body{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+      res.set_content(body, "text/html");
+    });
+  }
 
   std::cout << "Dao playground: http://localhost:" << port << "\n";
-  std::cout << "  frontend: " << frontend_dir << "\n";
+  std::cout << "  frontend: " << (serve_frontend ? frontend_dir.string() : "(dev mode — use Vite)") << "\n";
   std::cout << "  examples: " << examples_dir << "\n";
 
   if (!svr.listen("127.0.0.1", port)) {

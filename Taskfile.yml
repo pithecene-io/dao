@@ -44,11 +44,35 @@ tasks:
     cmds:
       - ctest --test-dir {{.BUILD_DIR}} --output-on-failure
 
+  playground-build:
+    desc: Build playground frontend assets
+    dir: tools/playground/frontend
+    cmds:
+      - npm ci --ignore-scripts
+      - npm run build
+    sources:
+      - tools/playground/frontend/src/**/*
+      - tools/playground/frontend/index.html
+      - tools/playground/frontend/package-lock.json
+    generates:
+      - tools/playground/frontend/dist/index.html
+
   playground:
-    desc: Start the playground server (http://localhost:8090)
-    deps: [build]
+    desc: Build and start the playground server (http://localhost:8090)
+    deps: [build, playground-build]
     cmds:
       - "{{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground {{.CLI_ARGS}}"
+
+  playground-dev:
+    desc: Start playground in dev mode (Vite HMR on :5173, backend on :8090)
+    deps: [build]
+    cmds:
+      - cd tools/playground/frontend && npm ci --ignore-scripts
+      - |
+        trap 'kill $BACKEND_PID 2>/dev/null' EXIT INT TERM
+        {{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground &
+        BACKEND_PID=$!
+        cd tools/playground/frontend && npx vite
 
   format:
     desc: Run clang-format on all source files
