@@ -18,7 +18,7 @@ Dao should be built in stages that preserve feedback loops:
 
 ## Phase 0 — Constitutional Baseline
 
-Status: scaffolded
+Status: **complete**
 
 Goals:
 - repository constitution, contracts, and architecture index in place
@@ -45,6 +45,8 @@ Rationale:
 
 ## Phase 1 — Frontend Skeleton
 
+Status: **complete**
+
 Goals:
 - indentation-aware lexer
 - parser for declarations, statements, expressions, lambdas, pipelines,
@@ -67,6 +69,9 @@ Exit criteria:
 
 ## Phase 1.5 — Playground and Example Hardening Loop
 
+Status: **complete** — Vite + TypeScript frontend with HMR, semantic
+tokens, IR panels, run/console, generic print
+
 Goals:
 - bring up a small web playground tied to the local `examples/` directory
 - support structural highlighting first, then compiler-backed semantic
@@ -82,6 +87,9 @@ Exit criteria:
   the browser once frontend analysis is available
 
 ## Phase 2 — Semantic Frontend + HIR
+
+Status: **complete** — resolve, typecheck, concepts, generics,
+monomorphization, extend method lowering, HIR
 
 Goals:
 - name resolution and scope analysis
@@ -103,6 +111,9 @@ Exit criteria:
 
 ## Phase 3 — MIR + Execution Semantics Lowering
 
+Status: **partial** — basic-block MIR, HIR→MIR lowering, generator
+coroutines. Resource/mode lowering deferred.
+
 Goals:
 - explicit control-flow lowering to MIR
 - ownership-free but scoped lowering model for `resource memory ... =>`
@@ -122,6 +133,9 @@ Exit criteria:
 
 ## Phase 4 — LLVM Backend + Native Driver
 
+Status: **complete** — MIR→LLVM lowering, object emission, linking,
+`daoc build`, runtime ABI
+
 Goals:
 - LLVM lowering for scalar arithmetic, control flow, calls, aggregates,
   and resource lifetime intrinsics
@@ -139,6 +153,10 @@ Exit criteria:
 - small routing / ETL / numerics examples compile through LLVM
 
 ## Phase 5 — Runtime and Initial Standard Library
+
+Status: **partial** — runtime ABI contract, IO/equality/conversion/
+generator hooks, prelude with Printable/Equatable/range. Scoped
+resource domains and mode plumbing deferred.
 
 Goals:
 - runtime memory support for scoped resource domains
@@ -202,12 +220,17 @@ Exit criteria:
 ## Tooling Track — Semantic Tooling, IntelliSense, and Web IDE
 
 ### Tooling T1 — Semantic Highlighting
+
+Status: **complete**
+
 - compiler-produced semantic token streams
 - frozen baseline token taxonomy implemented end to end
 - category distinction for declarations, calls, types, lambdas, pipes,
   modes, resources, and bindings
 
 ### Tooling T2 — Initial IntelliSense Slice
+
+Status: **not started**
 - hover
 - completion
 - go-to-definition
