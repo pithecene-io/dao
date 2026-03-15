@@ -15,6 +15,7 @@
 #include "backend/llvm/llvm_backend.h"
 #include "ir/mir/mir_builder.h"
 #include "ir/mir/mir_context.h"
+#include "ir/mir/mir_monomorphize.h"
 #include "ir/mir/mir_printer.h"
 
 #include <nlohmann/json.hpp>
@@ -236,6 +237,12 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
         MirContext mir_ctx;
         auto mir_result =
             build_mir(*hir_result.module, mir_ctx, types);
+
+        if (mir_result.module != nullptr) {
+          auto mono = monomorphize(*mir_result.module, mir_ctx, types);
+          collect_diagnostics(diagnostics, source, mono.diagnostics,
+                              prelude_bytes, prelude_lines);
+        }
 
         for (const auto& diag : mir_result.diagnostics) {
           if (diag.span.offset < prelude_bytes) {

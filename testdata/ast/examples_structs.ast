@@ -1,0 +1,135 @@
+File
+  ClassDecl Point
+    Field x: i32
+    Field y: i32
+  FunctionDecl manhattan
+    Param p: Point
+    ReturnType: i32
+    LetStatement ax: i32
+      FieldExpr .x
+        Identifier p
+    LetStatement ay: i32
+      FieldExpr .y
+        Identifier p
+    IfStatement
+      Condition
+        BinaryExpr <
+          Identifier ax
+          IntLiteral 0
+      Then
+        Assignment
+          Target
+            Identifier ax
+          Value
+            BinaryExpr -
+              IntLiteral 0
+              Identifier ax
+    IfStatement
+      Condition
+        BinaryExpr <
+          Identifier ay
+          IntLiteral 0
+      Then
+        Assignment
+          Target
+            Identifier ay
+          Value
+            BinaryExpr -
+              IntLiteral 0
+              Identifier ay
+    ReturnStatement
+      BinaryExpr +
+        Identifier ax
+        Identifier ay
+  FunctionDecl add_points
+    Param a: Point
+    Param b: Point
+    ReturnType: Point
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier Point
+        Args
+          BinaryExpr +
+            FieldExpr .x
+              Identifier a
+            FieldExpr .x
+              Identifier b
+          BinaryExpr +
+            FieldExpr .y
+              Identifier a
+            FieldExpr .y
+              Identifier b
+  FunctionDecl main
+    ReturnType: i32
+    LetStatement a: Point
+      CallExpr
+        Callee
+          Identifier Point
+        Args
+          IntLiteral 3
+          IntLiteral 4
+    LetStatement b: Point
+      CallExpr
+        Callee
+          Identifier Point
+        Args
+          IntLiteral 1
+          IntLiteral 2
+    LetStatement c: Point
+      CallExpr
+        Callee
+          Identifier add_points
+        Args
+          Identifier a
+          Identifier b
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "a = (3, 4)"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "b = (1, 2)"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "a + b = :"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          FieldExpr .x
+            Identifier c
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          FieldExpr .y
+            Identifier c
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "manhattan(a):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier manhattan
+            Args
+              Identifier a
+    ReturnStatement
+      IntLiteral 0

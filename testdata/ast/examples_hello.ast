@@ -1,7 +1,4 @@
 File
-  ExternFunctionDecl print
-    Param msg: string
-    ReturnType: void
   FunctionDecl main
     ReturnType: i32
     ExpressionStatement
@@ -9,6 +6,12 @@ File
         Callee
           Identifier print
         Args
-          StringLiteral "hello, dao"
+          StringLiteral "hello, dao!"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "welcome to the playground"
     ReturnStatement
       IntLiteral 0

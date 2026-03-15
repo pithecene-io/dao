@@ -14,10 +14,10 @@ fn a_star(start: NodeId, goal: NodeId): i32
 fn main(): i32
   let cost: i32 = a_star(3, 7)
   print("a_star(3, 7) cost:")
-  print_i32(cost)
+  print(cost)
 
   let same: i32 = a_star(5, 5)
   print("a_star(5, 5) cost:")
-  print_i32(same)
+  print(same)
 
   return 0

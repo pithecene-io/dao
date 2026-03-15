@@ -23,10 +23,10 @@ fn main(): i32
   print("b = (1, 2)")
 
   print("a + b = :")
-  print_i32(c.x)
-  print_i32(c.y)
+  print(c.x)
+  print(c.y)
 
   print("manhattan(a):")
-  print_i32(manhattan(a))
+  print(manhattan(a))
 
   return 0

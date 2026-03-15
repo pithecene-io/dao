@@ -9,5 +9,5 @@ fn main(): i32
   mode unsafe =>
     let val: i32 = read_ptr(&x)
     print("read via pointer:")
-    print_i32(val)
+    print(val)
   return 0

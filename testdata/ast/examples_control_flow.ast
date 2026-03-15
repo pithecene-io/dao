@@ -1,0 +1,166 @@
+File
+  FunctionDecl abs
+    Param x: i32
+    ReturnType: i32
+    IfStatement
+      Condition
+        BinaryExpr <
+          Identifier x
+          IntLiteral 0
+      Then
+        ReturnStatement
+          BinaryExpr -
+            IntLiteral 0
+            Identifier x
+    ReturnStatement
+      Identifier x
+  FunctionDecl max
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+    IfStatement
+      Condition
+        BinaryExpr >
+          Identifier a
+          Identifier b
+      Then
+        ReturnStatement
+          Identifier a
+    ReturnStatement
+      Identifier b
+  FunctionDecl factorial
+    Param n: i32
+    ReturnType: i32
+    LetStatement result: i32
+      IntLiteral 1
+    LetStatement i: i32
+      IntLiteral 1
+    WhileStatement
+      Condition
+        BinaryExpr <=
+          Identifier i
+          Identifier n
+      Assignment
+        Target
+          Identifier result
+        Value
+          BinaryExpr *
+            Identifier result
+            Identifier i
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+    ReturnStatement
+      Identifier result
+  FunctionDecl fibonacci
+    Param n: i32
+    ReturnType: i32
+    LetStatement a: i32
+      IntLiteral 0
+    LetStatement b: i32
+      IntLiteral 1
+    LetStatement i: i32
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          Identifier n
+      LetStatement tmp: i32
+        Identifier b
+      Assignment
+        Target
+          Identifier b
+        Value
+          BinaryExpr +
+            Identifier a
+            Identifier b
+      Assignment
+        Target
+          Identifier a
+        Value
+          Identifier tmp
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+    ReturnStatement
+      Identifier a
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "abs(-7):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier abs
+            Args
+              BinaryExpr -
+                IntLiteral 0
+                IntLiteral 7
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "max(3, 8):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier max
+            Args
+              IntLiteral 3
+              IntLiteral 8
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "factorial(6):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier factorial
+            Args
+              IntLiteral 6
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "fibonacci(10):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier fibonacci
+            Args
+              IntLiteral 10
+    ReturnStatement
+      IntLiteral 0
