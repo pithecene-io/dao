@@ -395,13 +395,14 @@ void handle_goto_def(const httplib::Request& req, httplib::Response& res,
     return;
   }
 
-  // Adjust definition offset back to user space.
-  // If the definition is in the prelude, report it as-is (negative would
-  // be wrong, so clamp to 0).
-  uint32_t user_def_offset = result->offset > pipe.prelude_bytes
-                                 ? result->offset - pipe.prelude_bytes
-                                 : 0;
+  // If the definition is inside the prelude, it's not navigable
+  // in the user's source — return null.
+  if (result->offset < pipe.prelude_bytes) {
+    res.set_content("null", "application/json");
+    return;
+  }
 
+  auto user_def_offset = result->offset - pipe.prelude_bytes;
   auto loc = pipe.source.line_col(result->offset);
   auto prelude_text = std::string(
       pipe.source.contents().substr(0, pipe.prelude_bytes));

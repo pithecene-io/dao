@@ -75,12 +75,31 @@ auto query_hover(uint32_t offset, const ResolveResult& resolve,
   // an offset — we have the Symbol*. Try the decl type instead.
   if (sym->decl != nullptr &&
       (sym->kind == SymbolKind::Function ||
-       sym->kind == SymbolKind::Type ||
-       sym->kind == SymbolKind::Param)) {
+       sym->kind == SymbolKind::Type)) {
     const auto* decl = static_cast<const Decl*>(sym->decl);
     const auto* decl_type = typed.typed.decl_type(decl);
     if (decl_type != nullptr) {
       result.type = print_type(decl_type);
+    }
+  }
+
+  // For parameters, extract the type from the enclosing function's type
+  // by matching the parameter name.
+  if (sym->kind == SymbolKind::Param && sym->decl != nullptr) {
+    const auto* fn_decl = static_cast<const Decl*>(sym->decl);
+    const auto* fn_type = typed.typed.decl_type(fn_decl);
+    if (fn_type != nullptr && fn_type->kind() == TypeKind::Function) {
+      const auto* ft = static_cast<const TypeFunction*>(fn_type);
+      if (fn_decl->is<FunctionDecl>()) {
+        const auto& fn = fn_decl->as<FunctionDecl>();
+        for (size_t idx = 0; idx < fn.params.size(); ++idx) {
+          if (fn.params[idx].name == sym->name &&
+              idx < ft->param_types().size()) {
+            result.type = print_type(ft->param_types()[idx]);
+            break;
+          }
+        }
+      }
     }
   }
 

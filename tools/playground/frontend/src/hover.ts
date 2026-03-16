@@ -9,6 +9,12 @@ interface HoverResponse {
 
 let hoverTooltip: HTMLElement | null = null;
 
+function esc(text: string): string {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 export function initHover(view: EditorView): void {
   const container = view.dom;
 
@@ -55,9 +61,9 @@ function showTooltip(x: number, y: number, data: HoverResponse): void {
     document.body.appendChild(hoverTooltip);
   }
 
-  let content = `<span class="hover-kind">${data.kind}</span> <strong>${data.name}</strong>`;
+  let content = `<span class="hover-kind">${esc(data.kind)}</span> <strong>${esc(data.name)}</strong>`;
   if (data.type) {
-    content += `<br><span class="hover-type">${data.type}</span>`;
+    content += `<br><span class="hover-type">${esc(data.type)}</span>`;
   }
 
   hoverTooltip.innerHTML = content;
