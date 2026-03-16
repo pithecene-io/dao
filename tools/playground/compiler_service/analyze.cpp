@@ -206,7 +206,9 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
       goto respond; // NOLINT(cppcoreguidelines-avoid-goto)
     }
 
-    monomorphize(*mir_result.module, mir_ctx, types);
+    auto mono_result = monomorphize(*mir_result.module, mir_ctx, types);
+    collect_diagnostics(diagnostics, source, mono_result.diagnostics,
+                        prelude_bytes, prelude_lines);
 
     std::ostringstream mir_out;
     print_mir(mir_out, *mir_result.module);
