@@ -25,7 +25,8 @@ struct ResolvedSource {
   ResolveResult resolve_result;
 };
 
-auto resolve_source(const std::string& name, std::string contents) -> ResolvedSource {
+auto resolve_source(const std::string& name, std::string contents,
+                    uint32_t prelude_bytes = 0) -> ResolvedSource {
   SourceBuffer source(name, std::move(contents));
   auto lex_result = lex(source);
   ParseResult parse_result;
@@ -34,7 +35,7 @@ auto resolve_source(const std::string& name, std::string contents) -> ResolvedSo
   if (lex_result.diagnostics.empty()) {
     parse_result = parse(lex_result.tokens);
     if (parse_result.file != nullptr) {
-      resolve_result = resolve(*parse_result.file);
+      resolve_result = resolve(*parse_result.file, prelude_bytes);
     }
   }
 
@@ -42,6 +43,23 @@ auto resolve_source(const std::string& name, std::string contents) -> ResolvedSo
           std::move(lex_result),
           std::move(parse_result),
           std::move(resolve_result)};
+}
+
+auto load_prelude() -> std::string {
+  std::filesystem::path root(DAO_SOURCE_DIR);
+  auto stdlib_core = root / "stdlib" / "core";
+  std::string prelude;
+  if (!std::filesystem::exists(stdlib_core)) {
+    return prelude;
+  }
+  for (const auto& entry : std::filesystem::directory_iterator(stdlib_core)) {
+    if (entry.path().extension() != ".dao") {
+      continue;
+    }
+    prelude += read_file(entry.path());
+    prelude += '\n';
+  }
+  return prelude;
 }
 
 auto has_diagnostic_containing(const ResolveResult& result, const std::string& text) -> bool {
@@ -304,18 +322,24 @@ suite<"resolve_corpus"> resolve_corpus = [] {
   "all examples resolve without spurious diagnostics"_test = [] {
     std::filesystem::path root(DAO_SOURCE_DIR);
     auto examples_dir = root / "examples";
+    auto prelude = load_prelude();
+    auto prelude_bytes = static_cast<uint32_t>(prelude.size());
 
     for (const auto& entry : std::filesystem::directory_iterator(examples_dir)) {
       if (entry.path().extension() != ".dao") {
         continue;
       }
 
-      auto contents = read_file(entry.path());
-      auto result = resolve_source(entry.path().filename().string(), std::move(contents));
+      auto contents = prelude + read_file(entry.path());
+      auto result = resolve_source(entry.path().filename().string(),
+                                   std::move(contents), prelude_bytes);
 
       // No value-position diagnostics should fire on example files.
+      // Skip prelude-origin diagnostics.
       for (const auto& diag : result.resolve_result.diagnostics) {
-        // Print diagnostic for debugging if it fires.
+        if (diag.span.offset < prelude_bytes) {
+          continue;
+        }
         expect(false) << entry.path().filename().string() << ": " << diag.message;
       }
     }

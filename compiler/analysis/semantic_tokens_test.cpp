@@ -336,9 +336,9 @@ suite<"taxonomy_coverage"> taxonomy_coverage = [] {
       categories.insert(tok.kind);
     }
 
-    // hello.dao has: extern fn, print("hello, dao"), 0, i32
-    expect(categories.contains("keyword.extern")) << "missing keyword.extern";
+    // hello.dao has: fn main(): i32, print("hello, dao!"), return 0
     expect(categories.contains("keyword.fn")) << "missing keyword.fn";
+    expect(categories.contains("keyword.return")) << "missing keyword.return";
     expect(categories.contains("decl.function")) << "missing decl.function";
     expect(categories.contains("literal.number")) << "missing literal.number";
     expect(categories.contains("literal.string")) << "missing literal.string";
