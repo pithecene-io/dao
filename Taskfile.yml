@@ -68,10 +68,9 @@ tasks:
     deps: [build]
     cmds:
       - cd tools/playground/frontend && npm ci --ignore-scripts
+      - defer: kill $(lsof -ti :8090) 2>/dev/null || true
       - |
-        trap 'kill $BACKEND_PID 2>/dev/null' EXIT INT TERM
         {{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground &
-        BACKEND_PID=$!
         cd tools/playground/frontend && npx vite
 
   format:
