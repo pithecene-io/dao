@@ -66,6 +66,14 @@ auto main(int argc, char* argv[]) -> int {
   svr.Post("/api/run", [&root](const httplib::Request& req, httplib::Response& res) {
     dao::playground::handle_run(req, res, root);
   });
+
+  svr.Post("/api/hover", [&root](const httplib::Request& req, httplib::Response& res) {
+    dao::playground::handle_hover(req, res, root);
+  });
+
+  svr.Post("/api/goto-def", [&root](const httplib::Request& req, httplib::Response& res) {
+    dao::playground::handle_goto_def(req, res, root);
+  });
   // NOLINTEND(modernize-use-trailing-return-type)
 
   // Serve frontend static files when dist/ exists (prod mode).

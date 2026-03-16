@@ -3,6 +3,8 @@ import { createEditor } from "./editor";
 import { initAnalysis, scheduleAnalyze } from "./analysis";
 import { doRun } from "./run";
 import { loadExamples } from "./examples";
+import { initHover } from "./hover";
+import { initGotoDef } from "./goto_def";
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -10,6 +12,8 @@ import { loadExamples } from "./examples";
 
 const editor = createEditor(scheduleAnalyze);
 initAnalysis(editor);
+initHover(editor);
+initGotoDef(editor);
 
 // ---------------------------------------------------------------------------
 // Run button + keyboard shortcut

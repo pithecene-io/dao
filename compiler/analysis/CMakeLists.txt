@@ -1,4 +1,6 @@
 add_library(dao_analysis STATIC
+  goto_definition.cpp
+  hover.cpp
   semantic_tokens.cpp
 )
 

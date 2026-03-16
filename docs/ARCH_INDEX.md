@@ -89,6 +89,8 @@ CLI, playground, and LSP.
 
 - `semantic_tokens.h` / `semantic_tokens.cpp` — token classification per
   the frozen taxonomy in `CONTRACT_LANGUAGE_TOOLING.md`
+- `hover.h` / `hover.cpp` — hover info: symbol kind, name, type at offset
+- `goto_definition.h` / `goto_definition.cpp` — jump-to-declaration from use site
 
 ## `runtime/`
 
