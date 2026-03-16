@@ -1,27 +1,8 @@
 File
-  FunctionDecl range
-    Param n: i32
-    ReturnType: Generator<i32>
-    LetStatement i
-      IntLiteral 0
-    WhileStatement
-      Condition
-        BinaryExpr <
-          Identifier i
-          Identifier n
-      YieldStatement
-        Identifier i
-      Assignment
-        Target
-          Identifier i
-        Value
-          BinaryExpr +
-            Identifier i
-            IntLiteral 1
   FunctionDecl countdown
     Param from: i32
     ReturnType: Generator<i32>
-    LetStatement i
+    LetStatement i: i32
       Identifier from
     WhileStatement
       Condition
@@ -40,7 +21,7 @@ File
   FunctionDecl evens
     Param n: i32
     ReturnType: Generator<i32>
-    LetStatement i
+    LetStatement i: i32
       IntLiteral 0
     WhileStatement
       Condition
@@ -58,37 +39,73 @@ File
           BinaryExpr +
             Identifier i
             IntLiteral 1
-  FunctionDecl sum_range
-    Param n: i32
+  FunctionDecl main
     ReturnType: i32
-    LetStatement total
-      IntLiteral 0
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "countdown from 5:"
     ForStatement x
       Iterable
         CallExpr
           Callee
-            Identifier range
+            Identifier countdown
           Args
-            Identifier n
-      Assignment
-        Target
-          Identifier total
-        Value
-          BinaryExpr +
-            Identifier total
+            IntLiteral 5
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
             Identifier x
-    ReturnStatement
-      Identifier total
-  FunctionDecl first_even
-    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "first 4 even numbers:"
     ForStatement x
       Iterable
         CallExpr
           Callee
             Identifier evens
           Args
+            IntLiteral 4
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
+            Identifier x
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "sum of range(5):"
+    LetStatement total: i32
+      IntLiteral 0
+    ForStatement i
+      Iterable
+        CallExpr
+          Callee
+            Identifier range
+          Args
             IntLiteral 5
-      ReturnStatement
-        Identifier x
+      Assignment
+        Target
+          Identifier total
+        Value
+          BinaryExpr +
+            Identifier total
+            Identifier i
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier total
     ReturnStatement
       IntLiteral 0

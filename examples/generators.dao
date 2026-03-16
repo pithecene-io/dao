@@ -13,16 +13,16 @@ fn evens(n: i32): Generator<i32>
 fn main(): i32
   print("countdown from 5:")
   for x in countdown(5):
-    print_i32(x)
+    print(x)
 
   print("first 4 even numbers:")
   for x in evens(4):
-    print_i32(x)
+    print(x)
 
   print("sum of range(5):")
   let total: i32 = 0
   for i in range(5):
     total = total + i
-  print_i32(total)
+  print(total)
 
   return 0

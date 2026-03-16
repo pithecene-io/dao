@@ -13,7 +13,7 @@ File
     Param start: NodeId
     Param goal: NodeId
     ReturnType: i32
-    ExprBody
+    ReturnStatement
       BinaryExpr +
         Identifier start
         Identifier goal
@@ -44,3 +44,45 @@ File
           Identifier goal
     ReturnStatement
       Identifier cost
+  FunctionDecl main
+    ReturnType: i32
+    LetStatement cost: i32
+      CallExpr
+        Callee
+          Identifier a_star
+        Args
+          IntLiteral 3
+          IntLiteral 7
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "a_star(3, 7) cost:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier cost
+    LetStatement same: i32
+      CallExpr
+        Callee
+          Identifier a_star
+        Args
+          IntLiteral 5
+          IntLiteral 5
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "a_star(5, 5) cost:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier same
+    ReturnStatement
+      IntLiteral 0

@@ -18,10 +18,4 @@ extend bool as Printable:
 extend string as Printable:
     fn to_string(self): string -> self
 
-fn print(msg: string): void -> __dao_io_write_stdout(msg)
-
-fn print_i32(x: i32): void -> print(__dao_conv_i32_to_string(x))
-
-fn print_f64(x: f64): void -> print(__dao_conv_f64_to_string(x))
-
-fn print_bool(x: bool): void -> print(__dao_conv_bool_to_string(x))
+fn print<T: Printable>(x: T): void -> __dao_io_write_stdout(x.to_string())

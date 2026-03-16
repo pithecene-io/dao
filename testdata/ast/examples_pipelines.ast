@@ -13,6 +13,13 @@ File
       BinaryExpr +
         Identifier x
         IntLiteral 1
+  FunctionDecl negate
+    Param x: i32
+    ReturnType: i32
+    ExprBody
+      BinaryExpr -
+        IntLiteral 0
+        Identifier x
   FunctionDecl transform
     Param x: i32
     ReturnType: i32
@@ -22,3 +29,41 @@ File
           Identifier x
           Identifier double
         Identifier increment
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "5 |> double |> increment:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier transform
+            Args
+              IntLiteral 5
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "3 |> double |> negate:"
+    LetStatement result: i32
+      PipeExpr
+        PipeExpr
+          IntLiteral 3
+          Identifier double
+        Identifier negate
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier result
+    ReturnStatement
+      IntLiteral 0

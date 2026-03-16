@@ -8,10 +8,10 @@ fn transform(x: i32): i32 -> x |> double |> increment
 
 fn main(): i32
   print("5 |> double |> increment:")
-  print_i32(transform(5))
+  print(transform(5))
 
   print("3 |> double |> negate:")
   let result: i32 = 3 |> double |> negate
-  print_i32(result)
+  print(result)
 
   return 0

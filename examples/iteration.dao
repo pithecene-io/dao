@@ -20,12 +20,12 @@ fn nested_iteration(): i32
 fn main(): i32
   print("squares of 0..4:")
   for x in squares(5):
-    print_i32(x)
+    print(x)
 
   print("sum of squares(5):")
-  print_i32(sum_squares(5))
+  print(sum_squares(5))
 
   print("nested iteration total:")
-  print_i32(nested_iteration())
+  print(nested_iteration())
 
   return 0

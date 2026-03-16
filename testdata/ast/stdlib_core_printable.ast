@@ -51,12 +51,15 @@ File
       ReturnType: string
       ExprBody
         Identifier self
-  FunctionDecl print
-    Param msg: string
+  FunctionDecl print<T: Printable>
+    Param x: T
     ReturnType: void
     ExprBody
       CallExpr
         Callee
           Identifier __dao_io_write_stdout
         Args
-          Identifier msg
+          CallExpr
+            Callee
+              FieldExpr .to_string
+                Identifier x

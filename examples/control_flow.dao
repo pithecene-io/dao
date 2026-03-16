@@ -29,15 +29,15 @@ fn fibonacci(n: i32): i32
 
 fn main(): i32
   print("abs(-7):")
-  print_i32(abs(0 - 7))
+  print(abs(0 - 7))
 
   print("max(3, 8):")
-  print_i32(max(3, 8))
+  print(max(3, 8))
 
   print("factorial(6):")
-  print_i32(factorial(6))
+  print(factorial(6))
 
   print("fibonacci(10):")
-  print_i32(fibonacci(10))
+  print(fibonacci(10))
 
   return 0

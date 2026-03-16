@@ -1,27 +1,8 @@
 File
-  FunctionDecl range
-    Param n: i32
-    ReturnType: Generator<i32>
-    LetStatement i
-      IntLiteral 0
-    WhileStatement
-      Condition
-        BinaryExpr <
-          Identifier i
-          Identifier n
-      YieldStatement
-        Identifier i
-      Assignment
-        Target
-          Identifier i
-        Value
-          BinaryExpr +
-            Identifier i
-            IntLiteral 1
   FunctionDecl squares
     Param n: i32
     ReturnType: Generator<i32>
-    LetStatement i
+    LetStatement i: i32
       IntLiteral 0
     WhileStatement
       Condition
@@ -42,7 +23,7 @@ File
   FunctionDecl sum_squares
     Param n: i32
     ReturnType: i32
-    LetStatement total
+    LetStatement total: i32
       IntLiteral 0
     ForStatement x
       Iterable
@@ -60,32 +41,9 @@ File
             Identifier x
     ReturnStatement
       Identifier total
-  FunctionDecl count_positive
-    Param gen: Generator<i32>
-    ReturnType: i32
-    LetStatement count
-      IntLiteral 0
-    ForStatement x
-      Iterable
-        Identifier gen
-      IfStatement
-        Condition
-          BinaryExpr >
-            Identifier x
-            IntLiteral 0
-        Then
-          Assignment
-            Target
-              Identifier count
-            Value
-              BinaryExpr +
-                Identifier count
-                IntLiteral 1
-    ReturnStatement
-      Identifier count
   FunctionDecl nested_iteration
     ReturnType: i32
-    LetStatement total
+    LetStatement total: i32
       IntLiteral 0
     ForStatement i
       Iterable
@@ -112,3 +70,56 @@ File
               Identifier j
     ReturnStatement
       Identifier total
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "squares of 0..4:"
+    ForStatement x
+      Iterable
+        CallExpr
+          Callee
+            Identifier squares
+          Args
+            IntLiteral 5
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
+            Identifier x
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "sum of squares(5):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier sum_squares
+            Args
+              IntLiteral 5
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "nested iteration total:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier nested_iteration
+    ReturnStatement
+      IntLiteral 0

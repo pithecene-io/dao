@@ -1,8 +1,9 @@
 File
-  FunctionDecl read
+  FunctionDecl read_ptr
     Param ptr: *i32
     ReturnType: i32
     LetStatement value: i32
+      IntLiteral 0
     ModeBlock unsafe
       Assignment
         Target
@@ -12,3 +13,29 @@ File
             Identifier ptr
     ReturnStatement
       Identifier value
+  FunctionDecl main
+    ReturnType: i32
+    LetStatement x: i32
+      IntLiteral 42
+    ModeBlock unsafe
+      LetStatement val: i32
+        CallExpr
+          Callee
+            Identifier read_ptr
+          Args
+            UnaryExpr &
+              Identifier x
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
+            StringLiteral "read via pointer:"
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
+            Identifier val
+    ReturnStatement
+      IntLiteral 0
