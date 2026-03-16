@@ -8,6 +8,10 @@ interface HoverResponse {
 }
 
 let hoverTooltip: HTMLElement | null = null;
+let hoverSeq = 0;
+let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+
+const HOVER_DEBOUNCE_MS = 100;
 
 function esc(text: string): string {
   const div = document.createElement("div");
@@ -18,40 +22,51 @@ function esc(text: string): string {
 export function initHover(view: EditorView): void {
   const container = view.dom;
 
-  container.addEventListener("mousemove", async (e: MouseEvent) => {
-    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
-    if (pos === null) {
+  container.addEventListener("mousemove", (e: MouseEvent) => {
+    if (hoverTimer) clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => doHover(view, e), HOVER_DEBOUNCE_MS);
+  });
+
+  container.addEventListener("mouseleave", hideTooltip);
+}
+
+async function doHover(view: EditorView, e: MouseEvent): Promise<void> {
+  const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+  if (pos === null) {
+    hideTooltip();
+    return;
+  }
+
+  const seq = ++hoverSeq;
+  const source = getSource();
+
+  try {
+    const resp = await fetch("/api/hover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source, offset: pos }),
+    });
+
+    // Discard stale response.
+    if (seq !== hoverSeq) return;
+
+    if (!resp.ok) {
       hideTooltip();
       return;
     }
 
-    const source = getSource();
+    const data: HoverResponse | null = await resp.json();
+    if (seq !== hoverSeq) return;
 
-    try {
-      const resp = await fetch("/api/hover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source, offset: pos }),
-      });
-
-      if (!resp.ok) {
-        hideTooltip();
-        return;
-      }
-
-      const data: HoverResponse | null = await resp.json();
-      if (!data) {
-        hideTooltip();
-        return;
-      }
-
-      showTooltip(e.clientX, e.clientY, data);
-    } catch {
+    if (!data) {
       hideTooltip();
+      return;
     }
-  });
 
-  container.addEventListener("mouseleave", hideTooltip);
+    showTooltip(e.clientX, e.clientY, data);
+  } catch {
+    if (seq === hoverSeq) hideTooltip();
+  }
 }
 
 function showTooltip(x: number, y: number, data: HoverResponse): void {
