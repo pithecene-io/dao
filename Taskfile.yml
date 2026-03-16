@@ -69,7 +69,7 @@ tasks:
     cmds:
       - cd tools/playground/frontend && npm ci --ignore-scripts
       - |
-        trap 'kill $BACKEND_PID 2>/dev/null' EXIT INT TERM
+        trap 'kill $BACKEND_PID 2>/dev/null' 0 2 15
         {{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground &
         BACKEND_PID=$!
         cd tools/playground/frontend && npx vite
