@@ -23,6 +23,7 @@ void LlvmRuntimeHooks::declare_all() {
   declare_conversion_hooks();
   declare_generator_hooks();
   declare_mem_resource_hooks();
+  declare_string_hooks();
 }
 
 auto LlvmRuntimeHooks::is_runtime_hook(std::string_view name) -> bool {
@@ -133,6 +134,19 @@ void LlvmRuntimeHooks::declare_mem_resource_hooks() {
   // __dao_mem_resource_exit(domain: ptr): void
   ensure_declared(runtime_hooks::kMemResourceExit,
                   llvm::FunctionType::get(void_ty, {ptr}, false));
+}
+
+// ---------------------------------------------------------------------------
+// String hooks
+// ---------------------------------------------------------------------------
+
+void LlvmRuntimeHooks::declare_string_hooks() {
+  auto* str_type = types_.string_type();
+  auto* str_ptr = llvm::PointerType::getUnqual(str_type);
+
+  // __dao_str_concat(a: *dao.string, b: *dao.string): dao.string
+  ensure_declared(runtime_hooks::kStrConcat,
+                  llvm::FunctionType::get(str_type, {str_ptr, str_ptr}, false));
 }
 
 // ---------------------------------------------------------------------------

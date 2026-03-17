@@ -51,6 +51,9 @@ inline constexpr std::string_view kGenFree  = "__dao_gen_free";
 inline constexpr std::string_view kMemResourceEnter = "__dao_mem_resource_enter";
 inline constexpr std::string_view kMemResourceExit  = "__dao_mem_resource_exit";
 
+// String domain
+inline constexpr std::string_view kStrConcat = "__dao_str_concat";
+
 // All hook names, for iteration / validation.
 inline constexpr std::string_view kAllHooks[] = {
     kWriteStdout,
@@ -58,6 +61,7 @@ inline constexpr std::string_view kAllHooks[] = {
     kConvI32ToString, kConvF64ToString, kConvBoolToString,
     kGenAlloc, kGenFree,
     kMemResourceEnter, kMemResourceExit,
+    kStrConcat,
 };
 
 } // namespace runtime_hooks
@@ -86,6 +90,7 @@ private:
   void declare_conversion_hooks();
   void declare_generator_hooks();
   void declare_mem_resource_hooks();
+  void declare_string_hooks();
 
   // Helper: get-or-create a function declaration.
   auto ensure_declared(std::string_view name, llvm::FunctionType* fn_type)

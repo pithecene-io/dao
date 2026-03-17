@@ -1,0 +1,11 @@
+fn greet(name: string): string
+  return concat("Hello, ", name)
+
+fn main(): i32
+  print(greet("Dao"))
+  print(concat("foo", "bar"))
+  print(concat("", "empty prefix"))
+  print(concat("empty suffix", ""))
+  print(concat("a", concat("b", "c")))
+  print(concat(concat("x", "y"), "z"))
+  return 0

@@ -77,6 +77,16 @@ void *__dao_gen_alloc(int64_t size, int64_t align);
 void __dao_gen_free(void *ptr);
 
 // ---------------------------------------------------------------------------
+// Runtime hook declarations — String domain
+// ---------------------------------------------------------------------------
+
+// Concatenate two strings, returning the result by value.
+// The returned ptr points to a freshly malloc-allocated buffer
+// owned by the caller. Not automatically freed in the current runtime.
+struct dao_string __dao_str_concat(const struct dao_string *a,
+                                   const struct dao_string *b);
+
+// ---------------------------------------------------------------------------
 // Runtime hook declarations — Memory/resource domain
 // ---------------------------------------------------------------------------
 

@@ -1,0 +1,90 @@
+File
+  FunctionDecl greet
+    Param name: string
+    ReturnType: string
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier concat
+        Args
+          StringLiteral "Hello, "
+          Identifier name
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier greet
+            Args
+              StringLiteral "Dao"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier concat
+            Args
+              StringLiteral "foo"
+              StringLiteral "bar"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier concat
+            Args
+              StringLiteral ""
+              StringLiteral "empty prefix"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier concat
+            Args
+              StringLiteral "empty suffix"
+              StringLiteral ""
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier concat
+            Args
+              StringLiteral "a"
+              CallExpr
+                Callee
+                  Identifier concat
+                Args
+                  StringLiteral "b"
+                  StringLiteral "c"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier concat
+            Args
+              CallExpr
+                Callee
+                  Identifier concat
+                Args
+                  StringLiteral "x"
+                  StringLiteral "y"
+              StringLiteral "z"
+    ReturnStatement
+      IntLiteral 0
