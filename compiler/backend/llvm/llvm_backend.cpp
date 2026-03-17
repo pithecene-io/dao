@@ -401,8 +401,14 @@ auto LlvmBackend::lower_inst(const MirInst& inst,
         return true;
       },
 
-      // Resource regions — call runtime domain hooks.
-      [&](const MirResourceEnter&) -> bool {
+      // Resource regions — dispatch by kind.
+      [&](const MirResourceEnter& p) -> bool {
+        if (p.region_kind != "memory") {
+          emit_diagnostic(inst.span,
+                           "resource '" + std::string(p.region_kind) +
+                           "' lowering not yet supported");
+          return false;
+        }
         auto* enter_fn = module_->getFunction(
             std::string(runtime_hooks::kMemResourceEnter));
         if (enter_fn == nullptr) {
@@ -414,6 +420,10 @@ auto LlvmBackend::lower_inst(const MirInst& inst,
         return true;
       },
       [&](const MirResourceExit& p) -> bool {
+        if (p.region_kind != "memory") {
+          // Entry already diagnosed; skip duplicate.
+          return true;
+        }
         auto* handle = get_value(p.domain_handle, state);
         if (handle == nullptr) {
           emit_diagnostic(inst.span, "resource_exit: domain handle not found");

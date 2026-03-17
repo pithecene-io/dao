@@ -321,7 +321,7 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
       },
       [&](const HirResource& res) {
         auto domain_handle = emit_value(
-            nullptr, stmt.span,
+            types_.pointer_to(types_.void_type()), stmt.span,
             MirResourceEnter{res.resource_kind, res.resource_name});
 
         active_regions_.push_back(
