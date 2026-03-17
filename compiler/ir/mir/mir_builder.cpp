@@ -324,7 +324,8 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
                     MirResourceEnter{res.resource_kind, res.resource_name});
 
         active_regions_.push_back(
-            {.exit_payload = MirResourceExit{},
+            {.exit_payload = MirResourceExit{res.resource_kind,
+                                             res.resource_name},
              .span = stmt.span});
 
         for (const auto* s : res.body) {
@@ -334,7 +335,8 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
         active_regions_.pop_back();
 
         if (!block_terminated()) {
-          emit_effect(stmt.span, MirResourceExit{});
+          emit_effect(stmt.span,
+                      MirResourceExit{res.resource_kind, res.resource_name});
         }
       },
   }, stmt.payload);
