@@ -52,7 +52,8 @@ inline constexpr std::string_view kMemResourceEnter = "__dao_mem_resource_enter"
 inline constexpr std::string_view kMemResourceExit  = "__dao_mem_resource_exit";
 
 // String domain
-inline constexpr std::string_view kStrConcat = "__dao_str_concat";
+inline constexpr std::string_view kStrConcat  = "__dao_str_concat";
+inline constexpr std::string_view kStrLength  = "__dao_str_length";
 
 // All hook names, for iteration / validation.
 inline constexpr std::string_view kAllHooks[] = {
@@ -61,7 +62,7 @@ inline constexpr std::string_view kAllHooks[] = {
     kConvI32ToString, kConvF64ToString, kConvBoolToString,
     kGenAlloc, kGenFree,
     kMemResourceEnter, kMemResourceExit,
-    kStrConcat,
+    kStrConcat, kStrLength,
 };
 
 } // namespace runtime_hooks

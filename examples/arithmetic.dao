@@ -4,13 +4,6 @@ fn cube(x: i32): i32 -> x * x * x
 
 fn is_even(x: i32): bool -> x == (x / 2) * 2
 
-fn clamp(x: i32, lo: i32, hi: i32): i32
-  if x < lo:
-    return lo
-  if x > hi:
-    return hi
-  return x
-
 fn sum_range(a: i32, b: i32): i32
   let total: i32 = 0
   let i: i32 = a

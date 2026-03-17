@@ -76,6 +76,7 @@ Examples:
 | `__dao_mem_resource_enter`| `(): *void`                           |
 | `__dao_mem_resource_exit` | `(domain: *void): void`              |
 | `__dao_str_concat`       | `(a: string, b: string): string`      |
+| `__dao_str_length`       | `(s: string): i32`                    |
 
 These are the **only** runtime hooks in the current supported slice.
 New hooks require updating this contract before implementation.

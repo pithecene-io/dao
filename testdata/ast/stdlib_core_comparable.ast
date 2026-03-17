@@ -1,0 +1,10 @@
+File
+  DerivedConceptDecl Comparable
+    FunctionDecl lt
+      Param self
+      Param other: Comparable
+      ReturnType: bool
+    FunctionDecl gt
+      Param self
+      Param other: Comparable
+      ReturnType: bool

@@ -141,12 +141,18 @@ void LlvmRuntimeHooks::declare_mem_resource_hooks() {
 // ---------------------------------------------------------------------------
 
 void LlvmRuntimeHooks::declare_string_hooks() {
+  auto& ctx = module_.getContext();
   auto* str_type = types_.string_type();
   auto* str_ptr = llvm::PointerType::getUnqual(str_type);
+  auto* i32 = llvm::Type::getInt32Ty(ctx);
 
   // __dao_str_concat(a: *dao.string, b: *dao.string): dao.string
   ensure_declared(runtime_hooks::kStrConcat,
                   llvm::FunctionType::get(str_type, {str_ptr, str_ptr}, false));
+
+  // __dao_str_length(s: *dao.string): i32
+  ensure_declared(runtime_hooks::kStrLength,
+                  llvm::FunctionType::get(i32, {str_ptr}, false));
 }
 
 // ---------------------------------------------------------------------------
