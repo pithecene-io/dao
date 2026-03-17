@@ -320,12 +320,14 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
         }
       },
       [&](const HirResource& res) {
-        emit_effect(stmt.span,
-                    MirResourceEnter{res.resource_kind, res.resource_name});
+        auto domain_handle = emit_value(
+            types_.pointer_to(types_.void_type()), stmt.span,
+            MirResourceEnter{res.resource_kind, res.resource_name});
 
         active_regions_.push_back(
             {.exit_payload = MirResourceExit{res.resource_kind,
-                                             res.resource_name},
+                                             res.resource_name,
+                                             domain_handle},
              .span = stmt.span});
 
         for (const auto* s : res.body) {
@@ -336,7 +338,8 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
 
         if (!block_terminated()) {
           emit_effect(stmt.span,
-                      MirResourceExit{res.resource_kind, res.resource_name});
+                      MirResourceExit{res.resource_kind, res.resource_name,
+                                      domain_handle});
         }
       },
   }, stmt.payload);

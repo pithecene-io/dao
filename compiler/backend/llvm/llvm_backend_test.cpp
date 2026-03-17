@@ -451,13 +451,25 @@ suite<"unsupported_constructs"> unsupported_constructs = [] {
     expect(!pipe.has_errors()) << "mode unsafe should be no-op";
   };
 
-  "resource region is rejected"_test = [] {
+  "resource memory calls domain hooks"_test = [] {
     LlvmTestPipeline pipe(
         "fn test(): i32\n"
         "  resource memory Arena =>\n"
         "    return 1\n"
         "  return 0\n");
-    expect(pipe.has_errors()) << "resource should fail";
+    expect(!pipe.has_errors()) << "resource memory should compile";
+    auto ir = pipe.ir();
+    expect(contains(ir, "__dao_mem_resource_enter")) << ir;
+    expect(contains(ir, "__dao_mem_resource_exit")) << ir;
+  };
+
+  "resource gpu is rejected"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn test(): i32\n"
+        "  resource gpu compute =>\n"
+        "    return 1\n"
+        "  return 0\n");
+    expect(pipe.has_errors()) << "resource gpu should fail";
   };
 
   "field assignment via store"_test = [] {

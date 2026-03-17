@@ -76,6 +76,18 @@ void *__dao_gen_alloc(int64_t size, int64_t align);
 // Free a generator frame previously allocated by __dao_gen_alloc.
 void __dao_gen_free(void *ptr);
 
+// ---------------------------------------------------------------------------
+// Runtime hook declarations — Memory/resource domain
+// ---------------------------------------------------------------------------
+
+// Enter a scoped resource domain. Returns an opaque domain handle.
+// Current implementation: scope/lifetime bookkeeping only.
+// Arena-based allocation semantics are deferred.
+void *__dao_mem_resource_enter(void);
+
+// Exit a scoped resource domain. Takes the handle returned by enter.
+void __dao_mem_resource_exit(void *domain);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

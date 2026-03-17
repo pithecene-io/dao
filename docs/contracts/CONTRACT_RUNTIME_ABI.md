@@ -19,7 +19,7 @@ user-written host-language glue.
 
 Out of scope:
 
-- scoped resource-domain memory semantics
+- arena/allocator-level resource-domain memory semantics
 - parallel/GPU execution runtime
 - scheduler/executor architecture
 - allocator design
@@ -56,6 +56,7 @@ Domains:
 | `eq`       | Equality comparison                        |
 | `conv`     | Value-to-value conversion (e.g. to_string) |
 | `gen`      | Generator frame allocation and lifetime    |
+| `mem`      | Resource domain scope and lifetime         |
 
 Examples:
 
@@ -71,6 +72,8 @@ Examples:
 | `__dao_conv_bool_to_string`| `(x: bool): string`                 |
 | `__dao_gen_alloc`         | `(size: i64, align: i64): *void`     |
 | `__dao_gen_free`          | `(ptr: *void): void`                 |
+| `__dao_mem_resource_enter`| `(): *void`                           |
+| `__dao_mem_resource_exit` | `(domain: *void): void`              |
 
 These are the **only** runtime hooks in the current supported slice.
 New hooks require updating this contract before implementation.
@@ -147,6 +150,41 @@ Properties:
 - Consumer code accesses the generator exclusively through the
   `__dao_gen_*` hooks and the resume function pointer.
 
+### Resource domain handle
+
+Resource domains are represented at the ABI boundary as an opaque
+pointer:
+
+```
+ptr  ; opaque domain handle
+```
+
+C-equivalent:
+
+```c
+void *domain;
+```
+
+Properties:
+
+- the handle is opaque to compiler-generated code; its internal
+  structure is private to the runtime
+- `__dao_mem_resource_enter` returns a fresh handle; the compiler
+  passes the same handle to the corresponding `__dao_mem_resource_exit`
+- handles are scope-paired: every enter has exactly one exit on every
+  control-flow path (including early return)
+- nesting is supported: each enter/exit pair is independent
+
+Current implementation status:
+
+- the first implementation provides **scope/lifetime bookkeeping
+  only** — entering a resource domain establishes a scope boundary
+  and exiting closes it
+- arena-based allocation, per-domain allocator routing, and domain-
+  scoped deallocation are deferred
+- the handle/token ABI is designed to accommodate future arena
+  semantics without signature churn
+
 ## Ownership and lifetime rules
 
 For the current supported hook slice:
@@ -171,6 +209,11 @@ For the current supported hook slice:
    `__dao_gen_free` when the iterator is no longer needed. The
    compiler inserts the free call at for-loop exit.
 
+5. **Resource domain handles are scope-paired.** Every handle
+   returned by `__dao_mem_resource_enter` must be passed to exactly
+   one `__dao_mem_resource_exit` call. The compiler inserts exit
+   calls on both normal and early-return paths.
+
 ## Stability
 
 ### Stable (frozen for current slice)
@@ -186,8 +229,8 @@ For the current supported hook slice:
 - additional scalar types (i8, i16, i64, u8, u16, u32, u64, f32)
 - additional conversion hooks
 - string concatenation / manipulation hooks
-- memory allocation hooks
-- mode/resource runtime hooks
+- memory allocation hooks (beyond resource domain scope tracking)
+- mode runtime hooks (parallel, GPU)
 
 ## Authoritative sources
 
