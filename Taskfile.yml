@@ -68,7 +68,7 @@ tasks:
     deps: [build]
     cmds:
       - cd tools/playground/frontend && npm ci --ignore-scripts
-      - defer: kill $(lsof -ti :8090) 2>/dev/null || true
+      - defer: pkill -xf '{{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground' 2>/dev/null || true
       - |
         {{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground &
         cd tools/playground/frontend && npx vite
