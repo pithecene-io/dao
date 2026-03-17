@@ -3,6 +3,8 @@
 #include "pipeline.h"
 #include "token_category.h"
 
+#include "analysis/goto_definition.h"
+#include "analysis/hover.h"
 #include "analysis/semantic_tokens.h"
 #include "frontend/ast/ast_printer.h"
 #include "frontend/lexer/lexer.h"
@@ -240,6 +242,179 @@ respond:
       {"diagnostics", diagnostics},
   };
 
+  res.set_content(response.dump(), "application/json");
+}
+
+// ---------------------------------------------------------------------------
+// Shared lightweight pipeline for hover/goto-def (lex → parse → resolve → typecheck)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+struct LightPipeline {
+  SourceBuffer source;
+  LexResult lex_result;
+  ParseResult parse_result;
+  ResolveResult resolve_result;
+  TypeCheckResult check_result;
+  TypeContext types;
+  uint32_t prelude_bytes = 0;
+  bool ok = false;
+};
+
+auto run_light_pipeline(const nlohmann::json& request,
+                        const std::filesystem::path& repo_root)
+    -> LightPipeline {
+  LightPipeline pipe{SourceBuffer("", ""), {}, {}, {}, {}, {}, 0, false};
+
+  auto prelude_source = load_prelude(repo_root);
+  pipe.prelude_bytes = static_cast<uint32_t>(prelude_source.size());
+
+  auto user_source = request["source"].get<std::string>();
+  pipe.source = SourceBuffer("<playground>", prelude_source + user_source);
+  pipe.lex_result = lex(pipe.source);
+
+  if (!pipe.lex_result.diagnostics.empty()) {
+    return pipe;
+  }
+
+  pipe.parse_result = parse(pipe.lex_result.tokens);
+  if (pipe.parse_result.file == nullptr) {
+    return pipe;
+  }
+
+  pipe.resolve_result = resolve(*pipe.parse_result.file, pipe.prelude_bytes);
+
+  pipe.check_result =
+      typecheck(*pipe.parse_result.file, pipe.resolve_result, pipe.types);
+
+  pipe.ok = true;
+  return pipe;
+}
+
+/// Find the token span offset that contains the given byte offset.
+/// Returns the token's span.offset, or the offset itself if no token found.
+auto find_token_offset(uint32_t offset, const LexResult& lex_result)
+    -> uint32_t {
+  for (const auto& tok : lex_result.tokens) {
+    if (tok.span.offset <= offset &&
+        offset < tok.span.offset + tok.span.length) {
+      return tok.span.offset;
+    }
+  }
+  return offset;
+}
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// Hover
+// ---------------------------------------------------------------------------
+
+void handle_hover(const httplib::Request& req, httplib::Response& res,
+                  const std::filesystem::path& repo_root) {
+  nlohmann::json request;
+  try {
+    request = nlohmann::json::parse(req.body);
+  } catch (const nlohmann::json::parse_error&) {
+    res.status = 400;
+    res.set_content(R"({"error":"invalid JSON"})", "application/json");
+    return;
+  }
+
+  if (!request.contains("source") || !request.contains("offset")) {
+    res.status = 400;
+    res.set_content(R"({"error":"missing 'source' or 'offset'"})",
+                    "application/json");
+    return;
+  }
+
+  auto user_offset = request["offset"].get<uint32_t>();
+  auto pipe = run_light_pipeline(request, repo_root);
+
+  if (!pipe.ok) {
+    res.set_content("null", "application/json");
+    return;
+  }
+
+  // Find the token at this offset and use its span start for lookup.
+  auto absolute_offset = pipe.prelude_bytes + user_offset;
+  auto token_offset = find_token_offset(absolute_offset, pipe.lex_result);
+
+  auto result = dao::query_hover(token_offset, pipe.resolve_result,
+                                 pipe.check_result);
+  if (!result) {
+    res.set_content("null", "application/json");
+    return;
+  }
+
+  nlohmann::json response = {
+      {"name", result->name},
+      {"kind", result->symbol_kind},
+      {"type", result->type},
+  };
+  res.set_content(response.dump(), "application/json");
+}
+
+// ---------------------------------------------------------------------------
+// Go to definition
+// ---------------------------------------------------------------------------
+
+void handle_goto_def(const httplib::Request& req, httplib::Response& res,
+                     const std::filesystem::path& repo_root) {
+  nlohmann::json request;
+  try {
+    request = nlohmann::json::parse(req.body);
+  } catch (const nlohmann::json::parse_error&) {
+    res.status = 400;
+    res.set_content(R"({"error":"invalid JSON"})", "application/json");
+    return;
+  }
+
+  if (!request.contains("source") || !request.contains("offset")) {
+    res.status = 400;
+    res.set_content(R"({"error":"missing 'source' or 'offset'"})",
+                    "application/json");
+    return;
+  }
+
+  auto user_offset = request["offset"].get<uint32_t>();
+  auto pipe = run_light_pipeline(request, repo_root);
+
+  if (!pipe.ok) {
+    res.set_content("null", "application/json");
+    return;
+  }
+
+  auto absolute_offset = pipe.prelude_bytes + user_offset;
+  auto token_offset = find_token_offset(absolute_offset, pipe.lex_result);
+
+  auto result = dao::query_definition(token_offset, pipe.resolve_result);
+  if (!result) {
+    res.set_content("null", "application/json");
+    return;
+  }
+
+  // If the definition is inside the prelude, it's not navigable
+  // in the user's source — return null.
+  if (result->offset < pipe.prelude_bytes) {
+    res.set_content("null", "application/json");
+    return;
+  }
+
+  auto user_def_offset = result->offset - pipe.prelude_bytes;
+  auto loc = pipe.source.line_col(result->offset);
+  auto prelude_text = std::string(
+      pipe.source.contents().substr(0, pipe.prelude_bytes));
+  auto prelude_lines = count_lines(prelude_text);
+  auto line = loc.line > prelude_lines ? loc.line - prelude_lines : loc.line;
+
+  nlohmann::json response = {
+      {"offset", user_def_offset},
+      {"length", result->length},
+      {"line", line},
+      {"col", loc.col},
+  };
   res.set_content(response.dump(), "application/json");
 }
 

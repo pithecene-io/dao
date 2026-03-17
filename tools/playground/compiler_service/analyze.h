@@ -10,6 +10,12 @@ namespace dao::playground {
 void handle_analyze(const httplib::Request& req, httplib::Response& res,
                     const std::filesystem::path& repo_root);
 
+void handle_hover(const httplib::Request& req, httplib::Response& res,
+                  const std::filesystem::path& repo_root);
+
+void handle_goto_def(const httplib::Request& req, httplib::Response& res,
+                     const std::filesystem::path& repo_root);
+
 } // namespace dao::playground
 
 #endif // DAO_PLAYGROUND_ANALYZE_H
