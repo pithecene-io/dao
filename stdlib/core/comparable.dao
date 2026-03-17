@@ -1,0 +1,3 @@
+derived concept Comparable:
+  fn lt(self, other: Comparable): bool
+  fn gt(self, other: Comparable): bool

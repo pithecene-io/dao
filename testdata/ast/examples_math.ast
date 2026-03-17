@@ -1,60 +1,4 @@
 File
-  FunctionDecl square
-    Param x: i32
-    ReturnType: i32
-    ExprBody
-      BinaryExpr *
-        Identifier x
-        Identifier x
-  FunctionDecl cube
-    Param x: i32
-    ReturnType: i32
-    ExprBody
-      BinaryExpr *
-        BinaryExpr *
-          Identifier x
-          Identifier x
-        Identifier x
-  FunctionDecl is_even
-    Param x: i32
-    ReturnType: bool
-    ExprBody
-      BinaryExpr ==
-        Identifier x
-        BinaryExpr *
-          BinaryExpr /
-            Identifier x
-            IntLiteral 2
-          IntLiteral 2
-  FunctionDecl sum_range
-    Param a: i32
-    Param b: i32
-    ReturnType: i32
-    LetStatement total: i32
-      IntLiteral 0
-    LetStatement i: i32
-      Identifier a
-    WhileStatement
-      Condition
-        BinaryExpr <
-          Identifier i
-          Identifier b
-      Assignment
-        Target
-          Identifier total
-        Value
-          BinaryExpr +
-            Identifier total
-            Identifier i
-      Assignment
-        Target
-          Identifier i
-        Value
-          BinaryExpr +
-            Identifier i
-            IntLiteral 1
-    ReturnStatement
-      Identifier total
   FunctionDecl main
     ReturnType: i32
     ExpressionStatement
@@ -62,7 +6,7 @@ File
         Callee
           Identifier print
         Args
-          StringLiteral "square(7):"
+          StringLiteral "abs(-5):"
     ExpressionStatement
       CallExpr
         Callee
@@ -70,15 +14,17 @@ File
         Args
           CallExpr
             Callee
-              Identifier square
+              Identifier abs
             Args
-              IntLiteral 7
+              BinaryExpr -
+                IntLiteral 0
+                IntLiteral 5
     ExpressionStatement
       CallExpr
         Callee
           Identifier print
         Args
-          StringLiteral "cube(3):"
+          StringLiteral "abs(3):"
     ExpressionStatement
       CallExpr
         Callee
@@ -86,7 +32,7 @@ File
         Args
           CallExpr
             Callee
-              Identifier cube
+              Identifier abs
             Args
               IntLiteral 3
     ExpressionStatement
@@ -94,7 +40,7 @@ File
         Callee
           Identifier print
         Args
-          StringLiteral "is_even(4):"
+          StringLiteral "min(10, 3):"
     ExpressionStatement
       CallExpr
         Callee
@@ -102,15 +48,16 @@ File
         Args
           CallExpr
             Callee
-              Identifier is_even
+              Identifier min
             Args
-              IntLiteral 4
+              IntLiteral 10
+              IntLiteral 3
     ExpressionStatement
       CallExpr
         Callee
           Identifier print
         Args
-          StringLiteral "is_even(7):"
+          StringLiteral "max(10, 3):"
     ExpressionStatement
       CallExpr
         Callee
@@ -118,9 +65,10 @@ File
         Args
           CallExpr
             Callee
-              Identifier is_even
+              Identifier max
             Args
-              IntLiteral 7
+              IntLiteral 10
+              IntLiteral 3
     ExpressionStatement
       CallExpr
         Callee
@@ -144,7 +92,7 @@ File
         Callee
           Identifier print
         Args
-          StringLiteral "sum_range(1, 11):"
+          StringLiteral "clamp(-5, 0, 10):"
     ExpressionStatement
       CallExpr
         Callee
@@ -152,9 +100,46 @@ File
         Args
           CallExpr
             Callee
-              Identifier sum_range
+              Identifier clamp
             Args
-              IntLiteral 1
-              IntLiteral 11
+              BinaryExpr -
+                IntLiteral 0
+                IntLiteral 5
+              IntLiteral 0
+              IntLiteral 10
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "clamp(7, 0, 10):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier clamp
+            Args
+              IntLiteral 7
+              IntLiteral 0
+              IntLiteral 10
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "length of hello:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier length
+            Args
+              StringLiteral "hello"
     ReturnStatement
       IntLiteral 0

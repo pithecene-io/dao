@@ -3,6 +3,9 @@ File
     Param a: string
     Param b: string
     ReturnType: string
+  ExternFunctionDecl __dao_str_length
+    Param s: string
+    ReturnType: i32
   FunctionDecl concat
     Param a: string
     Param b: string
@@ -14,3 +17,12 @@ File
         Args
           Identifier a
           Identifier b
+  FunctionDecl length
+    Param s: string
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_str_length
+        Args
+          Identifier s

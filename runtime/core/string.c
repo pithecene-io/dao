@@ -34,3 +34,10 @@ struct dao_string __dao_str_concat(const struct dao_string *a,
 
   return (struct dao_string){.ptr = buf, .len = total};
 }
+
+int32_t __dao_str_length(const struct dao_string *s) {
+  if (s == NULL) {
+    return 0;
+  }
+  return (int32_t)s->len;
+}

@@ -86,6 +86,9 @@ void __dao_gen_free(void *ptr);
 struct dao_string __dao_str_concat(const struct dao_string *a,
                                    const struct dao_string *b);
 
+// Return the byte length of a string as i32.
+int32_t __dao_str_length(const struct dao_string *s);
+
 // ---------------------------------------------------------------------------
 // Runtime hook declarations — Memory/resource domain
 // ---------------------------------------------------------------------------
