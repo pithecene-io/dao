@@ -181,7 +181,8 @@ private:
         },
         [&](const MirResourceExit& p) {
           out_ << "resource_exit " << p.region_kind
-               << " " << p.region_name;
+               << " " << p.region_name
+               << " %" << p.domain_handle.id;
         },
         [&](const MirLambdaInst& p) {
           out_ << "lambda";

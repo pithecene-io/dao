@@ -22,6 +22,7 @@ void LlvmRuntimeHooks::declare_all() {
   declare_equality_hooks();
   declare_conversion_hooks();
   declare_generator_hooks();
+  declare_mem_resource_hooks();
 }
 
 auto LlvmRuntimeHooks::is_runtime_hook(std::string_view name) -> bool {
@@ -113,6 +114,24 @@ void LlvmRuntimeHooks::declare_generator_hooks() {
 
   // __dao_gen_free(ptr): void
   ensure_declared(runtime_hooks::kGenFree,
+                  llvm::FunctionType::get(void_ty, {ptr}, false));
+}
+
+// ---------------------------------------------------------------------------
+// Memory/resource domain hooks
+// ---------------------------------------------------------------------------
+
+void LlvmRuntimeHooks::declare_mem_resource_hooks() {
+  auto& ctx = module_.getContext();
+  auto* ptr = llvm::PointerType::getUnqual(ctx);
+  auto* void_ty = llvm::Type::getVoidTy(ctx);
+
+  // __dao_mem_resource_enter(): ptr
+  ensure_declared(runtime_hooks::kMemResourceEnter,
+                  llvm::FunctionType::get(ptr, {}, false));
+
+  // __dao_mem_resource_exit(domain: ptr): void
+  ensure_declared(runtime_hooks::kMemResourceExit,
                   llvm::FunctionType::get(void_ty, {ptr}, false));
 }
 

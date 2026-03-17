@@ -104,7 +104,7 @@ struct MirYieldInst   { MirValueId value; };
 struct MirModeEnter     { HirModeKind mode_kind; std::string_view region_name; };
 struct MirModeExit      { HirModeKind mode_kind; };
 struct MirResourceEnter { std::string_view region_kind; std::string_view region_name; };
-struct MirResourceExit  { std::string_view region_kind; std::string_view region_name; };
+struct MirResourceExit  { std::string_view region_kind; std::string_view region_name; MirValueId domain_handle; };
 
 struct MirLambdaInst { MirFunction* fn; };
 

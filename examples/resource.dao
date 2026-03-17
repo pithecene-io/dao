@@ -1,0 +1,34 @@
+fn compute_in_pool(): i32
+  let result: i32 = 0
+  resource memory pool =>
+    let a: i32 = 10
+    let b: i32 = 20
+    result = a + b
+  return result
+
+fn nested_domains(): i32
+  let total: i32 = 0
+  resource memory outer =>
+    let x: i32 = 100
+    resource memory inner =>
+      let y: i32 = 50
+      total = x + y
+  return total
+
+fn early_return(flag: i32): i32
+  resource memory arena =>
+    if flag > 0:
+      return flag
+    let x: i32 = 42
+  return 0
+
+fn main(): i32
+  print("compute_in_pool:")
+  print(compute_in_pool())
+  print("nested_domains:")
+  print(nested_domains())
+  print("early_return(5):")
+  print(early_return(5))
+  print("early_return(0):")
+  print(early_return(0))
+  return 0

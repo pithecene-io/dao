@@ -1,0 +1,118 @@
+File
+  FunctionDecl compute_in_pool
+    ReturnType: i32
+    LetStatement result: i32
+      IntLiteral 0
+    ResourceBlock memory pool
+      LetStatement a: i32
+        IntLiteral 10
+      LetStatement b: i32
+        IntLiteral 20
+      Assignment
+        Target
+          Identifier result
+        Value
+          BinaryExpr +
+            Identifier a
+            Identifier b
+    ReturnStatement
+      Identifier result
+  FunctionDecl nested_domains
+    ReturnType: i32
+    LetStatement total: i32
+      IntLiteral 0
+    ResourceBlock memory outer
+      LetStatement x: i32
+        IntLiteral 100
+      ResourceBlock memory inner
+        LetStatement y: i32
+          IntLiteral 50
+        Assignment
+          Target
+            Identifier total
+          Value
+            BinaryExpr +
+              Identifier x
+              Identifier y
+    ReturnStatement
+      Identifier total
+  FunctionDecl early_return
+    Param flag: i32
+    ReturnType: i32
+    ResourceBlock memory arena
+      IfStatement
+        Condition
+          BinaryExpr >
+            Identifier flag
+            IntLiteral 0
+        Then
+          ReturnStatement
+            Identifier flag
+      LetStatement x: i32
+        IntLiteral 42
+    ReturnStatement
+      IntLiteral 0
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "compute_in_pool:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier compute_in_pool
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "nested_domains:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier nested_domains
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "early_return(5):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier early_return
+            Args
+              IntLiteral 5
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "early_return(0):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier early_return
+            Args
+              IntLiteral 0
+    ReturnStatement
+      IntLiteral 0

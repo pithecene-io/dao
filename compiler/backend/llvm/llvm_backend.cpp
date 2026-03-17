@@ -401,12 +401,33 @@ auto LlvmBackend::lower_inst(const MirInst& inst,
         return true;
       },
 
-      // Resource regions — no runtime hook exists yet.
+      // Resource regions — call runtime domain hooks.
       [&](const MirResourceEnter&) -> bool {
-        emit_diagnostic(inst.span, "resource region lowering not yet supported");
-        return false;
+        auto* enter_fn = module_->getFunction(
+            std::string(runtime_hooks::kMemResourceEnter));
+        if (enter_fn == nullptr) {
+          emit_diagnostic(inst.span, "resource_enter: runtime hook not found");
+          return false;
+        }
+        auto* handle = state.builder->CreateCall(enter_fn, {}, "resource.domain");
+        state.values[inst.result.id] = handle;
+        return true;
       },
-      [&](const MirResourceExit&) -> bool { return true; },
+      [&](const MirResourceExit& p) -> bool {
+        auto* handle = get_value(p.domain_handle, state);
+        if (handle == nullptr) {
+          emit_diagnostic(inst.span, "resource_exit: domain handle not found");
+          return false;
+        }
+        auto* exit_fn = module_->getFunction(
+            std::string(runtime_hooks::kMemResourceExit));
+        if (exit_fn == nullptr) {
+          emit_diagnostic(inst.span, "resource_exit: runtime hook not found");
+          return false;
+        }
+        state.builder->CreateCall(exit_fn, {handle});
+        return true;
+      },
 
       // Unsupported constructs.
       [&](const MirIndexAccess&) -> bool {
