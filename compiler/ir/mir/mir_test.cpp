@@ -274,7 +274,7 @@ suite<"mir_mode"> mir_mode = [] {
 // ---------------------------------------------------------------------------
 
 suite<"mir_resource"> mir_resource = [] {
-  "resource region preserved as enter/exit"_test = [] {
+  "resource region preserved as enter/exit with metadata"_test = [] {
     MirTestPipeline pipe(
         "fn main(): i32\n"
         "    resource gpu compute =>\n"
@@ -282,7 +282,139 @@ suite<"mir_resource"> mir_resource = [] {
         "    return 0\n");
     auto dump = pipe.dump();
     expect(contains(dump, "resource_enter gpu compute")) << dump;
-    expect(contains(dump, "resource_exit")) << dump;
+    expect(contains(dump, "resource_exit gpu compute")) << dump;
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Dao-specific: early return inside region
+// ---------------------------------------------------------------------------
+
+suite<"mir_region_early_return"> mir_region_early_return = [] {
+  "early return inside mode emits mode_exit before return"_test = [] {
+    MirTestPipeline pipe(
+        "fn test(x: i32): i32\n"
+        "    mode unsafe =>\n"
+        "        if x > 0:\n"
+        "            return x\n"
+        "    return 0\n");
+    auto dump = pipe.dump();
+    // The early return path must emit mode_exit before the return.
+    // Find the early return block — it should contain mode_exit then return.
+    expect(contains(dump, "mode_enter unsafe")) << dump;
+    expect(contains(dump, "mode_exit")) << dump;
+
+    // Verify mode_exit appears before return in the early-return block.
+    auto exit_pos = dump.find("mode_exit");
+    auto return_pos = dump.find("return %", exit_pos);
+    expect(exit_pos != std::string::npos) << "mode_exit must exist";
+    expect(return_pos != std::string::npos)
+        << "return must follow mode_exit";
+  };
+
+  "early return inside resource emits resource_exit before return"_test =
+      [] {
+    MirTestPipeline pipe(
+        "fn test(x: i32): i32\n"
+        "    resource memory pool =>\n"
+        "        if x > 0:\n"
+        "            return x\n"
+        "    return 0\n");
+    auto dump = pipe.dump();
+    expect(contains(dump, "resource_enter memory pool")) << dump;
+
+    // Early return path: resource_exit then return.
+    auto exit_pos = dump.find("resource_exit memory pool");
+    expect(exit_pos != std::string::npos) << "resource_exit must exist";
+    auto return_pos = dump.find("return %", exit_pos);
+    expect(return_pos != std::string::npos)
+        << "return must follow resource_exit";
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Dao-specific: nested regions
+// ---------------------------------------------------------------------------
+
+suite<"mir_nested_regions"> mir_nested_regions = [] {
+  "mode inside resource emits correct nesting"_test = [] {
+    MirTestPipeline pipe(
+        "fn test(): i32\n"
+        "    resource memory pool =>\n"
+        "        mode unsafe =>\n"
+        "            let x: i32 = 1\n"
+        "    return 0\n");
+    auto dump = pipe.dump();
+
+    // Verify nesting order: resource_enter, mode_enter, mode_exit,
+    // resource_exit.
+    auto res_enter = dump.find("resource_enter memory pool");
+    auto mode_enter = dump.find("mode_enter unsafe");
+    auto mode_exit = dump.find("mode_exit");
+    auto res_exit = dump.find("resource_exit memory pool");
+
+    expect(res_enter != std::string::npos) << dump;
+    expect(mode_enter != std::string::npos) << dump;
+    expect(mode_exit != std::string::npos) << dump;
+    expect(res_exit != std::string::npos) << dump;
+
+    expect(res_enter < mode_enter) << "resource_enter before mode_enter";
+    expect(mode_enter < mode_exit) << "mode_enter before mode_exit";
+    expect(mode_exit < res_exit) << "mode_exit before resource_exit";
+  };
+
+  "early return in nested regions unwinds in reverse order"_test = [] {
+    MirTestPipeline pipe(
+        "fn test(x: i32): i32\n"
+        "    resource memory pool =>\n"
+        "        mode unsafe =>\n"
+        "            return x\n"
+        "    return 0\n");
+    auto dump = pipe.dump();
+
+    // Early return must unwind: mode_exit then resource_exit then return.
+    // Find the sequence starting from the early-return block.
+    auto mode_exit = dump.find("mode_exit");
+    expect(mode_exit != std::string::npos) << dump;
+    auto res_exit = dump.find("resource_exit memory pool", mode_exit);
+    expect(res_exit != std::string::npos)
+        << "resource_exit must follow mode_exit on early return";
+    auto ret_pos = dump.find("return %", res_exit);
+    expect(ret_pos != std::string::npos)
+        << "return must follow resource_exit on early return";
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Dao-specific: sequential regions
+// ---------------------------------------------------------------------------
+
+suite<"mir_sequential_regions"> mir_sequential_regions = [] {
+  "sequential resource regions do not interleave"_test = [] {
+    MirTestPipeline pipe(
+        "fn test(): i32\n"
+        "    resource memory pool_a =>\n"
+        "        let a: i32 = 1\n"
+        "    resource memory pool_b =>\n"
+        "        let b: i32 = 2\n"
+        "    return 0\n");
+    auto dump = pipe.dump();
+
+    // First region: enter_a, exit_a
+    auto enter_a = dump.find("resource_enter memory pool_a");
+    auto exit_a = dump.find("resource_exit memory pool_a");
+    // Second region: enter_b, exit_b
+    auto enter_b = dump.find("resource_enter memory pool_b");
+    auto exit_b = dump.find("resource_exit memory pool_b");
+
+    expect(enter_a != std::string::npos) << dump;
+    expect(exit_a != std::string::npos) << dump;
+    expect(enter_b != std::string::npos) << dump;
+    expect(exit_b != std::string::npos) << dump;
+
+    // exit_a must come before enter_b.
+    expect(exit_a < enter_b)
+        << "first region must exit before second region enters";
   };
 };
 

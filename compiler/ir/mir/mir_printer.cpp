@@ -179,8 +179,9 @@ private:
           out_ << "resource_enter " << p.region_kind
                << " " << p.region_name;
         },
-        [&](const MirResourceExit&) {
-          out_ << "resource_exit";
+        [&](const MirResourceExit& p) {
+          out_ << "resource_exit " << p.region_kind
+               << " " << p.region_name;
         },
         [&](const MirLambdaInst& p) {
           out_ << "lambda";

@@ -111,8 +111,9 @@ Exit criteria:
 
 ## Phase 3 — MIR + Execution Semantics Lowering
 
-Status: **partial** — basic-block MIR, HIR→MIR lowering, generator
-coroutines. Resource/mode lowering deferred.
+Status: **complete** — basic-block MIR, HIR→MIR lowering, generator
+coroutines, scoped mode/resource region lowering with enter/exit
+instructions, reverse-order cleanup on early return
 
 Goals:
 - explicit control-flow lowering to MIR
