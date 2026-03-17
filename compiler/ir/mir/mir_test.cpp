@@ -299,17 +299,21 @@ suite<"mir_region_early_return"> mir_region_early_return = [] {
         "            return x\n"
         "    return 0\n");
     auto dump = pipe.dump();
-    // The early return path must emit mode_exit before the return.
-    // Find the early return block — it should contain mode_exit then return.
     expect(contains(dump, "mode_enter unsafe")) << dump;
-    expect(contains(dump, "mode_exit")) << dump;
 
-    // Verify mode_exit appears before return in the early-return block.
-    auto exit_pos = dump.find("mode_exit");
-    auto return_pos = dump.find("return %", exit_pos);
-    expect(exit_pos != std::string::npos) << "mode_exit must exist";
-    expect(return_pos != std::string::npos)
-        << "return must follow mode_exit";
+    // There must be TWO mode_exit instructions: one on the early-return
+    // path (cleanup before return x) and one on the normal fallthrough
+    // path (after the if body). A single mode_exit would mean the
+    // early-return cleanup is broken.
+    size_t exit_count = 0;
+    size_t pos = 0;
+    while ((pos = dump.find("mode_exit", pos)) != std::string::npos) {
+      ++exit_count;
+      ++pos;
+    }
+    expect(exit_count == 2_ul)
+        << "expected 2 mode_exit (early-return + normal), got "
+        << exit_count;
   };
 
   "early return inside resource emits resource_exit before return"_test =
@@ -323,12 +327,20 @@ suite<"mir_region_early_return"> mir_region_early_return = [] {
     auto dump = pipe.dump();
     expect(contains(dump, "resource_enter memory pool")) << dump;
 
-    // Early return path: resource_exit then return.
-    auto exit_pos = dump.find("resource_exit memory pool");
-    expect(exit_pos != std::string::npos) << "resource_exit must exist";
-    auto return_pos = dump.find("return %", exit_pos);
-    expect(return_pos != std::string::npos)
-        << "return must follow resource_exit";
+    // There must be TWO resource_exit instructions: one on the
+    // early-return path (cleanup before return x) and one on the
+    // normal fallthrough. A single resource_exit would mean the
+    // early-return cleanup is broken.
+    size_t exit_count = 0;
+    size_t pos = 0;
+    while ((pos = dump.find("resource_exit memory pool", pos))
+               != std::string::npos) {
+      ++exit_count;
+      ++pos;
+    }
+    expect(exit_count == 2_ul)
+        << "expected 2 resource_exit (early-return + normal), got "
+        << exit_count;
   };
 };
 
