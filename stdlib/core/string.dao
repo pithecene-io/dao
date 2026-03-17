@@ -1,0 +1,3 @@
+extern fn __dao_str_concat(a: string, b: string): string
+
+fn concat(a: string, b: string): string -> __dao_str_concat(a, b)

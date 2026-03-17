@@ -1,0 +1,16 @@
+File
+  ExternFunctionDecl __dao_str_concat
+    Param a: string
+    Param b: string
+    ReturnType: string
+  FunctionDecl concat
+    Param a: string
+    Param b: string
+    ReturnType: string
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_str_concat
+        Args
+          Identifier a
+          Identifier b

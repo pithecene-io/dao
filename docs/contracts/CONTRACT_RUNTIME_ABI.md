@@ -57,6 +57,7 @@ Domains:
 | `conv`     | Value-to-value conversion (e.g. to_string) |
 | `gen`      | Generator frame allocation and lifetime    |
 | `mem`      | Resource domain scope and lifetime         |
+| `str`      | String operations                          |
 
 Examples:
 
@@ -74,6 +75,7 @@ Examples:
 | `__dao_gen_free`          | `(ptr: *void): void`                 |
 | `__dao_mem_resource_enter`| `(): *void`                           |
 | `__dao_mem_resource_exit` | `(domain: *void): void`              |
+| `__dao_str_concat`       | `(a: string, b: string): string`      |
 
 These are the **only** runtime hooks in the current supported slice.
 New hooks require updating this contract before implementation.
@@ -214,6 +216,15 @@ For the current supported hook slice:
    one `__dao_mem_resource_exit` call. The compiler inserts exit
    calls on both normal and early-return paths.
 
+6. **String concat results are heap-allocated.**
+   `__dao_str_concat` returns a `dao_string` whose `ptr` points to
+   a freshly `malloc`-allocated buffer owned by the caller. Unlike
+   scalar-to-string conversion hooks, concat cannot use transient
+   storage because concat composes with itself (e.g.
+   `concat("a", concat("b", "c"))`). In the current runtime these
+   allocations are not automatically freed — they leak until process
+   exit. Future arena or GC integration will reclaim them.
+
 ## Stability
 
 ### Stable (frozen for current slice)
@@ -228,7 +239,7 @@ For the current supported hook slice:
 
 - additional scalar types (i8, i16, i64, u8, u16, u32, u64, f32)
 - additional conversion hooks
-- string concatenation / manipulation hooks
+- additional string manipulation hooks (beyond concat)
 - memory allocation hooks (beyond resource domain scope tracking)
 - mode runtime hooks (parallel, GPU)
 

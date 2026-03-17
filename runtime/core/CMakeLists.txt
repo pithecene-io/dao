@@ -4,6 +4,7 @@ add_library(dao_runtime STATIC
   convert.c
   generator.c
   resource.c
+  string.c
 )
 
 # This is C code, not C++.
