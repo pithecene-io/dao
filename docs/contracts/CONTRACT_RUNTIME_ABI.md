@@ -81,6 +81,12 @@ Examples:
 These are the **only** runtime hooks in the current supported slice.
 New hooks require updating this contract before implementation.
 
+**Note on `__dao_str_length`**: the internal string representation
+stores byte length as `i64`, but the hook narrows to `i32` because
+the Dao surface type system does not yet include `i64`. This will
+silently truncate for strings longer than `INT32_MAX`. When `i64`
+is added as a surface type, this hook should be widened.
+
 ## Canonical value representations
 
 ### Scalar types
