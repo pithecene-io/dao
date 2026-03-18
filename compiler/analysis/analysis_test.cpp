@@ -266,6 +266,44 @@ suite<"completion"> completion = [] {
       }
     }
   };
+
+  "if/else branches have separate scopes"_test = [] {
+    // Source: "fn test(): i32\n  if true:\n    let a: i32 = 1\n  else:\n    let b: i32 = 2\n  return 0\n"
+    // Then branch: let a at offset ~28. Else branch: let b at offset ~52.
+    AnalysisPipeline pipe(
+        "fn test(): i32\n"
+        "  if true:\n"
+        "    let a: i32 = 1\n"
+        "    return a\n"
+        "  else:\n"
+        "    let b: i32 = 2\n"
+        "    return b\n"
+        "  return 0\n");
+    // Inside else branch — "let b" is at ~61, "return b" at ~79.
+    // Offset 82 should be inside else scope.
+    auto items = query_completions(82, pipe.resolve_result,
+                                   pipe.check_result);
+    expect(has_completion(items, "b")) << "b should be visible in else";
+    expect(!has_completion(items, "a")) << "a should NOT be visible in else";
+  };
+
+  "shadowing: inner local hides outer"_test = [] {
+    AnalysisPipeline pipe(
+        "fn test(x: i32): i32\n"
+        "  let x: i32 = 99\n"
+        "  return x\n");
+    // Offset inside body, after let x shadows param x.
+    auto items = query_completions(40, pipe.resolve_result,
+                                   pipe.check_result);
+    // Should have exactly one "x", not two.
+    int x_count = 0;
+    for (const auto& item : items) {
+      if (item.label == "x") {
+        ++x_count;
+      }
+    }
+    expect(x_count == 1) << "shadowed x should appear once, got " << x_count;
+  };
 };
 
 auto main() -> int {} // NOLINT(readability-named-parameter)

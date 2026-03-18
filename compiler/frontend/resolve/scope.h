@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace dao {
@@ -40,11 +41,16 @@ public:
   }
 
   /// Collect all symbols visible from this scope (local + parent chain).
+  /// Innermost bindings shadow outer ones — only the nearest binding
+  /// for each name is included.
   [[nodiscard]] auto all_visible_symbols() const -> std::vector<Symbol*> {
     std::vector<Symbol*> result;
+    std::unordered_set<std::string_view> seen;
     for (const Scope* scope = this; scope != nullptr; scope = scope->parent_) {
       for (const auto& [name, sym] : scope->declarations_) {
-        result.push_back(sym);
+        if (seen.insert(name).second) {
+          result.push_back(sym);
+        }
       }
     }
     return result;

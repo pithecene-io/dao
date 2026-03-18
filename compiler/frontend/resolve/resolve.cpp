@@ -459,14 +459,24 @@ private:
       resolve_expr(*if_stmt.condition, scope);
 
       auto* then_scope = ctx_.make_scope(ScopeKind::Block, scope);
-      then_scope->set_range(stmt.span);
+      if (!if_stmt.then_body.empty()) {
+        auto first = if_stmt.then_body.front()->span;
+        auto last = if_stmt.then_body.back()->span;
+        then_scope->set_range(
+            {first.offset, last.offset + last.length - first.offset});
+      }
       for (const auto* s : if_stmt.then_body) {
         resolve_stmt(*s, then_scope);
       }
 
       if (if_stmt.has_else()) {
         auto* else_scope = ctx_.make_scope(ScopeKind::Block, scope);
-        else_scope->set_range(stmt.span);
+        if (!if_stmt.else_body.empty()) {
+          auto first = if_stmt.else_body.front()->span;
+          auto last = if_stmt.else_body.back()->span;
+          else_scope->set_range(
+              {first.offset, last.offset + last.length - first.offset});
+        }
         for (const auto* s : if_stmt.else_body) {
           resolve_stmt(*s, else_scope);
         }
