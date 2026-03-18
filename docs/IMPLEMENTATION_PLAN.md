@@ -359,6 +359,36 @@ Exit criteria (Tier A+B):
 - i64 is usable end-to-end (type, codegen, runtime, examples)
 - explicit numeric conversions exist between i32 and f64
 
+### Task 16 — Error-Tolerant Parsing and Tooling Hardening
+
+**Objective**: Make the parser produce partial ASTs for incomplete
+or broken source, enabling completion and diagnostics while typing.
+
+Governing contracts: `CONTRACT_LANGUAGE_TOOLING.md`
+
+Deliverables:
+
+- error recovery at ~18 parser error points: skip to next statement
+  or insert synthetic nodes instead of bailing
+- partial AST consumers: resolver, type checker, and analysis APIs
+  must tolerate missing/error nodes gracefully
+- dot completion for general expressions: use AST expression types
+  (`typed.expr_type()`) instead of symbol-only heuristics, so
+  `make_point().`, `p.x.`, and `arr[i].` work
+- playground diagnostics suppression for incomplete constructs
+  (e.g. don't report "function not found" while user is typing
+  an opening paren)
+
+Priority: **medium** — improves day-to-day playground UX but does
+not block any phase milestone.
+
+Exit criteria:
+
+- typing `p.` mid-statement shows dot completions without parser
+  failure
+- incomplete source produces partial results instead of no results
+- diagnostics for in-progress constructs are deferred or suppressed
+
 ## Principles
 
 - The grammar in `spec/grammar/` is the parser's source of truth
