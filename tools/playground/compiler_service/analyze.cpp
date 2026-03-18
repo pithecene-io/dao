@@ -534,6 +534,81 @@ void handle_references(const httplib::Request& req, httplib::Response& res,
 // Completions
 // ---------------------------------------------------------------------------
 
+/// Scan backward from offset to find the non-whitespace character.
+/// Returns the position (1-indexed into contents), or 0 if none found.
+auto scan_back_past_whitespace(std::string_view contents, uint32_t offset)
+    -> uint32_t {
+  auto pos = offset;
+  while (pos > 0 && (contents[pos - 1] == ' ' || contents[pos - 1] == '\t')) {
+    --pos;
+  }
+  return pos;
+}
+
+/// Resolve the semantic type of a symbol from typed results.
+/// Handles locals, params, functions, and types.
+auto resolve_receiver_type(const dao::Symbol* sym,
+                            const dao::TypeCheckResult& typed)
+    -> const dao::Type* {
+  if (sym == nullptr || sym->decl == nullptr) {
+    return nullptr;
+  }
+  switch (sym->kind) {
+  case dao::SymbolKind::Local:
+    return typed.typed.local_type(
+        static_cast<const dao::Stmt*>(sym->decl));
+  case dao::SymbolKind::Param: {
+    const auto* fn_decl = static_cast<const dao::Decl*>(sym->decl);
+    const auto* fn_type = typed.typed.decl_type(fn_decl);
+    if (fn_type == nullptr || fn_type->kind() != dao::TypeKind::Function) {
+      return nullptr;
+    }
+    const auto* func = static_cast<const dao::TypeFunction*>(fn_type);
+    if (!fn_decl->is<dao::FunctionDecl>()) {
+      return nullptr;
+    }
+    const auto& decl = fn_decl->as<dao::FunctionDecl>();
+    for (size_t idx = 0; idx < decl.params.size(); ++idx) {
+      if (decl.params[idx].name == sym->name &&
+          idx < func->param_types().size()) {
+        return func->param_types()[idx];
+      }
+    }
+    return nullptr;
+  }
+  default:
+    return nullptr;
+  }
+}
+
+/// Try to detect and resolve dot completion at the given offset.
+/// Returns the receiver type if a dot trigger is found, or nullptr.
+auto try_resolve_dot_receiver(uint32_t absolute_offset,
+                               const LightPipeline& pipe)
+    -> const dao::Type* {
+  auto contents = pipe.source.contents();
+  if (absolute_offset == 0 || absolute_offset > contents.size()) {
+    return nullptr;
+  }
+
+  auto pos = scan_back_past_whitespace(contents, absolute_offset);
+  if (pos == 0 || contents[pos - 1] != '.') {
+    return nullptr;
+  }
+
+  // Find the identifier token before the dot.
+  auto pre_dot = scan_back_past_whitespace(contents, pos - 1);
+  auto token_off = find_token_offset(
+      pre_dot > 0 ? pre_dot - 1 : 0, pipe.lex_result);
+
+  auto use_it = pipe.resolve_result.uses.find(token_off);
+  if (use_it == pipe.resolve_result.uses.end()) {
+    return nullptr;
+  }
+
+  return resolve_receiver_type(use_it->second, pipe.check_result);
+}
+
 void handle_completions(const httplib::Request& req, httplib::Response& res,
                          const std::filesystem::path& repo_root) {
   nlohmann::json request;
@@ -563,61 +638,10 @@ void handle_completions(const httplib::Request& req, httplib::Response& res,
   auto absolute_offset = pipe.prelude_bytes + user_offset;
   std::vector<dao::CompletionItem> items;
 
-  // Detect dot completion: check if cursor is immediately after a '.'.
-  auto contents = pipe.source.contents();
-  bool is_dot = false;
-  if (absolute_offset > 0 && absolute_offset <= contents.size()) {
-    // Scan backward past whitespace to find the trigger character.
-    auto pos = absolute_offset;
-    while (pos > 0 && (contents[pos - 1] == ' ' || contents[pos - 1] == '\t')) {
-      --pos;
-    }
-    is_dot = (pos > 0 && contents[pos - 1] == '.');
-    if (is_dot) {
-      // Find the token before the dot.
-      auto pre_dot = pos - 1;
-      while (pre_dot > 0 &&
-             (contents[pre_dot - 1] == ' ' || contents[pre_dot - 1] == '\t')) {
-        --pre_dot;
-      }
-      auto token_off = find_token_offset(pre_dot > 0 ? pre_dot - 1 : 0,
-                                          pipe.lex_result);
-      // Look up the symbol at that token to find its type.
-      auto use_it = pipe.resolve_result.uses.find(token_off);
-      if (use_it != pipe.resolve_result.uses.end()) {
-        const dao::Type* recv_type = nullptr;
-        const auto* sym = use_it->second;
-        if (sym->kind == dao::SymbolKind::Local && sym->decl != nullptr) {
-          recv_type = pipe.check_result.typed.local_type(
-              static_cast<const dao::Stmt*>(sym->decl));
-        } else if (sym->kind == dao::SymbolKind::Param &&
-                   sym->decl != nullptr) {
-          const auto* fn_decl = static_cast<const dao::Decl*>(sym->decl);
-          const auto* fn_type = pipe.check_result.typed.decl_type(fn_decl);
-          if (fn_type != nullptr &&
-              fn_type->kind() == dao::TypeKind::Function) {
-            const auto* ft =
-                static_cast<const dao::TypeFunction*>(fn_type);
-            if (fn_decl->is<dao::FunctionDecl>()) {
-              const auto& fn = fn_decl->as<dao::FunctionDecl>();
-              for (size_t idx = 0; idx < fn.params.size(); ++idx) {
-                if (fn.params[idx].name == sym->name &&
-                    idx < ft->param_types().size()) {
-                  recv_type = ft->param_types()[idx];
-                  break;
-                }
-              }
-            }
-          }
-        }
-        if (recv_type != nullptr) {
-          items = dao::query_dot_completions(recv_type, pipe.check_result);
-        }
-      }
-    }
-  }
-
-  if (!is_dot) {
+  const auto* receiver = try_resolve_dot_receiver(absolute_offset, pipe);
+  if (receiver != nullptr) {
+    items = dao::query_dot_completions(receiver, pipe.check_result);
+  } else {
     items = dao::query_completions(absolute_offset, pipe.resolve_result,
                                     pipe.check_result);
   }
