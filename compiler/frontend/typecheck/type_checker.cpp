@@ -1055,9 +1055,17 @@ auto TypeChecker::check_bool_literal(const Expr* /*expr*/) -> const Type* {
 
 auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
   const auto& bin = expr->as<BinaryExpr>();
-  // Check LHS first, then use its type as context for RHS literal fitting.
+  // Check both sides, using peer type as context for literal fitting.
+  // First pass: LHS without context, RHS with LHS as context.
   const auto* lhs = check_expr(bin.left);
   const auto* rhs = check_expr(bin.right, lhs);
+  // Second pass: if RHS provided a concrete type and LHS is a literal
+  // that defaulted, re-check LHS with RHS as context.
+  if (lhs != nullptr && rhs != nullptr && lhs != rhs &&
+      (bin.left->kind() == NodeKind::IntLiteral ||
+       bin.left->kind() == NodeKind::FloatLiteral)) {
+    lhs = check_expr(bin.left, rhs);
+  }
   if (lhs == nullptr || rhs == nullptr) {
     return nullptr;
   }

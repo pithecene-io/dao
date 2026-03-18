@@ -9,8 +9,10 @@ fn factorial_i64(n: i64): i64
 fn main(): i32
   print("factorial_i64(20):")
   print(factorial_i64(20))
-  print("min i64:")
-  print(min(100, 42))
+  print("1 + x where x is i64:")
+  let x: i64 = 100
+  let y: i64 = 1 + x
+  print(y)
   print("length of hello:")
   print(length("hello"))
   return 0

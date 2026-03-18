@@ -739,18 +739,18 @@ suite<"runtime_abi"> runtime_abi = [] {
 
   "prelude length generates str_length call"_test = [] {
     constexpr std::string_view prelude =
-        "extern fn __dao_str_length(s: string): i32\n";
+        "extern fn __dao_str_length(s: string): i64\n";
     LlvmTestPipeline pipe(
         std::string(prelude) +
-        "fn length(s: string): i32 -> __dao_str_length(s)\n"
+        "fn length(s: string): i64 -> __dao_str_length(s)\n"
         "\n"
-        "fn main(): i32\n"
+        "fn main(): i64\n"
         "  return length(\"hello\")\n",
         static_cast<uint32_t>(prelude.size()));
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
     expect(contains(ir, "__dao_str_length")) << ir;
-    expect(contains(ir, "call i32")) << ir;
+    expect(contains(ir, "call i64")) << ir;
   };
 
   "runtime hooks pre-declared by backend unconditionally"_test = [] {
