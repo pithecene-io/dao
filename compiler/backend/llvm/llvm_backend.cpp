@@ -636,7 +636,10 @@ auto LlvmBackend::lower_binary(const MirBinary& p, const MirInst& inst,
                       : state.builder->CreateICmpEQ(lhs, rhs, "eq");
     break;
   case BinaryOp::BangEq:
-    result = is_float ? state.builder->CreateFCmpONE(lhs, rhs, "fne")
+    // UNE (unordered or not equal): true if either operand is NaN or
+    // if the operands are not equal. ONE would incorrectly return false
+    // when either operand is NaN, violating IEEE 754 != semantics.
+    result = is_float ? state.builder->CreateFCmpUNE(lhs, rhs, "fne")
                       : state.builder->CreateICmpNE(lhs, rhs, "ne");
     break;
   case BinaryOp::Lt:
