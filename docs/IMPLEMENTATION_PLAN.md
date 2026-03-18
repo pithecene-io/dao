@@ -308,8 +308,19 @@ Priority: **high** — correctness baseline for existing types.
   predicates (ordered vs unordered), NaN propagation, signed-zero
   preservation
 - freeze integer overflow policy for i32: decide checked vs wrapping
-  default, implement the chosen behavior, add wrapping/saturating
-  alternate operations
+  default, implement the chosen behavior
+
+#### Tier A+ — Post-baseline (no blocking dependency)
+
+Priority: **medium** — enriches the numeric surface but does not
+block other tiers.
+
+- explicit wrapping operations: `wrapping_add`, `wrapping_sub`,
+  `wrapping_mul`
+- explicit saturating operations: `saturating_add`, `saturating_sub`,
+  `saturating_mul`
+- explicit checked operations: `checked_add`, `checked_sub`,
+  `checked_mul` (return error/status on overflow)
 
 #### Tier B — Phase 6 prerequisite
 

@@ -8,6 +8,7 @@
 #include "ir/mir/mir.h"
 
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 
@@ -163,6 +164,12 @@ private:
                        FunctionState& state) -> bool;
   auto lower_iter_destroy(const MirIterDestroy& p, const MirInst& inst,
                           FunctionState& state) -> bool;
+
+  // Checked signed integer arithmetic — traps on overflow.
+  auto emit_checked_signed_op(llvm::Intrinsic::ID intrinsic,
+                               llvm::Value* lhs, llvm::Value* rhs,
+                               const char* name,
+                               FunctionState& state) -> llvm::Value*;
 
   // Place resolution — walk projection chains to an LLVM pointer.
   auto resolve_place(const MirPlace& place,

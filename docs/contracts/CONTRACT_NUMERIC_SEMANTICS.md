@@ -91,26 +91,41 @@ is representable in the type's range.
 
 ### 4.2 Overflow
 
-Signed integer overflow must not be language-level undefined behavior.
-The compiler must not exploit overflow as an optimization assumption
-in ways that change observable program behavior.
+Signed integer overflow is **checked by default**. Overflow in the
+default arithmetic operators (`+`, `-`, `*`) causes a **trap**
+(runtime abort). The compiler must not treat signed integer overflow
+as undefined behavior and must not silently lower default signed
+arithmetic to wrapping semantics.
 
-The default overflow policy for signed integer arithmetic:
+Rules:
 
-- default arithmetic operators produce defined behavior on overflow
-- the specific defined behavior (checked/trapping, wrapping, or
-  mode-dependent) is not yet frozen; what is frozen is that overflow
-  is never undefined
+1. default `+`, `-`, `*` on signed integers are checked — overflow
+   traps
+2. the trap is a defined runtime abort, not undefined behavior
+3. the compiler may not exploit overflow for optimization
+4. `mode unsafe =>` does **not** change the semantics of integer
+   arithmetic operators — `unsafe` governs pointer/memory/FFI
+   safety, not arithmetic behavior
+5. the operator means the same thing in every build mode unless
+   the language explicitly says otherwise — no debug/release
+   semantic split
 
-When the overflow policy is fully frozen, the language must provide:
+Future explicit operations (not yet implemented):
 
-- default operators with the chosen overflow behavior
-- explicit wrapping operations as alternate APIs or intrinsics
-- explicit saturating operations as alternate APIs or intrinsics
-- explicit checked operations that report overflow
+- `wrapping_add`, `wrapping_sub`, `wrapping_mul` — two's complement
+  wrap, no trap
+- `saturating_add`, `saturating_sub`, `saturating_mul` — clamp to
+  min/max representable value
+- `checked_add`, `checked_sub`, `checked_mul` — return an error
+  value or status on overflow
 
-Status: **Partially specified** — overflow is defined as non-UB;
-specific policy deferred
+If Dao later wants relaxed arithmetic for high-performance numerics,
+it must be introduced as an explicit mode, operator family, or
+intrinsic family — not by overloading `unsafe` or by making
+semantics build-configuration-dependent.
+
+Status: **Specified, implemented** (i32 checked add/sub/mul with
+trap on overflow)
 
 ### 4.3 Division and remainder
 
@@ -371,7 +386,7 @@ The compiler and backend must:
 | Feature                          | Specified | Implemented       |
 |----------------------------------|-----------|-------------------|
 | `i32` arithmetic                 | Yes       | Yes               |
-| `i32` overflow non-UB            | Yes       | Partial (wraps)   |
+| `i32` checked overflow (trap)    | Yes       | Yes               |
 | `f64` IEEE 754 binary64          | Yes       | Partial           |
 | `f64` NaN/Inf/−0.0 semantics    | Yes       | Partial (codegen) |
 | `f64` comparison partial-order   | Yes       | Partial           |
@@ -383,7 +398,7 @@ The compiler and backend must:
 | Decimal types                    | Posture   | Deferred          |
 | Rounding-mode control            | Forbidden | N/A               |
 | Fast-math / relaxed mode         | Opt-in    | Deferred          |
-| Integer overflow policy freeze   | Partial   | Deferred          |
+| Integer overflow policy freeze   | Yes       | Implemented       |
 | String conversion (f64)          | Partial   | Implemented       |
 | Mixed-type operator rejection    | Yes       | Implemented       |
 
