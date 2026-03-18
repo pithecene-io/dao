@@ -627,8 +627,9 @@ void TypeChecker::check_function(const Decl* decl) {
 
   // Validate extern fn ABI types (user declarations only, not __dao_* hooks).
   // Validate extern fn ABI types for user declarations.
-  // Functions with reserved prefixes (__dao_, __) are exempt — they
-  // use Dao-defined ABI conventions per CONTRACT_RUNTIME_ABI.
+  // Reserved-prefix names (__) are exempt — this covers __dao_*
+  // runtime hooks (Dao-defined ABI per CONTRACT_RUNTIME_ABI) and
+  // aligns with C's reserved identifier convention.
   if (fn.is_extern && !fn.name.starts_with("__")) {
     for (const auto& param : fn.params) {
       if (param.type != nullptr) {

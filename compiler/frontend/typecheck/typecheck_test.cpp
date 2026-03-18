@@ -434,7 +434,7 @@ suite<"typecheck_negative"> typecheck_negative = [] {
     expect(is_ok(result)) << "pointer extern fn should typecheck";
   };
 
-  "reserved __ prefix hooks are exempt from ABI validation"_test = [] {
+  "__dao_ runtime hooks are exempt from ABI validation"_test = [] {
     auto result = check_source(
         "extern fn __dao_test_hook(msg: string): void\n");
     expect(is_ok(result)) << "__dao_ hooks should bypass ABI checks";
