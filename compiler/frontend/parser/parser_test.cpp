@@ -723,6 +723,71 @@ suite<"self_keyword_tests"> self_keyword_tests = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Error recovery
+// ---------------------------------------------------------------------------
+
+suite<"error_recovery"> error_recovery = [] {
+  "broken declaration does not prevent parsing subsequent ones"_test = [] {
+    SourceBuffer src("test.dao",
+        "fn good1(): i32 -> 1\n"
+        "\n"
+        "this is garbage\n"
+        "\n"
+        "fn good2(): i32 -> 2\n");
+    auto lex_result = lex(src);
+    auto result = parse(lex_result.tokens);
+    expect(result.file != nullptr) << "file should be produced";
+    // good1, ErrorDecl, and good2 should all be present.
+    expect(result.file->declarations.size() == 3_ul)
+        << "should have good1 + error + good2";
+    if (result.file->declarations.size() == 3) {
+      expect(result.file->declarations[0]->kind() == NodeKind::FunctionDecl);
+      expect(result.file->declarations[1]->kind() == NodeKind::ErrorDecl)
+          << "error placeholder should be inserted for garbage";
+      expect(result.file->declarations[2]->kind() == NodeKind::FunctionDecl);
+    }
+  };
+
+  "broken statement does not prevent parsing subsequent ones"_test = [] {
+    SourceBuffer src("test.dao",
+        "fn main(): i32\n"
+        "  let x: i32 = 1\n"
+        "  @@@ broken\n"
+        "  return x\n");
+    auto lex_result = lex(src);
+    auto result = parse(lex_result.tokens);
+    expect(result.file != nullptr) << "file should be produced";
+    expect(!result.file->declarations.empty())
+        << "function should be parsed";
+    if (!result.file->declarations.empty()) {
+      const auto& fn = result.file->declarations[0]->as<FunctionDecl>();
+      // Should have let, ErrorStmt, and return.
+      expect(fn.body.size() >= 3_ul)
+          << "should have let + error + return";
+      if (fn.body.size() >= 3) {
+        expect(fn.body[0]->kind() == NodeKind::LetStatement);
+        expect(fn.body[1]->kind() == NodeKind::ErrorStmt)
+            << "error placeholder should be inserted for broken statement";
+        expect(fn.body[2]->kind() == NodeKind::ReturnStatement);
+      }
+    }
+  };
+
+  "incomplete source still produces partial AST"_test = [] {
+    SourceBuffer src("test.dao",
+        "fn add(a: i32, b: i32): i32 -> a + b\n"
+        "\n"
+        "fn incomplete(\n");
+    auto lex_result = lex(src);
+    auto result = parse(lex_result.tokens);
+    expect(result.file != nullptr) << "file should be produced";
+    // At least the first valid function should be present.
+    expect(!result.file->declarations.empty())
+        << "valid declaration should survive incomplete one";
+  };
+};
+
 // NOLINTEND(readability-function-cognitive-complexity,readability-magic-numbers,modernize-use-trailing-return-type)
 
 } // namespace

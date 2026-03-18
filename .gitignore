@@ -24,15 +24,16 @@ CMakeUserPresets.json
 .task/
 
 # Compiled executables from daoc build
-examples/hello
-examples/astar
-examples/arithmetic
-examples/control_flow
-examples/generators
-examples/iteration
-examples/pipelines
-examples/structs
-examples/unsafe
+# Ignore extensionless files in examples/ (binary outputs of daoc build).
+# Git doesn't support "ignore files without extension" natively, so we
+# ignore everything then un-ignore the patterns we want to keep.
+# The ** variants ensure nested dirs (e.g. examples/ffi/) are covered.
+examples/*
+!examples/*/
+!examples/**/*.dao
+!examples/**/*.md
+!examples/**/*.c
+!examples/**/*.h
 
 # Playground frontend
 tools/playground/frontend/node_modules/
