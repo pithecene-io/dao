@@ -1,21 +1,26 @@
+fn min<T: Numeric>(a: T, b: T): T
+  if a.less_than(b):
+    return a
+  return b
+
+fn max<T: Numeric>(a: T, b: T): T
+  if b.less_than(a):
+    return a
+  return b
+
+fn clamp<T: Numeric>(x: T, lo: T, hi: T): T
+  if x.less_than(lo):
+    return lo
+  if hi.less_than(x):
+    return hi
+  return x
+
 fn abs(x: i32): i32
   if x < 0:
     return 0 - x
   return x
 
-fn min(a: i32, b: i32): i32
-  if a < b:
-    return a
-  return b
-
-fn max(a: i32, b: i32): i32
-  if a > b:
-    return a
-  return b
-
-fn clamp(x: i32, lo: i32, hi: i32): i32
-  if x < lo:
-    return lo
-  if x > hi:
-    return hi
+fn abs_f64(x: f64): f64
+  if x < 0.0:
+    return 0.0 - x
   return x

@@ -1,4 +1,67 @@
 File
+  FunctionDecl min<T: Numeric>
+    Param a: T
+    Param b: T
+    ReturnType: T
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .less_than
+              Identifier a
+          Args
+            Identifier b
+      Then
+        ReturnStatement
+          Identifier a
+    ReturnStatement
+      Identifier b
+  FunctionDecl max<T: Numeric>
+    Param a: T
+    Param b: T
+    ReturnType: T
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .less_than
+              Identifier b
+          Args
+            Identifier a
+      Then
+        ReturnStatement
+          Identifier a
+    ReturnStatement
+      Identifier b
+  FunctionDecl clamp<T: Numeric>
+    Param x: T
+    Param lo: T
+    Param hi: T
+    ReturnType: T
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .less_than
+              Identifier x
+          Args
+            Identifier lo
+      Then
+        ReturnStatement
+          Identifier lo
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .less_than
+              Identifier hi
+          Args
+            Identifier x
+      Then
+        ReturnStatement
+          Identifier hi
+    ReturnStatement
+      Identifier x
   FunctionDecl abs
     Param x: i32
     ReturnType: i32
@@ -14,54 +77,18 @@ File
             Identifier x
     ReturnStatement
       Identifier x
-  FunctionDecl min
-    Param a: i32
-    Param b: i32
-    ReturnType: i32
-    IfStatement
-      Condition
-        BinaryExpr <
-          Identifier a
-          Identifier b
-      Then
-        ReturnStatement
-          Identifier a
-    ReturnStatement
-      Identifier b
-  FunctionDecl max
-    Param a: i32
-    Param b: i32
-    ReturnType: i32
-    IfStatement
-      Condition
-        BinaryExpr >
-          Identifier a
-          Identifier b
-      Then
-        ReturnStatement
-          Identifier a
-    ReturnStatement
-      Identifier b
-  FunctionDecl clamp
-    Param x: i32
-    Param lo: i32
-    Param hi: i32
-    ReturnType: i32
+  FunctionDecl abs_f64
+    Param x: f64
+    ReturnType: f64
     IfStatement
       Condition
         BinaryExpr <
           Identifier x
-          Identifier lo
+          FloatLiteral 0.0
       Then
         ReturnStatement
-          Identifier lo
-    IfStatement
-      Condition
-        BinaryExpr >
-          Identifier x
-          Identifier hi
-      Then
-        ReturnStatement
-          Identifier hi
+          BinaryExpr -
+            FloatLiteral 0.0
+            Identifier x
     ReturnStatement
       Identifier x

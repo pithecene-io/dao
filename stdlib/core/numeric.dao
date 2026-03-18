@@ -1,0 +1,14 @@
+derived concept Numeric:
+  fn less_than(self, other: Numeric): bool
+
+extend i32 as Numeric:
+  fn less_than(self, other: i32): bool
+    if self < other:
+      return true
+    return false
+
+extend f64 as Numeric:
+  fn less_than(self, other: f64): bool
+    if self < other:
+      return true
+    return false
