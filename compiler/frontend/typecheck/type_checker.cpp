@@ -39,7 +39,15 @@ auto TypeChecker::check(const FileNode& file) -> TypeCheckResult {
     check_declaration(decl);
   }
 
-  return {.typed = std::move(typed_), .diagnostics = std::move(diagnostics_)};
+  // Export method table for tooling (completion, hover).
+  std::vector<MethodInfo> methods;
+  for (const auto& [key, entry] : method_table_) {
+    methods.push_back({key.type, key.name, entry.fn_type});
+  }
+
+  return {.typed = std::move(typed_),
+          .diagnostics = std::move(diagnostics_),
+          .methods = std::move(methods)};
 }
 
 // ---------------------------------------------------------------------------

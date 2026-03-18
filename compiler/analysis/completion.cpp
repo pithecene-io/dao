@@ -114,4 +114,45 @@ auto query_completions(uint32_t offset,
   return items;
 }
 
+auto query_dot_completions(const Type* receiver_type,
+                            const TypeCheckResult& typed)
+    -> std::vector<CompletionItem> {
+  std::vector<CompletionItem> items;
+
+  if (receiver_type == nullptr) {
+    return items;
+  }
+
+  // Unwrap pointer for auto-deref: (*Point).| → Point fields.
+  const Type* base_type = receiver_type;
+  if (base_type->kind() == TypeKind::Pointer) {
+    base_type = static_cast<const TypePointer*>(base_type)->pointee();
+  }
+
+  // Struct fields.
+  if (base_type->kind() == TypeKind::Struct) {
+    const auto* struct_type = static_cast<const TypeStruct*>(base_type);
+    for (const auto& field : struct_type->fields()) {
+      items.push_back({
+          .label = std::string(field.name),
+          .kind = "field",
+          .type = print_type(field.type),
+      });
+    }
+  }
+
+  // Methods from concept extends (exported method table).
+  for (const auto& method : typed.methods) {
+    if (method.receiver_type == base_type) {
+      items.push_back({
+          .label = std::string(method.method_name),
+          .kind = "method",
+          .type = print_type(method.method_type),
+      });
+    }
+  }
+
+  return items;
+}
+
 } // namespace dao

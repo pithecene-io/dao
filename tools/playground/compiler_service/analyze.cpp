@@ -561,8 +561,66 @@ void handle_completions(const httplib::Request& req, httplib::Response& res,
   }
 
   auto absolute_offset = pipe.prelude_bytes + user_offset;
-  auto items = dao::query_completions(absolute_offset, pipe.resolve_result,
-                                       pipe.check_result);
+  std::vector<dao::CompletionItem> items;
+
+  // Detect dot completion: check if cursor is immediately after a '.'.
+  auto contents = pipe.source.contents();
+  bool is_dot = false;
+  if (absolute_offset > 0 && absolute_offset <= contents.size()) {
+    // Scan backward past whitespace to find the trigger character.
+    auto pos = absolute_offset;
+    while (pos > 0 && (contents[pos - 1] == ' ' || contents[pos - 1] == '\t')) {
+      --pos;
+    }
+    is_dot = (pos > 0 && contents[pos - 1] == '.');
+    if (is_dot) {
+      // Find the token before the dot.
+      auto pre_dot = pos - 1;
+      while (pre_dot > 0 &&
+             (contents[pre_dot - 1] == ' ' || contents[pre_dot - 1] == '\t')) {
+        --pre_dot;
+      }
+      auto token_off = find_token_offset(pre_dot > 0 ? pre_dot - 1 : 0,
+                                          pipe.lex_result);
+      // Look up the symbol at that token to find its type.
+      auto use_it = pipe.resolve_result.uses.find(token_off);
+      if (use_it != pipe.resolve_result.uses.end()) {
+        const dao::Type* recv_type = nullptr;
+        const auto* sym = use_it->second;
+        if (sym->kind == dao::SymbolKind::Local && sym->decl != nullptr) {
+          recv_type = pipe.check_result.typed.local_type(
+              static_cast<const dao::Stmt*>(sym->decl));
+        } else if (sym->kind == dao::SymbolKind::Param &&
+                   sym->decl != nullptr) {
+          const auto* fn_decl = static_cast<const dao::Decl*>(sym->decl);
+          const auto* fn_type = pipe.check_result.typed.decl_type(fn_decl);
+          if (fn_type != nullptr &&
+              fn_type->kind() == dao::TypeKind::Function) {
+            const auto* ft =
+                static_cast<const dao::TypeFunction*>(fn_type);
+            if (fn_decl->is<dao::FunctionDecl>()) {
+              const auto& fn = fn_decl->as<dao::FunctionDecl>();
+              for (size_t idx = 0; idx < fn.params.size(); ++idx) {
+                if (fn.params[idx].name == sym->name &&
+                    idx < ft->param_types().size()) {
+                  recv_type = ft->param_types()[idx];
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (recv_type != nullptr) {
+          items = dao::query_dot_completions(recv_type, pipe.check_result);
+        }
+      }
+    }
+  }
+
+  if (!is_dot) {
+    items = dao::query_completions(absolute_offset, pipe.resolve_result,
+                                    pipe.check_result);
+  }
 
   nlohmann::json response = nlohmann::json::array();
   for (const auto& item : items) {
