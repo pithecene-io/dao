@@ -226,6 +226,44 @@ suite<"arithmetic"> arithmetic = [] {
     expect(!pipe.has_errors()) << "no backend errors";
     expect(contains(ir, "icmp slt")) << ir;
   };
+
+  "float == uses ordered equal (oeq)"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn feq(a: f64, b: f64): bool\n"
+        "  return a == b\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "fcmp oeq")) << ir;
+  };
+
+  "float != uses unordered not-equal (une)"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn fne(a: f64, b: f64): bool\n"
+        "  return a != b\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // UNE: true if either operand is NaN OR operands are not equal.
+    // ONE would incorrectly return false for NaN comparisons.
+    expect(contains(ir, "fcmp une")) << ir;
+  };
+
+  "float < uses ordered less-than (olt)"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn flt(a: f64, b: f64): bool\n"
+        "  return a < b\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "fcmp olt")) << ir;
+  };
+
+  "float >= uses ordered greater-or-equal (oge)"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn fge(a: f64, b: f64): bool\n"
+        "  return a >= b\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "fcmp oge")) << ir;
+  };
 };
 
 // ---------------------------------------------------------------------------
