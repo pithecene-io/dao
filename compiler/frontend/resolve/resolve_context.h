@@ -52,7 +52,7 @@ public:
       }
       auto range = scope->range();
       if (range.length > 0 && offset >= range.offset &&
-          offset < range.offset + range.length) {
+          offset <= range.offset + range.length) {
         result = scope.get();
         break;
       }
@@ -69,7 +69,7 @@ public:
       for (auto* child : result->children()) {
         auto range = child->range();
         if (range.length > 0 && offset >= range.offset &&
-            offset < range.offset + range.length) {
+            offset <= range.offset + range.length) {
           result = child;
           found_child = true;
           break;

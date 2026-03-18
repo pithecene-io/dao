@@ -304,6 +304,20 @@ suite<"completion"> completion = [] {
     }
     expect(x_count == 1) << "shadowed x should appear once, got " << x_count;
   };
+
+  "completion works at end of file"_test = [] {
+    std::string src =
+        "fn add(a: i32, b: i32): i32 -> a + b\n"
+        "fn main(): i32\n"
+        "  return 0\n";
+    AnalysisPipeline pipe(src);
+    // Cursor at source.size() — one past the last character.
+    auto items = query_completions(
+        static_cast<uint32_t>(src.size()), pipe.resolve_result,
+        pipe.check_result);
+    expect(!items.empty()) << "should offer completions at end of file";
+    expect(has_completion(items, "add")) << "add should be visible at EOF";
+  };
 };
 
 auto main() -> int {} // NOLINT(readability-named-parameter)
