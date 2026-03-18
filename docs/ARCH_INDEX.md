@@ -20,7 +20,7 @@ Normative behavior lives in `CLAUDE.md` and `docs/contracts/`.
 Contracts and explanatory material.
 
 - `ARCH_INDEX.md` — this file
-- `contracts/` — normative contracts for structure, syntax, execution contexts, compiler architecture, bootstrap/interop posture, tooling boundaries, and runtime ABI
+- `contracts/` — normative contracts for structure, syntax, execution contexts, compiler architecture, bootstrap/interop posture, tooling boundaries, runtime ABI, and numeric semantics
 - `ROADMAP.md` — staged implementation plan from frontend skeleton to self-hosting, tooling maturity, and GPU expansion
 - `IMPLEMENTATION_PLAN.md` — concrete task sequence, toolchain decisions, and delivery order for Tasks 0–5
 - `task_specs/` — detailed per-task design specs for Tasks 6+
