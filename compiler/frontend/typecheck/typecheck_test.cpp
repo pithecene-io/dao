@@ -400,6 +400,45 @@ suite<"typecheck_negative"> typecheck_negative = [] {
     auto result = check_source("fn bad(): i32 -> true\n");
     expect(has_error_containing(result, "does not match return type"));
   };
+
+  "extern fn with string param is rejected"_test = [] {
+    auto result = check_source(
+        "extern fn bad(msg: string): void\n");
+    expect(has_error_containing(result, "not supported at the C ABI"));
+  };
+
+  "extern fn with string return is rejected"_test = [] {
+    auto result = check_source(
+        "extern fn bad(): string\n");
+    expect(has_error_containing(result, "not supported at the C ABI"));
+  };
+
+  "extern fn with struct param is rejected"_test = [] {
+    auto result = check_source(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "extern fn bad(p: Point): i32\n");
+    expect(has_error_containing(result, "not supported at the C ABI"));
+  };
+
+  "extern fn with scalar types is accepted"_test = [] {
+    auto result = check_source(
+        "extern fn good(a: i32, b: i64, c: f64): i32\n");
+    expect(is_ok(result)) << "scalar extern fn should typecheck";
+  };
+
+  "extern fn with pointer is accepted"_test = [] {
+    auto result = check_source(
+        "extern fn good(p: *i32): *i32\n");
+    expect(is_ok(result)) << "pointer extern fn should typecheck";
+  };
+
+  "reserved __ prefix hooks are exempt from ABI validation"_test = [] {
+    auto result = check_source(
+        "extern fn __dao_test_hook(msg: string): void\n");
+    expect(is_ok(result)) << "__dao_ hooks should bypass ABI checks";
+  };
 };
 
 // ---------------------------------------------------------------------------

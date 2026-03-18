@@ -184,5 +184,5 @@ Each expansion requires updating this contract before implementation.
 | Driver: link `.o` files          | Implemented     |
 | Driver: link `-l` libraries      | Implemented     |
 | Driver: `-L` search paths        | Implemented     |
-| Unsupported type rejection       | Partial         |
+| Unsupported type rejection       | Implemented     |
 | E2E foreign call example         | Implemented     |

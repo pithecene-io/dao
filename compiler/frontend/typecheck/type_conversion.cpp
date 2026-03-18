@@ -96,4 +96,20 @@ auto is_float(const Type* type) -> bool {
   return kind == BuiltinKind::F32 || kind == BuiltinKind::F64;
 }
 
+auto is_c_abi_compatible(const Type* type) -> bool {
+  if (type == nullptr) {
+    return false;
+  }
+  switch (type->kind()) {
+  case TypeKind::Builtin:
+    return true; // all builtin scalars (i32, i64, f64, bool, etc.)
+  case TypeKind::Pointer:
+    return true; // raw pointers
+  case TypeKind::Void:
+    return true; // void return
+  default:
+    return false; // string, struct, function, generator, named, enum, generic
+  }
+}
+
 } // namespace dao
