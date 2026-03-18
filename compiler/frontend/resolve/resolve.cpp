@@ -62,6 +62,7 @@ public:
   auto run(const FileNode& file, uint32_t prelude_bytes) -> ResolveResult {
     // Create the file scope and pre-populate builtins.
     file_scope_ = ctx_.make_scope(ScopeKind::File, nullptr);
+    file_scope_->set_range(file.span);
     prelude_bytes_ = prelude_bytes;
     populate_builtins();
 
@@ -254,6 +255,7 @@ private:
   void resolve_function(const Decl& decl, Scope* parent) {
     const auto& fn = decl.as<FunctionDecl>();
     auto* fn_scope = ctx_.make_scope(ScopeKind::Function, parent);
+    fn_scope->set_range(decl.span);
 
     // Declare generic type parameters (visible to params, return type, body).
     declare_type_params(fn.type_params, fn_scope, decl);
@@ -283,6 +285,7 @@ private:
     // Resolve body statements in a nested block scope so that let
     // bindings can shadow parameters without triggering duplicate errors.
     auto* body_scope = ctx_.make_scope(ScopeKind::Block, fn_scope);
+    body_scope->set_range(decl.span);
     for (const auto* stmt : fn.body) {
       resolve_stmt(*stmt, body_scope);
     }
@@ -296,6 +299,7 @@ private:
   void resolve_class(const Decl& decl, Scope* parent) {
     const auto& st = decl.as<ClassDecl>();
     auto* struct_scope = ctx_.make_scope(ScopeKind::Struct, parent);
+    struct_scope->set_range(decl.span);
 
     // Declare generic type parameters (visible to field types).
     declare_type_params(st.type_params, struct_scope, decl);
@@ -346,6 +350,7 @@ private:
   void resolve_concept(const Decl& decl, Scope* parent) {
     const auto& concept_ = decl.as<ConceptDecl>();
     auto* concept_scope = ctx_.make_scope(ScopeKind::Function, parent);
+    concept_scope->set_range(decl.span);
 
     // Declare generic type parameters.
     declare_type_params(concept_.type_params, concept_scope, decl);
@@ -454,12 +459,14 @@ private:
       resolve_expr(*if_stmt.condition, scope);
 
       auto* then_scope = ctx_.make_scope(ScopeKind::Block, scope);
+      then_scope->set_range(stmt.span);
       for (const auto* s : if_stmt.then_body) {
         resolve_stmt(*s, then_scope);
       }
 
       if (if_stmt.has_else()) {
         auto* else_scope = ctx_.make_scope(ScopeKind::Block, scope);
+        else_scope->set_range(stmt.span);
         for (const auto* s : if_stmt.else_body) {
           resolve_stmt(*s, else_scope);
         }
@@ -471,6 +478,7 @@ private:
       resolve_expr(*while_stmt.condition, scope);
 
       auto* while_scope = ctx_.make_scope(ScopeKind::Block, scope);
+      while_scope->set_range(stmt.span);
       for (const auto* s : while_stmt.body) {
         resolve_stmt(*s, while_scope);
       }
@@ -484,6 +492,7 @@ private:
 
       // Create block scope for the loop body; declare the loop variable.
       auto* for_scope = ctx_.make_scope(ScopeKind::Block, scope);
+      for_scope->set_range(stmt.span);
       auto* sym = ctx_.make_symbol(
           SymbolKind::Local, for_stmt.var, for_stmt.var_span, &stmt);
       for_scope->declare(for_stmt.var, sym);
@@ -496,6 +505,7 @@ private:
     case NodeKind::ModeBlock: {
       const auto& mode = stmt.as<ModeBlock>();
       auto* mode_scope = ctx_.make_scope(ScopeKind::Block, scope);
+      mode_scope->set_range(stmt.span);
       for (const auto* s : mode.body) {
         resolve_stmt(*s, mode_scope);
       }
@@ -504,6 +514,7 @@ private:
     case NodeKind::ResourceBlock: {
       const auto& res = stmt.as<ResourceBlock>();
       auto* res_scope = ctx_.make_scope(ScopeKind::Block, scope);
+      res_scope->set_range(stmt.span);
       for (const auto* s : res.body) {
         resolve_stmt(*s, res_scope);
       }
@@ -620,6 +631,7 @@ private:
 
       // Create a block scope for the lambda body.
       auto* lam_scope = ctx_.make_scope(ScopeKind::Block, scope);
+      lam_scope->set_range(expr.span);
       for (const auto& [name, span] : lam.params) {
         if (lam_scope->lookup_local(name) != nullptr) {
           diagnostics_.push_back(Diagnostic::error(

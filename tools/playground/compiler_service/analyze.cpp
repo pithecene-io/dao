@@ -3,6 +3,7 @@
 #include "pipeline.h"
 #include "token_category.h"
 
+#include "analysis/completion.h"
 #include "analysis/document_symbols.h"
 #include "analysis/goto_definition.h"
 #include "analysis/hover.h"
@@ -524,6 +525,51 @@ void handle_references(const httplib::Request& req, httplib::Response& res,
         {"offset", ref_user_offset},
         {"length", ref.span.length},
         {"isDefinition", ref.is_definition},
+    });
+  }
+  res.set_content(response.dump(), "application/json");
+}
+
+// ---------------------------------------------------------------------------
+// Completions
+// ---------------------------------------------------------------------------
+
+void handle_completions(const httplib::Request& req, httplib::Response& res,
+                         const std::filesystem::path& repo_root) {
+  nlohmann::json request;
+  try {
+    request = nlohmann::json::parse(req.body);
+  } catch (const nlohmann::json::parse_error&) {
+    res.status = 400;
+    res.set_content(R"({"error":"invalid JSON"})", "application/json");
+    return;
+  }
+
+  if (!request.contains("source") || !request.contains("offset")) {
+    res.status = 400;
+    res.set_content(R"({"error":"missing 'source' or 'offset'"})",
+                    "application/json");
+    return;
+  }
+
+  auto user_offset = request["offset"].get<uint32_t>();
+  auto pipe = run_light_pipeline(request, repo_root);
+
+  if (!pipe.ok) {
+    res.set_content("[]", "application/json");
+    return;
+  }
+
+  auto absolute_offset = pipe.prelude_bytes + user_offset;
+  auto items = dao::query_completions(absolute_offset, pipe.resolve_result,
+                                       pipe.check_result);
+
+  nlohmann::json response = nlohmann::json::array();
+  for (const auto& item : items) {
+    response.push_back({
+        {"label", item.label},
+        {"kind", item.kind},
+        {"type", item.type},
     });
   }
   res.set_content(response.dump(), "application/json");

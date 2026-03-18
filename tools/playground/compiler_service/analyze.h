@@ -23,6 +23,9 @@ void handle_document_symbols(const httplib::Request& req,
 void handle_references(const httplib::Request& req, httplib::Response& res,
                         const std::filesystem::path& repo_root);
 
+void handle_completions(const httplib::Request& req, httplib::Response& res,
+                         const std::filesystem::path& repo_root);
+
 } // namespace dao::playground
 
 #endif // DAO_PLAYGROUND_ANALYZE_H

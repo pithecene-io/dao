@@ -241,16 +241,16 @@ Status: **complete**
 
 ### Tooling T2 — Initial IntelliSense Slice
 
-Status: **partial** — hover, go-to-definition, document symbols, and
-references implemented as shared analysis APIs with playground
-endpoints. Completion deferred.
+Status: **complete** — all five analysis APIs implemented as shared
+compiler analysis with playground HTTP endpoints.
 
 - hover ✓
 - go-to-definition ✓
 - document symbols ✓
 - references ✓
-- completion — not started
+- completion ✓ (scope-aware identifier completion with type info)
 - symbol identity hardening across compiler sessions — deferred
+  (not blocking; identity is stable within a single session)
 
 ### Tooling T3 — Web IDE North Star
 - AST / HIR / MIR panes

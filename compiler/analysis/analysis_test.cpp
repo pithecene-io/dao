@@ -1,8 +1,11 @@
+#include "analysis/completion.h"
 #include "analysis/document_symbols.h"
 #include "analysis/references.h"
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser.h"
 #include "frontend/resolve/resolve.h"
+#include "frontend/typecheck/type_checker.h"
+#include "frontend/types/type_context.h"
 
 #include <boost/ut.hpp>
 #include <string>
@@ -17,6 +20,8 @@ struct AnalysisPipeline {
   LexResult lex_result;
   ParseResult parse_result;
   ResolveResult resolve_result;
+  TypeContext types;
+  TypeCheckResult check_result;
 
   explicit AnalysisPipeline(const std::string& src)
       : source("test.dao", std::string(src)),
@@ -24,6 +29,8 @@ struct AnalysisPipeline {
         parse_result(parse(lex_result.tokens)) {
     if (parse_result.file != nullptr) {
       resolve_result = resolve(*parse_result.file);
+      check_result =
+          typecheck(*parse_result.file, resolve_result, types);
     }
   }
 };
@@ -147,6 +154,117 @@ suite<"references"> references = [] {
     AnalysisPipeline pipe("fn main(): i32 -> 0\n");
     auto refs = query_references(9999, pipe.resolve_result);
     expect(refs.empty()) << "should return empty for unknown offset";
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Completion
+// ---------------------------------------------------------------------------
+
+namespace {
+
+auto has_completion(const std::vector<CompletionItem>& items,
+                    std::string_view name) -> bool {
+  for (const auto& item : items) {
+    if (item.label == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+} // namespace
+
+suite<"completion"> completion = [] {
+  "top-level functions are offered"_test = [] {
+    AnalysisPipeline pipe(
+        "fn add(a: i32, b: i32): i32 -> a + b\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    // Offset inside main body (after "  return ").
+    auto items = query_completions(55, pipe.resolve_result,
+                                   pipe.check_result);
+    expect(has_completion(items, "add")) << "should offer add";
+    expect(has_completion(items, "main")) << "should offer main";
+  };
+
+  "local variables are offered"_test = [] {
+    // Source layout: "fn main(): i32\n  let x: i32 = 42\n  return x\n"
+    //                0              14                 32           43
+    // Offset 40 is inside "return x", well after let x.
+    AnalysisPipeline pipe(
+        "fn main(): i32\n"
+        "  let x: i32 = 42\n"
+        "  return x\n");
+    auto items = query_completions(40, pipe.resolve_result,
+                                   pipe.check_result);
+    expect(has_completion(items, "x")) << "should offer local x";
+  };
+
+  "parameters are offered"_test = [] {
+    // Source: "fn add(a: i32, b: i32): i32\n  return a + b\n"
+    //         0                            28              42
+    // Offset 38 is inside "return a + b".
+    AnalysisPipeline pipe(
+        "fn add(a: i32, b: i32): i32\n"
+        "  return a + b\n");
+    auto items = query_completions(38, pipe.resolve_result,
+                                   pipe.check_result);
+    expect(has_completion(items, "a")) << "should offer param a";
+    expect(has_completion(items, "b")) << "should offer param b";
+  };
+
+  "locals before cursor are offered, after cursor are not"_test = [] {
+    // Source: "fn main(): i32\n  let x: i32 = 1\n  let y: i32 = 2\n  return x\n"
+    //         0              14               30                46           58
+    // Offset 33 is at the start of "let y" — x is declared, y is not yet.
+    AnalysisPipeline pipe(
+        "fn main(): i32\n"
+        "  let x: i32 = 1\n"
+        "  let y: i32 = 2\n"
+        "  return x\n");
+    auto items = query_completions(33, pipe.resolve_result,
+                                   pipe.check_result);
+    expect(has_completion(items, "x")) << "x declared before cursor";
+    expect(!has_completion(items, "y")) << "y declared after cursor";
+  };
+
+  "builtin types are offered"_test = [] {
+    AnalysisPipeline pipe(
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto items = query_completions(20, pipe.resolve_result,
+                                   pipe.check_result);
+    expect(has_completion(items, "i32")) << "should offer i32";
+    expect(has_completion(items, "f64")) << "should offer f64";
+    expect(has_completion(items, "bool")) << "should offer bool";
+  };
+
+  "internal hooks are filtered out"_test = [] {
+    AnalysisPipeline pipe(
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto items = query_completions(20, pipe.resolve_result,
+                                   pipe.check_result);
+    for (const auto& item : items) {
+      expect(!item.label.starts_with("__"))
+          << "should not offer __-prefixed: " << item.label;
+    }
+  };
+
+  "completions include type info"_test = [] {
+    AnalysisPipeline pipe(
+        "fn add(a: i32, b: i32): i32 -> a + b\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto items = query_completions(55, pipe.resolve_result,
+                                   pipe.check_result);
+    for (const auto& item : items) {
+      if (item.label == "add") {
+        expect(!item.type.empty()) << "add should have type info";
+        break;
+      }
+    }
   };
 };
 

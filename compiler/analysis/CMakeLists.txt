@@ -1,4 +1,5 @@
 add_library(dao_analysis STATIC
+  completion.cpp
   document_symbols.cpp
   goto_definition.cpp
   hover.cpp
