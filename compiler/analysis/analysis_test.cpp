@@ -320,4 +320,47 @@ suite<"completion"> completion = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Dot completion
+// ---------------------------------------------------------------------------
+
+suite<"dot_completion"> dot_completion = [] {
+  "struct fields offered"_test = [] {
+    AnalysisPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n");
+    auto* point_type = pipe.check_result.typed.decl_type(
+        pipe.parse_result.file->declarations[0]);
+    expect(point_type != nullptr) << "Point type should exist";
+    auto items = query_dot_completions(point_type, pipe.check_result);
+    expect(has_completion(items, "x")) << "should offer field x";
+    expect(has_completion(items, "y")) << "should offer field y";
+  };
+
+  "methods from extends offered"_test = [] {
+    AnalysisPipeline pipe(
+        "extern fn __test_hook(x: i32): string\n"
+        "concept Showable:\n"
+        "  fn show(self): string\n"
+        "extend i32 as Showable:\n"
+        "  fn show(self): string -> __test_hook(self)\n");
+    // Get the i32 type via the type context.
+    auto* i32_type = pipe.types.i32();
+    auto items = query_dot_completions(i32_type, pipe.check_result);
+    expect(has_completion(items, "show")) << "should offer method show";
+  };
+
+  "dot completion on non-struct returns empty for fields"_test = [] {
+    AnalysisPipeline pipe("fn main(): i32 -> 0\n");
+    auto* bool_type = pipe.types.bool_type();
+    auto items = query_dot_completions(bool_type, pipe.check_result);
+    // bool has no fields, but may have methods from Equatable etc.
+    for (const auto& item : items) {
+      expect(item.kind != "field")
+          << "bool should not have fields: " << item.label;
+    }
+  };
+};
+
 auto main() -> int {} // NOLINT(readability-named-parameter)

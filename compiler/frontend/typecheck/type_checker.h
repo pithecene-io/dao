@@ -20,9 +20,17 @@ namespace dao {
 // TypeCheckResult — output of the type-checking pass.
 // ---------------------------------------------------------------------------
 
+/// A method available on a type via concept/extend.
+struct MethodInfo {
+  const Type* receiver_type;
+  std::string_view method_name;
+  const Type* method_type; // function type (self removed)
+};
+
 struct TypeCheckResult {
   TypedResults typed;
   std::vector<Diagnostic> diagnostics;
+  std::vector<MethodInfo> methods; // exported method table for tooling
 };
 
 // ---------------------------------------------------------------------------
