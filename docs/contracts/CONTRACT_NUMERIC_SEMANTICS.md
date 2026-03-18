@@ -39,7 +39,7 @@ optimization-driven weakening.
 | `i8`  | 8     | yes    | Deferred            |
 | `i16` | 16    | yes    | Deferred            |
 | `i32` | 32    | yes    | Implemented         |
-| `i64` | 64    | yes    | Deferred            |
+| `i64` | 64    | yes    | Implemented         |
 | `u8`  | 8     | no     | Deferred            |
 | `u16` | 16    | no     | Deferred            |
 | `u32` | 32    | no     | Deferred            |
@@ -211,7 +211,8 @@ rules in the initial language model.
 - narrowing conversions are explicit and checked
 - sign-changing conversions (signed ↔ unsigned) are explicit
 
-Status: **Deferred** — only `i32` is currently surfaced
+Status: **Partially implemented** — `i32` ↔ `i64` conversions
+available via `to_i64` / `i64_to_i32` (trapping on narrowing)
 
 ### 6.3 Integer to float
 
@@ -221,7 +222,8 @@ Status: **Deferred** — only `i32` is currently surfaced
 - `i32` → `f64` is exact (all i32 values are representable in f64)
 - `i64` → `f64` may lose precision and requires explicit conversion
 
-Status: **Deferred** — no cross-type conversions implemented yet
+Status: **Partially implemented** — `i32` → `f64` available via
+`to_f64` (exact)
 
 ### 6.4 Float to integer
 
@@ -234,7 +236,8 @@ Status: **Deferred** — no cross-type conversions implemented yet
 - float-to-integer conversion must not be silent or undefined on
   out-of-range inputs
 
-Status: **Deferred**
+Status: **Partially implemented** — `f64` → `i32` available via
+`f64_to_i32` (truncating, trapping on NaN/Inf/out-of-range)
 
 ### 6.5 f64 to f32 / f32 to f64
 
@@ -391,10 +394,11 @@ The compiler and backend must:
 | `f64` NaN/Inf/−0.0 semantics    | Yes       | Partial (codegen) |
 | `f64` comparison partial-order   | Yes       | Partial           |
 | `f32` IEEE 754 binary32          | Yes       | Deferred          |
-| Integer widths beyond i32        | Yes       | Deferred          |
+| `i64` arithmetic + overflow      | Yes       | Yes               |
+| Integer widths beyond i32/i64    | Yes       | Deferred          |
 | Unsigned integers                | Yes       | Deferred          |
-| Numeric conversions              | Yes       | Deferred          |
-| Float-to-int trapping            | Yes       | Deferred          |
+| Numeric conversions (i32↔i64↔f64)| Yes       | Partial           |
+| Float-to-int trapping (f64→i32)  | Yes       | Yes               |
 | Decimal types                    | Posture   | Deferred          |
 | Rounding-mode control            | Forbidden | N/A               |
 | Fast-math / relaxed mode         | Opt-in    | Deferred          |

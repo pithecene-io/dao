@@ -107,6 +107,23 @@ void LlvmRuntimeHooks::declare_conversion_hooks() {
   auto* i1 = llvm::Type::getInt1Ty(ctx);
   ensure_declared(runtime_hooks::kConvBoolToString,
                   llvm::FunctionType::get(str_type, {i1}, false));
+
+  // Numeric type conversions
+  // __dao_conv_i32_to_f64(x: i32): f64
+  ensure_declared(runtime_hooks::kConvI32ToF64,
+                  llvm::FunctionType::get(f64, {i32}, false));
+
+  // __dao_conv_i32_to_i64(x: i32): i64
+  ensure_declared(runtime_hooks::kConvI32ToI64,
+                  llvm::FunctionType::get(i64, {i32}, false));
+
+  // __dao_conv_f64_to_i32(x: f64): i32
+  ensure_declared(runtime_hooks::kConvF64ToI32,
+                  llvm::FunctionType::get(i32, {f64}, false));
+
+  // __dao_conv_i64_to_i32(x: i64): i32
+  ensure_declared(runtime_hooks::kConvI64ToI32,
+                  llvm::FunctionType::get(i32, {i64}, false));
 }
 
 // ---------------------------------------------------------------------------
