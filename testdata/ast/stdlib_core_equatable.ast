@@ -3,6 +3,10 @@ File
     Param a: i32
     Param b: i32
     ReturnType: bool
+  ExternFunctionDecl __dao_eq_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: bool
   ExternFunctionDecl __dao_eq_f64
     Param a: f64
     Param b: f64
@@ -29,6 +33,18 @@ File
         CallExpr
           Callee
             Identifier __dao_eq_i32
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl i64 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: i64
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __dao_eq_i64
           Args
             Identifier self
             Identifier other

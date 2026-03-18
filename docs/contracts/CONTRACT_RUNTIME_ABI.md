@@ -65,10 +65,12 @@ Examples:
 |---------------------------|--------------------------------------|
 | `__dao_io_write_stdout`   | `(msg: string): void`                |
 | `__dao_eq_i32`            | `(a: i32, b: i32): bool`            |
+| `__dao_eq_i64`            | `(a: i64, b: i64): bool`            |
 | `__dao_eq_f64`            | `(a: f64, b: f64): bool`            |
 | `__dao_eq_bool`           | `(a: bool, b: bool): bool`          |
 | `__dao_eq_string`         | `(a: string, b: string): bool`      |
 | `__dao_conv_i32_to_string`| `(x: i32): string`                   |
+| `__dao_conv_i64_to_string`| `(x: i64): string`                   |
 | `__dao_conv_f64_to_string`| `(x: f64): string`                   |
 | `__dao_conv_bool_to_string`| `(x: bool): string`                 |
 | `__dao_gen_alloc`         | `(size: i64, align: i64): *void`     |
@@ -76,16 +78,10 @@ Examples:
 | `__dao_mem_resource_enter`| `(): *void`                           |
 | `__dao_mem_resource_exit` | `(domain: *void): void`              |
 | `__dao_str_concat`       | `(a: string, b: string): string`      |
-| `__dao_str_length`       | `(s: string): i32`                    |
+| `__dao_str_length`       | `(s: string): i64`                    |
 
 These are the **only** runtime hooks in the current supported slice.
 New hooks require updating this contract before implementation.
-
-**Note on `__dao_str_length`**: the internal string representation
-stores byte length as `i64`, but the hook narrows to `i32` because
-the Dao surface type system does not yet include `i64`. This will
-silently truncate for strings longer than `INT32_MAX`. When `i64`
-is added as a surface type, this hook should be widened.
 
 ## Canonical value representations
 

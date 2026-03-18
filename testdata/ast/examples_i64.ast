@@ -1,0 +1,82 @@
+File
+  FunctionDecl factorial_i64
+    Param n: i64
+    ReturnType: i64
+    LetStatement result: i64
+      IntLiteral 1
+    LetStatement i: i64
+      IntLiteral 1
+    WhileStatement
+      Condition
+        BinaryExpr <=
+          Identifier i
+          Identifier n
+      Assignment
+        Target
+          Identifier result
+        Value
+          BinaryExpr *
+            Identifier result
+            Identifier i
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+    ReturnStatement
+      Identifier result
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "factorial_i64(20):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier factorial_i64
+            Args
+              IntLiteral 20
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "min i64:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier min
+            Args
+              IntLiteral 100
+              IntLiteral 42
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "length of hello:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier length
+            Args
+              StringLiteral "hello"
+    ReturnStatement
+      IntLiteral 0

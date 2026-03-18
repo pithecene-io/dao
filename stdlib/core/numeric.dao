@@ -7,6 +7,12 @@ extend i32 as Numeric:
       return true
     return false
 
+extend i64 as Numeric:
+  fn less_than(self, other: i64): bool
+    if self < other:
+      return true
+    return false
+
 extend f64 as Numeric:
   fn less_than(self, other: f64): bool
     if self < other:

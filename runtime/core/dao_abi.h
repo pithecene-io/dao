@@ -47,6 +47,7 @@ void __dao_io_write_stdout(const struct dao_string *msg);
 // ---------------------------------------------------------------------------
 
 bool __dao_eq_i32(int32_t a, int32_t b);
+bool __dao_eq_i64(int64_t a, int64_t b);
 bool __dao_eq_f64(double a, double b);
 bool __dao_eq_bool(bool a, bool b);
 bool __dao_eq_string(const struct dao_string *a, const struct dao_string *b);
@@ -61,6 +62,7 @@ bool __dao_eq_string(const struct dao_string *a, const struct dao_string *b);
 // thread. Callers must consume or copy the result before the next
 // conversion call.
 struct dao_string __dao_conv_i32_to_string(int32_t x);
+struct dao_string __dao_conv_i64_to_string(int64_t x);
 struct dao_string __dao_conv_f64_to_string(double x);
 struct dao_string __dao_conv_bool_to_string(bool x);
 
@@ -86,8 +88,8 @@ void __dao_gen_free(void *ptr);
 struct dao_string __dao_str_concat(const struct dao_string *a,
                                    const struct dao_string *b);
 
-// Return the byte length of a string as i32.
-int32_t __dao_str_length(const struct dao_string *s);
+// Return the byte length of a string as i64.
+int64_t __dao_str_length(const struct dao_string *s);
 
 // ---------------------------------------------------------------------------
 // Runtime hook declarations — Memory/resource domain

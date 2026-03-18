@@ -1,4 +1,5 @@
 extern fn __dao_conv_i32_to_string(x: i32): string
+extern fn __dao_conv_i64_to_string(x: i64): string
 extern fn __dao_conv_f64_to_string(x: f64): string
 extern fn __dao_conv_bool_to_string(x: bool): string
 extern fn __dao_io_write_stdout(msg: string): void
@@ -8,6 +9,9 @@ derived concept Printable:
 
 extend i32 as Printable:
     fn to_string(self): string -> __dao_conv_i32_to_string(self)
+
+extend i64 as Printable:
+    fn to_string(self): string -> __dao_conv_i64_to_string(self)
 
 extend f64 as Printable:
     fn to_string(self): string -> __dao_conv_f64_to_string(self)

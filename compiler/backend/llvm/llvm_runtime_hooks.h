@@ -34,12 +34,14 @@ inline constexpr std::string_view kWriteStdout = "__dao_io_write_stdout";
 
 // Equality domain
 inline constexpr std::string_view kEqI32    = "__dao_eq_i32";
+inline constexpr std::string_view kEqI64    = "__dao_eq_i64";
 inline constexpr std::string_view kEqF64    = "__dao_eq_f64";
 inline constexpr std::string_view kEqBool   = "__dao_eq_bool";
 inline constexpr std::string_view kEqString = "__dao_eq_string";
 
 // Conversion domain (to_string)
 inline constexpr std::string_view kConvI32ToString  = "__dao_conv_i32_to_string";
+inline constexpr std::string_view kConvI64ToString  = "__dao_conv_i64_to_string";
 inline constexpr std::string_view kConvF64ToString  = "__dao_conv_f64_to_string";
 inline constexpr std::string_view kConvBoolToString = "__dao_conv_bool_to_string";
 
@@ -58,8 +60,8 @@ inline constexpr std::string_view kStrLength  = "__dao_str_length";
 // All hook names, for iteration / validation.
 inline constexpr std::string_view kAllHooks[] = {
     kWriteStdout,
-    kEqI32,    kEqF64,    kEqBool,    kEqString,
-    kConvI32ToString, kConvF64ToString, kConvBoolToString,
+    kEqI32,    kEqI64,    kEqF64,    kEqBool,    kEqString,
+    kConvI32ToString, kConvI64ToString, kConvF64ToString, kConvBoolToString,
     kGenAlloc, kGenFree,
     kMemResourceEnter, kMemResourceExit,
     kStrConcat, kStrLength,
