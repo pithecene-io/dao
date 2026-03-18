@@ -91,6 +91,7 @@ CLI, playground, and LSP.
   the frozen taxonomy in `CONTRACT_LANGUAGE_TOOLING.md`
 - `hover.h` / `hover.cpp` — hover info: symbol kind, name, type at offset
 - `goto_definition.h` / `goto_definition.cpp` — jump-to-declaration from use site
+- `completion.h` / `completion.cpp` — scope-aware symbol completion at cursor offset
 - `document_symbols.h` / `document_symbols.cpp` — hierarchical symbol tree from AST
 - `references.h` / `references.cpp` — find all use-sites of a symbol
 

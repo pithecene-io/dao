@@ -82,6 +82,10 @@ auto main(int argc, char* argv[]) -> int {
   svr.Post("/api/references", [&root](const httplib::Request& req, httplib::Response& res) {
     dao::playground::handle_references(req, res, root);
   });
+
+  svr.Post("/api/completions", [&root](const httplib::Request& req, httplib::Response& res) {
+    dao::playground::handle_completions(req, res, root);
+  });
   // NOLINTEND(modernize-use-trailing-return-type)
 
   // Serve frontend static files when dist/ exists (prod mode).

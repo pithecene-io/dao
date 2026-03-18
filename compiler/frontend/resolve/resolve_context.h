@@ -40,6 +40,46 @@ public:
     return symbols_;
   }
 
+  /// Find the innermost scope whose range contains the given offset.
+  /// Walks the scope tree from roots, preferring deeper children.
+  /// Returns nullptr if no scope contains the offset.
+  [[nodiscard]] auto scope_at_offset(uint32_t offset) const -> Scope* {
+    // Find root scopes (no parent).
+    Scope* result = nullptr;
+    for (const auto& scope : scopes_) {
+      if (scope->parent() != nullptr) {
+        continue;
+      }
+      auto range = scope->range();
+      if (range.length > 0 && offset >= range.offset &&
+          offset <= range.offset + range.length) {
+        result = scope.get();
+        break;
+      }
+    }
+
+    if (result == nullptr) {
+      return nullptr;
+    }
+
+    // Walk down children, always preferring the deepest containing child.
+    bool found_child = true;
+    while (found_child) {
+      found_child = false;
+      for (auto* child : result->children()) {
+        auto range = child->range();
+        if (range.length > 0 && offset >= range.offset &&
+            offset <= range.offset + range.length) {
+          result = child;
+          found_child = true;
+          break;
+        }
+      }
+    }
+
+    return result;
+  }
+
   /// Intern a string so it outlives any string_view pointing to it.
   /// Returns a stable string_view into owned storage.
   auto intern(std::string str) -> std::string_view {

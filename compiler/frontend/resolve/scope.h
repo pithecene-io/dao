@@ -1,11 +1,14 @@
 #ifndef DAO_FRONTEND_RESOLVE_SCOPE_H
 #define DAO_FRONTEND_RESOLVE_SCOPE_H
 
+#include "frontend/diagnostics/source.h"
 #include "frontend/resolve/symbol.h"
 
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace dao {
 
@@ -19,6 +22,9 @@ enum class ScopeKind : std::uint8_t {
 class Scope {
 public:
   Scope(ScopeKind kind, Scope* parent) : kind_(kind), parent_(parent) {
+    if (parent != nullptr) {
+      parent->children_.push_back(this);
+    }
   }
 
   [[nodiscard]] auto kind() const -> ScopeKind {
@@ -26,6 +32,28 @@ public:
   }
   [[nodiscard]] auto parent() const -> Scope* {
     return parent_;
+  }
+
+  void set_range(Span range) { range_ = range; }
+  [[nodiscard]] auto range() const -> Span { return range_; }
+  [[nodiscard]] auto children() const -> const std::vector<Scope*>& {
+    return children_;
+  }
+
+  /// Collect all symbols visible from this scope (local + parent chain).
+  /// Innermost bindings shadow outer ones — only the nearest binding
+  /// for each name is included.
+  [[nodiscard]] auto all_visible_symbols() const -> std::vector<Symbol*> {
+    std::vector<Symbol*> result;
+    std::unordered_set<std::string_view> seen;
+    for (const Scope* scope = this; scope != nullptr; scope = scope->parent_) {
+      for (const auto& [name, sym] : scope->declarations_) {
+        if (seen.insert(name).second) {
+          result.push_back(sym);
+        }
+      }
+    }
+    return result;
   }
 
   // Look up a name in this scope only (no parent traversal).
@@ -58,6 +86,8 @@ public:
 private:
   ScopeKind kind_;
   Scope* parent_;
+  Span range_{};
+  std::vector<Scope*> children_;
   std::unordered_map<std::string_view, Symbol*> declarations_;
 };
 
