@@ -152,6 +152,54 @@ suite<"typecheck_literals"> typecheck_literals = [] {
         "    return x\n");
     expect(is_ok(result)) << "inferred let should work";
   };
+
+  "int literal fits i64 in let declaration"_test = [] {
+    auto result = check_source(
+        "fn main(): i32\n"
+        "    let x: i64 = 42\n"
+        "    return 0\n");
+    expect(is_ok(result)) << "int literal should fit i64 target";
+  };
+
+  "int literal fits i64 in binary rhs"_test = [] {
+    auto result = check_source(
+        "fn main(): i64\n"
+        "    let x: i64 = 100\n"
+        "    return x + 1\n");
+    expect(is_ok(result)) << "literal 1 should fit i64 from lhs";
+  };
+
+  "int literal fits i64 in binary lhs"_test = [] {
+    auto result = check_source(
+        "fn main(): i64\n"
+        "    let x: i64 = 100\n"
+        "    return 1 + x\n");
+    expect(is_ok(result)) << "literal 1 should fit i64 from rhs";
+  };
+
+  "int literal fits i64 in call argument"_test = [] {
+    auto result = check_source(
+        "fn add_i64(a: i64, b: i64): i64 -> a + b\n"
+        "fn main(): i64\n"
+        "    return add_i64(1, 2)\n");
+    expect(is_ok(result)) << "literal args should fit i64 params";
+  };
+
+  "int literal fits i64 in return"_test = [] {
+    auto result = check_source(
+        "fn get(): i64\n"
+        "    return 42\n");
+    expect(is_ok(result)) << "literal should fit i64 return type";
+  };
+
+  "int literal fits i64 in assignment"_test = [] {
+    auto result = check_source(
+        "fn main(): i32\n"
+        "    let x: i64 = 0\n"
+        "    x = 42\n"
+        "    return 0\n");
+    expect(is_ok(result)) << "literal should fit i64 assignment target";
+  };
 };
 
 // ---------------------------------------------------------------------------

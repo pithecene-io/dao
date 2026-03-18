@@ -1,4 +1,5 @@
 extern fn __dao_eq_i32(a: i32, b: i32): bool
+extern fn __dao_eq_i64(a: i64, b: i64): bool
 extern fn __dao_eq_f64(a: f64, b: f64): bool
 extern fn __dao_eq_bool(a: bool, b: bool): bool
 extern fn __dao_eq_string(a: string, b: string): bool
@@ -8,6 +9,9 @@ derived concept Equatable:
 
 extend i32 as Equatable:
     fn eq(self, other: i32): bool -> __dao_eq_i32(self, other)
+
+extend i64 as Equatable:
+    fn eq(self, other: i64): bool -> __dao_eq_i64(self, other)
 
 extend f64 as Equatable:
     fn eq(self, other: f64): bool -> __dao_eq_f64(self, other)

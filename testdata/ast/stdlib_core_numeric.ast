@@ -19,6 +19,21 @@ File
             BoolLiteral true
       ReturnStatement
         BoolLiteral false
+  ExtendDecl i64 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: i64
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
   ExtendDecl f64 as Numeric
     FunctionDecl less_than
       Param self

@@ -755,7 +755,7 @@ void TypeChecker::check_let(const Stmt* stmt) {
 
   const Type* init_type = nullptr;
   if (let.initializer != nullptr) {
-    init_type = check_expr(let.initializer);
+    init_type = check_expr(let.initializer, declared_type);
   }
 
   if (declared_type != nullptr && init_type != nullptr) {
@@ -796,7 +796,7 @@ void TypeChecker::check_assignment(const Stmt* stmt) {
   }
 
   const auto* target_type = check_expr(assign.target);
-  const auto* value_type = check_expr(assign.value);
+  const auto* value_type = check_expr(assign.value, target_type);
 
   if (target_type != nullptr && value_type != nullptr &&
       !is_assignable(value_type, target_type)) {
@@ -903,7 +903,7 @@ void TypeChecker::check_return(const Stmt* stmt) {
                       ctx_.return_type->kind() == TypeKind::Generator;
 
   if (ret.value != nullptr) {
-    const auto* val_type = check_expr(ret.value);
+    const auto* val_type = check_expr(ret.value, ctx_.return_type);
     if (in_generator) {
       error(ret.value->span,
             "'return value' is not valid in a generator function; "
@@ -952,10 +952,10 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
     result = check_identifier(expr);
     break;
   case NodeKind::IntLiteral:
-    result = check_int_literal(expr);
+    result = check_int_literal(expr, expected);
     break;
   case NodeKind::FloatLiteral:
-    result = check_float_literal(expr);
+    result = check_float_literal(expr, expected);
     break;
   case NodeKind::StringLiteral:
     result = check_string_literal(expr);
@@ -1022,11 +1022,22 @@ auto TypeChecker::check_identifier(const Expr* expr) -> const Type* {
 // Literals
 // ---------------------------------------------------------------------------
 
-auto TypeChecker::check_int_literal(const Expr* /*expr*/) -> const Type* {
+auto TypeChecker::check_int_literal(const Expr* /*expr*/,
+                                     const Type* expected) -> const Type* {
+  // If the target type is a known integer type, adopt it.
+  // This allows `let x: i64 = 42` without requiring a suffix.
+  if (expected != nullptr && is_integer(expected)) {
+    return expected;
+  }
   return types_.i32(); // default integer literal type
 }
 
-auto TypeChecker::check_float_literal(const Expr* /*expr*/) -> const Type* {
+auto TypeChecker::check_float_literal(const Expr* /*expr*/,
+                                       const Type* expected) -> const Type* {
+  // If the target type is a known float type, adopt it.
+  if (expected != nullptr && is_float(expected)) {
+    return expected;
+  }
   return types_.f64(); // default float literal type
 }
 
@@ -1044,8 +1055,17 @@ auto TypeChecker::check_bool_literal(const Expr* /*expr*/) -> const Type* {
 
 auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
   const auto& bin = expr->as<BinaryExpr>();
+  // Check both sides, using peer type as context for literal fitting.
+  // First pass: LHS without context, RHS with LHS as context.
   const auto* lhs = check_expr(bin.left);
-  const auto* rhs = check_expr(bin.right);
+  const auto* rhs = check_expr(bin.right, lhs);
+  // Second pass: if RHS provided a concrete type and LHS is a literal
+  // that defaulted, re-check LHS with RHS as context.
+  if (lhs != nullptr && rhs != nullptr && lhs != rhs &&
+      (bin.left->kind() == NodeKind::IntLiteral ||
+       bin.left->kind() == NodeKind::FloatLiteral)) {
+    lhs = check_expr(bin.left, rhs);
+  }
   if (lhs == nullptr || rhs == nullptr) {
     return nullptr;
   }
@@ -1372,7 +1392,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
   std::unordered_map<uint32_t, const Type*> type_bindings;
 
   for (size_t i = 0; i < params.size(); ++i) {
-    const auto* arg_type = check_expr(call.args[i]);
+    const auto* arg_type = check_expr(call.args[i], params[i]);
     if (arg_type == nullptr || params[i] == nullptr) {
       continue;
     }

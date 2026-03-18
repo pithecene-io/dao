@@ -60,6 +60,11 @@ void LlvmRuntimeHooks::declare_equality_hooks() {
   ensure_declared(runtime_hooks::kEqI32,
                   llvm::FunctionType::get(i1, {i32, i32}, false));
 
+  // __dao_eq_i64(a: i64, b: i64): bool
+  auto* i64 = llvm::Type::getInt64Ty(ctx);
+  ensure_declared(runtime_hooks::kEqI64,
+                  llvm::FunctionType::get(i1, {i64, i64}, false));
+
   // __dao_eq_f64(a: f64, b: f64): bool
   auto* f64 = llvm::Type::getDoubleTy(ctx);
   ensure_declared(runtime_hooks::kEqF64,
@@ -87,6 +92,11 @@ void LlvmRuntimeHooks::declare_conversion_hooks() {
   auto* i32 = llvm::Type::getInt32Ty(ctx);
   ensure_declared(runtime_hooks::kConvI32ToString,
                   llvm::FunctionType::get(str_type, {i32}, false));
+
+  // __dao_conv_i64_to_string(x: i64): dao.string
+  auto* i64 = llvm::Type::getInt64Ty(ctx);
+  ensure_declared(runtime_hooks::kConvI64ToString,
+                  llvm::FunctionType::get(str_type, {i64}, false));
 
   // __dao_conv_f64_to_string(x: f64): dao.string
   auto* f64 = llvm::Type::getDoubleTy(ctx);
@@ -144,15 +154,15 @@ void LlvmRuntimeHooks::declare_string_hooks() {
   auto& ctx = module_.getContext();
   auto* str_type = types_.string_type();
   auto* str_ptr = llvm::PointerType::getUnqual(str_type);
-  auto* i32 = llvm::Type::getInt32Ty(ctx);
+  auto* i64 = llvm::Type::getInt64Ty(ctx);
 
   // __dao_str_concat(a: *dao.string, b: *dao.string): dao.string
   ensure_declared(runtime_hooks::kStrConcat,
                   llvm::FunctionType::get(str_type, {str_ptr, str_ptr}, false));
 
-  // __dao_str_length(s: *dao.string): i32
+  // __dao_str_length(s: *dao.string): i64
   ensure_declared(runtime_hooks::kStrLength,
-                  llvm::FunctionType::get(i32, {str_ptr}, false));
+                  llvm::FunctionType::get(i64, {str_ptr}, false));
 }
 
 // ---------------------------------------------------------------------------

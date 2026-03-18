@@ -5,7 +5,7 @@ File
     ReturnType: string
   ExternFunctionDecl __dao_str_length
     Param s: string
-    ReturnType: i32
+    ReturnType: i64
   FunctionDecl concat
     Param a: string
     Param b: string
@@ -19,7 +19,7 @@ File
           Identifier b
   FunctionDecl length
     Param s: string
-    ReturnType: i32
+    ReturnType: i64
     ExprBody
       CallExpr
         Callee

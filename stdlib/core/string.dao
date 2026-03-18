@@ -1,5 +1,5 @@
 extern fn __dao_str_concat(a: string, b: string): string
-extern fn __dao_str_length(s: string): i32
+extern fn __dao_str_length(s: string): i64
 
 fn concat(a: string, b: string): string -> __dao_str_concat(a, b)
-fn length(s: string): i32 -> __dao_str_length(s)
+fn length(s: string): i64 -> __dao_str_length(s)

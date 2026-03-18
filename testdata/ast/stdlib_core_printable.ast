@@ -2,6 +2,9 @@ File
   ExternFunctionDecl __dao_conv_i32_to_string
     Param x: i32
     ReturnType: string
+  ExternFunctionDecl __dao_conv_i64_to_string
+    Param x: i64
+    ReturnType: string
   ExternFunctionDecl __dao_conv_f64_to_string
     Param x: f64
     ReturnType: string
@@ -23,6 +26,16 @@ File
         CallExpr
           Callee
             Identifier __dao_conv_i32_to_string
+          Args
+            Identifier self
+  ExtendDecl i64 as Printable
+    FunctionDecl to_string
+      Param self
+      ReturnType: string
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __dao_conv_i64_to_string
           Args
             Identifier self
   ExtendDecl f64 as Printable

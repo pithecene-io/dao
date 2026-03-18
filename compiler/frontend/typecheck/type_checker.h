@@ -153,8 +153,8 @@ private:
   auto check_expr(const Expr* expr, const Type* expected) -> const Type*;
 
   auto check_identifier(const Expr* expr) -> const Type*;
-  auto check_int_literal(const Expr* expr) -> const Type*;
-  auto check_float_literal(const Expr* expr) -> const Type*;
+  auto check_int_literal(const Expr* expr, const Type* expected) -> const Type*;
+  auto check_float_literal(const Expr* expr, const Type* expected) -> const Type*;
   auto check_string_literal(const Expr* expr) -> const Type*;
   auto check_bool_literal(const Expr* expr) -> const Type*;
   auto check_binary(const Expr* expr) -> const Type*;
