@@ -1,0 +1,49 @@
+File
+  ExternFunctionDecl __dao_conv_i32_to_f64
+    Param x: i32
+    ReturnType: f64
+  ExternFunctionDecl __dao_conv_i32_to_i64
+    Param x: i32
+    ReturnType: i64
+  ExternFunctionDecl __dao_conv_f64_to_i32
+    Param x: f64
+    ReturnType: i32
+  ExternFunctionDecl __dao_conv_i64_to_i32
+    Param x: i64
+    ReturnType: i32
+  FunctionDecl to_f64
+    Param x: i32
+    ReturnType: f64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i32_to_f64
+        Args
+          Identifier x
+  FunctionDecl to_i64
+    Param x: i32
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i32_to_i64
+        Args
+          Identifier x
+  FunctionDecl f64_to_i32
+    Param x: f64
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_f64_to_i32
+        Args
+          Identifier x
+  FunctionDecl i64_to_i32
+    Param x: i64
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i64_to_i32
+        Args
+          Identifier x

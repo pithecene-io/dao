@@ -1,0 +1,9 @@
+extern fn __dao_conv_i32_to_f64(x: i32): f64
+extern fn __dao_conv_i32_to_i64(x: i32): i64
+extern fn __dao_conv_f64_to_i32(x: f64): i32
+extern fn __dao_conv_i64_to_i32(x: i64): i32
+
+fn to_f64(x: i32): f64 -> __dao_conv_i32_to_f64(x)
+fn to_i64(x: i32): i64 -> __dao_conv_i32_to_i64(x)
+fn f64_to_i32(x: f64): i32 -> __dao_conv_f64_to_i32(x)
+fn i64_to_i32(x: i64): i32 -> __dao_conv_i64_to_i32(x)

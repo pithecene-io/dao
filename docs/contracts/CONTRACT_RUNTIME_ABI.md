@@ -77,6 +77,10 @@ Examples:
 | `__dao_gen_free`          | `(ptr: *void): void`                 |
 | `__dao_mem_resource_enter`| `(): *void`                           |
 | `__dao_mem_resource_exit` | `(domain: *void): void`              |
+| `__dao_conv_i32_to_f64`  | `(x: i32): f64`                       |
+| `__dao_conv_i32_to_i64`  | `(x: i32): i64`                       |
+| `__dao_conv_f64_to_i32`  | `(x: f64): i32`                       |
+| `__dao_conv_i64_to_i32`  | `(x: i64): i32`                       |
 | `__dao_str_concat`       | `(a: string, b: string): string`      |
 | `__dao_str_length`       | `(s: string): i64`                    |
 

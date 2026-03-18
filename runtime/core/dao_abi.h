@@ -66,6 +66,14 @@ struct dao_string __dao_conv_i64_to_string(int64_t x);
 struct dao_string __dao_conv_f64_to_string(double x);
 struct dao_string __dao_conv_bool_to_string(bool x);
 
+// Numeric type conversions.
+// Lossless conversions are exact. Narrowing conversions trap (abort)
+// on NaN, Inf, or out-of-range values.
+double __dao_conv_i32_to_f64(int32_t x);
+int64_t __dao_conv_i32_to_i64(int32_t x);
+int32_t __dao_conv_f64_to_i32(double x);
+int32_t __dao_conv_i64_to_i32(int64_t x);
+
 // ---------------------------------------------------------------------------
 // Runtime hook declarations — Generator domain
 // ---------------------------------------------------------------------------

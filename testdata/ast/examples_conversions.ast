@@ -1,0 +1,105 @@
+File
+  FunctionDecl main
+    ReturnType: i32
+    LetStatement x: i32
+      IntLiteral 42
+    LetStatement y: f64
+      CallExpr
+        Callee
+          Identifier to_f64
+        Args
+          Identifier x
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "i32 42 as f64:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier y
+    LetStatement big: i64
+      CallExpr
+        Callee
+          Identifier to_i64
+        Args
+          Identifier x
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "i32 42 as i64:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier big
+    LetStatement pi: f64
+      FloatLiteral 3.14
+    LetStatement truncated: i32
+      CallExpr
+        Callee
+          Identifier f64_to_i32
+        Args
+          Identifier pi
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "f64 3.14 as i32 (truncated):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier truncated
+    LetStatement neg: f64
+      BinaryExpr -
+        FloatLiteral 0.0
+        FloatLiteral 2.71
+    LetStatement neg_trunc: i32
+      CallExpr
+        Callee
+          Identifier f64_to_i32
+        Args
+          Identifier neg
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "f64 -2.71 as i32 (truncated toward zero):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier neg_trunc
+    LetStatement wide: i64
+      IntLiteral 100
+    LetStatement narrow: i32
+      CallExpr
+        Callee
+          Identifier i64_to_i32
+        Args
+          Identifier wide
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "i64 100 as i32:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier narrow
+    ReturnStatement
+      IntLiteral 0

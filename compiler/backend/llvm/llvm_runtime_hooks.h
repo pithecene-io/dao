@@ -45,6 +45,12 @@ inline constexpr std::string_view kConvI64ToString  = "__dao_conv_i64_to_string"
 inline constexpr std::string_view kConvF64ToString  = "__dao_conv_f64_to_string";
 inline constexpr std::string_view kConvBoolToString = "__dao_conv_bool_to_string";
 
+// Conversion domain (numeric type conversions)
+inline constexpr std::string_view kConvI32ToF64  = "__dao_conv_i32_to_f64";
+inline constexpr std::string_view kConvI32ToI64  = "__dao_conv_i32_to_i64";
+inline constexpr std::string_view kConvF64ToI32  = "__dao_conv_f64_to_i32";
+inline constexpr std::string_view kConvI64ToI32  = "__dao_conv_i64_to_i32";
+
 // Generator domain
 inline constexpr std::string_view kGenAlloc = "__dao_gen_alloc";
 inline constexpr std::string_view kGenFree  = "__dao_gen_free";
@@ -62,6 +68,7 @@ inline constexpr std::string_view kAllHooks[] = {
     kWriteStdout,
     kEqI32,    kEqI64,    kEqF64,    kEqBool,    kEqString,
     kConvI32ToString, kConvI64ToString, kConvF64ToString, kConvBoolToString,
+    kConvI32ToF64, kConvI32ToI64, kConvF64ToI32, kConvI64ToI32,
     kGenAlloc, kGenFree,
     kMemResourceEnter, kMemResourceExit,
     kStrConcat, kStrLength,
