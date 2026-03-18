@@ -72,9 +72,16 @@ static archive, or shared/system library.
 - C unions
 - arrays / slices by value
 
-If an `extern fn` declaration uses an unsupported type, the compiler
+If a user-declared `extern fn` uses an unsupported type, the compiler
 must reject it with a clear diagnostic during type checking or
 backend lowering.
+
+**Exception**: Dao runtime hooks (`__dao_*` prefix) are exempt from
+these restrictions. They use Dao-defined types (e.g. `string`) with
+Dao-defined ABI conventions specified in `CONTRACT_RUNTIME_ABI.md`.
+Runtime hooks are consumed through the same `extern fn` syntax but
+operate under a different ABI contract than user-declared foreign
+functions.
 
 ### 4.4 Future type expansions
 
