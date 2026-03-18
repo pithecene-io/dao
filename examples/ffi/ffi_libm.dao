@@ -1,0 +1,9 @@
+extern fn sqrt(x: f64): f64
+extern fn pow(base: f64, exp: f64): f64
+
+fn main(): i32
+  print("sqrt(2.0):")
+  print(sqrt(2.0))
+  print("pow(2.0, 10.0):")
+  print(pow(2.0, 10.0))
+  return 0

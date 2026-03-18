@@ -96,4 +96,33 @@ auto is_float(const Type* type) -> bool {
   return kind == BuiltinKind::F32 || kind == BuiltinKind::F64;
 }
 
+auto is_c_abi_compatible(const Type* type) -> bool {
+  if (type == nullptr) {
+    return false;
+  }
+  switch (type->kind()) {
+  case TypeKind::Builtin: {
+    // Only the v1 supported set: i32, i64, f64, bool.
+    // Other builtins (i8, i16, u8-u64, f32) require a contract
+    // update before they are allowed at the C ABI boundary.
+    auto kind = static_cast<const TypeBuiltin*>(type)->builtin();
+    switch (kind) {
+    case BuiltinKind::I32:
+    case BuiltinKind::I64:
+    case BuiltinKind::F64:
+    case BuiltinKind::Bool:
+      return true;
+    default:
+      return false;
+    }
+  }
+  case TypeKind::Pointer:
+    return true; // raw pointers
+  case TypeKind::Void:
+    return true; // void return
+  default:
+    return false; // string, struct, function, generator, named, enum, generic
+  }
+}
+
 } // namespace dao

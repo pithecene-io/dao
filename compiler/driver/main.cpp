@@ -496,7 +496,10 @@ void cmd_llvm_ir(const std::filesystem::path& path) {
 }
 
 // Compile a .dao file to a native executable.
-void cmd_build(const std::filesystem::path& path) {
+// Extra link inputs (object files, -l flags, -L flags) are forwarded
+// to the system linker.
+void cmd_build(const std::filesystem::path& path,
+               std::span<const std::string> link_extras = {}) {
   auto mir = run_through_mir(path);
   llvm::LLVMContext llvm_ctx;
   auto llvm_result = lower_to_llvm(mir, llvm_ctx, path);
@@ -534,6 +537,11 @@ void cmd_build(const std::filesystem::path& path) {
       "-o",
       out_str,
   };
+
+  // Append extra link inputs (object files, -l flags, -L flags).
+  for (const auto& extra : link_extras) {
+    args.push_back(extra);
+  }
 
   std::string link_error;
   int link_status = llvm::sys::ExecuteAndWait(
@@ -574,7 +582,6 @@ constexpr auto commands = std::array{
     Command{.name = "hir", .handler = cmd_hir},
     Command{.name = "mir", .handler = cmd_mir},
     Command{.name = "llvm-ir", .handler = cmd_llvm_ir},
-    Command{.name = "build", .handler = cmd_build},
 };
 
 } // namespace
@@ -602,6 +609,25 @@ auto main(int argc, char* argv[]) -> int {
       handler(path);
       return EXIT_SUCCESS;
     }
+  }
+
+  // build — accepts extra link inputs after the source file.
+  if (arg1 == "build") {
+    if (argc < 3) {
+      std::cerr << "usage: daoc build <file> [link-inputs...]\n";
+      return EXIT_FAILURE;
+    }
+    std::filesystem::path path(argv[2]);
+    if (!std::filesystem::exists(path)) {
+      std::cerr << "error: file not found: " << path << "\n";
+      return EXIT_FAILURE;
+    }
+    std::vector<std::string> extras;
+    for (int i = 3; i < argc; ++i) {
+      extras.emplace_back(argv[i]);
+    }
+    cmd_build(path, extras);
+    return EXIT_SUCCESS;
   }
 
   // daoc <file> — read and exit (Task 0 compat)

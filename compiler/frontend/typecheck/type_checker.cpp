@@ -625,6 +625,30 @@ void TypeChecker::check_function(const Decl* decl) {
                              ? resolve_type_node(fn.return_type)
                              : types_.void_type();
 
+  // Validate extern fn ABI types (user declarations only, not __dao_* hooks).
+  // Validate extern fn ABI types for user declarations.
+  // Reserved-prefix names (__) are exempt — this covers __dao_*
+  // runtime hooks (Dao-defined ABI per CONTRACT_RUNTIME_ABI) and
+  // aligns with C's reserved identifier convention.
+  if (fn.is_extern && !fn.name.starts_with("__")) {
+    for (const auto& param : fn.params) {
+      if (param.type != nullptr) {
+        const auto* param_type = resolve_type_node(param.type);
+        if (param_type != nullptr && !is_c_abi_compatible(param_type)) {
+          error(param.type->span,
+                "extern fn parameter type '" + print_type(param_type) +
+                    "' is not supported at the C ABI boundary");
+        }
+      }
+    }
+    if (ret_type != nullptr && ret_type->kind() != TypeKind::Void &&
+        !is_c_abi_compatible(ret_type)) {
+      error(fn.return_type->span,
+            "extern fn return type '" + print_type(ret_type) +
+                "' is not supported at the C ABI boundary");
+    }
+  }
+
   // Set up param types in symbol cache.
   for (const auto& param : fn.params) {
     auto decl_it = decl_symbols_.find(param.name_span.offset);

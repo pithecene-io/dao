@@ -1,0 +1,9 @@
+extern fn add_i64(a: i64, b: i64): i64
+extern fn scale(x: f64, factor: i32): f64
+
+fn main(): i32
+  print("add_i64(100, 200):")
+  print(add_i64(100, 200))
+  print("scale(3.14, 2):")
+  print(scale(3.14, 2))
+  return 0
