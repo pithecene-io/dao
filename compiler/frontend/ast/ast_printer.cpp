@@ -71,6 +71,7 @@ private:
         [&](const AliasDecl& alias) { print_alias_decl(alias); },
         [&](const ConceptDecl& concept_) { print_concept_decl(concept_); },
         [&](const ExtendDecl& ext) { print_extend_decl(ext); },
+        [](const ErrorDeclNode&) {},
     }, decl.payload);
   }
 
@@ -327,6 +328,7 @@ private:
           Scope scope(depth_);
           print_expr(*node.expr);
         },
+        [](const ErrorStmtNode&) {},
     }, stmt.payload);
   }
 
@@ -493,6 +495,7 @@ private:
             }
           }
         },
+        [](const ErrorExprNode&) {},
     }, expr.payload);
   }
 

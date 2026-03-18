@@ -723,6 +723,59 @@ suite<"self_keyword_tests"> self_keyword_tests = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Error recovery
+// ---------------------------------------------------------------------------
+
+suite<"error_recovery"> error_recovery = [] {
+  "broken declaration does not prevent parsing subsequent ones"_test = [] {
+    SourceBuffer src("test.dao",
+        "fn good1(): i32 -> 1\n"
+        "\n"
+        "this is garbage\n"
+        "\n"
+        "fn good2(): i32 -> 2\n");
+    auto lex_result = lex(src);
+    auto result = parse(lex_result.tokens);
+    expect(result.file != nullptr) << "file should be produced";
+    // good1 and good2 should both be present; garbage is skipped.
+    expect(result.file->declarations.size() >= 2_ul)
+        << "both valid declarations should survive";
+  };
+
+  "broken statement does not prevent parsing subsequent ones"_test = [] {
+    SourceBuffer src("test.dao",
+        "fn main(): i32\n"
+        "  let x: i32 = 1\n"
+        "  @@@ broken\n"
+        "  return x\n");
+    auto lex_result = lex(src);
+    auto result = parse(lex_result.tokens);
+    expect(result.file != nullptr) << "file should be produced";
+    expect(!result.file->declarations.empty())
+        << "function should be parsed";
+    if (!result.file->declarations.empty()) {
+      const auto& fn = result.file->declarations[0]->as<FunctionDecl>();
+      // Should have at least the let and return statements.
+      expect(fn.body.size() >= 2_ul)
+          << "valid statements should survive broken one";
+    }
+  };
+
+  "incomplete source still produces partial AST"_test = [] {
+    SourceBuffer src("test.dao",
+        "fn add(a: i32, b: i32): i32 -> a + b\n"
+        "\n"
+        "fn incomplete(\n");
+    auto lex_result = lex(src);
+    auto result = parse(lex_result.tokens);
+    expect(result.file != nullptr) << "file should be produced";
+    // At least the first valid function should be present.
+    expect(!result.file->declarations.empty())
+        << "valid declaration should survive incomplete one";
+  };
+};
+
 // NOLINTEND(readability-function-cognitive-complexity,readability-magic-numbers,modernize-use-trailing-return-type)
 
 } // namespace

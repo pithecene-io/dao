@@ -13,6 +13,7 @@ auto Decl::kind() const -> NodeKind {
       [](const AliasDecl&) { return NodeKind::AliasDecl; },
       [](const ConceptDecl&) { return NodeKind::ConceptDecl; },
       [](const ExtendDecl&) { return NodeKind::ExtendDecl; },
+      [](const ErrorDeclNode&) { return NodeKind::ErrorDecl; },
   }, payload);
 }
 
@@ -28,6 +29,7 @@ auto Stmt::kind() const -> NodeKind {
       [](const ResourceBlock&) { return NodeKind::ResourceBlock; },
       [](const ReturnStatement&) { return NodeKind::ReturnStatement; },
       [](const ExpressionStatement&) { return NodeKind::ExpressionStatement; },
+      [](const ErrorStmtNode&) { return NodeKind::ErrorStmt; },
   }, payload);
 }
 
@@ -47,6 +49,7 @@ auto Expr::kind() const -> NodeKind {
       [](const ListLiteral&) { return NodeKind::ListLiteral; },
       [](const IdentifierExpr&) { return NodeKind::Identifier; },
       [](const QualifiedName&) { return NodeKind::QualifiedName; },
+      [](const ErrorExprNode&) { return NodeKind::ErrorExpr; },
   }, payload);
 }
 
@@ -132,6 +135,12 @@ auto node_kind_name(NodeKind kind) -> const char* {
     return "NamedType";
   case NodeKind::PointerType:
     return "PointerType";
+  case NodeKind::ErrorExpr:
+    return "ErrorExpr";
+  case NodeKind::ErrorStmt:
+    return "ErrorStmt";
+  case NodeKind::ErrorDecl:
+    return "ErrorDecl";
   }
   return "Unknown";
 }

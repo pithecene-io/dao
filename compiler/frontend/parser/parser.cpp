@@ -75,6 +75,51 @@ private:
   }
 
   // -----------------------------------------------------------------------
+  // Error recovery
+  // -----------------------------------------------------------------------
+
+  /// Skip tokens until a declaration keyword or EOF.
+  void synchronize_to_declaration() {
+    while (!at_end()) {
+      switch (peek_kind()) {
+      case TokenKind::KwFn:
+      case TokenKind::KwClass:
+      case TokenKind::KwConcept:
+      case TokenKind::KwDerived:
+      case TokenKind::KwExtend:
+      case TokenKind::KwExtern:
+      case TokenKind::KwType:
+        return;
+      case TokenKind::Dedent:
+        return;
+      default:
+        advance();
+      }
+    }
+  }
+
+  /// Skip tokens until a statement boundary (NEWLINE, DEDENT, or EOF).
+  void synchronize_to_statement() {
+    while (!at_end()) {
+      if (peek_kind() == TokenKind::Newline ||
+          peek_kind() == TokenKind::Dedent) {
+        return;
+      }
+      advance();
+    }
+  }
+
+  /// Create an error expression node at the current position.
+  auto make_error_expr() -> Expr* {
+    return ctx_.alloc<Expr>(peek().span, ErrorExprNode{});
+  }
+
+  /// Create an error statement node at the current position.
+  auto make_error_stmt(Span span) -> Stmt* {
+    return ctx_.alloc<Stmt>(span, ErrorStmtNode{});
+  }
+
+  // -----------------------------------------------------------------------
   // File
   // -----------------------------------------------------------------------
 
@@ -97,6 +142,9 @@ private:
       auto* decl = parse_declaration();
       if (decl != nullptr) {
         declarations.push_back(decl);
+      } else {
+        // Recovery: skip to next declaration keyword.
+        synchronize_to_declaration();
       }
       skip_newlines();
     }
@@ -511,6 +559,9 @@ private:
       auto* stmt = parse_statement();
       if (stmt != nullptr) {
         stmts.push_back(stmt);
+      } else {
+        // Recovery: skip to next statement boundary and continue.
+        synchronize_to_statement();
       }
     }
     return stmts;
@@ -541,8 +592,7 @@ private:
 
     // Expression or assignment.
     auto* expr = parse_expression();
-    if (expr == nullptr) {
-      advance();
+    if (expr == nullptr || expr->kind() == NodeKind::ErrorExpr) {
       return nullptr;
     }
 
@@ -998,9 +1048,8 @@ private:
     }
     default:
       error("expected expression");
-      const auto& tok = advance();
-      // Return an error placeholder.
-      return ctx_.alloc<Expr>(tok.span, IdentifierExpr{tok.text});
+      advance(); // skip the offending token to guarantee progress
+      return make_error_expr();
     }
   }
 

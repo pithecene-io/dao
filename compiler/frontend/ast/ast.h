@@ -85,6 +85,11 @@ enum class NodeKind : std::uint8_t {
   // Types
   NamedType,
   PointerType,
+
+  // Error recovery placeholders
+  ErrorExpr,
+  ErrorStmt,
+  ErrorDecl,
 };
 
 // ---------------------------------------------------------------------------
@@ -236,8 +241,15 @@ struct ExtendDecl {
   std::vector<Decl*> methods; // FunctionDecl nodes
 };
 
+// Error recovery placeholders — carry no data; diagnostics are reported
+// separately. These allow partial ASTs to flow through downstream passes.
+struct ErrorDeclNode {};
+struct ErrorStmtNode {};
+struct ErrorExprNode {};
+
 using DeclPayload =
-    std::variant<FunctionDecl, ClassDecl, AliasDecl, ConceptDecl, ExtendDecl>;
+    std::variant<FunctionDecl, ClassDecl, AliasDecl, ConceptDecl, ExtendDecl,
+                 ErrorDeclNode>;
 
 // ---------------------------------------------------------------------------
 // Statement payloads
@@ -306,7 +318,7 @@ struct ExpressionStatement {
 using StmtPayload = std::variant<
     LetStatement, Assignment, IfStatement, WhileStatement, ForStatement,
     YieldStatement, ModeBlock, ResourceBlock, ReturnStatement,
-    ExpressionStatement>;
+    ExpressionStatement, ErrorStmtNode>;
 
 // ---------------------------------------------------------------------------
 // Expression payloads
@@ -369,7 +381,7 @@ struct QualifiedName {
 using ExprPayload = std::variant<
     BinaryExpr, UnaryExpr, CallExpr, IndexExpr, FieldExpr, PipeExpr,
     LambdaExpr, IntLiteral, FloatLiteral, StringLiteral, BoolLiteral,
-    ListLiteral, IdentifierExpr, QualifiedName>;
+    ListLiteral, IdentifierExpr, QualifiedName, ErrorExprNode>;
 
 // ---------------------------------------------------------------------------
 // Type node payloads
