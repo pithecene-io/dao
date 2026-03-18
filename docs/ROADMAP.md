@@ -155,9 +155,14 @@ Exit criteria:
 
 ## Phase 5 — Runtime and Initial Standard Library
 
-Status: **partial** — runtime ABI contract, IO/equality/conversion/
-generator hooks, prelude with Printable/Equatable/range. Scoped
-resource domains and mode plumbing deferred.
+Status: **runtime backbone complete, stdlib incremental** — 14 runtime
+hooks across 6 domains (io, eq, conv, gen, mem, str), scoped resource
+domains with enter/exit handles, prelude with Printable/Equatable/
+Comparable/Numeric concepts, string concat/length, generic math
+(abs, min, max, clamp), range generator. Mode plumbing: unsafe is a
+correct no-op; parallel/gpu deferred to Phase 8. Stdlib breadth
+(io, numerics modules, containers) continues incrementally without
+blocking Phase 6+ work.
 
 Goals:
 - runtime memory support for scoped resource domains

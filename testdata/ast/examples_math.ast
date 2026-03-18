@@ -6,40 +6,6 @@ File
         Callee
           Identifier print
         Args
-          StringLiteral "abs(-5):"
-    ExpressionStatement
-      CallExpr
-        Callee
-          Identifier print
-        Args
-          CallExpr
-            Callee
-              Identifier abs
-            Args
-              BinaryExpr -
-                IntLiteral 0
-                IntLiteral 5
-    ExpressionStatement
-      CallExpr
-        Callee
-          Identifier print
-        Args
-          StringLiteral "abs(3):"
-    ExpressionStatement
-      CallExpr
-        Callee
-          Identifier print
-        Args
-          CallExpr
-            Callee
-              Identifier abs
-            Args
-              IntLiteral 3
-    ExpressionStatement
-      CallExpr
-        Callee
-          Identifier print
-        Args
           StringLiteral "min(10, 3):"
     ExpressionStatement
       CallExpr
@@ -57,6 +23,23 @@ File
         Callee
           Identifier print
         Args
+          StringLiteral "min(3.14, 2.71):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier min
+            Args
+              FloatLiteral 3.14
+              FloatLiteral 2.71
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
           StringLiteral "max(10, 3):"
     ExpressionStatement
       CallExpr
@@ -69,6 +52,23 @@ File
             Args
               IntLiteral 10
               IntLiteral 3
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "max(3.14, 2.71):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier max
+            Args
+              FloatLiteral 3.14
+              FloatLiteral 2.71
     ExpressionStatement
       CallExpr
         Callee
@@ -92,7 +92,7 @@ File
         Callee
           Identifier print
         Args
-          StringLiteral "clamp(-5, 0, 10):"
+          StringLiteral "clamp(3.14, 1.0, 2.0):"
     ExpressionStatement
       CallExpr
         Callee
@@ -101,18 +101,34 @@ File
           CallExpr
             Callee
               Identifier clamp
+            Args
+              FloatLiteral 3.14
+              FloatLiteral 1.0
+              FloatLiteral 2.0
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "abs(-5):"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier abs
             Args
               BinaryExpr -
                 IntLiteral 0
                 IntLiteral 5
-              IntLiteral 0
-              IntLiteral 10
     ExpressionStatement
       CallExpr
         Callee
           Identifier print
         Args
-          StringLiteral "clamp(7, 0, 10):"
+          StringLiteral "abs_f64(-3.14):"
     ExpressionStatement
       CallExpr
         Callee
@@ -120,11 +136,11 @@ File
         Args
           CallExpr
             Callee
-              Identifier clamp
+              Identifier abs_f64
             Args
-              IntLiteral 7
-              IntLiteral 0
-              IntLiteral 10
+              BinaryExpr -
+                FloatLiteral 0.0
+                FloatLiteral 3.14
     ExpressionStatement
       CallExpr
         Callee

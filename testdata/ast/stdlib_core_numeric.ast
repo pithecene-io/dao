@@ -1,0 +1,36 @@
+File
+  ConceptDecl Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: Numeric
+      ReturnType: bool
+  ExtendDecl i32 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: i32
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
+  ExtendDecl f64 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: f64
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
