@@ -11,6 +11,7 @@
 #include "ir/mir/mir.h"
 
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalVariable.h>
@@ -474,6 +475,37 @@ auto LlvmBackend::get_value(MirValueId id, FunctionState& state) -> llvm::Value*
 }
 
 // ---------------------------------------------------------------------------
+// Checked signed integer arithmetic
+// ---------------------------------------------------------------------------
+
+auto LlvmBackend::emit_checked_signed_op(llvm::Intrinsic::ID intrinsic,
+                                           llvm::Value* lhs, llvm::Value* rhs,
+                                           const char* name,
+                                           FunctionState& state)
+    -> llvm::Value* {
+  auto* fn = llvm::Intrinsic::getDeclaration(module_.get(), intrinsic,
+                                              {lhs->getType()});
+  auto* pair = state.builder->CreateCall(fn, {lhs, rhs});
+
+  auto* result = state.builder->CreateExtractValue(pair, 0, name);
+  auto* overflow = state.builder->CreateExtractValue(pair, 1, "overflow");
+
+  auto* parent_fn = state.builder->GetInsertBlock()->getParent();
+  auto* trap_bb = llvm::BasicBlock::Create(ctx_, "overflow.trap", parent_fn);
+  auto* cont_bb = llvm::BasicBlock::Create(ctx_, "overflow.cont", parent_fn);
+
+  state.builder->CreateCondBr(overflow, trap_bb, cont_bb);
+
+  state.builder->SetInsertPoint(trap_bb);
+  auto* trap_fn = llvm::Intrinsic::getDeclaration(module_.get(), llvm::Intrinsic::trap);
+  state.builder->CreateCall(trap_fn);
+  state.builder->CreateUnreachable();
+
+  state.builder->SetInsertPoint(cont_bb);
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Constant lowering
 // ---------------------------------------------------------------------------
 
@@ -600,16 +632,34 @@ auto LlvmBackend::lower_binary(const MirBinary& p, const MirInst& inst,
 
   switch (p.op) {
   case BinaryOp::Add:
-    result = is_float ? state.builder->CreateFAdd(lhs, rhs, "fadd")
-                      : state.builder->CreateAdd(lhs, rhs, "add");
+    if (is_float) {
+      result = state.builder->CreateFAdd(lhs, rhs, "fadd");
+    } else if (is_unsigned_op) {
+      result = state.builder->CreateAdd(lhs, rhs, "add");
+    } else {
+      result = emit_checked_signed_op(
+          llvm::Intrinsic::sadd_with_overflow, lhs, rhs, "add", state);
+    }
     break;
   case BinaryOp::Sub:
-    result = is_float ? state.builder->CreateFSub(lhs, rhs, "fsub")
-                      : state.builder->CreateSub(lhs, rhs, "sub");
+    if (is_float) {
+      result = state.builder->CreateFSub(lhs, rhs, "fsub");
+    } else if (is_unsigned_op) {
+      result = state.builder->CreateSub(lhs, rhs, "sub");
+    } else {
+      result = emit_checked_signed_op(
+          llvm::Intrinsic::ssub_with_overflow, lhs, rhs, "sub", state);
+    }
     break;
   case BinaryOp::Mul:
-    result = is_float ? state.builder->CreateFMul(lhs, rhs, "fmul")
-                      : state.builder->CreateMul(lhs, rhs, "mul");
+    if (is_float) {
+      result = state.builder->CreateFMul(lhs, rhs, "fmul");
+    } else if (is_unsigned_op) {
+      result = state.builder->CreateMul(lhs, rhs, "mul");
+    } else {
+      result = emit_checked_signed_op(
+          llvm::Intrinsic::smul_with_overflow, lhs, rhs, "mul", state);
+    }
     break;
   case BinaryOp::Div:
     if (is_float) {

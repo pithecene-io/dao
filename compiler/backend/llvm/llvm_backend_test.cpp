@@ -198,15 +198,19 @@ suite<"simple_functions"> simple_functions = [] {
 // ---------------------------------------------------------------------------
 
 suite<"arithmetic"> arithmetic = [] {
-  "integer arithmetic"_test = [] {
+  "signed integer arithmetic uses checked intrinsics"_test = [] {
     LlvmTestPipeline pipe(
         "fn calc(x: i32, y: i32): i32\n"
         "  return x * y + x - y\n");
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
-    expect(contains(ir, "mul")) << ir;
-    expect(contains(ir, "add")) << ir;
-    expect(contains(ir, "sub")) << ir;
+    // Signed ops use overflow-checking intrinsics.
+    expect(contains(ir, "llvm.smul.with.overflow.i32")) << ir;
+    expect(contains(ir, "llvm.sadd.with.overflow.i32")) << ir;
+    expect(contains(ir, "llvm.ssub.with.overflow.i32")) << ir;
+    // Overflow branches to trap.
+    expect(contains(ir, "overflow.trap")) << ir;
+    expect(contains(ir, "llvm.trap")) << ir;
   };
 
   "float arithmetic"_test = [] {
