@@ -1,5 +1,5 @@
 File
-  DerivedConceptDecl Numeric
+  ConceptDecl Numeric
     FunctionDecl less_than
       Param self
       Param other: Numeric

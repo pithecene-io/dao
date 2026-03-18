@@ -155,7 +155,7 @@ Exit criteria:
 
 ## Phase 5 — Runtime and Initial Standard Library
 
-Status: **runtime backbone complete, stdlib incremental** — 16 runtime
+Status: **runtime backbone complete, stdlib incremental** — 14 runtime
 hooks across 6 domains (io, eq, conv, gen, mem, str), scoped resource
 domains with enter/exit handles, prelude with Printable/Equatable/
 Comparable/Numeric concepts, string concat/length, generic math

@@ -1,4 +1,4 @@
-derived concept Numeric:
+concept Numeric:
   fn less_than(self, other: Numeric): bool
 
 extend i32 as Numeric:
