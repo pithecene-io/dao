@@ -337,8 +337,11 @@ The compiler and backend must not:
 The compiler and backend must:
 
 - preserve default IEEE-observable behavior for ordinary floating code
-- lower float comparisons according to partial-order semantics
-  (unordered comparisons for `==`/`!=`, ordered for relational ops)
+- lower float comparisons according to partial-order semantics:
+  ordered equality for `==` (false if either operand is NaN),
+  unordered not-equal for `!=` (true if either operand is NaN),
+  ordered comparisons for relational ops `<`/`<=`/`>`/`>=`
+  (false if either operand is NaN)
 - ensure explicit conversions trap or error where the language
   specifies
 - distinguish semantic defaults from future relaxed modes
@@ -369,7 +372,7 @@ The compiler and backend must:
 |----------------------------------|-----------|-------------------|
 | `i32` arithmetic                 | Yes       | Yes               |
 | `i32` overflow non-UB            | Yes       | Partial (wraps)   |
-| `f64` IEEE 754 binary64          | Yes       | Yes               |
+| `f64` IEEE 754 binary64          | Yes       | Partial           |
 | `f64` NaN/Inf/−0.0 semantics    | Yes       | Partial (codegen) |
 | `f64` comparison partial-order   | Yes       | Partial           |
 | `f32` IEEE 754 binary32          | Yes       | Deferred          |
