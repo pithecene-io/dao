@@ -181,8 +181,8 @@ Each expansion requires updating this contract before implementation.
 | `extern fn` LLVM lowering        | Implemented     |
 | Scalar types at boundary         | Implemented     |
 | Pointer types at boundary        | Implemented     |
-| Driver: link `.o` files          | Not implemented |
-| Driver: link `-l` libraries      | Not implemented |
-| Driver: `-L` search paths        | Not implemented |
+| Driver: link `.o` files          | Implemented     |
+| Driver: link `-l` libraries      | Implemented     |
+| Driver: `-L` search paths        | Implemented     |
 | Unsupported type rejection       | Partial         |
-| E2E foreign call example         | Not implemented |
+| E2E foreign call example         | Implemented     |
