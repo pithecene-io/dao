@@ -288,18 +288,65 @@ Exit criteria:
 
 ## What Comes After
 
-The following are sequenced in `docs/ROADMAP.md` and are not detailed
-here:
+Tasks 6–13 (resolve, types, typecheck, HIR, MIR, LLVM backend,
+generics, coroutines) are complete or substantially complete.
 
-- Task 6 — Name resolution (`compiler/frontend/resolve/`)
-- Task 7 — Type representation (`compiler/frontend/types/`)
-- Task 8 — Type checking (`compiler/frontend/typecheck/`)
-- Task 9 — HIR construction (`compiler/ir/hir/`)
-- Task 10 — MIR lowering (`compiler/ir/mir/`)
-- Task 11 — LLVM backend (`compiler/backend/llvm/`)
+The next implementation tasks are sequenced below.
 
-These are explicitly deferred until the frontend feedback loop
-(spec, probes, compiler, playground) is stable.
+### Task 14 — Numeric Type Expansion
+
+**Objective**: Implement the numeric semantics frozen in
+`CONTRACT_NUMERIC_SEMANTICS.md` in staged tiers.
+
+Governing contract: `docs/contracts/CONTRACT_NUMERIC_SEMANTICS.md`
+
+#### Tier A — Near-term (Phase 5 tail / pre-Phase 6)
+
+Priority: **high** — correctness baseline for existing types.
+
+- audit existing f64 codegen against IEEE 754: verify comparison
+  predicates (ordered vs unordered), NaN propagation, signed-zero
+  preservation
+- freeze integer overflow policy for i32: decide checked vs wrapping
+  default, implement the chosen behavior, add wrapping/saturating
+  alternate operations
+
+#### Tier B — Phase 6 prerequisite
+
+Priority: **high** — C ABI interop cannot function without 64-bit
+integers.
+
+- `i64` surface exposure: type system, parser literal support,
+  codegen, runtime hooks (`__dao_eq_i64`, `__dao_conv_i64_to_string`)
+- explicit `i32 → f64` and `f64 → i32` conversion functions with
+  the trapping semantics defined in the contract
+- widen `__dao_str_length` from i32 to i64 once i64 is surfaced
+
+#### Tier C — Phase 6+ dedicated task
+
+Priority: **medium** — broadens the numeric surface but does not
+block interop.
+
+- full integer width expansion: i8, i16, u8, u16, u32, u64
+- `f32` surface exposure: type, codegen, stdlib formatting,
+  conversion, runtime hooks
+- float-to-int trapping for all combinations
+- full numeric conversion matrix with explicit cast syntax
+
+#### Tier D — Phase 8
+
+Priority: **low** — depends on GPU and optimization infrastructure.
+
+- fast-math / relaxed numeric opt-in mode
+- GPU numeric profiles
+- decimal type design and initial implementation
+
+Exit criteria (Tier A+B):
+
+- f64 comparisons emit correct IEEE predicates in LLVM IR
+- i32 overflow behavior is defined and tested
+- i64 is usable end-to-end (type, codegen, runtime, examples)
+- explicit numeric conversions exist between i32 and f64
 
 ## Principles
 
