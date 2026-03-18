@@ -1,6 +1,8 @@
 add_library(dao_analysis STATIC
+  document_symbols.cpp
   goto_definition.cpp
   hover.cpp
+  references.cpp
   semantic_tokens.cpp
 )
 
@@ -23,5 +25,12 @@ target_compile_definitions(semantic_tokens_test PRIVATE
   DAO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
+add_executable(analysis_test
+  analysis_test.cpp
+)
+
+target_link_libraries(analysis_test PRIVATE dao_analysis Boost::ut)
+
 include(CTest)
 add_test(NAME semantic_tokens_test COMMAND semantic_tokens_test)
+add_test(NAME analysis_test COMMAND analysis_test)

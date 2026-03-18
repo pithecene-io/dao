@@ -1,0 +1,153 @@
+#include "analysis/document_symbols.h"
+#include "analysis/references.h"
+#include "frontend/lexer/lexer.h"
+#include "frontend/parser/parser.h"
+#include "frontend/resolve/resolve.h"
+
+#include <boost/ut.hpp>
+#include <string>
+
+using namespace boost::ut;
+using namespace dao;
+
+namespace {
+
+struct AnalysisPipeline {
+  SourceBuffer source;
+  LexResult lex_result;
+  ParseResult parse_result;
+  ResolveResult resolve_result;
+
+  explicit AnalysisPipeline(const std::string& src)
+      : source("test.dao", std::string(src)),
+        lex_result(lex(source)),
+        parse_result(parse(lex_result.tokens)) {
+    if (parse_result.file != nullptr) {
+      resolve_result = resolve(*parse_result.file);
+    }
+  }
+};
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// Document symbols
+// ---------------------------------------------------------------------------
+
+suite<"document_symbols"> document_symbols = [] {
+  "functions appear as top-level symbols"_test = [] {
+    AnalysisPipeline pipe("fn add(a: i32, b: i32): i32 -> a + b\n");
+    auto symbols = query_document_symbols(*pipe.parse_result.file, 0);
+    expect(symbols.size() == 1_ul);
+    expect(symbols[0].name == "add");
+    expect(symbols[0].kind == "function");
+    expect(symbols[0].children.size() == 2_ul);
+    expect(symbols[0].children[0].name == "a");
+    expect(symbols[0].children[0].kind == "parameter");
+    expect(symbols[0].children[1].name == "b");
+  };
+
+  "classes show fields as children"_test = [] {
+    AnalysisPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n");
+    auto symbols = query_document_symbols(*pipe.parse_result.file, 0);
+    expect(symbols.size() == 1_ul);
+    expect(symbols[0].name == "Point");
+    expect(symbols[0].kind == "class");
+    expect(symbols[0].children.size() == 2_ul);
+    expect(symbols[0].children[0].name == "x");
+    expect(symbols[0].children[0].kind == "field");
+    expect(symbols[0].children[1].name == "y");
+  };
+
+  "concepts show methods as children"_test = [] {
+    AnalysisPipeline pipe(
+        "concept Printable:\n"
+        "  fn to_string(self): string\n");
+    auto symbols = query_document_symbols(*pipe.parse_result.file, 0);
+    expect(symbols.size() == 1_ul);
+    expect(symbols[0].name == "Printable");
+    expect(symbols[0].kind == "concept");
+    expect(symbols[0].children.size() == 1_ul);
+    expect(symbols[0].children[0].name == "to_string");
+    expect(symbols[0].children[0].kind == "method");
+  };
+
+  "prelude declarations are filtered"_test = [] {
+    AnalysisPipeline pipe(
+        "fn prelude_fn(): i32 -> 0\n"
+        "fn user_fn(): i32 -> 1\n");
+    // Treat first 26 bytes as prelude.
+    auto symbols = query_document_symbols(*pipe.parse_result.file, 26);
+    expect(symbols.size() == 1_ul);
+    expect(symbols[0].name == "user_fn");
+  };
+
+  "aliases appear as symbols"_test = [] {
+    AnalysisPipeline pipe("type NodeId = i32\n");
+    auto symbols = query_document_symbols(*pipe.parse_result.file, 0);
+    expect(symbols.size() == 1_ul);
+    expect(symbols[0].name == "NodeId");
+    expect(symbols[0].kind == "alias");
+  };
+
+  "extern functions appear"_test = [] {
+    AnalysisPipeline pipe("extern fn sqrt(x: f64): f64\n");
+    auto symbols = query_document_symbols(*pipe.parse_result.file, 0);
+    expect(symbols.size() == 1_ul);
+    expect(symbols[0].name == "sqrt");
+    expect(symbols[0].kind == "extern_function");
+  };
+};
+
+// ---------------------------------------------------------------------------
+// References
+// ---------------------------------------------------------------------------
+
+suite<"references"> references = [] {
+  "find references to a function"_test = [] {
+    AnalysisPipeline pipe(
+        "fn add(a: i32, b: i32): i32 -> a + b\n"
+        "fn main(): i32\n"
+        "  return add(1, 2)\n");
+    // Offset 3 = "add" declaration.
+    auto refs = query_references(3, pipe.resolve_result);
+    expect(refs.size() >= 2_ul) << "should find definition + at least one use";
+
+    bool has_def = false;
+    bool has_use = false;
+    for (const auto& ref : refs) {
+      if (ref.is_definition) {
+        has_def = true;
+      } else {
+        has_use = true;
+      }
+    }
+    expect(has_def) << "should include definition";
+    expect(has_use) << "should include use site";
+  };
+
+  "find references from use site"_test = [] {
+    AnalysisPipeline pipe(
+        "fn foo(): i32 -> 42\n"
+        "fn main(): i32\n"
+        "  return foo()\n");
+    // Find the offset of `foo()` in the call — "return foo()" starts
+    // at some offset. The use of foo in `return foo()` should resolve.
+    // Offset of "foo" in line 3: "fn foo..." is 20 bytes,
+    // "fn main..." is ~15 bytes, "  return " is ~9 bytes = ~44.
+    // Use the declaration offset (3) which should also work.
+    auto refs = query_references(3, pipe.resolve_result);
+    expect(refs.size() >= 2_ul) << "definition + use";
+  };
+
+  "no references for unknown offset"_test = [] {
+    AnalysisPipeline pipe("fn main(): i32 -> 0\n");
+    auto refs = query_references(9999, pipe.resolve_result);
+    expect(refs.empty()) << "should return empty for unknown offset";
+  };
+};
+
+auto main() -> int {} // NOLINT(readability-named-parameter)

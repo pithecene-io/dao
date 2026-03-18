@@ -185,6 +185,11 @@ Exit criteria:
 
 ## Phase 6 — C ABI Interop and Host Integration
 
+Status: **v1 complete** — scalar/pointer C ABI calls, driver link
+passthrough (.o, -l, -L), extern fn type validation, E2E examples
+with custom C helpers and libm. Aggregates, callbacks, variadics
+deferred.
+
 Goals:
 - stable C ABI entry/exit surface for initial foreign function calls
 - ability to call C libraries from Dao through explicit declarations
@@ -236,13 +241,16 @@ Status: **complete**
 
 ### Tooling T2 — Initial IntelliSense Slice
 
-Status: **not started**
-- hover
-- completion
-- go-to-definition
-- references
-- document symbols
-- symbol identity hardening across compiler sessions
+Status: **partial** — hover, go-to-definition, document symbols, and
+references implemented as shared analysis APIs with playground
+endpoints. Completion deferred.
+
+- hover ✓
+- go-to-definition ✓
+- document symbols ✓
+- references ✓
+- completion — not started
+- symbol identity hardening across compiler sessions — deferred
 
 ### Tooling T3 — Web IDE North Star
 - AST / HIR / MIR panes
