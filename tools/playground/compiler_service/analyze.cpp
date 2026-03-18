@@ -3,8 +3,10 @@
 #include "pipeline.h"
 #include "token_category.h"
 
+#include "analysis/document_symbols.h"
 #include "analysis/goto_definition.h"
 #include "analysis/hover.h"
+#include "analysis/references.h"
 #include "analysis/semantic_tokens.h"
 #include "frontend/ast/ast_printer.h"
 #include "frontend/lexer/lexer.h"
@@ -415,6 +417,115 @@ void handle_goto_def(const httplib::Request& req, httplib::Response& res,
       {"line", line},
       {"col", loc.col},
   };
+  res.set_content(response.dump(), "application/json");
+}
+
+// ---------------------------------------------------------------------------
+// Document symbols
+// ---------------------------------------------------------------------------
+
+void handle_document_symbols(const httplib::Request& req,
+                              httplib::Response& res,
+                              const std::filesystem::path& repo_root) {
+  nlohmann::json request;
+  try {
+    request = nlohmann::json::parse(req.body);
+  } catch (const nlohmann::json::parse_error&) {
+    res.status = 400;
+    res.set_content(R"({"error":"invalid JSON"})", "application/json");
+    return;
+  }
+
+  if (!request.contains("source")) {
+    res.status = 400;
+    res.set_content(R"({"error":"missing 'source'"})", "application/json");
+    return;
+  }
+
+  auto pipe = run_light_pipeline(request, repo_root);
+
+  if (!pipe.ok || pipe.parse_result.file == nullptr) {
+    res.set_content("[]", "application/json");
+    return;
+  }
+
+  auto symbols = dao::query_document_symbols(*pipe.parse_result.file,
+                                              pipe.prelude_bytes);
+
+  // Build JSON response.
+  std::function<nlohmann::json(const dao::DocumentSymbol&)> to_json;
+  to_json = [&](const dao::DocumentSymbol& sym) -> nlohmann::json {
+    auto user_offset = sym.span.offset >= pipe.prelude_bytes
+                           ? sym.span.offset - pipe.prelude_bytes
+                           : sym.span.offset;
+    nlohmann::json children = nlohmann::json::array();
+    for (const auto& child : sym.children) {
+      children.push_back(to_json(child));
+    }
+    return {
+        {"name", sym.name},
+        {"kind", sym.kind},
+        {"offset", user_offset},
+        {"length", sym.span.length},
+        {"children", children},
+    };
+  };
+
+  nlohmann::json response = nlohmann::json::array();
+  for (const auto& sym : symbols) {
+    response.push_back(to_json(sym));
+  }
+  res.set_content(response.dump(), "application/json");
+}
+
+// ---------------------------------------------------------------------------
+// References
+// ---------------------------------------------------------------------------
+
+void handle_references(const httplib::Request& req, httplib::Response& res,
+                        const std::filesystem::path& repo_root) {
+  nlohmann::json request;
+  try {
+    request = nlohmann::json::parse(req.body);
+  } catch (const nlohmann::json::parse_error&) {
+    res.status = 400;
+    res.set_content(R"({"error":"invalid JSON"})", "application/json");
+    return;
+  }
+
+  if (!request.contains("source") || !request.contains("offset")) {
+    res.status = 400;
+    res.set_content(R"({"error":"missing 'source' or 'offset'"})",
+                    "application/json");
+    return;
+  }
+
+  auto user_offset = request["offset"].get<uint32_t>();
+  auto pipe = run_light_pipeline(request, repo_root);
+
+  if (!pipe.ok) {
+    res.set_content("[]", "application/json");
+    return;
+  }
+
+  auto absolute_offset = pipe.prelude_bytes + user_offset;
+  auto token_offset = find_token_offset(absolute_offset, pipe.lex_result);
+
+  auto results = dao::query_references(token_offset, pipe.resolve_result);
+
+  nlohmann::json response = nlohmann::json::array();
+  for (const auto& ref : results) {
+    // Skip references inside the prelude.
+    if (ref.span.offset < pipe.prelude_bytes) {
+      continue;
+    }
+    auto ref_user_offset = ref.span.offset - pipe.prelude_bytes;
+    response.push_back({
+        {"offset", ref_user_offset},
+        {"length", ref.span.length},
+        {"isDefinition", ref.is_definition},
+    });
+  }
   res.set_content(response.dump(), "application/json");
 }
 
