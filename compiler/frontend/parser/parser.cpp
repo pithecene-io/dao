@@ -114,9 +114,14 @@ private:
     return ctx_.alloc<Expr>(peek().span, ErrorExprNode{});
   }
 
-  /// Create an error statement node at the current position.
+  /// Create an error statement node.
   auto make_error_stmt(Span span) -> Stmt* {
     return ctx_.alloc<Stmt>(span, ErrorStmtNode{});
+  }
+
+  /// Create an error declaration node.
+  auto make_error_decl(Span span) -> Decl* {
+    return ctx_.alloc<Decl>(span, ErrorDeclNode{});
   }
 
   // -----------------------------------------------------------------------
@@ -139,12 +144,16 @@ private:
       if (at_end()) {
         break;
       }
+      Span before = peek().span;
       auto* decl = parse_declaration();
       if (decl != nullptr) {
         declarations.push_back(decl);
       } else {
-        // Recovery: skip to next declaration keyword.
+        // Recovery: insert an error placeholder and skip to next declaration keyword.
         synchronize_to_declaration();
+        Span err_span = {.offset = before.offset,
+                         .length = peek().span.offset - before.offset};
+        declarations.push_back(make_error_decl(err_span));
       }
       skip_newlines();
     }
@@ -556,12 +565,16 @@ private:
       if (peek_kind() == TokenKind::Dedent || peek_kind() == TokenKind::Eof) {
         break;
       }
+      Span before = peek().span;
       auto* stmt = parse_statement();
       if (stmt != nullptr) {
         stmts.push_back(stmt);
       } else {
-        // Recovery: skip to next statement boundary and continue.
+        // Recovery: insert an error placeholder and skip to next statement boundary.
         synchronize_to_statement();
+        Span err_span = {.offset = before.offset,
+                         .length = peek().span.offset - before.offset};
+        stmts.push_back(make_error_stmt(err_span));
       }
     }
     return stmts;

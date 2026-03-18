@@ -738,9 +738,15 @@ suite<"error_recovery"> error_recovery = [] {
     auto lex_result = lex(src);
     auto result = parse(lex_result.tokens);
     expect(result.file != nullptr) << "file should be produced";
-    // good1 and good2 should both be present; garbage is skipped.
-    expect(result.file->declarations.size() >= 2_ul)
-        << "both valid declarations should survive";
+    // good1, ErrorDecl, and good2 should all be present.
+    expect(result.file->declarations.size() == 3_ul)
+        << "should have good1 + error + good2";
+    if (result.file->declarations.size() == 3) {
+      expect(result.file->declarations[0]->kind() == NodeKind::FunctionDecl);
+      expect(result.file->declarations[1]->kind() == NodeKind::ErrorDecl)
+          << "error placeholder should be inserted for garbage";
+      expect(result.file->declarations[2]->kind() == NodeKind::FunctionDecl);
+    }
   };
 
   "broken statement does not prevent parsing subsequent ones"_test = [] {
@@ -756,9 +762,15 @@ suite<"error_recovery"> error_recovery = [] {
         << "function should be parsed";
     if (!result.file->declarations.empty()) {
       const auto& fn = result.file->declarations[0]->as<FunctionDecl>();
-      // Should have at least the let and return statements.
-      expect(fn.body.size() >= 2_ul)
-          << "valid statements should survive broken one";
+      // Should have let, ErrorStmt, and return.
+      expect(fn.body.size() >= 3_ul)
+          << "should have let + error + return";
+      if (fn.body.size() >= 3) {
+        expect(fn.body[0]->kind() == NodeKind::LetStatement);
+        expect(fn.body[1]->kind() == NodeKind::ErrorStmt)
+            << "error placeholder should be inserted for broken statement";
+        expect(fn.body[2]->kind() == NodeKind::ReturnStatement);
+      }
     }
   };
 
