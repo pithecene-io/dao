@@ -762,9 +762,22 @@ suite<"runtime_abi"> runtime_abi = [] {
         "  return\n");
     auto ir = pipe.ir();
     expect(!pipe.has_errors()) << "no backend errors";
+    // IO
     expect(contains(ir, "declare void @__dao_io_write_stdout")) << ir;
+    // Equality
     expect(contains(ir, "declare i1 @__dao_eq_i32")) << ir;
+    expect(contains(ir, "declare i1 @__dao_eq_i64")) << ir;
     expect(contains(ir, "declare i1 @__dao_eq_f64")) << ir;
+    // Conversion (to_string)
+    expect(contains(ir, "@__dao_conv_i32_to_string")) << ir;
+    expect(contains(ir, "@__dao_conv_i64_to_string")) << ir;
+    // Numeric conversions
+    expect(contains(ir, "declare double @__dao_conv_i32_to_f64(i32)")) << ir;
+    expect(contains(ir, "declare i64 @__dao_conv_i32_to_i64(i32)")) << ir;
+    expect(contains(ir, "declare i32 @__dao_conv_f64_to_i32(double)")) << ir;
+    expect(contains(ir, "declare i32 @__dao_conv_i64_to_i32(i64)")) << ir;
+    // String
+    expect(contains(ir, "@__dao_str_length")) << ir;
   };
 };
 
