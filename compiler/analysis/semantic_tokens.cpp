@@ -497,6 +497,16 @@ private:
       visit_type(*ptr.pointee);
       break;
     }
+    case NodeKind::FunctionType: {
+      const auto& ftn = type.as<FunctionTypeNode>();
+      // Classify 'fn' keyword in the function type.
+      classify(Span{.offset = type.span.offset, .length = 2}, "keyword.fn");
+      for (const auto* param_type : ftn.param_types) {
+        visit_type(*param_type);
+      }
+      visit_type(*ftn.return_type);
+      break;
+    }
     default:
       break;
     }

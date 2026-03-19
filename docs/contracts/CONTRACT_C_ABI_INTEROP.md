@@ -119,14 +119,65 @@ compatible predicate recursively. A struct containing another struct
 is valid at the boundary if and only if the inner struct is also
 repr-C-compatible.
 
-### 4.4 Types explicitly not supported
+### 4.4 Function pointer types at the boundary
+
+Dao function types may appear as parameters and return values in
+`extern fn` declarations, representing C function pointers.
+
+#### 4.4.1 Syntax
+
+Function types are written as `fn(T, U, ...): R` in type positions,
+mirroring function declaration syntax. Parameter names are omitted —
+only types are listed.
+
+#### 4.4.2 ABI-compatible function type predicate
+
+A Dao function type is C-ABI-compatible if and only if:
+
+1. every parameter type is itself C-ABI-compatible (scalar, pointer,
+   repr-C-compatible struct, or recursively ABI-compatible function
+   type)
+2. the return type is C-ABI-compatible or void
+
+The compiler must reject extern fn signatures that use function types
+failing this predicate with a clear diagnostic.
+
+#### 4.4.3 Representation
+
+Function types at the C ABI boundary are lowered to opaque pointers
+(`ptr` in LLVM IR). This matches the C calling convention where
+function pointer parameters are pointer-sized values.
+
+#### 4.4.4 Passing functions as callbacks
+
+A named Dao function may be passed as an argument where a function
+type is expected in an extern fn call. The compiler emits the
+function's address as the argument value.
+
+#### 4.4.5 Restrictions
+
+- **No closures**: only named function references may be passed as
+  function-pointer arguments to extern fn calls. Lambda expressions
+  in function-pointer argument positions of extern fn calls must be
+  rejected by the type checker with a clear diagnostic. Closures
+  cannot be represented as C function pointers.
+- **No indirect calls from Dao**: calling through a function-typed
+  value received from C is not yet supported. The initial
+  implementation covers outbound callbacks only (Dao → C → Dao).
+  Function pointer return types are accepted syntactically (e.g.
+  for passing opaque values back to C) but invoking them produces
+  a backend error.
+- **Calling convention**: function pointers follow the platform C
+  calling convention. No other conventions are supported.
+
+### 4.5 Types explicitly not supported
 
 - Dao `string` as C `char*` (requires explicit conversion)
-- function pointers / callbacks
 - variadic functions (`printf`-style)
 - C enums
 - C unions
 - arrays / slices by value
+- capturing lambdas / closures at the C boundary
 
 If a user-declared `extern fn` uses an unsupported type, the compiler
 must reject it with a clear diagnostic during type checking or
@@ -139,13 +190,14 @@ conventions specified in `CONTRACT_RUNTIME_ABI.md`. The `__` prefix
 aligns with C's reserved identifier convention; user code should not
 declare `__`-prefixed names.
 
-### 4.5 Future type expansions
+### 4.6 Future type expansions
 
 The following may be added in later versions:
 
 - `c_string` or explicit null-terminated byte string type
-- function pointer types for callbacks
 - packed structs / explicit alignment control
+- indirect calls through function-typed values (C → Dao callbacks
+  returning function pointers)
 
 Each expansion requires updating this contract before implementation.
 
@@ -245,3 +297,10 @@ Each expansion requires updating this contract before implementation.
 | Unsupported type rejection       | Implemented     |
 | E2E foreign call example         | Implemented     |
 | E2E struct-by-value example      | Implemented     |
+| Function pointer type syntax     | Implemented     |
+| Function pointer params          | Implemented     |
+| Function pointer return type     | Accepted        |
+| Indirect call through fn ptr     | Not implemented |
+| Named function as callback       | Implemented     |
+| Lambda rejection at ABI boundary | Implemented     |
+| E2E callback example             | Implemented     |

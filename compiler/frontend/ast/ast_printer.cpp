@@ -522,6 +522,17 @@ private:
           out_ << "*";
           print_type_inline(*ptr.pointee);
         },
+        [&](const FunctionTypeNode& ftn) {
+          out_ << "fn(";
+          for (size_t i = 0; i < ftn.param_types.size(); ++i) {
+            if (i > 0) {
+              out_ << ", ";
+            }
+            print_type_inline(*ftn.param_types[i]);
+          }
+          out_ << "): ";
+          print_type_inline(*ftn.return_type);
+        },
     }, type.payload);
   }
 

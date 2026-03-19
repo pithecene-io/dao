@@ -132,6 +132,24 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
     return types_.pointer_to(pointee);
   }
 
+  case NodeKind::FunctionType: {
+    const auto& ftn = node->as<FunctionTypeNode>();
+    std::vector<const Type*> param_types;
+    param_types.reserve(ftn.param_types.size());
+    for (const auto* pt : ftn.param_types) {
+      const auto* resolved = resolve_type_node(pt);
+      if (resolved == nullptr) {
+        return nullptr;
+      }
+      param_types.push_back(resolved);
+    }
+    const auto* ret_type = resolve_type_node(ftn.return_type);
+    if (ret_type == nullptr) {
+      return nullptr;
+    }
+    return types_.function_type(std::move(param_types), ret_type);
+  }
+
   default:
     error(node->span, "unsupported type syntax");
     return nullptr;
@@ -654,6 +672,28 @@ void TypeChecker::check_function(const Decl* decl) {
       error(fn.return_type->span,
             "extern fn return type '" + print_type(ret_type) +
                 "' is not supported at the C ABI boundary");
+    }
+  }
+
+  // Reject function types in non-extern fn signatures. Indirect calls
+  // through function-typed values are not yet implemented; function
+  // types are currently only valid at the extern fn ABI boundary.
+  if (!fn.is_extern) {
+    for (const auto& param : fn.params) {
+      if (param.type != nullptr) {
+        const auto* param_type = resolve_type_node(param.type);
+        if (param_type != nullptr &&
+            param_type->kind() == TypeKind::Function) {
+          error(param.type->span,
+                "function type parameters are only supported in extern fn "
+                "declarations (indirect calls not yet implemented)");
+        }
+      }
+    }
+    if (ret_type != nullptr && ret_type->kind() == TypeKind::Function) {
+      error(fn.return_type->span,
+            "function type returns are only supported in extern fn "
+            "declarations (indirect calls not yet implemented)");
     }
   }
 
@@ -1422,11 +1462,37 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
     return nullptr;
   }
 
+  // Detect if the callee is an extern fn (for ABI boundary enforcement).
+  bool callee_is_extern = false;
+  if (call.callee->is<IdentifierExpr>()) {
+    auto sym_it = resolve_.uses.find(call.callee->span.offset);
+    if (sym_it != resolve_.uses.end() &&
+        sym_it->second->kind == SymbolKind::Function &&
+        sym_it->second->decl != nullptr) {
+      const auto* fn_decl = sym_it->second->decl_as_decl();
+      if (fn_decl->is<FunctionDecl>()) {
+        callee_is_extern = fn_decl->as<FunctionDecl>().is_extern;
+      }
+    }
+  }
+
   // Check arguments and infer generic type bindings from call site.
   // type_bindings maps generic param index → concrete type.
   std::unordered_map<uint32_t, const Type*> type_bindings;
 
   for (size_t i = 0; i < params.size(); ++i) {
+    // Reject lambdas in function-pointer positions of extern fn calls.
+    // Lambdas cannot cross the C ABI boundary as closures have no
+    // context pointer in a C function pointer representation.
+    // (CONTRACT_C_ABI_INTEROP §4.4.5)
+    if (callee_is_extern && params[i] != nullptr &&
+        params[i]->kind() == TypeKind::Function &&
+        call.args[i]->is<LambdaExpr>()) {
+      error(call.args[i]->span,
+            "lambda cannot be passed as a C function pointer; "
+            "use a named function instead");
+    }
+
     const auto* arg_type = check_expr(call.args[i], params[i]);
     if (arg_type == nullptr || params[i] == nullptr) {
       continue;

@@ -1203,6 +1203,28 @@ private:
       return ctx_.alloc<TypeNode>(span, PointerType{pointee});
     }
 
+    // Function type: fn(T, U, ...): R
+    if (peek_kind() == TokenKind::KwFn) {
+      const auto& fn_tok = advance(); // consume 'fn'
+      consume(TokenKind::LParen);
+      std::vector<TypeNode*> param_types;
+      if (peek_kind() != TokenKind::RParen) {
+        param_types.push_back(parse_type());
+        while (peek_kind() == TokenKind::Comma) {
+          advance(); // consume ','
+          param_types.push_back(parse_type());
+        }
+      }
+      consume(TokenKind::RParen);
+      consume(TokenKind::Colon);
+      auto* return_type = parse_type();
+      Span span = {.offset = fn_tok.span.offset,
+                   .length = (return_type->span.offset + return_type->span.length) -
+                             fn_tok.span.offset};
+      return ctx_.alloc<TypeNode>(
+          span, FunctionTypeNode{std::move(param_types), return_type});
+    }
+
     return parse_named_type();
   }
 

@@ -182,10 +182,14 @@ literal :=
 
 type :=
       pointer_type
+    | function_type
     | named_type
 
 pointer_type :=
     "*" type
+
+function_type :=
+    "fn" "(" type_list? ")" ":" type
 
 named_type :=
     qualified_name ("[" type_list "]")?
