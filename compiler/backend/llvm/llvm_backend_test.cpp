@@ -507,6 +507,19 @@ suite<"externs"> externs = [] {
     // { { f64 }, i32 } = 16 bytes: EB0=SSE(double), EB1=INTEGER(i32).
     expect(contains(ir, "declare i32 @get_tag(double, i32)")) << ir;
   };
+
+  // Function pointer params lower to ptr.
+  "extern fn with callback param lowers to ptr"_test = [] {
+    LlvmTestPipeline pipe(
+        "extern fn apply(cb: fn(i32, i32): i32, a: i32, b: i32): i32\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Function pointer param → ptr in LLVM IR.
+    expect(contains(ir, "declare i32 @apply(ptr, i32, i32)")) << ir;
+  };
 };
 
 // ---------------------------------------------------------------------------

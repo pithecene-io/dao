@@ -492,6 +492,32 @@ suite<"typecheck_negative"> typecheck_negative = [] {
     expect(has_error_containing(result, "not supported at the C ABI"));
   };
 
+  // --- Function pointer types at the ABI boundary (§4.4) ---
+
+  "extern fn with function pointer param is accepted"_test = [] {
+    auto result = check_source(
+        "extern fn apply(cb: fn(i32, i32): i32, a: i32, b: i32): i32\n");
+    expect(is_ok(result)) << "function pointer param should be accepted";
+  };
+
+  "extern fn with function pointer return is accepted"_test = [] {
+    auto result = check_source(
+        "extern fn get_op(): fn(i32, i32): i32\n");
+    expect(is_ok(result)) << "function pointer return should be accepted";
+  };
+
+  "extern fn with void callback is accepted"_test = [] {
+    auto result = check_source(
+        "extern fn register_cb(cb: fn(i32): void): void\n");
+    expect(is_ok(result)) << "void callback should be accepted";
+  };
+
+  "extern fn with string-param callback is rejected"_test = [] {
+    auto result = check_source(
+        "extern fn bad(cb: fn(string): void): void\n");
+    expect(has_error_containing(result, "not supported at the C ABI"));
+  };
+
   "extern fn with scalar types is accepted"_test = [] {
     auto result = check_source(
         "extern fn good(a: i32, b: i64, c: f64): i32\n");

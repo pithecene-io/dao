@@ -400,6 +400,17 @@ private:
       if (node->is<PointerType>()) {
         return "*" + self(node->as<PointerType>().pointee, self);
       }
+      if (node->is<FunctionTypeNode>()) {
+        const auto& ftn = node->as<FunctionTypeNode>();
+        std::string result = "fn(";
+        for (size_t pidx = 0; pidx < ftn.param_types.size(); ++pidx) {
+          if (pidx > 0) { result += ", "; }
+          result += self(ftn.param_types[pidx], self);
+        }
+        result += "): ";
+        result += self(ftn.return_type, self);
+        return result;
+      }
       return {};
     };
     auto target_name = format_type_node(ext.target_type, format_type_node);
@@ -715,6 +726,14 @@ private:
     case NodeKind::PointerType: {
       const auto& ptr = type.as<PointerType>();
       resolve_type(*ptr.pointee, scope);
+      break;
+    }
+    case NodeKind::FunctionType: {
+      const auto& ftn = type.as<FunctionTypeNode>();
+      for (const auto* param_type : ftn.param_types) {
+        resolve_type(*param_type, scope);
+      }
+      resolve_type(*ftn.return_type, scope);
       break;
     }
     default:

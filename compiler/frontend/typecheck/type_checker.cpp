@@ -132,6 +132,24 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
     return types_.pointer_to(pointee);
   }
 
+  case NodeKind::FunctionType: {
+    const auto& ftn = node->as<FunctionTypeNode>();
+    std::vector<const Type*> param_types;
+    param_types.reserve(ftn.param_types.size());
+    for (const auto* pt : ftn.param_types) {
+      const auto* resolved = resolve_type_node(pt);
+      if (resolved == nullptr) {
+        return nullptr;
+      }
+      param_types.push_back(resolved);
+    }
+    const auto* ret_type = resolve_type_node(ftn.return_type);
+    if (ret_type == nullptr) {
+      return nullptr;
+    }
+    return types_.function_type(std::move(param_types), ret_type);
+  }
+
   default:
     error(node->span, "unsupported type syntax");
     return nullptr;

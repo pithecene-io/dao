@@ -85,6 +85,7 @@ enum class NodeKind : std::uint8_t {
   // Types
   NamedType,
   PointerType,
+  FunctionType,
 
   // Error recovery placeholders
   ErrorExpr,
@@ -396,7 +397,12 @@ struct PointerType {
   TypeNode* pointee;
 };
 
-using TypeNodePayload = std::variant<NamedType, PointerType>;
+struct FunctionTypeNode {
+  std::vector<TypeNode*> param_types;
+  TypeNode* return_type;
+};
+
+using TypeNodePayload = std::variant<NamedType, PointerType, FunctionTypeNode>;
 
 // ---------------------------------------------------------------------------
 // Container nodes — arena-allocated.

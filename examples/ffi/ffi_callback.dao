@@ -1,0 +1,23 @@
+extern fn apply_op(op: fn(i32, i32): i32, a: i32, b: i32): i32
+extern fn transform(f: fn(f64): f64, x: f64): f64
+
+fn add(a: i32, b: i32): i32
+  return a + b
+
+fn mul(a: i32, b: i32): i32
+  return a * b
+
+fn double_it(x: f64): f64
+  return x + x
+
+fn main(): i32
+  print("--- callback: add(3, 4) ---")
+  print(apply_op(add, 3, 4))
+
+  print("--- callback: mul(5, 6) ---")
+  print(apply_op(mul, 5, 6))
+
+  print("--- callback: double_it(3.14) ---")
+  print(transform(double_it, 3.14))
+
+  return 0

@@ -172,8 +172,23 @@ auto is_c_abi_compatible_impl(const Type* type,
     visiting.erase(st->decl_id());
     return true;
   }
+  case TypeKind::Function: {
+    // Function pointer type: all param and return types must be
+    // C-ABI-compatible (CONTRACT_C_ABI_INTEROP §4.4.2).
+    const auto* fn_type = static_cast<const TypeFunction*>(type);
+    for (const auto* param : fn_type->param_types()) {
+      if (!is_c_abi_compatible_impl(param, visiting)) {
+        return false;
+      }
+    }
+    if (fn_type->return_type() != nullptr &&
+        fn_type->return_type()->kind() != TypeKind::Void) {
+      return is_c_abi_compatible_impl(fn_type->return_type(), visiting);
+    }
+    return true;
+  }
   default:
-    return false; // string, function, generator, named, enum, generic
+    return false; // string, generator, named, enum, generic
   }
 }
 

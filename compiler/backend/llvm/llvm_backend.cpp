@@ -133,6 +133,12 @@ void LlvmBackend::declare_functions(const MirModule& mir_module,
       if (LlvmTypeLowering::is_string_type(local.type)) {
         lowered_param = llvm::PointerType::getUnqual(lowered_param);
       }
+      // Function type params: lower to opaque ptr (C function pointer).
+      // llvm::FunctionType is not a first-class type — pointers to
+      // functions are represented as opaque ptr in LLVM IR.
+      if (llvm::isa<llvm::FunctionType>(lowered_param)) {
+        lowered_param = llvm::PointerType::getUnqual(lowered_param);
+      }
       // For extern fn: struct params need ABI coercion at the C boundary.
       if (mir_fn->is_extern && llvm::isa<llvm::StructType>(lowered_param) &&
           !LlvmTypeLowering::is_string_type(local.type)) {
@@ -152,6 +158,11 @@ void LlvmBackend::declare_functions(const MirModule& mir_module,
       } else {
         param_types.push_back(lowered_param);
       }
+    }
+
+    // Function type return: lower to opaque ptr.
+    if (llvm::isa<llvm::FunctionType>(ret_type)) {
+      ret_type = llvm::PointerType::getUnqual(ret_type);
     }
 
     // For extern fn: struct returns also need ABI coercion.
