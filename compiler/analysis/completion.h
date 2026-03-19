@@ -24,11 +24,10 @@ auto query_completions(uint32_t offset,
 
 /// Query dot completions for a receiver type.
 /// Returns fields (if struct) and methods (from concept extends).
-/// The caller is responsible for determining the receiver type —
-/// currently the playground only resolves simple identifier receivers
-/// (locals and params). General expression receivers (calls, field
-/// chains, indexing) require AST-level expression lookup, which is
-/// tracked as Task 16.
+/// The caller is responsible for determining the receiver type.
+/// The playground resolves both simple identifier receivers and
+/// general expression receivers (calls, field chains, indexing)
+/// via the typed expression map.
 auto query_dot_completions(const Type* receiver_type,
                             const TypeCheckResult& typed)
     -> std::vector<CompletionItem>;

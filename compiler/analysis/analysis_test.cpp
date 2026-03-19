@@ -351,6 +351,36 @@ suite<"dot_completion"> dot_completion = [] {
     expect(has_completion(items, "show")) << "should offer method show";
   };
 
+  "expr_types map includes call expressions for dot lookup"_test = [] {
+    // Verify that a function call returning a struct type is recorded
+    // in the expr_types map — this is the foundation for expression-
+    // typed dot completion (e.g. make_point(). should offer fields).
+    AnalysisPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "fn make_point(): Point\n"
+        "  return Point(0, 0)\n"
+        "fn main(): i32\n"
+        "  let p = make_point()\n"
+        "  return p.x\n");
+    // The call expression `make_point()` should have a typed entry.
+    bool found_call = false;
+    for (const auto& [expr, type] : pipe.check_result.typed.expr_types()) {
+      if (expr->kind() == NodeKind::CallExpr && type != nullptr &&
+          type->kind() == TypeKind::Struct) {
+        found_call = true;
+        // Verify dot completion works with this type.
+        auto items = query_dot_completions(type, pipe.check_result);
+        expect(has_completion(items, "x"))
+            << "should offer field x on call result";
+        expect(has_completion(items, "y"))
+            << "should offer field y on call result";
+      }
+    }
+    expect(found_call) << "call returning struct should be in expr_types";
+  };
+
   "dot completion on non-struct returns empty for fields"_test = [] {
     AnalysisPipeline pipe("fn main(): i32 -> 0\n");
     auto* bool_type = pipe.types.bool_type();
