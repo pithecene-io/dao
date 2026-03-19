@@ -260,6 +260,15 @@ private:
       }
     }
 
+    // Comment-only line — treat like a blank line.
+    if (pos_ + 1 < src_.size() && src_[pos_] == '/' && src_[pos_ + 1] == '/') {
+      // Skip comment text to end of line.
+      while (pos_ < src_.size() && src_[pos_] != '\n') {
+        ++pos_;
+      }
+      // Fall through to blank-line handling below.
+    }
+
     // Blank line — skip without affecting indentation.
     if (pos_ >= src_.size() || src_[pos_] == '\n' || src_[pos_] == '\r') {
       at_line_start_ = false;
@@ -414,6 +423,13 @@ private:
       emit(TokenKind::Star, start, 1);
       return;
     case '/':
+      if (peek() == '/') {
+        // Line comment: skip to end of line (or end of file).
+        while (pos_ < src_.size() && src_[pos_] != '\n') {
+          ++pos_;
+        }
+        return;
+      }
       emit(TokenKind::Slash, start, 1);
       return;
 

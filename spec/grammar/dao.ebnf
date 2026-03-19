@@ -198,6 +198,10 @@ type_list :=
     type ("," type)*
 
 
+# Comments
+
+line_comment := "//" (any character except newline)* newline
+
 # Lexical placeholders
 identifier := IDENT
 integer_literal := INT
