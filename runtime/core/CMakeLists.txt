@@ -17,3 +17,27 @@ set_target_properties(dao_runtime PROPERTIES
 target_include_directories(dao_runtime PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# Tests
+find_package(ut REQUIRED)
+
+add_executable(overflow_test
+  overflow_test.cpp
+)
+
+set_target_properties(overflow_test PROPERTIES
+  LINKER_LANGUAGE CXX
+)
+
+target_link_libraries(overflow_test
+  PRIVATE
+    dao_runtime
+    Boost::ut
+)
+
+target_include_directories(overflow_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+include(CTest)
+add_test(NAME overflow_test COMMAND overflow_test)
