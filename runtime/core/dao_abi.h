@@ -42,6 +42,19 @@ struct dao_string {
 // Borrows msg for the duration of the call; no ownership transfer.
 void __dao_io_write_stdout(const struct dao_string *msg);
 
+// Write a string to stderr followed by a newline.
+void __dao_io_write_stderr(const struct dao_string *msg);
+
+// Read an entire file into a heap-allocated string. Traps on error.
+struct dao_string __dao_io_read_file(const struct dao_string *path);
+
+// Write a string to a file. Returns true on success, false on failure.
+bool __dao_io_write_file(const struct dao_string *path,
+                          const struct dao_string *content);
+
+// Check if a file exists.
+bool __dao_io_file_exists(const struct dao_string *path);
+
 // ---------------------------------------------------------------------------
 // Runtime hook declarations — Equality domain
 // ---------------------------------------------------------------------------

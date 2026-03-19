@@ -1,0 +1,9 @@
+extern fn __dao_io_write_stderr(msg: string): void
+extern fn __dao_io_read_file(path: string): string
+extern fn __dao_io_write_file(path: string, content: string): bool
+extern fn __dao_io_file_exists(path: string): bool
+
+fn eprint(msg: string): void -> __dao_io_write_stderr(msg)
+fn read_file(path: string): string -> __dao_io_read_file(path)
+fn write_file(path: string, content: string): bool -> __dao_io_write_file(path, content)
+fn file_exists(path: string): bool -> __dao_io_file_exists(path)

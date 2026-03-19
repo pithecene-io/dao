@@ -66,6 +66,10 @@ Examples:
 | Hook                      | Signature (Dao surface)              |
 |---------------------------|--------------------------------------|
 | `__dao_io_write_stdout`   | `(msg: string): void`                |
+| `__dao_io_write_stderr`   | `(msg: string): void`                |
+| `__dao_io_read_file`      | `(path: string): string`             |
+| `__dao_io_write_file`     | `(path: string, content: string): bool` |
+| `__dao_io_file_exists`    | `(path: string): bool`               |
 | `__dao_eq_i8`             | `(a: i8, b: i8): bool`              |
 | `__dao_eq_i16`            | `(a: i16, b: i16): bool`            |
 | `__dao_eq_i32`            | `(a: i32, b: i32): bool`            |
