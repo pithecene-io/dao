@@ -66,13 +66,27 @@ Examples:
 | Hook                      | Signature (Dao surface)              |
 |---------------------------|--------------------------------------|
 | `__dao_io_write_stdout`   | `(msg: string): void`                |
+| `__dao_eq_i8`             | `(a: i8, b: i8): bool`              |
+| `__dao_eq_i16`            | `(a: i16, b: i16): bool`            |
 | `__dao_eq_i32`            | `(a: i32, b: i32): bool`            |
 | `__dao_eq_i64`            | `(a: i64, b: i64): bool`            |
+| `__dao_eq_u8`             | `(a: u8, b: u8): bool`              |
+| `__dao_eq_u16`            | `(a: u16, b: u16): bool`            |
+| `__dao_eq_u32`            | `(a: u32, b: u32): bool`            |
+| `__dao_eq_u64`            | `(a: u64, b: u64): bool`            |
+| `__dao_eq_f32`            | `(a: f32, b: f32): bool`            |
 | `__dao_eq_f64`            | `(a: f64, b: f64): bool`            |
 | `__dao_eq_bool`           | `(a: bool, b: bool): bool`          |
 | `__dao_eq_string`         | `(a: string, b: string): bool`      |
+| `__dao_conv_i8_to_string` | `(x: i8): string`                   |
+| `__dao_conv_i16_to_string`| `(x: i16): string`                   |
 | `__dao_conv_i32_to_string`| `(x: i32): string`                   |
 | `__dao_conv_i64_to_string`| `(x: i64): string`                   |
+| `__dao_conv_u8_to_string` | `(x: u8): string`                   |
+| `__dao_conv_u16_to_string`| `(x: u16): string`                   |
+| `__dao_conv_u32_to_string`| `(x: u32): string`                   |
+| `__dao_conv_u64_to_string`| `(x: u64): string`                   |
+| `__dao_conv_f32_to_string`| `(x: f32): string`                   |
 | `__dao_conv_f64_to_string`| `(x: f64): string`                   |
 | `__dao_conv_bool_to_string`| `(x: bool): string`                 |
 | `__dao_gen_alloc`         | `(size: i64, align: i64): *void`     |

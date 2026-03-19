@@ -12,6 +12,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+struct dao_string __dao_conv_i8_to_string(int8_t x) {
+  static _Thread_local char buf[8];
+  int len = snprintf(buf, sizeof(buf), "%d", (int)x);
+  return (struct dao_string){.ptr = buf, .len = len};
+}
+
+struct dao_string __dao_conv_i16_to_string(int16_t x) {
+  static _Thread_local char buf[8];
+  int len = snprintf(buf, sizeof(buf), "%d", (int)x);
+  return (struct dao_string){.ptr = buf, .len = len};
+}
+
 struct dao_string __dao_conv_i32_to_string(int32_t x) {
   static _Thread_local char buf[32];
   int len = snprintf(buf, sizeof(buf), "%d", x);
@@ -21,6 +33,36 @@ struct dao_string __dao_conv_i32_to_string(int32_t x) {
 struct dao_string __dao_conv_i64_to_string(int64_t x) {
   static _Thread_local char buf[32];
   int len = snprintf(buf, sizeof(buf), "%lld", (long long)x);
+  return (struct dao_string){.ptr = buf, .len = len};
+}
+
+struct dao_string __dao_conv_u8_to_string(uint8_t x) {
+  static _Thread_local char buf[8];
+  int len = snprintf(buf, sizeof(buf), "%u", (unsigned)x);
+  return (struct dao_string){.ptr = buf, .len = len};
+}
+
+struct dao_string __dao_conv_u16_to_string(uint16_t x) {
+  static _Thread_local char buf[8];
+  int len = snprintf(buf, sizeof(buf), "%u", (unsigned)x);
+  return (struct dao_string){.ptr = buf, .len = len};
+}
+
+struct dao_string __dao_conv_u32_to_string(uint32_t x) {
+  static _Thread_local char buf[16];
+  int len = snprintf(buf, sizeof(buf), "%u", x);
+  return (struct dao_string){.ptr = buf, .len = len};
+}
+
+struct dao_string __dao_conv_u64_to_string(uint64_t x) {
+  static _Thread_local char buf[32];
+  int len = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)x);
+  return (struct dao_string){.ptr = buf, .len = len};
+}
+
+struct dao_string __dao_conv_f32_to_string(float x) {
+  static _Thread_local char buf[64];
+  int len = snprintf(buf, sizeof(buf), "%g", (double)x);
   return (struct dao_string){.ptr = buf, .len = len};
 }
 

@@ -46,8 +46,15 @@ void __dao_io_write_stdout(const struct dao_string *msg);
 // Runtime hook declarations — Equality domain
 // ---------------------------------------------------------------------------
 
+bool __dao_eq_i8(int8_t a, int8_t b);
+bool __dao_eq_i16(int16_t a, int16_t b);
 bool __dao_eq_i32(int32_t a, int32_t b);
 bool __dao_eq_i64(int64_t a, int64_t b);
+bool __dao_eq_u8(uint8_t a, uint8_t b);
+bool __dao_eq_u16(uint16_t a, uint16_t b);
+bool __dao_eq_u32(uint32_t a, uint32_t b);
+bool __dao_eq_u64(uint64_t a, uint64_t b);
+bool __dao_eq_f32(float a, float b);
 bool __dao_eq_f64(double a, double b);
 bool __dao_eq_bool(bool a, bool b);
 bool __dao_eq_string(const struct dao_string *a, const struct dao_string *b);
@@ -61,8 +68,15 @@ bool __dao_eq_string(const struct dao_string *a, const struct dao_string *b);
 // valid until the next call to the same conversion hook on the same
 // thread. Callers must consume or copy the result before the next
 // conversion call.
+struct dao_string __dao_conv_i8_to_string(int8_t x);
+struct dao_string __dao_conv_i16_to_string(int16_t x);
 struct dao_string __dao_conv_i32_to_string(int32_t x);
 struct dao_string __dao_conv_i64_to_string(int64_t x);
+struct dao_string __dao_conv_u8_to_string(uint8_t x);
+struct dao_string __dao_conv_u16_to_string(uint16_t x);
+struct dao_string __dao_conv_u32_to_string(uint32_t x);
+struct dao_string __dao_conv_u64_to_string(uint64_t x);
+struct dao_string __dao_conv_f32_to_string(float x);
 struct dao_string __dao_conv_f64_to_string(double x);
 struct dao_string __dao_conv_bool_to_string(bool x);
 

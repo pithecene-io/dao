@@ -1,5 +1,12 @@
+extern fn __dao_conv_i8_to_string(x: i8): string
+extern fn __dao_conv_i16_to_string(x: i16): string
 extern fn __dao_conv_i32_to_string(x: i32): string
 extern fn __dao_conv_i64_to_string(x: i64): string
+extern fn __dao_conv_u8_to_string(x: u8): string
+extern fn __dao_conv_u16_to_string(x: u16): string
+extern fn __dao_conv_u32_to_string(x: u32): string
+extern fn __dao_conv_u64_to_string(x: u64): string
+extern fn __dao_conv_f32_to_string(x: f32): string
 extern fn __dao_conv_f64_to_string(x: f64): string
 extern fn __dao_conv_bool_to_string(x: bool): string
 extern fn __dao_io_write_stdout(msg: string): void
@@ -7,11 +14,32 @@ extern fn __dao_io_write_stdout(msg: string): void
 derived concept Printable:
     fn to_string(self): string
 
+extend i8 as Printable:
+    fn to_string(self): string -> __dao_conv_i8_to_string(self)
+
+extend i16 as Printable:
+    fn to_string(self): string -> __dao_conv_i16_to_string(self)
+
 extend i32 as Printable:
     fn to_string(self): string -> __dao_conv_i32_to_string(self)
 
 extend i64 as Printable:
     fn to_string(self): string -> __dao_conv_i64_to_string(self)
+
+extend u8 as Printable:
+    fn to_string(self): string -> __dao_conv_u8_to_string(self)
+
+extend u16 as Printable:
+    fn to_string(self): string -> __dao_conv_u16_to_string(self)
+
+extend u32 as Printable:
+    fn to_string(self): string -> __dao_conv_u32_to_string(self)
+
+extend u64 as Printable:
+    fn to_string(self): string -> __dao_conv_u64_to_string(self)
+
+extend f32 as Printable:
+    fn to_string(self): string -> __dao_conv_f32_to_string(self)
 
 extend f64 as Printable:
     fn to_string(self): string -> __dao_conv_f64_to_string(self)

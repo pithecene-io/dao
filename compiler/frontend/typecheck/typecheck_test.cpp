@@ -438,16 +438,22 @@ suite<"typecheck_negative"> typecheck_negative = [] {
     expect(is_ok(result)) << "scalar extern fn should typecheck";
   };
 
-  "extern fn with unsurfaced builtin f32 is rejected"_test = [] {
+  "extern fn with f32 is accepted"_test = [] {
     auto result = check_source(
-        "extern fn bad(x: f32): f32\n");
-    expect(has_error_containing(result, "not supported at the C ABI"));
+        "extern fn good(x: f32): f32\n");
+    expect(is_ok(result)) << "f32 extern fn should typecheck";
   };
 
-  "extern fn with unsurfaced builtin u32 is rejected"_test = [] {
+  "extern fn with unsigned types is accepted"_test = [] {
     auto result = check_source(
-        "extern fn bad(x: u32): u32\n");
-    expect(has_error_containing(result, "not supported at the C ABI"));
+        "extern fn good(a: u8, b: u16, c: u32, d: u64): u32\n");
+    expect(is_ok(result)) << "unsigned extern fn should typecheck";
+  };
+
+  "extern fn with narrow signed types is accepted"_test = [] {
+    auto result = check_source(
+        "extern fn good(a: i8, b: i16): i16\n");
+    expect(is_ok(result)) << "narrow signed extern fn should typecheck";
   };
 
   "extern fn with pointer is accepted"_test = [] {

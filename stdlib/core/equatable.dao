@@ -1,5 +1,12 @@
+extern fn __dao_eq_i8(a: i8, b: i8): bool
+extern fn __dao_eq_i16(a: i16, b: i16): bool
 extern fn __dao_eq_i32(a: i32, b: i32): bool
 extern fn __dao_eq_i64(a: i64, b: i64): bool
+extern fn __dao_eq_u8(a: u8, b: u8): bool
+extern fn __dao_eq_u16(a: u16, b: u16): bool
+extern fn __dao_eq_u32(a: u32, b: u32): bool
+extern fn __dao_eq_u64(a: u64, b: u64): bool
+extern fn __dao_eq_f32(a: f32, b: f32): bool
 extern fn __dao_eq_f64(a: f64, b: f64): bool
 extern fn __dao_eq_bool(a: bool, b: bool): bool
 extern fn __dao_eq_string(a: string, b: string): bool
@@ -7,11 +14,32 @@ extern fn __dao_eq_string(a: string, b: string): bool
 derived concept Equatable:
     fn eq(self, other: Equatable): bool
 
+extend i8 as Equatable:
+    fn eq(self, other: i8): bool -> __dao_eq_i8(self, other)
+
+extend i16 as Equatable:
+    fn eq(self, other: i16): bool -> __dao_eq_i16(self, other)
+
 extend i32 as Equatable:
     fn eq(self, other: i32): bool -> __dao_eq_i32(self, other)
 
 extend i64 as Equatable:
     fn eq(self, other: i64): bool -> __dao_eq_i64(self, other)
+
+extend u8 as Equatable:
+    fn eq(self, other: u8): bool -> __dao_eq_u8(self, other)
+
+extend u16 as Equatable:
+    fn eq(self, other: u16): bool -> __dao_eq_u16(self, other)
+
+extend u32 as Equatable:
+    fn eq(self, other: u32): bool -> __dao_eq_u32(self, other)
+
+extend u64 as Equatable:
+    fn eq(self, other: u64): bool -> __dao_eq_u64(self, other)
+
+extend f32 as Equatable:
+    fn eq(self, other: f32): bool -> __dao_eq_f32(self, other)
 
 extend f64 as Equatable:
     fn eq(self, other: f64): bool -> __dao_eq_f64(self, other)

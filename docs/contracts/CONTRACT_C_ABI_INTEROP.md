@@ -43,12 +43,19 @@ static archive, or shared/system library.
 
 ## 4. Supported types at the ABI boundary
 
-### 4.1 Initial supported types (v1)
+### 4.1 Supported scalar types
 
 | Dao type  | C ABI type       | Direction       |
 |-----------|------------------|-----------------|
+| `i8`      | `int8_t`         | arg + return    |
+| `i16`     | `int16_t`        | arg + return    |
 | `i32`     | `int32_t`        | arg + return    |
 | `i64`     | `int64_t`        | arg + return    |
+| `u8`      | `uint8_t`        | arg + return    |
+| `u16`     | `uint16_t`       | arg + return    |
+| `u32`     | `uint32_t`       | arg + return    |
+| `u64`     | `uint64_t`       | arg + return    |
+| `f32`     | `float`          | arg + return    |
 | `f64`     | `double`         | arg + return    |
 | `bool`    | `_Bool` (1 byte) | arg + return    |
 | `*T`      | `T*`             | arg + return    |
@@ -90,7 +97,6 @@ The following may be added in later versions:
 - `c_string` or explicit null-terminated byte string type
 - by-value struct passing (once Dao struct ABI is stabilized)
 - function pointer types for callbacks
-- `f32` (when surfaced)
 
 Each expansion requires updating this contract before implementation.
 

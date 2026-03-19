@@ -1,4 +1,12 @@
 File
+  ExternFunctionDecl __dao_eq_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: bool
+  ExternFunctionDecl __dao_eq_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: bool
   ExternFunctionDecl __dao_eq_i32
     Param a: i32
     Param b: i32
@@ -6,6 +14,26 @@ File
   ExternFunctionDecl __dao_eq_i64
     Param a: i64
     Param b: i64
+    ReturnType: bool
+  ExternFunctionDecl __dao_eq_u8
+    Param a: u8
+    Param b: u8
+    ReturnType: bool
+  ExternFunctionDecl __dao_eq_u16
+    Param a: u16
+    Param b: u16
+    ReturnType: bool
+  ExternFunctionDecl __dao_eq_u32
+    Param a: u32
+    Param b: u32
+    ReturnType: bool
+  ExternFunctionDecl __dao_eq_u64
+    Param a: u64
+    Param b: u64
+    ReturnType: bool
+  ExternFunctionDecl __dao_eq_f32
+    Param a: f32
+    Param b: f32
     ReturnType: bool
   ExternFunctionDecl __dao_eq_f64
     Param a: f64
@@ -24,6 +52,30 @@ File
       Param self
       Param other: Equatable
       ReturnType: bool
+  ExtendDecl i8 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: i8
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __dao_eq_i8
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl i16 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: i16
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __dao_eq_i16
+          Args
+            Identifier self
+            Identifier other
   ExtendDecl i32 as Equatable
     FunctionDecl eq
       Param self
@@ -45,6 +97,66 @@ File
         CallExpr
           Callee
             Identifier __dao_eq_i64
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl u8 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: u8
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __dao_eq_u8
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl u16 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: u16
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __dao_eq_u16
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl u32 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: u32
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __dao_eq_u32
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl u64 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: u64
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __dao_eq_u64
+          Args
+            Identifier self
+            Identifier other
+  ExtendDecl f32 as Equatable
+    FunctionDecl eq
+      Param self
+      Param other: f32
+      ReturnType: bool
+      ExprBody
+        CallExpr
+          Callee
+            Identifier __dao_eq_f32
           Args
             Identifier self
             Identifier other
