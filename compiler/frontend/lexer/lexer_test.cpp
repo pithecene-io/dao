@@ -246,6 +246,44 @@ suite<"span_tests"> span_tests = [] {
   };
 };
 
+suite<"comment_tests"> comment_tests = [] {
+  "line comment is skipped"_test = [] {
+    auto output = lex_string("fn foo(): i32 // comment\n  return 0\n");
+    expect(output.result.diagnostics.empty());
+    bool has_slash = false;
+    for (const auto& tok : output.result.tokens) {
+      if (tok.kind == TokenKind::Slash) {
+        has_slash = true;
+      }
+    }
+    expect(!has_slash) << "comment should not produce slash token";
+  };
+
+  "comment-only line does not affect indentation"_test = [] {
+    auto output = lex_string("fn foo(): i32\n  // comment\n  return 0\n");
+    expect(output.result.diagnostics.empty());
+  };
+
+  "top-level comment before fn"_test = [] {
+    auto output = lex_string("// top\nfn foo(): i32\n  return 0\n");
+    expect(output.result.diagnostics.empty());
+    expect(output.result.tokens[0].kind == TokenKind::KwFn)
+        << "first real token should be fn";
+  };
+
+  "slash still works as operator"_test = [] {
+    auto output = lex_string("10 / 3\n");
+    expect(output.result.diagnostics.empty());
+    bool has_slash = false;
+    for (const auto& tok : output.result.tokens) {
+      if (tok.kind == TokenKind::Slash) {
+        has_slash = true;
+      }
+    }
+    expect(has_slash) << "single slash should be an operator";
+  };
+};
+
 suite<"file_tests"> file_tests = [] {
   "examples lex without error"_test = [] {
     std::filesystem::path root(DAO_SOURCE_DIR);
