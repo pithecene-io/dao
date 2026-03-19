@@ -2,7 +2,7 @@ File
   FunctionDecl range
     Param n: i32
     ReturnType: Generator<i32>
-    LetStatement i
+    LetStatement i: i32
       IntLiteral 0
     WhileStatement
       Condition
@@ -18,3 +18,71 @@ File
           BinaryExpr +
             Identifier i
             IntLiteral 1
+  FunctionDecl range_from
+    Param start: i32
+    Param end: i32
+    ReturnType: Generator<i32>
+    LetStatement i: i32
+      Identifier start
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          Identifier end
+      YieldStatement
+        Identifier i
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+  FunctionDecl range_step
+    Param start: i32
+    Param end: i32
+    Param step: i32
+    ReturnType: Generator<i32>
+    LetStatement i: i32
+      Identifier start
+    IfStatement
+      Condition
+        BinaryExpr >
+          Identifier step
+          IntLiteral 0
+      Then
+        WhileStatement
+          Condition
+            BinaryExpr <
+              Identifier i
+              Identifier end
+          YieldStatement
+            Identifier i
+          Assignment
+            Target
+              Identifier i
+            Value
+              BinaryExpr +
+                Identifier i
+                Identifier step
+      Else
+        IfStatement
+          Condition
+            BinaryExpr <
+              Identifier step
+              IntLiteral 0
+          Then
+            WhileStatement
+              Condition
+                BinaryExpr >
+                  Identifier i
+                  Identifier end
+              YieldStatement
+                Identifier i
+              Assignment
+                Target
+                  Identifier i
+                Value
+                  BinaryExpr +
+                    Identifier i
+                    Identifier step
