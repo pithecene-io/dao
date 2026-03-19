@@ -1019,6 +1019,9 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
   case NodeKind::ListLiteral:
     result = check_list_literal(expr);
     break;
+  case NodeKind::ErrorExpr:
+    // Recovery placeholder — skip silently.
+    break;
   default:
     error(expr->span, "unsupported expression in type checker");
     break;

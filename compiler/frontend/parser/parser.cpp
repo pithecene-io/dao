@@ -114,6 +114,11 @@ private:
     return ctx_.alloc<Expr>(peek().span, ErrorExprNode{});
   }
 
+  /// Check whether an expression is null or an error recovery placeholder.
+  static auto is_error_expr(const Expr* expr) -> bool {
+    return expr == nullptr || expr->kind() == NodeKind::ErrorExpr;
+  }
+
   /// Create an error statement node.
   auto make_error_stmt(Span span) -> Stmt* {
     return ctx_.alloc<Stmt>(span, ErrorStmtNode{});
@@ -618,6 +623,10 @@ private:
       }
       advance(); // =
       auto* value = parse_expression();
+      if (is_error_expr(value)) {
+        match(TokenKind::Newline);
+        return make_error_stmt(span_from(expr->span));
+      }
       // Trailing newline may have been consumed by pipe continuation.
       match(TokenKind::Newline);
       Span span = {.offset = expr->span.offset,
@@ -651,6 +660,15 @@ private:
       error("expected ':' or '=' after let binding name");
     }
 
+    // If the initializer is an error placeholder, promote the whole
+    // statement to an error so downstream passes never see it.
+    // Note: init == nullptr is valid (e.g. `let x: i32`), so only
+    // check when init was actually parsed but came back as an error.
+    if (init != nullptr && init->kind() == NodeKind::ErrorExpr) {
+      match(TokenKind::Newline);
+      return make_error_stmt(span_from(kw.span));
+    }
+
     // Trailing newline may have been consumed by pipe continuation.
     match(TokenKind::Newline);
     Span span = span_from(kw.span);
@@ -661,6 +679,10 @@ private:
   auto parse_if_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwIf);
     auto* condition = parse_expression();
+    if (is_error_expr(condition)) {
+      synchronize_to_statement();
+      return make_error_stmt(span_from(kw.span));
+    }
     consume(TokenKind::Colon);
     auto then_body = parse_suite();
 
@@ -679,6 +701,10 @@ private:
   auto parse_while_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwWhile);
     auto* condition = parse_expression();
+    if (is_error_expr(condition)) {
+      synchronize_to_statement();
+      return make_error_stmt(span_from(kw.span));
+    }
     consume(TokenKind::Colon);
     auto body = parse_suite();
     Span span = span_from(kw.span);
@@ -690,6 +716,10 @@ private:
     const auto& var_tok = consume(TokenKind::Identifier);
     consume(TokenKind::KwIn);
     auto* iterable = parse_expression();
+    if (is_error_expr(iterable)) {
+      synchronize_to_statement();
+      return make_error_stmt(span_from(kw.span));
+    }
     consume(TokenKind::Colon);
     auto body = parse_suite();
     Span span = span_from(kw.span);
@@ -724,6 +754,10 @@ private:
   auto parse_yield_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwYield);
     auto* value = parse_expression();
+    if (is_error_expr(value)) {
+      match(TokenKind::Newline);
+      return make_error_stmt(span_from(kw.span));
+    }
     match(TokenKind::Newline);
     Span span = span_from(kw.span);
     return ctx_.alloc<Stmt>(span, YieldStatement{value});
@@ -736,6 +770,10 @@ private:
         peek_kind() != TokenKind::Dedent &&
         peek_kind() != TokenKind::Eof) {
       value = parse_expression();
+      if (is_error_expr(value)) {
+        match(TokenKind::Newline);
+        return make_error_stmt(span_from(kw.span));
+      }
     }
     // Trailing newline may have been consumed by pipe continuation.
     match(TokenKind::Newline);
@@ -1059,10 +1097,12 @@ private:
       const auto& tok = advance();
       return ctx_.alloc<Expr>(tok.span, IdentifierExpr{tok.text});
     }
-    default:
+    default: {
+      auto err_span = peek().span;
       error("expected expression");
       advance(); // skip the offending token to guarantee progress
-      return make_error_expr();
+      return ctx_.alloc<Expr>(err_span, ErrorExprNode{});
+    }
     }
   }
 

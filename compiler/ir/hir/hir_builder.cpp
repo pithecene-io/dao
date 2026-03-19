@@ -409,6 +409,9 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
                                 HirLambda{std::move(params), body});
   }
 
+  case NodeKind::ErrorExpr:
+    // Recovery placeholder — skip silently.
+    return nullptr;
   default:
     error(expr->span, "unsupported expression in HIR builder");
     return nullptr;
