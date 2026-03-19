@@ -106,3 +106,146 @@ int32_t __dao_conv_i64_to_i32(int64_t x) {
   }
   return (int32_t)x;
 }
+
+// ---------------------------------------------------------------------------
+// Float ↔ float conversions
+// ---------------------------------------------------------------------------
+
+// f32 -> f64: exact (IEEE widening).
+double __dao_conv_f32_to_f64(float x) { return (double)x; }
+
+// f64 -> f32: rounds to nearest (IEEE narrowing).
+float __dao_conv_f64_to_f32(double x) { return (float)x; }
+
+// ---------------------------------------------------------------------------
+// Integer → float conversions
+// ---------------------------------------------------------------------------
+
+// i32 -> f32: may lose precision for large i32 values.
+float __dao_conv_i32_to_f32(int32_t x) { return (float)x; }
+
+// i64 -> f64: may lose precision for large i64 values.
+double __dao_conv_i64_to_f64(int64_t x) { return (double)x; }
+
+// i64 -> f32: may lose precision.
+float __dao_conv_i64_to_f32(int64_t x) { return (float)x; }
+
+// ---------------------------------------------------------------------------
+// Float → integer conversions (trapping)
+// ---------------------------------------------------------------------------
+
+// f64 -> i64: truncates toward zero. Traps on NaN, Inf, or out-of-range.
+int64_t __dao_conv_f64_to_i64(double x) {
+  if (isnan(x) || isinf(x) || x < (double)INT64_MIN || x >= 9.223372036854776e+18) {
+    fprintf(stderr, "dao: numeric conversion error: f64 value out of i64 range\n");
+    abort();
+  }
+  return (int64_t)x;
+}
+
+// f32 -> i32: truncates toward zero. Traps on NaN, Inf, or out-of-range.
+int32_t __dao_conv_f32_to_i32(float x) {
+  if (isnan(x) || isinf(x) || x < -2147483648.0f || x > 2147483647.0f) {
+    fprintf(stderr, "dao: numeric conversion error: f32 value out of i32 range\n");
+    abort();
+  }
+  return (int32_t)x;
+}
+
+// f32 -> i64: truncates toward zero. Traps on NaN, Inf, or out-of-range.
+int64_t __dao_conv_f32_to_i64(float x) {
+  // INT64_MAX is 2^63-1; the nearest float above is 2^63 = 9.223372e+18f.
+  // INT64_MIN is -2^63 = -9.223372e+18f (exactly representable in float).
+  if (isnan(x) || isinf(x) || x < (float)INT64_MIN || x >= 9.223372036854776e+18f) {
+    fprintf(stderr, "dao: numeric conversion error: f32 value out of i64 range\n");
+    abort();
+  }
+  return (int64_t)x;
+}
+
+// ---------------------------------------------------------------------------
+// Integer widening (lossless)
+// ---------------------------------------------------------------------------
+
+int32_t __dao_conv_i8_to_i32(int8_t x)   { return (int32_t)x; }
+int32_t __dao_conv_i16_to_i32(int16_t x)  { return (int32_t)x; }
+int64_t __dao_conv_i8_to_i64(int8_t x)    { return (int64_t)x; }
+int64_t __dao_conv_i16_to_i64(int16_t x)  { return (int64_t)x; }
+uint32_t __dao_conv_u8_to_u32(uint8_t x)  { return (uint32_t)x; }
+uint32_t __dao_conv_u16_to_u32(uint16_t x) { return (uint32_t)x; }
+uint64_t __dao_conv_u8_to_u64(uint8_t x)  { return (uint64_t)x; }
+uint64_t __dao_conv_u16_to_u64(uint16_t x) { return (uint64_t)x; }
+uint64_t __dao_conv_u32_to_u64(uint32_t x) { return (uint64_t)x; }
+int64_t __dao_conv_u32_to_i64(uint32_t x)  { return (int64_t)x; }
+
+// ---------------------------------------------------------------------------
+// Integer narrowing (trapping)
+// ---------------------------------------------------------------------------
+
+int8_t __dao_conv_i32_to_i8(int32_t x) {
+  if (x < INT8_MIN || x > INT8_MAX) {
+    fprintf(stderr, "dao: numeric conversion error: i32 value out of i8 range\n");
+    abort();
+  }
+  return (int8_t)x;
+}
+
+int16_t __dao_conv_i32_to_i16(int32_t x) {
+  if (x < INT16_MIN || x > INT16_MAX) {
+    fprintf(stderr, "dao: numeric conversion error: i32 value out of i16 range\n");
+    abort();
+  }
+  return (int16_t)x;
+}
+
+uint8_t __dao_conv_u32_to_u8(uint32_t x) {
+  if (x > UINT8_MAX) {
+    fprintf(stderr, "dao: numeric conversion error: u32 value out of u8 range\n");
+    abort();
+  }
+  return (uint8_t)x;
+}
+
+uint16_t __dao_conv_u32_to_u16(uint32_t x) {
+  if (x > UINT16_MAX) {
+    fprintf(stderr, "dao: numeric conversion error: u32 value out of u16 range\n");
+    abort();
+  }
+  return (uint16_t)x;
+}
+
+// ---------------------------------------------------------------------------
+// Sign conversions (trapping)
+// ---------------------------------------------------------------------------
+
+uint32_t __dao_conv_i32_to_u32(int32_t x) {
+  if (x < 0) {
+    fprintf(stderr, "dao: numeric conversion error: negative i32 to u32\n");
+    abort();
+  }
+  return (uint32_t)x;
+}
+
+int32_t __dao_conv_u32_to_i32(uint32_t x) {
+  if (x > INT32_MAX) {
+    fprintf(stderr, "dao: numeric conversion error: u32 value out of i32 range\n");
+    abort();
+  }
+  return (int32_t)x;
+}
+
+uint64_t __dao_conv_i64_to_u64(int64_t x) {
+  if (x < 0) {
+    fprintf(stderr, "dao: numeric conversion error: negative i64 to u64\n");
+    abort();
+  }
+  return (uint64_t)x;
+}
+
+int64_t __dao_conv_u64_to_i64(uint64_t x) {
+  if (x > INT64_MAX) {
+    fprintf(stderr, "dao: numeric conversion error: u64 value out of i64 range\n");
+    abort();
+  }
+  return (int64_t)x;
+}

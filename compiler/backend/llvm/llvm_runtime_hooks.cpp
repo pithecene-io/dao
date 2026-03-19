@@ -157,6 +157,70 @@ void LlvmRuntimeHooks::declare_conversion_hooks() {
   // __dao_conv_i64_to_i32(x: i64): i32
   ensure_declared(runtime_hooks::kConvI64ToI32,
                   llvm::FunctionType::get(i32, {i64}, false));
+
+  // Float ↔ float
+  ensure_declared(runtime_hooks::kConvF32ToF64,
+                  llvm::FunctionType::get(f64, {f32}, false));
+  ensure_declared(runtime_hooks::kConvF64ToF32,
+                  llvm::FunctionType::get(f32, {f64}, false));
+
+  // Integer → float
+  ensure_declared(runtime_hooks::kConvI32ToF32,
+                  llvm::FunctionType::get(f32, {i32}, false));
+  ensure_declared(runtime_hooks::kConvI64ToF64,
+                  llvm::FunctionType::get(f64, {i64}, false));
+  ensure_declared(runtime_hooks::kConvI64ToF32,
+                  llvm::FunctionType::get(f32, {i64}, false));
+
+  // Float → integer (trapping)
+  ensure_declared(runtime_hooks::kConvF64ToI64,
+                  llvm::FunctionType::get(i64, {f64}, false));
+  ensure_declared(runtime_hooks::kConvF32ToI32,
+                  llvm::FunctionType::get(i32, {f32}, false));
+  ensure_declared(runtime_hooks::kConvF32ToI64,
+                  llvm::FunctionType::get(i64, {f32}, false));
+
+  // Integer widening
+  ensure_declared(runtime_hooks::kConvI8ToI32,
+                  llvm::FunctionType::get(i32, {i8}, false));
+  ensure_declared(runtime_hooks::kConvI16ToI32,
+                  llvm::FunctionType::get(i32, {i16}, false));
+  ensure_declared(runtime_hooks::kConvI8ToI64,
+                  llvm::FunctionType::get(i64, {i8}, false));
+  ensure_declared(runtime_hooks::kConvI16ToI64,
+                  llvm::FunctionType::get(i64, {i16}, false));
+  ensure_declared(runtime_hooks::kConvU8ToU32,
+                  llvm::FunctionType::get(i32, {i8}, false));
+  ensure_declared(runtime_hooks::kConvU16ToU32,
+                  llvm::FunctionType::get(i32, {i16}, false));
+  ensure_declared(runtime_hooks::kConvU8ToU64,
+                  llvm::FunctionType::get(i64, {i8}, false));
+  ensure_declared(runtime_hooks::kConvU16ToU64,
+                  llvm::FunctionType::get(i64, {i16}, false));
+  ensure_declared(runtime_hooks::kConvU32ToU64,
+                  llvm::FunctionType::get(i64, {i32}, false));
+  ensure_declared(runtime_hooks::kConvU32ToI64,
+                  llvm::FunctionType::get(i64, {i32}, false));
+
+  // Integer narrowing (trapping)
+  ensure_declared(runtime_hooks::kConvI32ToI8,
+                  llvm::FunctionType::get(i8, {i32}, false));
+  ensure_declared(runtime_hooks::kConvI32ToI16,
+                  llvm::FunctionType::get(i16, {i32}, false));
+  ensure_declared(runtime_hooks::kConvU32ToU8,
+                  llvm::FunctionType::get(i8, {i32}, false));
+  ensure_declared(runtime_hooks::kConvU32ToU16,
+                  llvm::FunctionType::get(i16, {i32}, false));
+
+  // Sign conversions (trapping)
+  ensure_declared(runtime_hooks::kConvI32ToU32,
+                  llvm::FunctionType::get(i32, {i32}, false));
+  ensure_declared(runtime_hooks::kConvU32ToI32,
+                  llvm::FunctionType::get(i32, {i32}, false));
+  ensure_declared(runtime_hooks::kConvI64ToU64,
+                  llvm::FunctionType::get(i64, {i64}, false));
+  ensure_declared(runtime_hooks::kConvU64ToI64,
+                  llvm::FunctionType::get(i64, {i64}, false));
 }
 
 // ---------------------------------------------------------------------------

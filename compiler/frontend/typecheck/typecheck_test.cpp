@@ -1259,6 +1259,52 @@ suite<"typecheck_prelude"> prelude_tests = [] {
         << "saturating_add should typecheck through prelude extern + wrapper";
   };
 
+  "prelude float conversion functions typecheck"_test = [&] {
+    const std::string conv_prelude =
+        "extern fn __dao_conv_f32_to_f64(x: f32): f64\n"
+        "extern fn __dao_conv_f64_to_f32(x: f64): f32\n"
+        "fn f32_to_f64(x: f32): f64 -> __dao_conv_f32_to_f64(x)\n"
+        "fn f64_to_f32(x: f64): f32 -> __dao_conv_f64_to_f32(x)\n";
+    std::array preludes{conv_prelude};
+    auto result = check_with_prelude(
+        "fn test(x: f32): f64\n"
+        "  return f32_to_f64(x)\n",
+        preludes);
+    expect(is_ok(result))
+        << "float conversion should typecheck through prelude";
+  };
+
+  "prelude integer widening functions typecheck"_test = [&] {
+    const std::string conv_prelude =
+        "extern fn __dao_conv_i8_to_i32(x: i8): i32\n"
+        "extern fn __dao_conv_u16_to_u32(x: u16): u32\n"
+        "fn i8_to_i32(x: i8): i32 -> __dao_conv_i8_to_i32(x)\n"
+        "fn u16_to_u32(x: u16): u32 -> __dao_conv_u16_to_u32(x)\n";
+    std::array preludes{conv_prelude};
+    auto result = check_with_prelude(
+        "fn widen_signed(x: i8): i32\n"
+        "  return i8_to_i32(x)\n",
+        preludes);
+    expect(is_ok(result))
+        << "integer widening should typecheck through prelude";
+  };
+
+  "prelude sign conversion functions typecheck"_test = [&] {
+    const std::string conv_prelude =
+        "extern fn __dao_conv_i32_to_u32(x: i32): u32\n"
+        "extern fn __dao_conv_u32_to_i32(x: u32): i32\n"
+        "fn i32_to_u32(x: i32): u32 -> __dao_conv_i32_to_u32(x)\n"
+        "fn u32_to_i32(x: u32): i32 -> __dao_conv_u32_to_i32(x)\n";
+    std::array preludes{conv_prelude};
+    auto result = check_with_prelude(
+        "fn roundtrip(x: i32): i32\n"
+        "  let u = i32_to_u32(x)\n"
+        "  return u32_to_i32(u)\n",
+        preludes);
+    expect(is_ok(result))
+        << "sign conversion should typecheck through prelude";
+  };
+
   "multiple prelude files compose"_test = [&] {
     std::array preludes{printable_prelude, equatable_prelude};
     auto result = check_with_prelude(

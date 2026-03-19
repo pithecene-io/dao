@@ -88,6 +88,44 @@ int64_t __dao_conv_i32_to_i64(int32_t x);
 int32_t __dao_conv_f64_to_i32(double x);
 int32_t __dao_conv_i64_to_i32(int64_t x);
 
+// Float ↔ float
+double __dao_conv_f32_to_f64(float x);
+float __dao_conv_f64_to_f32(double x);
+
+// Integer → float
+float __dao_conv_i32_to_f32(int32_t x);
+double __dao_conv_i64_to_f64(int64_t x);
+float __dao_conv_i64_to_f32(int64_t x);
+
+// Float → integer (trapping)
+int64_t __dao_conv_f64_to_i64(double x);
+int32_t __dao_conv_f32_to_i32(float x);
+int64_t __dao_conv_f32_to_i64(float x);
+
+// Integer widening (lossless)
+int32_t __dao_conv_i8_to_i32(int8_t x);
+int32_t __dao_conv_i16_to_i32(int16_t x);
+int64_t __dao_conv_i8_to_i64(int8_t x);
+int64_t __dao_conv_i16_to_i64(int16_t x);
+uint32_t __dao_conv_u8_to_u32(uint8_t x);
+uint32_t __dao_conv_u16_to_u32(uint16_t x);
+uint64_t __dao_conv_u8_to_u64(uint8_t x);
+uint64_t __dao_conv_u16_to_u64(uint16_t x);
+uint64_t __dao_conv_u32_to_u64(uint32_t x);
+int64_t __dao_conv_u32_to_i64(uint32_t x);
+
+// Integer narrowing (trapping)
+int8_t __dao_conv_i32_to_i8(int32_t x);
+int16_t __dao_conv_i32_to_i16(int32_t x);
+uint8_t __dao_conv_u32_to_u8(uint32_t x);
+uint16_t __dao_conv_u32_to_u16(uint32_t x);
+
+// Sign conversions (trapping)
+uint32_t __dao_conv_i32_to_u32(int32_t x);
+int32_t __dao_conv_u32_to_i32(uint32_t x);
+uint64_t __dao_conv_i64_to_u64(int64_t x);
+int64_t __dao_conv_u64_to_i64(uint64_t x);
+
 // ---------------------------------------------------------------------------
 // Runtime hook declarations — Overflow domain (explicit operations)
 // ---------------------------------------------------------------------------

@@ -783,6 +783,12 @@ suite<"runtime_abi"> runtime_abi = [] {
     expect(contains(ir, "declare i64 @__dao_wrapping_add_i64(i64, i64)")) << ir;
     expect(contains(ir, "declare i32 @__dao_saturating_add_i32(i32, i32)")) << ir;
     expect(contains(ir, "declare i64 @__dao_saturating_add_i64(i64, i64)")) << ir;
+    // Numeric conversions (new)
+    expect(contains(ir, "declare double @__dao_conv_f32_to_f64(float)")) << ir;
+    expect(contains(ir, "declare float @__dao_conv_f64_to_f32(double)")) << ir;
+    expect(contains(ir, "declare i64 @__dao_conv_f64_to_i64(double)")) << ir;
+    expect(contains(ir, "declare i32 @__dao_conv_i8_to_i32(i8)")) << ir;
+    expect(contains(ir, "declare i32 @__dao_conv_i32_to_u32(i32)")) << ir;
   };
 };
 

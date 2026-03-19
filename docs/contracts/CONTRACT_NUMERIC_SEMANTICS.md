@@ -211,8 +211,10 @@ rules in the initial language model.
 - narrowing conversions are explicit and checked
 - sign-changing conversions (signed ↔ unsigned) are explicit
 
-Status: **Partially implemented** — `i32` ↔ `i64` conversions
-available via `to_i64` / `i64_to_i32` (trapping on narrowing)
+Status: **Implemented** — widening, narrowing, and sign-changing
+conversions available for all surfaced integer types (i8–i64,
+u8–u64) via explicit conversion functions; narrowing and sign
+conversions trap on out-of-range
 
 ### 6.3 Integer to float
 
@@ -222,8 +224,8 @@ available via `to_i64` / `i64_to_i32` (trapping on narrowing)
 - `i32` → `f64` is exact (all i32 values are representable in f64)
 - `i64` → `f64` may lose precision and requires explicit conversion
 
-Status: **Partially implemented** — `i32` → `f64` available via
-`to_f64` (exact)
+Status: **Implemented** — `i32_to_f32`, `i32_to_f64` (exact),
+`i64_to_f64`, `i64_to_f32` (may lose precision)
 
 ### 6.4 Float to integer
 
@@ -236,8 +238,8 @@ Status: **Partially implemented** — `i32` → `f64` available via
 - float-to-integer conversion must not be silent or undefined on
   out-of-range inputs
 
-Status: **Partially implemented** — `f64` → `i32` available via
-`f64_to_i32` (truncating, trapping on NaN/Inf/out-of-range)
+Status: **Implemented** — `f64_to_i32`, `f64_to_i64`, `f32_to_i32`,
+`f32_to_i64` (all truncating, trapping on NaN/Inf/out-of-range)
 
 ### 6.5 f64 to f32 / f32 to f64
 
@@ -245,8 +247,8 @@ Status: **Partially implemented** — `f64` → `i32` available via
 - `f64` → `f32`: explicit, rounds to nearest according to the
   default rounding rule
 
-Status: **Specified** — `f32` is surfaced; explicit conversion
-functions are deferred to the conversion matrix PR
+Status: **Implemented** — `f32_to_f64` (exact widening),
+`f64_to_f32` (narrowing, rounds to nearest)
 
 ### 6.6 Mixed-type binary operators
 
@@ -398,8 +400,8 @@ The compiler and backend must:
 | `i64` arithmetic + overflow      | Yes       | Yes               |
 | Integer widths (i8, i16)         | Yes       | Implemented       |
 | Unsigned integers (u8–u64)       | Yes       | Implemented       |
-| Numeric conversions (i32↔i64↔f64)| Yes       | Partial           |
-| Float-to-int trapping (f64→i32)  | Yes       | Yes               |
+| Numeric conversions (full matrix) | Yes       | Implemented       |
+| Float-to-int trapping (all)      | Yes       | Implemented       |
 | Decimal types                    | Posture   | Deferred          |
 | Rounding-mode control            | Forbidden | N/A               |
 | Fast-math / relaxed mode         | Opt-in    | Deferred          |
