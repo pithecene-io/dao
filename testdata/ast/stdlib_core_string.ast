@@ -6,6 +6,31 @@ File
   ExternFunctionDecl __dao_str_length
     Param s: string
     ReturnType: i64
+  ExternFunctionDecl __dao_str_char_at
+    Param s: string
+    Param index: i64
+    ReturnType: i32
+  ExternFunctionDecl __dao_str_substring
+    Param s: string
+    Param start: i64
+    Param len: i64
+    ReturnType: string
+  ExternFunctionDecl __dao_str_index_of
+    Param s: string
+    Param needle: string
+    ReturnType: i64
+  ExternFunctionDecl __dao_str_starts_with
+    Param s: string
+    Param prefix: string
+    ReturnType: bool
+  ExternFunctionDecl __dao_str_ends_with
+    Param s: string
+    Param suffix: string
+    ReturnType: bool
+  ExternFunctionDecl __dao_str_compare
+    Param a: string
+    Param b: string
+    ReturnType: i32
   FunctionDecl concat
     Param a: string
     Param b: string
@@ -26,3 +51,71 @@ File
           Identifier __dao_str_length
         Args
           Identifier s
+  FunctionDecl char_at
+    Param s: string
+    Param index: i64
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_str_char_at
+        Args
+          Identifier s
+          Identifier index
+  FunctionDecl substring
+    Param s: string
+    Param start: i64
+    Param len: i64
+    ReturnType: string
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_str_substring
+        Args
+          Identifier s
+          Identifier start
+          Identifier len
+  FunctionDecl index_of
+    Param s: string
+    Param needle: string
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_str_index_of
+        Args
+          Identifier s
+          Identifier needle
+  FunctionDecl starts_with
+    Param s: string
+    Param prefix: string
+    ReturnType: bool
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_str_starts_with
+        Args
+          Identifier s
+          Identifier prefix
+  FunctionDecl ends_with
+    Param s: string
+    Param suffix: string
+    ReturnType: bool
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_str_ends_with
+        Args
+          Identifier s
+          Identifier suffix
+  FunctionDecl str_compare
+    Param a: string
+    Param b: string
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_str_compare
+        Args
+          Identifier a
+          Identifier b

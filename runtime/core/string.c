@@ -2,6 +2,8 @@
 
 #include "dao_abi.h"
 
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -40,4 +42,89 @@ int64_t __dao_str_length(const struct dao_string *s) {
     return 0;
   }
   return s->len;
+}
+
+// Return the byte value at the given index. Traps on out-of-range.
+int32_t __dao_str_char_at(const struct dao_string *s, int64_t index) {
+  if (s == NULL || index < 0 || index >= s->len) {
+    fprintf(stderr, "dao: string index out of range: %lld (length %lld)\n",
+            (long long)index, (long long)(s ? s->len : 0));
+    abort();
+  }
+  return (int32_t)(unsigned char)s->ptr[index];
+}
+
+// Extract a substring starting at `start` with byte length `len`.
+// Traps if the range is out of bounds. Returns a heap-allocated copy.
+struct dao_string __dao_str_substring(const struct dao_string *s,
+                                      int64_t start, int64_t len) {
+  int64_t s_len = (s != NULL) ? s->len : 0;
+  if (start < 0 || len < 0 || start + len > s_len) {
+    fprintf(stderr,
+            "dao: substring out of range: start=%lld len=%lld (string length %lld)\n",
+            (long long)start, (long long)len, (long long)s_len);
+    abort();
+  }
+  if (len == 0) {
+    return (struct dao_string){.ptr = NULL, .len = 0};
+  }
+  char *buf = (char *)malloc((size_t)len);
+  if (buf == NULL) {
+    return (struct dao_string){.ptr = NULL, .len = 0};
+  }
+  memcpy(buf, s->ptr + start, (size_t)len);
+  return (struct dao_string){.ptr = buf, .len = len};
+}
+
+// Find the first occurrence of needle in s. Returns byte offset or -1.
+int64_t __dao_str_index_of(const struct dao_string *s,
+                            const struct dao_string *needle) {
+  if (s == NULL || needle == NULL) return -1;
+  if (needle->len == 0) return 0;
+  if (needle->len > s->len) return -1;
+
+  int64_t limit = s->len - needle->len;
+  for (int64_t i = 0; i <= limit; i++) {
+    if (memcmp(s->ptr + i, needle->ptr, (size_t)needle->len) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+// Check if s starts with prefix.
+bool __dao_str_starts_with(const struct dao_string *s,
+                            const struct dao_string *prefix) {
+  if (s == NULL || prefix == NULL) return false;
+  if (prefix->len == 0) return true;
+  if (prefix->len > s->len) return false;
+  return memcmp(s->ptr, prefix->ptr, (size_t)prefix->len) == 0;
+}
+
+// Check if s ends with suffix.
+bool __dao_str_ends_with(const struct dao_string *s,
+                          const struct dao_string *suffix) {
+  if (s == NULL || suffix == NULL) return false;
+  if (suffix->len == 0) return true;
+  if (suffix->len > s->len) return false;
+  int64_t offset = s->len - suffix->len;
+  return memcmp(s->ptr + offset, suffix->ptr, (size_t)suffix->len) == 0;
+}
+
+// Lexicographic comparison. Returns -1 if a < b, 0 if equal, 1 if a > b.
+int32_t __dao_str_compare(const struct dao_string *a,
+                           const struct dao_string *b) {
+  int64_t a_len = (a != NULL) ? a->len : 0;
+  int64_t b_len = (b != NULL) ? b->len : 0;
+  int64_t min_len = (a_len < b_len) ? a_len : b_len;
+
+  if (min_len > 0 && a->ptr != NULL && b->ptr != NULL) {
+    int cmp = memcmp(a->ptr, b->ptr, (size_t)min_len);
+    if (cmp < 0) return -1;
+    if (cmp > 0) return 1;
+  }
+
+  if (a_len < b_len) return -1;
+  if (a_len > b_len) return 1;
+  return 0;
 }

@@ -125,6 +125,12 @@ Examples:
 | `__dao_conv_u64_to_i64`  | `(x: u64): i64`                       |
 | `__dao_str_concat`       | `(a: string, b: string): string`      |
 | `__dao_str_length`       | `(s: string): i64`                    |
+| `__dao_str_char_at`      | `(s: string, index: i64): i32`        |
+| `__dao_str_substring`    | `(s: string, start: i64, len: i64): string` |
+| `__dao_str_index_of`     | `(s: string, needle: string): i64`    |
+| `__dao_str_starts_with`  | `(s: string, prefix: string): bool`   |
+| `__dao_str_ends_with`    | `(s: string, suffix: string): bool`   |
+| `__dao_str_compare`      | `(a: string, b: string): i32`         |
 | `__dao_wrapping_add_i8`  | `(a: i8, b: i8): i8`                 |
 | `__dao_wrapping_sub_i8`  | `(a: i8, b: i8): i8`                 |
 | `__dao_wrapping_mul_i8`  | `(a: i8, b: i8): i8`                 |
