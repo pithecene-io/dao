@@ -156,12 +156,17 @@ function's address as the argument value.
 
 #### 4.4.5 Restrictions
 
-- **No closures**: only non-capturing function references may be
-  passed across the C ABI boundary. Capturing lambdas cannot be
-  represented as C function pointers.
+- **No closures**: only named function references may be passed as
+  function-pointer arguments to extern fn calls. Lambda expressions
+  in function-pointer argument positions of extern fn calls must be
+  rejected by the type checker with a clear diagnostic. Closures
+  cannot be represented as C function pointers.
 - **No indirect calls from Dao**: calling through a function-typed
   value received from C is not yet supported. The initial
   implementation covers outbound callbacks only (Dao → C → Dao).
+  Function pointer return types are accepted syntactically (e.g.
+  for passing opaque values back to C) but invoking them produces
+  a backend error.
 - **Calling convention**: function pointers follow the platform C
   calling convention. No other conventions are supported.
 
@@ -294,6 +299,8 @@ Each expansion requires updating this contract before implementation.
 | E2E struct-by-value example      | Implemented     |
 | Function pointer type syntax     | Implemented     |
 | Function pointer params          | Implemented     |
-| Function pointer returns         | Implemented     |
+| Function pointer return type     | Accepted        |
+| Indirect call through fn ptr     | Not implemented |
 | Named function as callback       | Implemented     |
+| Lambda rejection at ABI boundary | Implemented     |
 | E2E callback example             | Implemented     |

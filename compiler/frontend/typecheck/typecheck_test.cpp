@@ -518,6 +518,16 @@ suite<"typecheck_negative"> typecheck_negative = [] {
     expect(has_error_containing(result, "not supported at the C ABI"));
   };
 
+  "lambda passed to extern fn callback is rejected"_test = [] {
+    auto result = check_source(
+        "extern fn apply(cb: fn(i32, i32): i32, a: i32, b: i32): i32\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return apply(|x, y| -> x + y, 1, 2)\n");
+    expect(has_error_containing(result,
+        "lambda cannot be passed as a C function pointer"));
+  };
+
   "extern fn with scalar types is accepted"_test = [] {
     auto result = check_source(
         "extern fn good(a: i32, b: i64, c: f64): i32\n");

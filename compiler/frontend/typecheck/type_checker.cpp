@@ -1440,11 +1440,37 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
     return nullptr;
   }
 
+  // Detect if the callee is an extern fn (for ABI boundary enforcement).
+  bool callee_is_extern = false;
+  if (call.callee->is<IdentifierExpr>()) {
+    auto sym_it = resolve_.uses.find(call.callee->span.offset);
+    if (sym_it != resolve_.uses.end() &&
+        sym_it->second->kind == SymbolKind::Function &&
+        sym_it->second->decl != nullptr) {
+      const auto* fn_decl = sym_it->second->decl_as_decl();
+      if (fn_decl->is<FunctionDecl>()) {
+        callee_is_extern = fn_decl->as<FunctionDecl>().is_extern;
+      }
+    }
+  }
+
   // Check arguments and infer generic type bindings from call site.
   // type_bindings maps generic param index → concrete type.
   std::unordered_map<uint32_t, const Type*> type_bindings;
 
   for (size_t i = 0; i < params.size(); ++i) {
+    // Reject lambdas in function-pointer positions of extern fn calls.
+    // Lambdas cannot cross the C ABI boundary as closures have no
+    // context pointer in a C function pointer representation.
+    // (CONTRACT_C_ABI_INTEROP §4.4.5)
+    if (callee_is_extern && params[i] != nullptr &&
+        params[i]->kind() == TypeKind::Function &&
+        call.args[i]->is<LambdaExpr>()) {
+      error(call.args[i]->span,
+            "lambda cannot be passed as a C function pointer; "
+            "use a named function instead");
+    }
+
     const auto* arg_type = check_expr(call.args[i], params[i]);
     if (arg_type == nullptr || params[i] == nullptr) {
       continue;
