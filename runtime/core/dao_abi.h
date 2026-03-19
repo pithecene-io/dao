@@ -183,6 +183,30 @@ struct dao_string __dao_str_concat(const struct dao_string *a,
 // Return the byte length of a string as i64.
 int64_t __dao_str_length(const struct dao_string *s);
 
+// Return the byte value at the given index as i32. Traps on out-of-range.
+int32_t __dao_str_char_at(const struct dao_string *s, int64_t index);
+
+// Extract a substring starting at `start` with byte length `len`.
+// Traps if the range is out of bounds. Returns a heap-allocated copy.
+struct dao_string __dao_str_substring(const struct dao_string *s,
+                                      int64_t start, int64_t len);
+
+// Find the first occurrence of needle in s. Returns byte offset or -1.
+int64_t __dao_str_index_of(const struct dao_string *s,
+                            const struct dao_string *needle);
+
+// Check if s starts with prefix.
+bool __dao_str_starts_with(const struct dao_string *s,
+                            const struct dao_string *prefix);
+
+// Check if s ends with suffix.
+bool __dao_str_ends_with(const struct dao_string *s,
+                          const struct dao_string *suffix);
+
+// Lexicographic comparison. Returns -1 if a < b, 0 if equal, 1 if a > b.
+int32_t __dao_str_compare(const struct dao_string *a,
+                           const struct dao_string *b);
+
 // ---------------------------------------------------------------------------
 // Runtime hook declarations — Memory/resource domain
 // ---------------------------------------------------------------------------

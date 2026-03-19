@@ -1,5 +1,17 @@
 extern fn __dao_str_concat(a: string, b: string): string
 extern fn __dao_str_length(s: string): i64
+extern fn __dao_str_char_at(s: string, index: i64): i32
+extern fn __dao_str_substring(s: string, start: i64, len: i64): string
+extern fn __dao_str_index_of(s: string, needle: string): i64
+extern fn __dao_str_starts_with(s: string, prefix: string): bool
+extern fn __dao_str_ends_with(s: string, suffix: string): bool
+extern fn __dao_str_compare(a: string, b: string): i32
 
 fn concat(a: string, b: string): string -> __dao_str_concat(a, b)
 fn length(s: string): i64 -> __dao_str_length(s)
+fn char_at(s: string, index: i64): i32 -> __dao_str_char_at(s, index)
+fn substring(s: string, start: i64, len: i64): string -> __dao_str_substring(s, start, len)
+fn index_of(s: string, needle: string): i64 -> __dao_str_index_of(s, needle)
+fn starts_with(s: string, prefix: string): bool -> __dao_str_starts_with(s, prefix)
+fn ends_with(s: string, suffix: string): bool -> __dao_str_ends_with(s, suffix)
+fn str_compare(a: string, b: string): i32 -> __dao_str_compare(a, b)

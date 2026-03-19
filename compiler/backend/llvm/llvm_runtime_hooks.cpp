@@ -322,6 +322,33 @@ void LlvmRuntimeHooks::declare_string_hooks() {
   // __dao_str_length(s: *dao.string): i64
   ensure_declared(runtime_hooks::kStrLength,
                   llvm::FunctionType::get(i64, {str_ptr}, false));
+
+  auto* i1 = llvm::Type::getInt1Ty(ctx);
+  auto* i32 = llvm::Type::getInt32Ty(ctx);
+
+  // __dao_str_char_at(s: *dao.string, index: i64): i32
+  ensure_declared(runtime_hooks::kStrCharAt,
+                  llvm::FunctionType::get(i32, {str_ptr, i64}, false));
+
+  // __dao_str_substring(s: *dao.string, start: i64, len: i64): dao.string
+  ensure_declared(runtime_hooks::kStrSubstring,
+                  llvm::FunctionType::get(str_type, {str_ptr, i64, i64}, false));
+
+  // __dao_str_index_of(s: *dao.string, needle: *dao.string): i64
+  ensure_declared(runtime_hooks::kStrIndexOf,
+                  llvm::FunctionType::get(i64, {str_ptr, str_ptr}, false));
+
+  // __dao_str_starts_with(s: *dao.string, prefix: *dao.string): bool
+  ensure_declared(runtime_hooks::kStrStartsWith,
+                  llvm::FunctionType::get(i1, {str_ptr, str_ptr}, false));
+
+  // __dao_str_ends_with(s: *dao.string, suffix: *dao.string): bool
+  ensure_declared(runtime_hooks::kStrEndsWith,
+                  llvm::FunctionType::get(i1, {str_ptr, str_ptr}, false));
+
+  // __dao_str_compare(a: *dao.string, b: *dao.string): i32
+  ensure_declared(runtime_hooks::kStrCompare,
+                  llvm::FunctionType::get(i32, {str_ptr, str_ptr}, false));
 }
 
 // ---------------------------------------------------------------------------

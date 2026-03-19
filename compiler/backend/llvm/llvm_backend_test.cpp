@@ -874,6 +874,32 @@ suite<"runtime_abi"> runtime_abi = [] {
 
     auto* conv_bool = module->getFunction("__dao_conv_bool_to_string");
     expect(conv_bool != nullptr) << "conv_bool_to_string declared";
+
+    // String operation hooks
+    auto* char_at = module->getFunction("__dao_str_char_at");
+    expect(char_at != nullptr) << "str_char_at declared";
+    expect(char_at->getReturnType()->isIntegerTy(32)) << "returns i32";
+    expect(char_at->arg_size() == 2u) << "2 params (str_ptr, i64)";
+
+    auto* substr = module->getFunction("__dao_str_substring");
+    expect(substr != nullptr) << "str_substring declared";
+    expect(substr->getReturnType()->isStructTy()) << "returns dao.string";
+    expect(substr->arg_size() == 3u) << "3 params (str_ptr, i64, i64)";
+
+    auto* indexof = module->getFunction("__dao_str_index_of");
+    expect(indexof != nullptr) << "str_index_of declared";
+    expect(indexof->getReturnType()->isIntegerTy(64)) << "returns i64";
+
+    auto* sw = module->getFunction("__dao_str_starts_with");
+    expect(sw != nullptr) << "str_starts_with declared";
+    expect(sw->getReturnType()->isIntegerTy(1)) << "returns i1";
+
+    auto* ew = module->getFunction("__dao_str_ends_with");
+    expect(ew != nullptr) << "str_ends_with declared";
+
+    auto* cmp = module->getFunction("__dao_str_compare");
+    expect(cmp != nullptr) << "str_compare declared";
+    expect(cmp->getReturnType()->isIntegerTy(32)) << "returns i32";
   };
 
   "string ABI shape matches contract"_test = [] {
@@ -898,6 +924,12 @@ suite<"runtime_abi"> runtime_abi = [] {
     expect(LlvmRuntimeHooks::is_runtime_hook("__dao_conv_i32_to_string"));
     expect(LlvmRuntimeHooks::is_runtime_hook("__dao_conv_f64_to_string"));
     expect(LlvmRuntimeHooks::is_runtime_hook("__dao_conv_bool_to_string"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_str_char_at"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_str_substring"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_str_index_of"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_str_starts_with"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_str_ends_with"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_str_compare"));
     expect(!LlvmRuntimeHooks::is_runtime_hook("__write_stdout"));
     expect(!LlvmRuntimeHooks::is_runtime_hook("user_function"));
   };

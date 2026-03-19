@@ -132,8 +132,14 @@ inline constexpr std::string_view kMemResourceEnter = "__dao_mem_resource_enter"
 inline constexpr std::string_view kMemResourceExit  = "__dao_mem_resource_exit";
 
 // String domain
-inline constexpr std::string_view kStrConcat  = "__dao_str_concat";
-inline constexpr std::string_view kStrLength  = "__dao_str_length";
+inline constexpr std::string_view kStrConcat     = "__dao_str_concat";
+inline constexpr std::string_view kStrLength     = "__dao_str_length";
+inline constexpr std::string_view kStrCharAt     = "__dao_str_char_at";
+inline constexpr std::string_view kStrSubstring  = "__dao_str_substring";
+inline constexpr std::string_view kStrIndexOf    = "__dao_str_index_of";
+inline constexpr std::string_view kStrStartsWith = "__dao_str_starts_with";
+inline constexpr std::string_view kStrEndsWith   = "__dao_str_ends_with";
+inline constexpr std::string_view kStrCompare    = "__dao_str_compare";
 
 // All hook names, for iteration / validation.
 inline constexpr std::string_view kAllHooks[] = {
@@ -166,6 +172,8 @@ inline constexpr std::string_view kAllHooks[] = {
     kGenAlloc, kGenFree,
     kMemResourceEnter, kMemResourceExit,
     kStrConcat, kStrLength,
+    kStrCharAt, kStrSubstring, kStrIndexOf,
+    kStrStartsWith, kStrEndsWith, kStrCompare,
 };
 
 } // namespace runtime_hooks
