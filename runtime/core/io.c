@@ -80,9 +80,19 @@ struct dao_string __dao_io_read_file(const struct dao_string *path) {
   }
 
   size_t read_bytes = fread(buf, 1, (size_t)size, file);
+  int read_err = ferror(file);
   fclose(file);
-  free(cpath);
 
+  if (read_err || read_bytes != (size_t)size) {
+    fprintf(stderr, "dao: read_file: read error for '%s' "
+            "(expected %ld bytes, got %zu)\n",
+            cpath, size, read_bytes);
+    free(buf);
+    free(cpath);
+    abort();
+  }
+
+  free(cpath);
   return (struct dao_string){.ptr = buf, .len = (int64_t)read_bytes};
 }
 
@@ -111,9 +121,14 @@ bool __dao_io_write_file(const struct dao_string *path,
     written = fwrite(content->ptr, 1, (size_t)content->len, file);
   }
 
-  fclose(file);
+  // fclose flushes buffered data — check its return value to catch
+  // disk-full or deferred write errors that fwrite did not report.
+  int close_err = fclose(file);
   free(cpath);
 
+  if (close_err != 0) {
+    return false;
+  }
   return content == NULL || content->len <= 0 ||
          written == (size_t)content->len;
 }
