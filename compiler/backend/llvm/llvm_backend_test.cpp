@@ -778,6 +778,11 @@ suite<"runtime_abi"> runtime_abi = [] {
     expect(contains(ir, "declare i32 @__dao_conv_i64_to_i32(i64)")) << ir;
     // String
     expect(contains(ir, "@__dao_str_length")) << ir;
+    // Overflow (wrapping + saturating)
+    expect(contains(ir, "declare i32 @__dao_wrapping_add_i32(i32, i32)")) << ir;
+    expect(contains(ir, "declare i64 @__dao_wrapping_add_i64(i64, i64)")) << ir;
+    expect(contains(ir, "declare i32 @__dao_saturating_add_i32(i32, i32)")) << ir;
+    expect(contains(ir, "declare i64 @__dao_saturating_add_i64(i64, i64)")) << ir;
   };
 };
 

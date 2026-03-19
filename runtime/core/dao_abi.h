@@ -75,6 +75,26 @@ int32_t __dao_conv_f64_to_i32(double x);
 int32_t __dao_conv_i64_to_i32(int64_t x);
 
 // ---------------------------------------------------------------------------
+// Runtime hook declarations — Overflow domain (explicit operations)
+// ---------------------------------------------------------------------------
+
+// Wrapping arithmetic: two's complement wrap, no trap.
+int32_t __dao_wrapping_add_i32(int32_t a, int32_t b);
+int32_t __dao_wrapping_sub_i32(int32_t a, int32_t b);
+int32_t __dao_wrapping_mul_i32(int32_t a, int32_t b);
+int64_t __dao_wrapping_add_i64(int64_t a, int64_t b);
+int64_t __dao_wrapping_sub_i64(int64_t a, int64_t b);
+int64_t __dao_wrapping_mul_i64(int64_t a, int64_t b);
+
+// Saturating arithmetic: clamp to min/max representable value.
+int32_t __dao_saturating_add_i32(int32_t a, int32_t b);
+int32_t __dao_saturating_sub_i32(int32_t a, int32_t b);
+int32_t __dao_saturating_mul_i32(int32_t a, int32_t b);
+int64_t __dao_saturating_add_i64(int64_t a, int64_t b);
+int64_t __dao_saturating_sub_i64(int64_t a, int64_t b);
+int64_t __dao_saturating_mul_i64(int64_t a, int64_t b);
+
+// ---------------------------------------------------------------------------
 // Runtime hook declarations — Generator domain
 // ---------------------------------------------------------------------------
 

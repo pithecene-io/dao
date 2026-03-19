@@ -21,6 +21,7 @@ void LlvmRuntimeHooks::declare_all() {
   declare_io_hooks();
   declare_equality_hooks();
   declare_conversion_hooks();
+  declare_overflow_hooks();
   declare_generator_hooks();
   declare_mem_resource_hooks();
   declare_string_hooks();
@@ -124,6 +125,35 @@ void LlvmRuntimeHooks::declare_conversion_hooks() {
   // __dao_conv_i64_to_i32(x: i64): i32
   ensure_declared(runtime_hooks::kConvI64ToI32,
                   llvm::FunctionType::get(i32, {i64}, false));
+}
+
+// ---------------------------------------------------------------------------
+// Overflow hooks (wrapping + saturating)
+// ---------------------------------------------------------------------------
+
+void LlvmRuntimeHooks::declare_overflow_hooks() {
+  auto& ctx = module_.getContext();
+  auto* i32 = llvm::Type::getInt32Ty(ctx);
+  auto* i64 = llvm::Type::getInt64Ty(ctx);
+
+  // Wrapping: (T, T) -> T
+  auto* i32_bin = llvm::FunctionType::get(i32, {i32, i32}, false);
+  auto* i64_bin = llvm::FunctionType::get(i64, {i64, i64}, false);
+
+  ensure_declared(runtime_hooks::kWrappingAddI32, i32_bin);
+  ensure_declared(runtime_hooks::kWrappingSubI32, i32_bin);
+  ensure_declared(runtime_hooks::kWrappingMulI32, i32_bin);
+  ensure_declared(runtime_hooks::kWrappingAddI64, i64_bin);
+  ensure_declared(runtime_hooks::kWrappingSubI64, i64_bin);
+  ensure_declared(runtime_hooks::kWrappingMulI64, i64_bin);
+
+  // Saturating: (T, T) -> T
+  ensure_declared(runtime_hooks::kSaturatingAddI32, i32_bin);
+  ensure_declared(runtime_hooks::kSaturatingSubI32, i32_bin);
+  ensure_declared(runtime_hooks::kSaturatingMulI32, i32_bin);
+  ensure_declared(runtime_hooks::kSaturatingAddI64, i64_bin);
+  ensure_declared(runtime_hooks::kSaturatingSubI64, i64_bin);
+  ensure_declared(runtime_hooks::kSaturatingMulI64, i64_bin);
 }
 
 // ---------------------------------------------------------------------------

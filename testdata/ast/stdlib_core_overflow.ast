@@ -1,0 +1,181 @@
+File
+  ExternFunctionDecl __dao_wrapping_add_i32
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+  ExternFunctionDecl __dao_wrapping_sub_i32
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+  ExternFunctionDecl __dao_wrapping_mul_i32
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+  ExternFunctionDecl __dao_wrapping_add_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+  ExternFunctionDecl __dao_wrapping_sub_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+  ExternFunctionDecl __dao_wrapping_mul_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+  ExternFunctionDecl __dao_saturating_add_i32
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+  ExternFunctionDecl __dao_saturating_sub_i32
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+  ExternFunctionDecl __dao_saturating_mul_i32
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+  ExternFunctionDecl __dao_saturating_add_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+  ExternFunctionDecl __dao_saturating_sub_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+  ExternFunctionDecl __dao_saturating_mul_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+  FunctionDecl wrapping_add
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_add_i32
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_sub
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_sub_i32
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_mul
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_mul_i32
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_add_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_add_i64
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_sub_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_sub_i64
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_mul_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_mul_i64
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_add
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_add_i32
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_sub
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_sub_i32
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_mul
+    Param a: i32
+    Param b: i32
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_mul_i32
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_add_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_add_i64
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_sub_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_sub_i64
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_mul_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_mul_i64
+        Args
+          Identifier a
+          Identifier b
