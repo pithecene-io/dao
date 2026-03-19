@@ -675,27 +675,8 @@ void TypeChecker::check_function(const Decl* decl) {
     }
   }
 
-  // Reject function types in non-extern fn signatures. Indirect calls
-  // through function-typed values are not yet implemented; function
-  // types are currently only valid at the extern fn ABI boundary.
-  if (!fn.is_extern) {
-    for (const auto& param : fn.params) {
-      if (param.type != nullptr) {
-        const auto* param_type = resolve_type_node(param.type);
-        if (param_type != nullptr &&
-            param_type->kind() == TypeKind::Function) {
-          error(param.type->span,
-                "function type parameters are only supported in extern fn "
-                "declarations (indirect calls not yet implemented)");
-        }
-      }
-    }
-    if (ret_type != nullptr && ret_type->kind() == TypeKind::Function) {
-      error(fn.return_type->span,
-            "function type returns are only supported in extern fn "
-            "declarations (indirect calls not yet implemented)");
-    }
-  }
+  // Function types are allowed in all function signatures. The backend
+  // supports indirect calls through function-typed values.
 
   // Set up param types in symbol cache.
   for (const auto& param : fn.params) {
