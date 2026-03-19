@@ -101,6 +101,18 @@ auto is_integer(const Type* type) -> bool {
   }
 }
 
+auto is_string(const Type* type) -> bool {
+  if (type == nullptr || type->kind() != TypeKind::Named) {
+    return false;
+  }
+  const auto* named = static_cast<const TypeNamed*>(type);
+  // The predeclared string type has name "string" AND null decl_id,
+  // distinguishing it from any user-defined nominal type named "string".
+  // This must match the backend's authoritative predicate in
+  // LlvmTypeLowering::is_string_type().
+  return named->name() == "string" && named->decl_id() == nullptr;
+}
+
 auto is_float(const Type* type) -> bool {
   if (type == nullptr || type->kind() != TypeKind::Builtin) {
     return false;

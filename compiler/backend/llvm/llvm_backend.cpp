@@ -739,7 +739,57 @@ auto LlvmBackend::lower_binary(const MirBinary& p, const MirInst& inst,
   auto lhs_type_it = state.value_types.find(p.lhs.id);
   const Type* operand_type = lhs_type_it != state.value_types.end() ? lhs_type_it->second : inst.type;
   bool is_unsigned_op = LlvmTypeLowering::is_unsigned(operand_type);
+  bool is_string_op = LlvmTypeLowering::is_string_type(operand_type);
   llvm::Value* result = nullptr;
+
+  // String operators: dispatch to runtime hooks.
+  if (is_string_op) {
+    auto* str_type = types_.string_type();
+    auto* str_ptr = llvm::PointerType::getUnqual(str_type);
+
+    if (p.op == BinaryOp::Add) {
+      // String concatenation: call __dao_str_concat(ptr, ptr) → dao.string
+      auto* concat_fn = module_->getFunction(
+          std::string(runtime_hooks::kStrConcat));
+      if (concat_fn == nullptr) {
+        emit_diagnostic(inst.span, "string concat hook not declared");
+        return false;
+      }
+      auto* lhs_tmp = state.builder->CreateAlloca(str_type, nullptr, "str.lhs");
+      auto* rhs_tmp = state.builder->CreateAlloca(str_type, nullptr, "str.rhs");
+      state.builder->CreateStore(lhs, lhs_tmp);
+      state.builder->CreateStore(rhs, rhs_tmp);
+      result = state.builder->CreateCall(
+          concat_fn->getFunctionType(), concat_fn, {lhs_tmp, rhs_tmp}, "concat");
+    } else if (p.op == BinaryOp::EqEq || p.op == BinaryOp::BangEq) {
+      // String equality: call __dao_eq_string(ptr, ptr) → i1
+      auto* eq_fn = module_->getFunction(
+          std::string(runtime_hooks::kEqString));
+      if (eq_fn == nullptr) {
+        emit_diagnostic(inst.span, "string equality hook not declared");
+        return false;
+      }
+      auto* lhs_tmp = state.builder->CreateAlloca(str_type, nullptr, "str.lhs");
+      auto* rhs_tmp = state.builder->CreateAlloca(str_type, nullptr, "str.rhs");
+      state.builder->CreateStore(lhs, lhs_tmp);
+      state.builder->CreateStore(rhs, rhs_tmp);
+      result = state.builder->CreateCall(
+          eq_fn->getFunctionType(), eq_fn, {lhs_tmp, rhs_tmp}, "str.eq");
+      if (p.op == BinaryOp::BangEq) {
+        result = state.builder->CreateNot(result, "str.ne");
+      }
+    } else {
+      emit_diagnostic(inst.span,
+                      "unsupported operator on string type");
+      return false;
+    }
+
+    if (result != nullptr) {
+      state.values[inst.result.id] = result;
+      state.value_types[inst.result.id] = inst.type;
+    }
+    return result != nullptr;
+  }
 
   switch (p.op) {
   case BinaryOp::Add:

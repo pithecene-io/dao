@@ -1147,7 +1147,30 @@ auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
 
   switch (bin.op) {
   // Arithmetic: same numeric type required.
-  case BinaryOp::Add:
+  case BinaryOp::Add: {
+    // String concatenation: string + string → string.
+    if (is_string(lhs)) {
+      if (!is_assignable(lhs, rhs)) {
+        error(expr->span,
+              "mismatched types in string concatenation: '" +
+                  print_type(lhs) + "' and '" + print_type(rhs) + "'");
+        return nullptr;
+      }
+      return lhs;
+    }
+    if (!is_numeric(lhs)) {
+      error(bin.left->span,
+            "'+' requires numeric or string type, got '" + print_type(lhs) + "'");
+      return nullptr;
+    }
+    if (!is_assignable(lhs, rhs)) {
+      error(expr->span,
+            "mismatched types in arithmetic: '" + print_type(lhs) +
+                "' and '" + print_type(rhs) + "'");
+      return nullptr;
+    }
+    return lhs;
+  }
   case BinaryOp::Sub:
   case BinaryOp::Mul:
   case BinaryOp::Div:

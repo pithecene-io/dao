@@ -26,6 +26,9 @@ auto is_integer(const Type* type) -> bool;
 /// Returns true if the type is a float builtin.
 auto is_float(const Type* type) -> bool;
 
+/// Returns true if the type is the predeclared string type.
+auto is_string(const Type* type) -> bool;
+
 /// Returns true if the type is compatible with the C ABI boundary.
 /// Supported: builtin scalars (i32, i64, f64, bool, etc.), pointers,
 /// and repr-C-compatible structs (non-empty, all fields recursively
