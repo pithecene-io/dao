@@ -101,6 +101,13 @@ auto is_integer(const Type* type) -> bool {
   }
 }
 
+auto is_string(const Type* type) -> bool {
+  if (type == nullptr || type->kind() != TypeKind::Named) {
+    return false;
+  }
+  return static_cast<const TypeNamed*>(type)->name() == "string";
+}
+
 auto is_float(const Type* type) -> bool {
   if (type == nullptr || type->kind() != TypeKind::Builtin) {
     return false;

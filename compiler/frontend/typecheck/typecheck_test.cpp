@@ -241,6 +241,31 @@ suite<"typecheck_arithmetic"> typecheck_arithmetic = [] {
     auto result = check_source("fn both(a: bool, b: bool): bool -> a and b\n");
     expect(is_ok(result));
   };
+
+  // String operators
+  "string concatenation with +"_test = [] {
+    auto result = check_source(
+        "fn cat(a: string, b: string): string -> a + b\n");
+    expect(is_ok(result));
+  };
+
+  "string equality with =="_test = [] {
+    auto result = check_source(
+        "fn eq(a: string, b: string): bool -> a == b\n");
+    expect(is_ok(result));
+  };
+
+  "string inequality with !="_test = [] {
+    auto result = check_source(
+        "fn ne(a: string, b: string): bool -> a != b\n");
+    expect(is_ok(result));
+  };
+
+  "string - is rejected"_test = [] {
+    auto result = check_source(
+        "fn bad(a: string, b: string): string -> a - b\n");
+    expect(has_error_containing(result, "arithmetic requires numeric type"));
+  };
 };
 
 // ---------------------------------------------------------------------------

@@ -296,6 +296,25 @@ suite<"arithmetic"> arithmetic = [] {
     expect(!pipe.has_errors()) << "no backend errors";
     expect(contains(ir, "fcmp olt")) << ir;
   };
+
+  // String operators dispatch to runtime hooks.
+  "string == calls __dao_eq_string"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn eq(a: string, b: string): bool\n"
+        "  return a == b\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "call i1 @__dao_eq_string(")) << ir;
+  };
+
+  "string + calls __dao_str_concat"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn cat(a: string, b: string): string\n"
+        "  return a + b\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "call %dao.string @__dao_str_concat(")) << ir;
+  };
 };
 
 // ---------------------------------------------------------------------------
