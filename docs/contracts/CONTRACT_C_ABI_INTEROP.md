@@ -69,10 +69,59 @@ static archive, or shared/system library.
 - opaque pointers (`*void` equivalent) are the primary interop
   mechanism for foreign aggregate data
 
-### 4.3 Types explicitly not supported in v1
+### 4.3 Struct-by-value at the boundary
+
+Dao structs may be passed by value across the C ABI boundary as both
+parameters and return values, provided they are **repr-C-compatible**.
+
+#### 4.3.1 Repr-C-compatible struct predicate
+
+A Dao struct is repr-C-compatible if and only if all of the following
+hold:
+
+1. the struct has at least one field (empty structs are rejected)
+2. every field type is itself C-ABI-compatible (scalar, pointer, or
+   a recursively repr-C-compatible struct)
+3. the struct is not self-referential or mutually recursive through
+   non-pointer fields (pointer-to-self is allowed, since pointers
+   are C-ABI-compatible independently)
+
+The compiler must reject extern fn signatures that use structs
+failing this predicate with a clear diagnostic.
+
+#### 4.3.2 Layout rules
+
+Repr-C-compatible Dao structs follow these layout rules at the ABI
+boundary:
+
+- declared field order is preserved (no field reordering)
+- no packed layout
+- no explicit alignment overrides
+- alignment follows the target's natural alignment for each field
+  type
+
+The current implementation relies on the target LLVM DataLayout and
+non-packed LLVM struct types to realize this layout. This matches
+C struct layout for the supported native targets under the default
+alignment rules.
+
+#### 4.3.3 Target scope
+
+Struct-by-value C ABI interop is supported on hosted native targets
+covered by the current LLVM backend and CI/test matrix. Additional
+targets may require further validation or target-specific ABI
+lowering.
+
+#### 4.3.4 Nested structs
+
+Nested structs are allowed if every level satisfies the repr-C-
+compatible predicate recursively. A struct containing another struct
+is valid at the boundary if and only if the inner struct is also
+repr-C-compatible.
+
+### 4.4 Types explicitly not supported
 
 - Dao `string` as C `char*` (requires explicit conversion)
-- struct/class by value (target-specific ABI rules)
 - function pointers / callbacks
 - variadic functions (`printf`-style)
 - C enums
@@ -90,13 +139,13 @@ conventions specified in `CONTRACT_RUNTIME_ABI.md`. The `__` prefix
 aligns with C's reserved identifier convention; user code should not
 declare `__`-prefixed names.
 
-### 4.4 Future type expansions
+### 4.5 Future type expansions
 
 The following may be added in later versions:
 
 - `c_string` or explicit null-terminated byte string type
-- by-value struct passing (once Dao struct ABI is stabilized)
 - function pointer types for callbacks
+- packed structs / explicit alignment control
 
 Each expansion requires updating this contract before implementation.
 
@@ -187,8 +236,12 @@ Each expansion requires updating this contract before implementation.
 | `extern fn` LLVM lowering        | Implemented     |
 | Scalar types at boundary         | Implemented     |
 | Pointer types at boundary        | Implemented     |
+| Struct-by-value arguments        | Implemented     |
+| Struct-by-value returns          | Implemented     |
+| Repr-C-compatible predicate      | Implemented     |
 | Driver: link `.o` files          | Implemented     |
 | Driver: link `-l` libraries      | Implemented     |
 | Driver: `-L` search paths        | Implemented     |
 | Unsupported type rejection       | Implemented     |
 | E2E foreign call example         | Implemented     |
+| E2E struct-by-value example      | Implemented     |

@@ -185,10 +185,10 @@ Exit criteria:
 
 ## Phase 6 — C ABI Interop and Host Integration
 
-Status: **v1 complete** — scalar/pointer C ABI calls, driver link
-passthrough (.o, -l, -L), extern fn type validation, E2E examples
-with custom C helpers and libm. Aggregates, callbacks, variadics
-deferred.
+Status: **v2 in progress** — v1 (scalar/pointer C ABI calls, driver
+link passthrough, extern fn type validation, E2E examples) complete.
+v2 adds struct-by-value arguments and returns with repr-C-compatible
+predicate. Callbacks and variadics deferred.
 
 Goals:
 - stable C ABI entry/exit surface for initial foreign function calls

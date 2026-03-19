@@ -7,6 +7,7 @@
 
 #include "backend/llvm/llvm_backend.h"
 
+#include "backend/llvm/llvm_abi.h"
 #include "backend/llvm/llvm_runtime_hooks.h"
 #include "ir/mir/mir.h"
 
@@ -42,6 +43,25 @@ auto LlvmBackend::lower(const MirModule& mir_module, uint32_t prelude_bytes)
     -> LlvmBackendResult {
   module_ = std::make_unique<llvm::Module>("dao_module", ctx_);
   diagnostics_.clear();
+
+  // Set the target triple and data layout early so that ABI-sensitive
+  // lowering (struct coercion, alignment) sees the correct target info.
+  // Without this, module_->getDataLayout() returns a default layout that
+  // does not match the host platform's alignment rules.
+  auto triple = llvm::sys::getDefaultTargetTriple();
+  module_->setTargetTriple(triple);
+  std::string target_err;
+  const auto* target =
+      llvm::TargetRegistry::lookupTarget(triple, target_err);
+  if (target != nullptr) {
+    llvm::TargetOptions opts;
+    auto target_machine = std::unique_ptr<llvm::TargetMachine>(
+        target->createTargetMachine(triple, "generic", "", opts,
+                                    llvm::Reloc::PIC_));
+    if (target_machine != nullptr) {
+      module_->setDataLayout(target_machine->createDataLayout());
+    }
+  }
 
   // Declare runtime hooks with canonical signatures before processing
   // MIR functions. This makes LlvmRuntimeHooks the authoritative source.
@@ -98,6 +118,7 @@ void LlvmBackend::declare_functions(const MirModule& mir_module,
     }
 
     std::vector<llvm::Type*> param_types;
+    bool needs_abi_coercion = false;
     for (const auto& local : mir_fn->locals) {
       if (!local.is_param) {
         break; // params come first
@@ -112,24 +133,103 @@ void LlvmBackend::declare_functions(const MirModule& mir_module,
       if (LlvmTypeLowering::is_string_type(local.type)) {
         lowered_param = llvm::PointerType::getUnqual(lowered_param);
       }
-      param_types.push_back(lowered_param);
+      // For extern fn: struct params need ABI coercion at the C boundary.
+      if (mir_fn->is_extern && llvm::isa<llvm::StructType>(lowered_param) &&
+          !LlvmTypeLowering::is_string_type(local.type)) {
+        auto* struct_ty = llvm::cast<llvm::StructType>(lowered_param);
+        auto coercion = classify_struct_for_c_abi(
+            struct_ty, module_->getDataLayout(), ctx_);
+        if (coercion.indirect) {
+          // Large struct: pass by pointer with byval attribute.
+          param_types.push_back(llvm::PointerType::getUnqual(lowered_param));
+        } else {
+          // Small struct: expand to coerced scalar types.
+          for (auto* coerced : coercion.coerced_types) {
+            param_types.push_back(coerced);
+          }
+        }
+        needs_abi_coercion = true;
+      } else {
+        param_types.push_back(lowered_param);
+      }
     }
 
+    // For extern fn: struct returns also need ABI coercion.
+    auto* lowered_ret = ret_type;
+    if (mir_fn->is_extern && llvm::isa<llvm::StructType>(ret_type) &&
+        !LlvmTypeLowering::is_string_type(mir_fn->return_type)) {
+      auto* struct_ty = llvm::cast<llvm::StructType>(ret_type);
+      auto coercion = classify_struct_for_c_abi(
+          struct_ty, module_->getDataLayout(), ctx_);
+      if (coercion.indirect) {
+        // Large struct return: add sret pointer parameter, return void.
+        param_types.insert(param_types.begin(),
+                           llvm::PointerType::getUnqual(ret_type));
+        lowered_ret = llvm::Type::getVoidTy(ctx_);
+      } else if (coercion.coerced_types.size() == 1) {
+        lowered_ret = coercion.coerced_types[0];
+      } else {
+        // Multiple coerced types: wrap in a struct for the return value.
+        lowered_ret = llvm::StructType::get(ctx_, coercion.coerced_types);
+      }
+      needs_abi_coercion = true;
+    }
+    (void)needs_abi_coercion;
+
     auto* fn_type =
-        llvm::FunctionType::get(ret_type, param_types, /*isVarArg=*/false);
+        llvm::FunctionType::get(lowered_ret, param_types, /*isVarArg=*/false);
     auto* llvm_fn = llvm::Function::Create(
         fn_type, llvm::Function::ExternalLinkage,
         std::string(mir_fn->symbol->name), module_.get());
 
-    // Name parameters.
-    size_t idx = 0;
-    for (auto& arg : llvm_fn->args()) {
-      if (idx < mir_fn->locals.size() && mir_fn->locals[idx].is_param) {
-        if (mir_fn->locals[idx].symbol != nullptr) {
-          arg.setName(std::string(mir_fn->locals[idx].symbol->name));
+    // Add byval attributes for indirect struct params.
+    if (mir_fn->is_extern) {
+      unsigned arg_idx = 0;
+      // Skip sret param if present.
+      if (llvm::isa<llvm::StructType>(ret_type) &&
+          !LlvmTypeLowering::is_string_type(mir_fn->return_type)) {
+        auto coercion = classify_struct_for_c_abi(
+            llvm::cast<llvm::StructType>(ret_type),
+            module_->getDataLayout(), ctx_);
+        if (coercion.indirect) {
+          llvm_fn->addParamAttr(0, llvm::Attribute::get(
+              ctx_, llvm::Attribute::StructRet, ret_type));
+          arg_idx = 1;
         }
       }
-      ++idx;
+      for (const auto& local : mir_fn->locals) {
+        if (!local.is_param) break;
+        auto* lowered_param = types_.lower(local.type);
+        if (lowered_param != nullptr &&
+            llvm::isa<llvm::StructType>(lowered_param) &&
+            !LlvmTypeLowering::is_string_type(local.type)) {
+          auto coercion = classify_struct_for_c_abi(
+              llvm::cast<llvm::StructType>(lowered_param),
+              module_->getDataLayout(), ctx_);
+          if (coercion.indirect) {
+            llvm_fn->addParamAttr(arg_idx, llvm::Attribute::get(
+                ctx_, llvm::Attribute::ByVal, lowered_param));
+            arg_idx++;
+          } else {
+            arg_idx += coercion.coerced_types.size();
+          }
+        } else {
+          arg_idx++;
+        }
+      }
+    }
+
+    // Name parameters (skip naming for ABI-coerced params).
+    if (!mir_fn->is_extern) {
+      size_t idx = 0;
+      for (auto& arg : llvm_fn->args()) {
+        if (idx < mir_fn->locals.size() && mir_fn->locals[idx].is_param) {
+          if (mir_fn->locals[idx].symbol != nullptr) {
+            arg.setName(std::string(mir_fn->locals[idx].symbol->name));
+          }
+        }
+        ++idx;
+      }
     }
 
     // For generator functions, also declare the resume function.
@@ -964,34 +1064,113 @@ auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
   }
 
   std::vector<llvm::Value*> args;
+  // Track the LLVM param index (which may diverge from MIR arg index
+  // due to sret insertion or struct param expansion).
+  unsigned llvm_param_idx = 0;
+
+  // Detect if the return type was ABI-coerced from a struct.
+  // If the callee returns void but MIR expects a struct, there may be
+  // an sret pointer as the first parameter.
+  auto* expected_ret = inst.type != nullptr ? types_.lower(inst.type) : nullptr;
+  llvm::AllocaInst* sret_alloca = nullptr;
+  if (expected_ret != nullptr && llvm::isa<llvm::StructType>(expected_ret) &&
+      callee_fn->getReturnType()->isVoidTy() &&
+      callee_fn->arg_size() > 0 &&
+      callee_fn->hasParamAttribute(0, llvm::Attribute::StructRet)) {
+    // Indirect struct return: allocate space and pass as first arg.
+    sret_alloca = state.builder->CreateAlloca(expected_ret, nullptr, "sret");
+    args.push_back(sret_alloca);
+    llvm_param_idx = 1;
+  }
+
   if (p.args != nullptr) {
-    args.reserve(p.args->size());
     for (size_t i = 0; i < p.args->size(); ++i) {
       auto* arg_val = get_value((*p.args)[i], state);
       if (arg_val == nullptr) {
         emit_diagnostic(inst.span, "call argument not found");
         return false;
       }
-      // If the callee expects a pointer to string struct, create a
-      // temporary alloca and pass its address.
-      if (i < callee_fn->getFunctionType()->getNumParams()) {
-        auto* param_type = callee_fn->getFunctionType()->getParamType(i);
+      // String → pointer coercion.
+      if (llvm_param_idx < callee_fn->getFunctionType()->getNumParams()) {
+        auto* param_type = callee_fn->getFunctionType()->getParamType(llvm_param_idx);
         if (param_type->isPointerTy() && arg_val->getType() == types_.string_type()) {
           auto* tmp = state.builder->CreateAlloca(types_.string_type(), nullptr, "str.arg");
           state.builder->CreateStore(arg_val, tmp);
           arg_val = tmp;
+          args.push_back(arg_val);
+          llvm_param_idx++;
+          continue;
         }
       }
+      // Struct ABI coercion: the arg is a struct but the callee expects
+      // coerced scalar types (from classify_struct_for_c_abi).
+      if (arg_val->getType()->isStructTy() &&
+          llvm_param_idx < callee_fn->getFunctionType()->getNumParams() &&
+          !callee_fn->getFunctionType()->getParamType(llvm_param_idx)->isStructTy()) {
+        auto* struct_ty = llvm::cast<llvm::StructType>(arg_val->getType());
+        auto coercion = classify_struct_for_c_abi(
+            struct_ty, module_->getDataLayout(), ctx_);
+        if (coercion.indirect) {
+          // Indirect: alloca + store + pass pointer.
+          auto* tmp = state.builder->CreateAlloca(struct_ty, nullptr, "byval.arg");
+          state.builder->CreateStore(arg_val, tmp);
+          args.push_back(tmp);
+          llvm_param_idx++;
+        } else {
+          // Direct: store struct to memory, load as coerced types.
+          auto* tmp = state.builder->CreateAlloca(struct_ty, nullptr, "coerce.arg");
+          state.builder->CreateStore(arg_val, tmp);
+          for (size_t ci = 0; ci < coercion.coerced_types.size(); ++ci) {
+            auto* coerced_ty = coercion.coerced_types[ci];
+            // GEP into the alloca at the eightbyte offset, bitcast-load.
+            uint64_t byte_offset = ci * 8;
+            auto* gep = state.builder->CreateGEP(
+                state.builder->getInt8Ty(), tmp,
+                state.builder->getInt64(byte_offset), "coerce.gep");
+            auto* loaded = state.builder->CreateLoad(coerced_ty, gep, "coerce.load");
+            args.push_back(loaded);
+            llvm_param_idx++;
+          }
+        }
+        continue;
+      }
+      // Struct ABI coercion: callee expects pointer with byval attribute.
+      if (arg_val->getType()->isStructTy() &&
+          llvm_param_idx < callee_fn->getFunctionType()->getNumParams() &&
+          callee_fn->hasParamAttribute(llvm_param_idx, llvm::Attribute::ByVal)) {
+        auto* tmp = state.builder->CreateAlloca(arg_val->getType(), nullptr, "byval.arg");
+        state.builder->CreateStore(arg_val, tmp);
+        args.push_back(tmp);
+        llvm_param_idx++;
+        continue;
+      }
       args.push_back(arg_val);
+      llvm_param_idx++;
     }
   }
 
   auto* call = state.builder->CreateCall(callee_fn->getFunctionType(),
                                           callee_fn, args);
-  if (!callee_fn->getReturnType()->isVoidTy() && inst.result.valid()) {
-    state.values[inst.result.id] = call;
-    state.value_types[inst.result.id] = inst.type;
 
+  // Handle return value.
+  if (sret_alloca != nullptr && inst.result.valid()) {
+    // Indirect return: load from the sret alloca.
+    auto* loaded = state.builder->CreateLoad(expected_ret, sret_alloca, "sret.load");
+    state.values[inst.result.id] = loaded;
+    state.value_types[inst.result.id] = inst.type;
+  } else if (!callee_fn->getReturnType()->isVoidTy() && inst.result.valid()) {
+    // Check if the return was ABI-coerced from a struct.
+    if (expected_ret != nullptr && llvm::isa<llvm::StructType>(expected_ret) &&
+        call->getType() != expected_ret) {
+      // Direct coerced return: store coerced value, load as struct.
+      auto* tmp = state.builder->CreateAlloca(expected_ret, nullptr, "coerce.ret");
+      state.builder->CreateStore(call, tmp);
+      auto* loaded = state.builder->CreateLoad(expected_ret, tmp, "coerce.ret.load");
+      state.values[inst.result.id] = loaded;
+    } else {
+      state.values[inst.result.id] = call;
+    }
+    state.value_types[inst.result.id] = inst.type;
   }
   return true;
 }

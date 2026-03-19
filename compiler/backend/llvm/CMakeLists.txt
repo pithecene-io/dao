@@ -1,6 +1,7 @@
 find_package(LLVM REQUIRED)
 
 add_library(dao_backend_llvm STATIC
+  llvm_abi.cpp
   llvm_type_lowering.cpp
   llvm_runtime_hooks.cpp
   llvm_backend.cpp

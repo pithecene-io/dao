@@ -384,6 +384,58 @@ suite<"externs"> externs = [] {
     expect(!pipe.has_errors()) << "no backend errors";
     expect(contains(ir, "declare void @print")) << ir;
   };
+
+  "extern fn with struct param uses ABI-coerced types"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "extern fn distance(p: Point): f64\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Point { i32, i32 } = 8 bytes → coerced to single i64 param.
+    expect(contains(ir, "declare double @distance(i64)")) << ir;
+  };
+
+  "extern fn returning struct uses ABI-coerced return"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "extern fn make_point(x: i32, y: i32): Point\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Point { i32, i32 } = 8 bytes → coerced to i64 return.
+    expect(contains(ir, "declare i64 @make_point(i32, i32)")) << ir;
+  };
+
+  "extern fn with large struct uses byval"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Inner:\n"
+        "  a: i32\n"
+        "  b: f64\n"
+        "\n"
+        "class Outer:\n"
+        "  inner: Inner\n"
+        "  tag: i32\n"
+        "\n"
+        "extern fn process(o: Outer): i32\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Outer { Inner { i32, f64 }, i32 } = 24 bytes → indirect (byval).
+    expect(contains(ir, "declare i32 @process(ptr byval(%dao.Outer))")) << ir;
+  };
 };
 
 // ---------------------------------------------------------------------------
