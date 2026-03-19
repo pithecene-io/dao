@@ -33,15 +33,29 @@ namespace runtime_hooks {
 inline constexpr std::string_view kWriteStdout = "__dao_io_write_stdout";
 
 // Equality domain
+inline constexpr std::string_view kEqI8     = "__dao_eq_i8";
+inline constexpr std::string_view kEqI16    = "__dao_eq_i16";
 inline constexpr std::string_view kEqI32    = "__dao_eq_i32";
 inline constexpr std::string_view kEqI64    = "__dao_eq_i64";
+inline constexpr std::string_view kEqU8     = "__dao_eq_u8";
+inline constexpr std::string_view kEqU16    = "__dao_eq_u16";
+inline constexpr std::string_view kEqU32    = "__dao_eq_u32";
+inline constexpr std::string_view kEqU64    = "__dao_eq_u64";
+inline constexpr std::string_view kEqF32    = "__dao_eq_f32";
 inline constexpr std::string_view kEqF64    = "__dao_eq_f64";
 inline constexpr std::string_view kEqBool   = "__dao_eq_bool";
 inline constexpr std::string_view kEqString = "__dao_eq_string";
 
 // Conversion domain (to_string)
+inline constexpr std::string_view kConvI8ToString   = "__dao_conv_i8_to_string";
+inline constexpr std::string_view kConvI16ToString  = "__dao_conv_i16_to_string";
 inline constexpr std::string_view kConvI32ToString  = "__dao_conv_i32_to_string";
 inline constexpr std::string_view kConvI64ToString  = "__dao_conv_i64_to_string";
+inline constexpr std::string_view kConvU8ToString   = "__dao_conv_u8_to_string";
+inline constexpr std::string_view kConvU16ToString  = "__dao_conv_u16_to_string";
+inline constexpr std::string_view kConvU32ToString  = "__dao_conv_u32_to_string";
+inline constexpr std::string_view kConvU64ToString  = "__dao_conv_u64_to_string";
+inline constexpr std::string_view kConvF32ToString  = "__dao_conv_f32_to_string";
 inline constexpr std::string_view kConvF64ToString  = "__dao_conv_f64_to_string";
 inline constexpr std::string_view kConvBoolToString = "__dao_conv_bool_to_string";
 
@@ -80,8 +94,14 @@ inline constexpr std::string_view kStrLength  = "__dao_str_length";
 // All hook names, for iteration / validation.
 inline constexpr std::string_view kAllHooks[] = {
     kWriteStdout,
-    kEqI32,    kEqI64,    kEqF64,    kEqBool,    kEqString,
-    kConvI32ToString, kConvI64ToString, kConvF64ToString, kConvBoolToString,
+    kEqI8,     kEqI16,    kEqI32,    kEqI64,
+    kEqU8,     kEqU16,    kEqU32,    kEqU64,
+    kEqF32,    kEqF64,    kEqBool,   kEqString,
+    kConvI8ToString,  kConvI16ToString,
+    kConvI32ToString, kConvI64ToString,
+    kConvU8ToString,  kConvU16ToString,
+    kConvU32ToString, kConvU64ToString,
+    kConvF32ToString, kConvF64ToString, kConvBoolToString,
     kConvI32ToF64, kConvI32ToI64, kConvF64ToI32, kConvI64ToI32,
     kWrappingAddI32,   kWrappingSubI32,   kWrappingMulI32,
     kWrappingAddI64,   kWrappingSubI64,   kWrappingMulI64,

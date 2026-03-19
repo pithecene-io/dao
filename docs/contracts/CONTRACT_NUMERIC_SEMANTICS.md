@@ -36,14 +36,14 @@ optimization-driven weakening.
 
 | Type  | Width | Signed | Status              |
 |-------|-------|--------|---------------------|
-| `i8`  | 8     | yes    | Deferred            |
-| `i16` | 16    | yes    | Deferred            |
+| `i8`  | 8     | yes    | Implemented         |
+| `i16` | 16    | yes    | Implemented         |
 | `i32` | 32    | yes    | Implemented         |
 | `i64` | 64    | yes    | Implemented         |
-| `u8`  | 8     | no     | Deferred            |
-| `u16` | 16    | no     | Deferred            |
-| `u32` | 32    | no     | Deferred            |
-| `u64` | 64    | no     | Deferred            |
+| `u8`  | 8     | no     | Implemented         |
+| `u16` | 16    | no     | Implemented         |
+| `u32` | 32    | no     | Implemented         |
+| `u64` | 64    | no     | Implemented         |
 
 All integer types are fixed-width, two's-complement for signed types,
 with no padding bits.
@@ -53,7 +53,7 @@ with no padding bits.
 | Type  | IEEE 754    | Status              |
 |-------|-------------|---------------------|
 | `f64` | binary64    | Implemented         |
-| `f32` | binary32    | Deferred            |
+| `f32` | binary32    | Implemented         |
 
 Both types are part of the language design. `f32` surface exposure is
 deferred until type surface, codegen, stdlib formatting/conversion,
@@ -393,10 +393,10 @@ The compiler and backend must:
 | `f64` IEEE 754 binary64          | Yes       | Partial           |
 | `f64` NaN/Inf/−0.0 semantics    | Yes       | Partial (codegen) |
 | `f64` comparison partial-order   | Yes       | Partial           |
-| `f32` IEEE 754 binary32          | Yes       | Deferred          |
+| `f32` IEEE 754 binary32          | Yes       | Implemented       |
 | `i64` arithmetic + overflow      | Yes       | Yes               |
-| Integer widths beyond i32/i64    | Yes       | Deferred          |
-| Unsigned integers                | Yes       | Deferred          |
+| Integer widths (i8, i16)         | Yes       | Implemented       |
+| Unsigned integers (u8–u64)       | Yes       | Implemented       |
 | Numeric conversions (i32↔i64↔f64)| Yes       | Partial           |
 | Float-to-int trapping (f64→i32)  | Yes       | Yes               |
 | Decimal types                    | Posture   | Deferred          |
