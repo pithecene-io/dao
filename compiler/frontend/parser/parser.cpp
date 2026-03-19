@@ -227,8 +227,9 @@ private:
         auto fields = parse_field_list();
         Span span = span_from(peek().span);
         return ctx_.alloc<Decl>(
-            span, ClassDecl{name_tok.text, name_tok.span, {}, std::move(fields),
-                            {}, {}});
+            span, ClassDecl{.name = name_tok.text, .name_span = name_tok.span,
+                            .type_params = {}, .fields = std::move(fields),
+                            .conformances = {}, .denials = {}});
       }
       error("expected declaration (fn, extern, class, concept, extend, or type)");
       advance(); // skip problematic token
@@ -324,9 +325,11 @@ private:
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
         span,
-        FunctionDecl{name_tok.text, name_tok.span, std::move(type_params),
-                     std::move(params), return_type, std::move(body),
-                     expr_body, is_extern});
+        FunctionDecl{.name = name_tok.text, .name_span = name_tok.span,
+                     .type_params = std::move(type_params),
+                     .params = std::move(params), .return_type = return_type,
+                     .body = std::move(body), .expr_body = expr_body,
+                     .is_extern = is_extern});
   }
 
   auto parse_params() -> std::vector<Param> {
@@ -369,9 +372,11 @@ private:
     auto body = parse_class_body();
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
-        span, ClassDecl{name_tok.text, name_tok.span,
-                        std::move(type_params), std::move(body.fields),
-                        std::move(body.conformances), std::move(body.denials)});
+        span, ClassDecl{.name = name_tok.text, .name_span = name_tok.span,
+                        .type_params = std::move(type_params),
+                        .fields = std::move(body.fields),
+                        .conformances = std::move(body.conformances),
+                        .denials = std::move(body.denials)});
   }
 
   struct ClassBody {
@@ -411,14 +416,15 @@ private:
     const auto& concept_tok = consume(TokenKind::Identifier);
     consume(TokenKind::Colon);
     auto methods = parse_method_list();
-    return {concept_tok.text, concept_tok.span, std::move(methods)};
+    return {.concept_name = concept_tok.text, .concept_span = concept_tok.span,
+            .methods = std::move(methods)};
   }
 
   auto parse_deny_spec() -> DenySpec {
     advance(); // consume 'deny'
     const auto& concept_tok = consume(TokenKind::Identifier);
     consume(TokenKind::Newline);
-    return {concept_tok.text, concept_tok.span};
+    return {.concept_name = concept_tok.text, .concept_span = concept_tok.span};
   }
 
   auto parse_method_list() -> std::vector<Decl*> {
@@ -480,10 +486,11 @@ private:
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
         span,
-        FunctionDecl{name_tok.text, name_tok.span,
-                     std::move(method_type_params), std::move(params),
-                     return_type, std::move(fn_body), expr_body,
-                     /*is_extern=*/false});
+        FunctionDecl{.name = name_tok.text, .name_span = name_tok.span,
+                     .type_params = std::move(method_type_params),
+                     .params = std::move(params), .return_type = return_type,
+                     .body = std::move(fn_body), .expr_body = expr_body,
+                     .is_extern = false});
   }
 
   auto parse_field_list() -> std::vector<FieldSpec*> {
@@ -517,7 +524,8 @@ private:
     consume(TokenKind::Newline);
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
-        span, AliasDecl{name_tok.text, name_tok.span, type});
+        span, AliasDecl{.name = name_tok.text, .name_span = name_tok.span,
+                        .type = type});
   }
 
   auto parse_concept_decl(bool is_derived) -> Decl* {
@@ -533,9 +541,10 @@ private:
     auto methods = parse_method_list();
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
-        span, ConceptDecl{name_tok.text, name_tok.span,
-                          std::move(type_params), std::move(methods),
-                          is_derived});
+        span, ConceptDecl{.name = name_tok.text, .name_span = name_tok.span,
+                          .type_params = std::move(type_params),
+                          .methods = std::move(methods),
+                          .is_derived = is_derived});
   }
 
   auto parse_extend_decl() -> Decl* {
@@ -547,8 +556,10 @@ private:
     auto methods = parse_method_list();
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
-        span, ExtendDecl{target_type, concept_tok.text, concept_tok.span,
-                         std::move(methods)});
+        span, ExtendDecl{.target_type = target_type,
+                         .concept_name = concept_tok.text,
+                         .concept_span = concept_tok.span,
+                         .methods = std::move(methods)});
   }
 
   // -----------------------------------------------------------------------
@@ -631,7 +642,7 @@ private:
       match(TokenKind::Newline);
       Span span = {.offset = expr->span.offset,
                    .length = (value->span.offset + value->span.length) - expr->span.offset};
-      return ctx_.alloc<Stmt>(span, Assignment{expr, value});
+      return ctx_.alloc<Stmt>(span, Assignment{.target = expr, .value = value});
     }
 
     // Trailing newline may have been consumed by pipe continuation.
@@ -673,7 +684,8 @@ private:
     match(TokenKind::Newline);
     Span span = span_from(kw.span);
     return ctx_.alloc<Stmt>(
-        span, LetStatement{name_tok.text, name_tok.span, type, init});
+        span, LetStatement{.name = name_tok.text, .name_span = name_tok.span,
+                           .type = type, .initializer = init});
   }
 
   auto parse_if_statement() -> Stmt* {
@@ -695,7 +707,9 @@ private:
 
     Span span = span_from(kw.span);
     return ctx_.alloc<Stmt>(
-        span, IfStatement{condition, std::move(then_body), std::move(else_body)});
+        span, IfStatement{.condition = condition,
+                          .then_body = std::move(then_body),
+                          .else_body = std::move(else_body)});
   }
 
   auto parse_while_statement() -> Stmt* {
@@ -708,7 +722,8 @@ private:
     consume(TokenKind::Colon);
     auto body = parse_suite();
     Span span = span_from(kw.span);
-    return ctx_.alloc<Stmt>(span, WhileStatement{condition, std::move(body)});
+    return ctx_.alloc<Stmt>(span, WhileStatement{.condition = condition,
+                                                    .body = std::move(body)});
   }
 
   auto parse_for_statement() -> Stmt* {
@@ -725,7 +740,8 @@ private:
     Span span = span_from(kw.span);
     return ctx_.alloc<Stmt>(
         span,
-        ForStatement{var_tok.text, var_tok.span, iterable, std::move(body)});
+        ForStatement{.var = var_tok.text, .var_span = var_tok.span,
+                     .iterable = iterable, .body = std::move(body)});
   }
 
   auto parse_mode_block() -> Stmt* {
@@ -735,7 +751,9 @@ private:
     auto body = parse_suite();
     Span span = span_from(kw.span);
     return ctx_.alloc<Stmt>(
-        span, ModeBlock{name_tok.text, name_tok.span, std::move(body)});
+        span, ModeBlock{.mode_name = name_tok.text,
+                        .name_span = name_tok.span,
+                        .body = std::move(body)});
   }
 
   auto parse_resource_block() -> Stmt* {
@@ -747,8 +765,11 @@ private:
     Span span = span_from(kw.span);
     return ctx_.alloc<Stmt>(
         span,
-        ResourceBlock{kind_tok.text, kind_tok.span, name_tok.text,
-                      name_tok.span, std::move(body)});
+        ResourceBlock{.resource_kind = kind_tok.text,
+                      .kind_span = kind_tok.span,
+                      .resource_name = name_tok.text,
+                      .name_span = name_tok.span,
+                      .body = std::move(body)});
   }
 
   auto parse_yield_statement() -> Stmt* {
@@ -816,7 +837,7 @@ private:
       }
       Span span = {.offset = left->span.offset,
                    .length = (right->span.offset + right->span.length) - left->span.offset};
-      left = ctx_.alloc<Expr>(span, PipeExpr{left, right});
+      left = ctx_.alloc<Expr>(span, PipeExpr{.left = left, .right = right});
     }
 
     // Consume matching DEDENTs for pipe continuation indents.
@@ -970,7 +991,7 @@ private:
       Span span = {.offset = op_tok.span.offset,
                    .length =
                        (operand->span.offset + operand->span.length) - op_tok.span.offset};
-      return ctx_.alloc<Expr>(span, UnaryExpr{op, operand});
+      return ctx_.alloc<Expr>(span, UnaryExpr{.op = op, .operand = operand});
     }
     return parse_application();
   }
@@ -994,7 +1015,8 @@ private:
       Span span = {.offset = callee->span.offset,
                    .length = (args.back()->span.offset + args.back()->span.length) -
                              callee->span.offset};
-      return ctx_.alloc<Expr>(span, CallExpr{callee, std::move(args)});
+      return ctx_.alloc<Expr>(span, CallExpr{.callee = callee,
+                                               .args = std::move(args)});
     }
 
     return callee;
@@ -1027,7 +1049,8 @@ private:
         const auto& rparen = consume(TokenKind::RParen);
         Span span = {.offset = expr->span.offset,
                      .length = (rparen.span.offset + rparen.span.length) - expr->span.offset};
-        expr = ctx_.alloc<Expr>(span, CallExpr{expr, std::move(args)});
+        expr = ctx_.alloc<Expr>(span, CallExpr{.callee = expr,
+                                                  .args = std::move(args)});
       } else if (peek_kind() == TokenKind::Dot) {
         // Field access: expr.field
         advance(); // .
@@ -1035,7 +1058,9 @@ private:
         Span span = {.offset = expr->span.offset,
                      .length =
                          (field_tok.span.offset + field_tok.span.length) - expr->span.offset};
-        expr = ctx_.alloc<Expr>(span, FieldExpr{expr, field_tok.text, field_tok.span});
+        expr = ctx_.alloc<Expr>(span, FieldExpr{.object = expr,
+                                                  .field = field_tok.text,
+                                                  .field_span = field_tok.span});
       } else if (peek_kind() == TokenKind::LBracket) {
         // Index or type-parameter application: expr[args]
         advance(); // [
@@ -1048,7 +1073,8 @@ private:
         const auto& rbracket = consume(TokenKind::RBracket);
         Span span = {.offset = expr->span.offset,
                      .length = (rbracket.span.offset + rbracket.span.length) - expr->span.offset};
-        expr = ctx_.alloc<Expr>(span, IndexExpr{expr, std::move(indices)});
+        expr = ctx_.alloc<Expr>(span, IndexExpr{.object = expr,
+                                                  .indices = std::move(indices)});
       } else {
         break;
       }
@@ -1139,7 +1165,8 @@ private:
     auto* body = parse_expression();
     Span span = {.offset = open_pipe.span.offset,
                  .length = (body->span.offset + body->span.length) - open_pipe.span.offset};
-    return ctx_.alloc<Expr>(span, LambdaExpr{std::move(params), body});
+    return ctx_.alloc<Expr>(span, LambdaExpr{.params = std::move(params),
+                                               .body = body});
   }
 
   auto parse_qualified_name_or_identifier() -> Expr* {
@@ -1194,7 +1221,8 @@ private:
       path.span.length = (gt.span.offset + gt.span.length) - path.span.offset;
     }
 
-    return ctx_.alloc<TypeNode>(path.span, NamedType{std::move(path), std::move(type_args)});
+    return ctx_.alloc<TypeNode>(path.span, NamedType{.name = std::move(path),
+                                                        .type_args = std::move(type_args)});
   }
 
   auto parse_type_path() -> QualifiedPath {
@@ -1220,7 +1248,8 @@ private:
   auto make_binary(BinaryOp op, Expr* left, Expr* right) -> Expr* {
     Span span = {.offset = left->span.offset,
                  .length = (right->span.offset + right->span.length) - left->span.offset};
-    return ctx_.alloc<Expr>(span, BinaryExpr{op, left, right});
+    return ctx_.alloc<Expr>(span, BinaryExpr{.op = op, .left = left,
+                                               .right = right});
   }
 
   auto span_from(Span start) -> Span {
