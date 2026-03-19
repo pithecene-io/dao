@@ -1305,6 +1305,43 @@ suite<"typecheck_prelude"> prelude_tests = [] {
         << "sign conversion should typecheck through prelude";
   };
 
+  "prelude i8 overflow functions typecheck"_test = [&] {
+    const std::string overflow_prelude =
+        "extern fn __dao_wrapping_add_i8(a: i8, b: i8): i8\n"
+        "extern fn __dao_saturating_add_i8(a: i8, b: i8): i8\n"
+        "fn wrapping_add_i8(a: i8, b: i8): i8 -> __dao_wrapping_add_i8(a, b)\n"
+        "fn saturating_add_i8(a: i8, b: i8): i8 -> __dao_saturating_add_i8(a, b)\n";
+    std::array preludes{overflow_prelude};
+    auto result = check_with_prelude(
+        "fn test(x: i8, y: i8): i8\n"
+        "  return wrapping_add_i8(x, y)\n",
+        preludes);
+    expect(is_ok(result))
+        << "i8 overflow should typecheck through prelude";
+  };
+
+  "prelude Numeric concept for u32 typechecks"_test = [&] {
+    const std::string numeric_prelude =
+        "concept Numeric:\n"
+        "  fn less_than(self, other: Numeric): bool\n"
+        "extend u32 as Numeric:\n"
+        "  fn less_than(self, other: u32): bool\n"
+        "    if self < other:\n"
+        "      return true\n"
+        "    return false\n"
+        "fn min<T: Numeric>(a: T, b: T): T\n"
+        "  if a.less_than(b):\n"
+        "    return a\n"
+        "  return b\n";
+    std::array preludes{numeric_prelude};
+    auto result = check_with_prelude(
+        "fn test(a: u32, b: u32): u32\n"
+        "  return min(a, b)\n",
+        preludes);
+    expect(is_ok(result))
+        << "generic min with u32 Numeric should typecheck";
+  };
+
   "multiple prelude files compose"_test = [&] {
     std::array preludes{printable_prelude, equatable_prelude};
     auto result = check_with_prelude(

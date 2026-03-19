@@ -304,14 +304,13 @@ For the current supported hook slice:
 
 - `__dao_` naming prefix and domain-qualified pattern
 - `dao_string` struct layout (`{ ptr, i64 }`)
-- scalar type mappings (i32, f64, bool, void)
+- scalar type mappings (i8, i16, i32, i64, u8, u16, u32, u64,
+  f32, f64, bool, void)
 - string passing convention (by-pointer in, by-value out)
 - all hooks listed in the table above
 
 ### Provisional (may evolve)
 
-- additional scalar types (i8, i16, i64, u8, u16, u32, u64, f32)
-- additional conversion hooks
 - additional string manipulation hooks (beyond concat)
 - memory allocation hooks (beyond resource domain scope tracking)
 - mode runtime hooks (parallel, GPU)
