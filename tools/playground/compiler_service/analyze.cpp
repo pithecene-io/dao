@@ -134,10 +134,12 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
     collect_diagnostics(diagnostics, source, parse_result.diagnostics,
                         prelude_bytes, prelude_lines);
 
-    if (has_user_error(parse_result.diagnostics, prelude_bytes) ||
-        parse_result.file == nullptr) {
+    if (parse_result.file == nullptr) {
       goto respond; // NOLINT(cppcoreguidelines-avoid-goto)
     }
+
+    bool has_parse_errors =
+        has_user_error(parse_result.diagnostics, prelude_bytes);
 
     if (diagnostics.empty()) {
       std::ostringstream ast_out;
@@ -146,9 +148,13 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
     }
 
     // --- Resolve ---
+    // Continue even with parse errors — error recovery nodes are
+    // tolerated by the resolver and produce partial results.
     auto resolve_result = resolve(*parse_result.file, prelude_bytes);
-    collect_diagnostics(diagnostics, source, resolve_result.diagnostics,
-                        prelude_bytes, prelude_lines);
+    if (!has_parse_errors) {
+      collect_diagnostics(diagnostics, source, resolve_result.diagnostics,
+                          prelude_bytes, prelude_lines);
+    }
 
     // Semantic tokens — always classify when lex/parse succeeded.
     auto sem_tokens =
@@ -156,25 +162,39 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
     build_semantic_tokens(semantic_tokens_json, sem_tokens, source,
                           prelude_bytes, prelude_lines);
 
-    if (has_user_error(resolve_result.diagnostics, prelude_bytes)) {
+    if (!has_parse_errors &&
+        has_user_error(resolve_result.diagnostics, prelude_bytes)) {
       goto respond; // NOLINT(cppcoreguidelines-avoid-goto)
     }
 
     // --- Typecheck ---
+    // Continue even with parse errors — the type checker skips error
+    // nodes silently, producing partial type information.
     TypeContext types;
     auto check_result =
         typecheck(*parse_result.file, resolve_result, types);
-    collect_diagnostics(diagnostics, source, check_result.diagnostics,
-                        prelude_bytes, prelude_lines);
+    if (!has_parse_errors) {
+      collect_diagnostics(diagnostics, source, check_result.diagnostics,
+                          prelude_bytes, prelude_lines);
+    }
 
     bool has_tc_errors = false;
-    for (const auto& diag : check_result.diagnostics) {
-      if (diag.span.offset >= prelude_bytes &&
-          diag.severity == Severity::Error) {
-        has_tc_errors = true;
+    if (!has_parse_errors) {
+      for (const auto& diag : check_result.diagnostics) {
+        if (diag.span.offset >= prelude_bytes &&
+            diag.severity == Severity::Error) {
+          has_tc_errors = true;
+        }
       }
     }
     if (has_tc_errors) {
+      goto respond; // NOLINT(cppcoreguidelines-avoid-goto)
+    }
+
+    // Stop lowering if parse had errors — partial ASTs with error
+    // nodes are fine for resolve/typecheck/tooling but not for
+    // HIR/MIR/LLVM lowering.
+    if (has_parse_errors) {
       goto respond; // NOLINT(cppcoreguidelines-avoid-goto)
     }
 
@@ -581,6 +601,31 @@ auto resolve_receiver_type(const dao::Symbol* sym,
   }
 }
 
+/// Try to find the type of the expression ending just before dot_pos
+/// by scanning the typed expression map. This handles general
+/// expressions like make_point()., p.x., and arr[i]. where the
+/// receiver is not a simple identifier in the symbol table.
+auto find_expr_type_before_dot(uint32_t dot_pos,
+                                 const dao::TypeCheckResult& typed)
+    -> const dao::Type* {
+  const dao::Type* best = nullptr;
+  uint32_t best_length = 0;
+
+  for (const auto& [expr, type] : typed.typed.expr_types()) {
+    auto end = expr->span.offset + expr->span.length;
+    if (end == dot_pos && type != nullptr) {
+      // If multiple expressions end at the same position, prefer the
+      // outermost one (largest span) — it's the complete sub-expression.
+      if (best == nullptr || expr->span.length > best_length) {
+        best = type;
+        best_length = expr->span.length;
+      }
+    }
+  }
+
+  return best;
+}
+
 /// Try to detect and resolve dot completion at the given offset.
 /// Returns the receiver type if a dot trigger is found, or nullptr.
 auto try_resolve_dot_receiver(uint32_t absolute_offset,
@@ -596,17 +641,24 @@ auto try_resolve_dot_receiver(uint32_t absolute_offset,
     return nullptr;
   }
 
-  // Find the identifier token before the dot.
+  // Fast path: simple identifier receiver (locals, params).
   auto pre_dot = scan_back_past_whitespace(contents, pos - 1);
   auto token_off = find_token_offset(
       pre_dot > 0 ? pre_dot - 1 : 0, pipe.lex_result);
 
   auto use_it = pipe.resolve_result.uses.find(token_off);
-  if (use_it == pipe.resolve_result.uses.end()) {
-    return nullptr;
+  if (use_it != pipe.resolve_result.uses.end()) {
+    const auto* sym_type =
+        resolve_receiver_type(use_it->second, pipe.check_result);
+    if (sym_type != nullptr) {
+      return sym_type;
+    }
   }
 
-  return resolve_receiver_type(use_it->second, pipe.check_result);
+  // Slow path: scan typed expressions for one ending at the dot.
+  // Handles call expressions, field chains, index expressions, etc.
+  auto dot_pos = pos - 1;
+  return find_expr_type_before_dot(dot_pos, pipe.check_result);
 }
 
 void handle_completions(const httplib::Request& req, httplib::Response& res,

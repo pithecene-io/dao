@@ -361,6 +361,8 @@ Exit criteria (Tier A+B):
 
 ### Task 16 — Error-Tolerant Parsing and Tooling Hardening
 
+**Status**: complete
+
 **Objective**: Make the parser produce partial ASTs for incomplete
 or broken source, enabling completion and diagnostics while typing.
 
@@ -379,15 +381,27 @@ Deliverables:
   (e.g. don't report "function not found" while user is typing
   an opening paren)
 
-Priority: **medium** — improves day-to-day playground UX but does
-not block any phase milestone.
+Implementation summary:
+
+- parser produces ErrorExpr/ErrorStmt/ErrorDecl placeholders with
+  synchronization at statement and declaration boundaries
+- statement parsers (let, if, while, for, yield, return, assignment)
+  detect ErrorExpr children and promote to ErrorStmt
+- resolver, type checker, and HIR builder tolerate error nodes via
+  explicit cases and silent default fallthrough
+- dot completion uses expr_types map scan for expression receivers
+  when symbol lookup fails (handles calls, field chains, indexing)
+- analyze pipeline continues through resolve/typecheck on parse
+  errors to produce partial semantic tokens and AST; downstream
+  cascade diagnostics are suppressed when parse errors exist;
+  HIR/MIR/LLVM lowering is skipped when parse errors exist
 
 Exit criteria:
 
-- typing `p.` mid-statement shows dot completions without parser
+- ✓ typing `p.` mid-statement shows dot completions without parser
   failure
-- incomplete source produces partial results instead of no results
-- diagnostics for in-progress constructs are deferred or suppressed
+- ✓ incomplete source produces partial results instead of no results
+- ✓ diagnostics for in-progress constructs are deferred or suppressed
 
 ## Principles
 
