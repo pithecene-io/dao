@@ -234,7 +234,58 @@ Specifically:
 - semantic types belong in `compiler/frontend/types/`
 - type checking belongs in `compiler/frontend/typecheck/`
 
-## 13. Non-goals of this contract
+## 13. Operator semantics
+
+### 13.1 Equality operators (`==`, `!=`)
+
+The equality operators have two dispatch paths:
+
+1. **Builtin scalars** (all integer types, float types, bool): the
+   compiler emits intrinsic comparison instructions directly (LLVM
+   `icmp`/`fcmp`). This is the fast path with no function call
+   overhead.
+2. **Non-builtin types**: the compiler dispatches through the
+   `Equatable` concept's runtime equality hook for the operand type.
+   Currently this covers `string` (via `__dao_eq_string`). When
+   struct equality is implemented, the same path will apply to any
+   type conforming to `Equatable`.
+
+`!=` is derived from `==` via logical negation. There is no separate
+not-equal hook or concept method.
+
+Both operands must have the same type. The result type is always
+`bool`.
+
+### 13.2 Arithmetic operators (`+`, `-`, `*`, `/`, `%`)
+
+Arithmetic operators require numeric operands with the following
+exception:
+
+- **`+` on strings**: `string + string` dispatches to the runtime
+  string concatenation hook (`__dao_str_concat`) and returns
+  `string`. This is a special case, not a general operator
+  overloading mechanism.
+
+All other arithmetic operators (`-`, `*`, `/`, `%`) reject non-numeric
+operands with a diagnostic.
+
+Both operands must have the same type. The result type matches the
+operand type.
+
+### 13.3 Comparison operators (`<`, `<=`, `>`, `>=`)
+
+Comparison operators currently require numeric operands. Extending
+them to non-numeric types via `Comparable` is a future task.
+
+### 13.4 General operator overloading
+
+Dao does not currently support user-defined operator overloading.
+The operator-to-concept dispatch for `==` and the string `+` special
+case are the only non-builtin operator behaviors. A general operator
+overloading mechanism is deferred and would require updating this
+contract and `CONTRACT_SYNTAX_SURFACE.md`.
+
+## 14. Non-goals of this contract
 
 This contract does not freeze:
 
@@ -250,7 +301,7 @@ This contract does not freeze:
 - higher-kinded types
 - dependent typing
 
-## 14. Implementation consequences
+## 15. Implementation consequences
 
 Compiler work may rely on the following architectural assumptions:
 
@@ -260,7 +311,7 @@ Compiler work may rely on the following architectural assumptions:
   tooling
 - `types/` must not depend on `typecheck/`
 
-## 15. Stability rule
+## 16. Stability rule
 
 Any change that would alter Dao from:
 
