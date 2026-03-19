@@ -59,7 +59,10 @@ int32_t __dao_str_char_at(const struct dao_string *s, int64_t index) {
 struct dao_string __dao_str_substring(const struct dao_string *s,
                                       int64_t start, int64_t len) {
   int64_t s_len = (s != NULL) ? s->len : 0;
-  if (start < 0 || len < 0 || start + len > s_len) {
+  // Use overflow-safe check: after ruling out negatives, compare
+  // start > s_len - len instead of start + len > s_len (which can
+  // overflow signed int64_t for large positive inputs, invoking UB).
+  if (start < 0 || len < 0 || len > s_len || start > s_len - len) {
     fprintf(stderr,
             "dao: substring out of range: start=%lld len=%lld (string length %lld)\n",
             (long long)start, (long long)len, (long long)s_len);
