@@ -97,7 +97,6 @@ The following may be added in later versions:
 - `c_string` or explicit null-terminated byte string type
 - by-value struct passing (once Dao struct ABI is stabilized)
 - function pointer types for callbacks
-- `f32` (when surfaced)
 
 Each expansion requires updating this contract before implementation.
 
