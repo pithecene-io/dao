@@ -26,10 +26,10 @@ CMakeUserPresets.json
 # Compiled executables from daoc build
 # Ignore extensionless files in examples/ (binary outputs of daoc build).
 # Git doesn't support "ignore files without extension" natively, so we
-# ignore everything then un-ignore the patterns we want to keep.
-# The ** variants ensure nested dirs (e.g. examples/ffi/) are covered.
-examples/*
-!examples/*/
+# ignore everything at all depths, then un-ignore directories and
+# source files we want to keep.
+examples/**
+!examples/**/*/
 !examples/**/*.dao
 !examples/**/*.md
 !examples/**/*.c
