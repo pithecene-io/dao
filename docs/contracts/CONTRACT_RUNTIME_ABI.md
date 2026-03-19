@@ -58,6 +58,8 @@ Domains:
 | `gen`      | Generator frame allocation and lifetime    |
 | `mem`      | Resource domain scope and lifetime         |
 | `str`      | String operations                          |
+| `wrapping` | Wrapping (two's complement) arithmetic     |
+| `saturating`| Saturating arithmetic                     |
 
 Examples:
 
@@ -83,6 +85,18 @@ Examples:
 | `__dao_conv_i64_to_i32`  | `(x: i64): i32`                       |
 | `__dao_str_concat`       | `(a: string, b: string): string`      |
 | `__dao_str_length`       | `(s: string): i64`                    |
+| `__dao_wrapping_add_i32` | `(a: i32, b: i32): i32`              |
+| `__dao_wrapping_sub_i32` | `(a: i32, b: i32): i32`              |
+| `__dao_wrapping_mul_i32` | `(a: i32, b: i32): i32`              |
+| `__dao_wrapping_add_i64` | `(a: i64, b: i64): i64`              |
+| `__dao_wrapping_sub_i64` | `(a: i64, b: i64): i64`              |
+| `__dao_wrapping_mul_i64` | `(a: i64, b: i64): i64`              |
+| `__dao_saturating_add_i32`| `(a: i32, b: i32): i32`             |
+| `__dao_saturating_sub_i32`| `(a: i32, b: i32): i32`             |
+| `__dao_saturating_mul_i32`| `(a: i32, b: i32): i32`             |
+| `__dao_saturating_add_i64`| `(a: i64, b: i64): i64`             |
+| `__dao_saturating_sub_i64`| `(a: i64, b: i64): i64`             |
+| `__dao_saturating_mul_i64`| `(a: i64, b: i64): i64`             |
 
 These are the **only** runtime hooks in the current supported slice.
 New hooks require updating this contract before implementation.

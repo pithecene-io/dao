@@ -2,6 +2,7 @@ add_library(dao_runtime STATIC
   io.c
   equality.c
   convert.c
+  overflow.c
   generator.c
   resource.c
   string.c

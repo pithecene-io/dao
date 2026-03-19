@@ -110,14 +110,14 @@ Rules:
    the language explicitly says otherwise — no debug/release
    semantic split
 
-Future explicit operations (not yet implemented):
+Explicit overflow operations:
 
 - `wrapping_add`, `wrapping_sub`, `wrapping_mul` — two's complement
-  wrap, no trap
+  wrap, no trap — **implemented** for i32 and i64
 - `saturating_add`, `saturating_sub`, `saturating_mul` — clamp to
-  min/max representable value
+  min/max representable value — **implemented** for i32 and i64
 - `checked_add`, `checked_sub`, `checked_mul` — return an error
-  value or status on overflow
+  value or status on overflow — **deferred** until Result type exists
 
 If Dao later wants relaxed arithmetic for high-performance numerics,
 it must be introduced as an explicit mode, operator family, or
@@ -403,6 +403,9 @@ The compiler and backend must:
 | Rounding-mode control            | Forbidden | N/A               |
 | Fast-math / relaxed mode         | Opt-in    | Deferred          |
 | Integer overflow policy freeze   | Yes       | Implemented       |
+| Wrapping operations (i32, i64)   | Yes       | Implemented       |
+| Saturating operations (i32, i64) | Yes       | Implemented       |
+| Checked operations               | Yes       | Deferred          |
 | String conversion (f64)          | Partial   | Implemented       |
 | Mixed-type operator rejection    | Yes       | Implemented       |
 

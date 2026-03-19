@@ -51,6 +51,20 @@ inline constexpr std::string_view kConvI32ToI64  = "__dao_conv_i32_to_i64";
 inline constexpr std::string_view kConvF64ToI32  = "__dao_conv_f64_to_i32";
 inline constexpr std::string_view kConvI64ToI32  = "__dao_conv_i64_to_i32";
 
+// Overflow domain (explicit operations)
+inline constexpr std::string_view kWrappingAddI32    = "__dao_wrapping_add_i32";
+inline constexpr std::string_view kWrappingSubI32    = "__dao_wrapping_sub_i32";
+inline constexpr std::string_view kWrappingMulI32    = "__dao_wrapping_mul_i32";
+inline constexpr std::string_view kWrappingAddI64    = "__dao_wrapping_add_i64";
+inline constexpr std::string_view kWrappingSubI64    = "__dao_wrapping_sub_i64";
+inline constexpr std::string_view kWrappingMulI64    = "__dao_wrapping_mul_i64";
+inline constexpr std::string_view kSaturatingAddI32  = "__dao_saturating_add_i32";
+inline constexpr std::string_view kSaturatingSubI32  = "__dao_saturating_sub_i32";
+inline constexpr std::string_view kSaturatingMulI32  = "__dao_saturating_mul_i32";
+inline constexpr std::string_view kSaturatingAddI64  = "__dao_saturating_add_i64";
+inline constexpr std::string_view kSaturatingSubI64  = "__dao_saturating_sub_i64";
+inline constexpr std::string_view kSaturatingMulI64  = "__dao_saturating_mul_i64";
+
 // Generator domain
 inline constexpr std::string_view kGenAlloc = "__dao_gen_alloc";
 inline constexpr std::string_view kGenFree  = "__dao_gen_free";
@@ -69,6 +83,10 @@ inline constexpr std::string_view kAllHooks[] = {
     kEqI32,    kEqI64,    kEqF64,    kEqBool,    kEqString,
     kConvI32ToString, kConvI64ToString, kConvF64ToString, kConvBoolToString,
     kConvI32ToF64, kConvI32ToI64, kConvF64ToI32, kConvI64ToI32,
+    kWrappingAddI32,   kWrappingSubI32,   kWrappingMulI32,
+    kWrappingAddI64,   kWrappingSubI64,   kWrappingMulI64,
+    kSaturatingAddI32, kSaturatingSubI32, kSaturatingMulI32,
+    kSaturatingAddI64, kSaturatingSubI64, kSaturatingMulI64,
     kGenAlloc, kGenFree,
     kMemResourceEnter, kMemResourceExit,
     kStrConcat, kStrLength,
@@ -98,6 +116,7 @@ private:
   void declare_io_hooks();
   void declare_equality_hooks();
   void declare_conversion_hooks();
+  void declare_overflow_hooks();
   void declare_generator_hooks();
   void declare_mem_resource_hooks();
   void declare_string_hooks();
