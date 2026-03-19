@@ -268,6 +268,34 @@ suite<"arithmetic"> arithmetic = [] {
     expect(!pipe.has_errors()) << "no backend errors";
     expect(contains(ir, "fcmp oge")) << ir;
   };
+
+  // f32 shares the same IEEE 754 predicate selection as f64.
+  "f32 == uses ordered equal (oeq)"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn feq(a: f32, b: f32): bool\n"
+        "  return a == b\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "fcmp oeq")) << ir;
+  };
+
+  "f32 != uses unordered not-equal (une)"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn fne(a: f32, b: f32): bool\n"
+        "  return a != b\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "fcmp une")) << ir;
+  };
+
+  "f32 < uses ordered less-than (olt)"_test = [] {
+    LlvmTestPipeline pipe(
+        "fn flt(a: f32, b: f32): bool\n"
+        "  return a < b\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    expect(contains(ir, "fcmp olt")) << ir;
+  };
 };
 
 // ---------------------------------------------------------------------------

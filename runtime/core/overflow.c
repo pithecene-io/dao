@@ -49,7 +49,10 @@ int16_t __dao_wrapping_sub_i16(int16_t a, int16_t b) {
 }
 
 int16_t __dao_wrapping_mul_i16(int16_t a, int16_t b) {
-  return u16_to_i16((uint16_t)a * (uint16_t)b);
+  // Cast to uint32_t before multiplying to avoid C integer-promotion UB:
+  // (uint16_t)a * (uint16_t)b promotes both operands to signed int on
+  // targets where int is 32-bit, and 65535*65535 overflows int.
+  return u16_to_i16((uint16_t)((uint32_t)(uint16_t)a * (uint32_t)(uint16_t)b));
 }
 
 int32_t __dao_wrapping_add_i32(int32_t a, int32_t b) {

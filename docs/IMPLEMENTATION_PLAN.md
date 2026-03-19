@@ -302,13 +302,18 @@ Governing contract: `docs/contracts/CONTRACT_NUMERIC_SEMANTICS.md`
 
 #### Tier A — Near-term (Phase 5 tail / pre-Phase 6)
 
-Priority: **high** — correctness baseline for existing types.
+Status: **complete**
 
-- audit existing f64 codegen against IEEE 754: verify comparison
-  predicates (ordered vs unordered), NaN propagation, signed-zero
-  preservation
-- freeze integer overflow policy for i32: decide checked vs wrapping
-  default, implement the chosen behavior
+- ✓ f64 codegen audited against IEEE 754: all six comparison
+  predicates use correct ordered/unordered semantics (oeq, une,
+  olt, ole, ogt, oge); NaN propagation preserved (no fast-math
+  flags); signed-zero preserved (fneg, fsub, fadd emit bare LLVM
+  IR with no nsz/nnan/ninf flags)
+- ✓ f32 shares the same IEEE 754-conformant codegen path
+- ✓ integer overflow policy frozen: checked by default (trap via
+  sadd/ssub/smul.with.overflow intrinsics for all signed types)
+- ✓ no fast-math flags anywhere in the backend (CONTRACT §8.1)
+- ✓ float-to-int conversions trap on NaN/Inf/out-of-range
 
 #### Tier A+ — Post-baseline (no blocking dependency)
 
@@ -358,12 +363,12 @@ Priority: **low** — depends on GPU and optimization infrastructure.
 - GPU numeric profiles
 - decimal type design and initial implementation
 
-Exit criteria (Tier A+B):
+Exit criteria (Tier A+B): **met**
 
-- f64 comparisons emit correct IEEE predicates in LLVM IR
-- i32 overflow behavior is defined and tested
-- i64 is usable end-to-end (type, codegen, runtime, examples)
-- explicit numeric conversions exist between i32 and f64
+- ✓ f64 comparisons emit correct IEEE predicates in LLVM IR
+- ✓ i32 overflow behavior is defined and tested
+- ✓ i64 is usable end-to-end (type, codegen, runtime, examples)
+- ✓ explicit numeric conversions exist between i32 and f64
 
 ### Task 16 — Error-Tolerant Parsing and Tooling Hardening
 

@@ -395,9 +395,9 @@ The compiler and backend must:
 |----------------------------------|-----------|-------------------|
 | `i32` arithmetic                 | Yes       | Yes               |
 | `i32` checked overflow (trap)    | Yes       | Yes               |
-| `f64` IEEE 754 binary64          | Yes       | Partial           |
-| `f64` NaN/Inf/−0.0 semantics    | Yes       | Partial (codegen) |
-| `f64` comparison partial-order   | Yes       | Partial           |
+| `f64` IEEE 754 binary64          | Yes       | Implemented       |
+| `f64` NaN/Inf/−0.0 semantics    | Yes       | Implemented       |
+| `f64` comparison partial-order   | Yes       | Implemented       |
 | `f32` IEEE 754 binary32          | Yes       | Implemented       |
 | `i64` arithmetic + overflow      | Yes       | Yes               |
 | Integer widths (i8, i16)         | Yes       | Implemented       |
