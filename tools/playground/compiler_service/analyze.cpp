@@ -141,7 +141,10 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
     bool has_parse_errors =
         has_user_error(parse_result.diagnostics, prelude_bytes);
 
-    if (diagnostics.empty()) {
+    // Always emit the partial AST when a file was produced, even if
+    // there are parse errors — error recovery nodes appear as
+    // placeholders and the user can see the surviving structure.
+    {
       std::ostringstream ast_out;
       print_ast(ast_out, *parse_result.file);
       ast_text = ast_out.str();
@@ -151,10 +154,8 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
     // Continue even with parse errors — error recovery nodes are
     // tolerated by the resolver and produce partial results.
     auto resolve_result = resolve(*parse_result.file, prelude_bytes);
-    if (!has_parse_errors) {
-      collect_diagnostics(diagnostics, source, resolve_result.diagnostics,
-                          prelude_bytes, prelude_lines);
-    }
+    collect_diagnostics(diagnostics, source, resolve_result.diagnostics,
+                        prelude_bytes, prelude_lines);
 
     // Semantic tokens — always classify when lex/parse succeeded.
     auto sem_tokens =
@@ -162,8 +163,7 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
     build_semantic_tokens(semantic_tokens_json, sem_tokens, source,
                           prelude_bytes, prelude_lines);
 
-    if (!has_parse_errors &&
-        has_user_error(resolve_result.diagnostics, prelude_bytes)) {
+    if (has_user_error(resolve_result.diagnostics, prelude_bytes)) {
       goto respond; // NOLINT(cppcoreguidelines-avoid-goto)
     }
 
@@ -173,18 +173,14 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
     TypeContext types;
     auto check_result =
         typecheck(*parse_result.file, resolve_result, types);
-    if (!has_parse_errors) {
-      collect_diagnostics(diagnostics, source, check_result.diagnostics,
-                          prelude_bytes, prelude_lines);
-    }
+    collect_diagnostics(diagnostics, source, check_result.diagnostics,
+                        prelude_bytes, prelude_lines);
 
     bool has_tc_errors = false;
-    if (!has_parse_errors) {
-      for (const auto& diag : check_result.diagnostics) {
-        if (diag.span.offset >= prelude_bytes &&
-            diag.severity == Severity::Error) {
-          has_tc_errors = true;
-        }
+    for (const auto& diag : check_result.diagnostics) {
+      if (diag.span.offset >= prelude_bytes &&
+          diag.severity == Severity::Error) {
+        has_tc_errors = true;
       }
     }
     if (has_tc_errors) {
