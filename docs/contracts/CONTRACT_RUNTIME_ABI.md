@@ -97,6 +97,32 @@ Examples:
 | `__dao_conv_i32_to_i64`  | `(x: i32): i64`                       |
 | `__dao_conv_f64_to_i32`  | `(x: f64): i32`                       |
 | `__dao_conv_i64_to_i32`  | `(x: i64): i32`                       |
+| `__dao_conv_f32_to_f64`  | `(x: f32): f64`                       |
+| `__dao_conv_f64_to_f32`  | `(x: f64): f32`                       |
+| `__dao_conv_i32_to_f32`  | `(x: i32): f32`                       |
+| `__dao_conv_i64_to_f64`  | `(x: i64): f64`                       |
+| `__dao_conv_i64_to_f32`  | `(x: i64): f32`                       |
+| `__dao_conv_f64_to_i64`  | `(x: f64): i64`                       |
+| `__dao_conv_f32_to_i32`  | `(x: f32): i32`                       |
+| `__dao_conv_f32_to_i64`  | `(x: f32): i64`                       |
+| `__dao_conv_i8_to_i32`   | `(x: i8): i32`                        |
+| `__dao_conv_i16_to_i32`  | `(x: i16): i32`                       |
+| `__dao_conv_i8_to_i64`   | `(x: i8): i64`                        |
+| `__dao_conv_i16_to_i64`  | `(x: i16): i64`                       |
+| `__dao_conv_u8_to_u32`   | `(x: u8): u32`                        |
+| `__dao_conv_u16_to_u32`  | `(x: u16): u32`                       |
+| `__dao_conv_u8_to_u64`   | `(x: u8): u64`                        |
+| `__dao_conv_u16_to_u64`  | `(x: u16): u64`                       |
+| `__dao_conv_u32_to_u64`  | `(x: u32): u64`                       |
+| `__dao_conv_u32_to_i64`  | `(x: u32): i64`                       |
+| `__dao_conv_i32_to_i8`   | `(x: i32): i8`                        |
+| `__dao_conv_i32_to_i16`  | `(x: i32): i16`                       |
+| `__dao_conv_u32_to_u8`   | `(x: u32): u8`                        |
+| `__dao_conv_u32_to_u16`  | `(x: u32): u16`                       |
+| `__dao_conv_i32_to_u32`  | `(x: i32): u32`                       |
+| `__dao_conv_u32_to_i32`  | `(x: u32): i32`                       |
+| `__dao_conv_i64_to_u64`  | `(x: i64): u64`                       |
+| `__dao_conv_u64_to_i64`  | `(x: u64): i64`                       |
 | `__dao_str_concat`       | `(a: string, b: string): string`      |
 | `__dao_str_length`       | `(s: string): i64`                    |
 | `__dao_wrapping_add_i32` | `(a: i32, b: i32): i32`              |

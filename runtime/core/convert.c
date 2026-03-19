@@ -154,7 +154,9 @@ int32_t __dao_conv_f32_to_i32(float x) {
 
 // f32 -> i64: truncates toward zero. Traps on NaN, Inf, or out-of-range.
 int64_t __dao_conv_f32_to_i64(float x) {
-  if (isnan(x) || isinf(x)) {
+  // INT64_MAX is 2^63-1; the nearest float above is 2^63 = 9.223372e+18f.
+  // INT64_MIN is -2^63 = -9.223372e+18f (exactly representable in float).
+  if (isnan(x) || isinf(x) || x < (float)INT64_MIN || x >= 9.223372036854776e+18f) {
     fprintf(stderr, "dao: numeric conversion error: f32 value out of i64 range\n");
     abort();
   }
