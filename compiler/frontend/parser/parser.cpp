@@ -623,6 +623,10 @@ private:
       }
       advance(); // =
       auto* value = parse_expression();
+      if (is_error_expr(value)) {
+        match(TokenKind::Newline);
+        return make_error_stmt(span_from(expr->span));
+      }
       // Trailing newline may have been consumed by pipe continuation.
       match(TokenKind::Newline);
       Span span = {.offset = expr->span.offset,
@@ -658,7 +662,9 @@ private:
 
     // If the initializer is an error placeholder, promote the whole
     // statement to an error so downstream passes never see it.
-    if (is_error_expr(init) && type == nullptr) {
+    // Note: init == nullptr is valid (e.g. `let x: i32`), so only
+    // check when init was actually parsed but came back as an error.
+    if (init != nullptr && init->kind() == NodeKind::ErrorExpr) {
       match(TokenKind::Newline);
       return make_error_stmt(span_from(kw.span));
     }
