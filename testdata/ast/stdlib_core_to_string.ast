@@ -1,0 +1,46 @@
+File
+  FunctionDecl i32_to_string
+    Param x: i32
+    ReturnType: string
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i32_to_string
+        Args
+          Identifier x
+  FunctionDecl i64_to_string
+    Param x: i64
+    ReturnType: string
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i64_to_string
+        Args
+          Identifier x
+  FunctionDecl f64_to_string
+    Param x: f64
+    ReturnType: string
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_f64_to_string
+        Args
+          Identifier x
+  FunctionDecl f32_to_string
+    Param x: f32
+    ReturnType: string
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_f32_to_string
+        Args
+          Identifier x
+  FunctionDecl bool_to_string
+    Param x: bool
+    ReturnType: string
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_bool_to_string
+        Args
+          Identifier x
