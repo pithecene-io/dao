@@ -29,6 +29,8 @@ auto check_source(const std::string& source) -> TypeCheckResult {
 
 /// Check user source with prelude source strings prepended.
 /// Uses source concatenation (same approach as the driver).
+/// The prelude byte offset is passed to resolve so __dao_ prefixed
+/// names in the prelude are not rejected as user code.
 auto check_with_prelude(const std::string& user_source,
                         std::span<const std::string> prelude_sources)
     -> TypeCheckResult {
@@ -37,8 +39,16 @@ auto check_with_prelude(const std::string& user_source,
     combined += pre;
     combined += '\n';
   }
+  auto prelude_bytes = static_cast<uint32_t>(combined.size());
   combined += user_source;
-  return check_source(combined);
+
+  SourceBuffer buf("test.dao", std::string(combined));
+  auto lex_result = lex(buf);
+  auto parse_result = parse(lex_result.tokens);
+  auto resolve_result = resolve(*parse_result.file, prelude_bytes);
+
+  TypeContext types;
+  return typecheck(*parse_result.file, resolve_result, types);
 }
 
 /// Returns true if any diagnostic message contains the substring.
@@ -1215,6 +1225,32 @@ suite<"typecheck_prelude"> prelude_tests = [] {
         preludes);
     expect(is_ok(result))
         << "user class should auto-derive from prelude concept";
+  };
+
+  "prelude wrapping functions typecheck"_test = [&] {
+    const std::string overflow_prelude =
+        "extern fn __dao_wrapping_add_i32(a: i32, b: i32): i32\n"
+        "fn wrapping_add(a: i32, b: i32): i32 -> __dao_wrapping_add_i32(a, b)\n";
+    std::array preludes{overflow_prelude};
+    auto result = check_with_prelude(
+        "fn test(x: i32, y: i32): i32\n"
+        "  return wrapping_add(x, y)\n",
+        preludes);
+    expect(is_ok(result))
+        << "wrapping_add should typecheck through prelude extern + wrapper";
+  };
+
+  "prelude saturating functions typecheck"_test = [&] {
+    const std::string sat_prelude =
+        "extern fn __dao_saturating_add_i32(a: i32, b: i32): i32\n"
+        "fn saturating_add(a: i32, b: i32): i32 -> __dao_saturating_add_i32(a, b)\n";
+    std::array preludes{sat_prelude};
+    auto result = check_with_prelude(
+        "fn test(x: i32, y: i32): i32\n"
+        "  return saturating_add(x, y)\n",
+        preludes);
+    expect(is_ok(result))
+        << "saturating_add should typecheck through prelude extern + wrapper";
   };
 
   "multiple prelude files compose"_test = [&] {

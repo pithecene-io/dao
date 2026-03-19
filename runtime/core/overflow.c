@@ -4,7 +4,10 @@
 // Authority:  docs/contracts/CONTRACT_NUMERIC_SEMANTICS.md §4.2
 //
 // Wrapping operations use unsigned arithmetic to avoid C signed
-// overflow UB, then cast back to signed.
+// overflow UB, then memcpy the result back to signed. The memcpy
+// reinterpretation is well-defined in all C standards (unlike
+// unsigned-to-signed casts, which are implementation-defined
+// pre-C23).
 //
 // Saturating operations clamp to the type's min/max on overflow.
 
@@ -12,33 +15,39 @@
 
 #include <limits.h>
 #include <stdint.h>
+#include <string.h>
+
+// Helper: reinterpret unsigned bits as signed via memcpy.
+// Well-defined in all C standards; the compiler optimizes this to a no-op.
+static int32_t u32_to_i32(uint32_t u) { int32_t r; memcpy(&r, &u, sizeof r); return r; }
+static int64_t u64_to_i64(uint64_t u) { int64_t r; memcpy(&r, &u, sizeof r); return r; }
 
 // ---------------------------------------------------------------------------
 // Wrapping operations — two's complement wrap, no trap
 // ---------------------------------------------------------------------------
 
 int32_t __dao_wrapping_add_i32(int32_t a, int32_t b) {
-  return (int32_t)((uint32_t)a + (uint32_t)b);
+  return u32_to_i32((uint32_t)a + (uint32_t)b);
 }
 
 int32_t __dao_wrapping_sub_i32(int32_t a, int32_t b) {
-  return (int32_t)((uint32_t)a - (uint32_t)b);
+  return u32_to_i32((uint32_t)a - (uint32_t)b);
 }
 
 int32_t __dao_wrapping_mul_i32(int32_t a, int32_t b) {
-  return (int32_t)((uint32_t)a * (uint32_t)b);
+  return u32_to_i32((uint32_t)a * (uint32_t)b);
 }
 
 int64_t __dao_wrapping_add_i64(int64_t a, int64_t b) {
-  return (int64_t)((uint64_t)a + (uint64_t)b);
+  return u64_to_i64((uint64_t)a + (uint64_t)b);
 }
 
 int64_t __dao_wrapping_sub_i64(int64_t a, int64_t b) {
-  return (int64_t)((uint64_t)a - (uint64_t)b);
+  return u64_to_i64((uint64_t)a - (uint64_t)b);
 }
 
 int64_t __dao_wrapping_mul_i64(int64_t a, int64_t b) {
-  return (int64_t)((uint64_t)a * (uint64_t)b);
+  return u64_to_i64((uint64_t)a * (uint64_t)b);
 }
 
 // ---------------------------------------------------------------------------
