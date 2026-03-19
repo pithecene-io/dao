@@ -518,6 +518,22 @@ suite<"typecheck_negative"> typecheck_negative = [] {
     expect(has_error_containing(result, "not supported at the C ABI"));
   };
 
+  "function type param in non-extern fn is rejected"_test = [] {
+    auto result = check_source(
+        "fn apply(cb: fn(i32, i32): i32, a: i32, b: i32): i32\n"
+        "  return cb(a, b)\n");
+    expect(has_error_containing(result,
+        "function type parameters are only supported in extern fn"));
+  };
+
+  "function type return in non-extern fn is rejected"_test = [] {
+    auto result = check_source(
+        "fn get_op(): fn(i32, i32): i32\n"
+        "  return get_op()\n");
+    expect(has_error_containing(result,
+        "function type returns are only supported in extern fn"));
+  };
+
   "lambda passed to extern fn callback is rejected"_test = [] {
     auto result = check_source(
         "extern fn apply(cb: fn(i32, i32): i32, a: i32, b: i32): i32\n"
