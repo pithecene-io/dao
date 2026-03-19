@@ -264,6 +264,15 @@ suite<"resolve_overloads"> resolve_overloads = [] {
         << "three different arities should all be allowed";
   };
 
+  "same-arity duplicate after overload set exists is rejected"_test = [] {
+    auto result = resolve_source("test",
+        "fn foo(a: i32): i32 -> a\n"
+        "fn foo(a: i32, b: i32): i32 -> a\n"
+        "fn foo(x: i32, y: i32): i32 -> x\n");
+    expect(has_diagnostic_containing(result.resolve_result,
+        "duplicate top-level declaration 'foo'"));
+  };
+
   "non-function duplicate with same name is still rejected"_test = [] {
     auto result = resolve_source("test",
         "fn foo(a: i32): i32 -> a\n"

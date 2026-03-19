@@ -203,28 +203,51 @@ private:
           decl.kind() == NodeKind::FunctionDecl &&
           existing->decl != nullptr) {
         const auto& new_fn = decl.as<FunctionDecl>();
-        const auto* existing_decl = static_cast<const Decl*>(existing->decl);
-        if (existing_decl->is<FunctionDecl>()) {
-          size_t new_arity = new_fn.params.size();
-          size_t existing_arity =
-              existing_decl->as<FunctionDecl>().params.size();
-          if (new_arity != existing_arity) {
-            // Different arity → register as overload with mangled name.
-            auto mangled = ctx_.intern(
-                std::string(name) + "$" + std::to_string(new_arity));
-            auto* sym = ctx_.make_symbol(kind, mangled, name_span, &decl);
-            file_scope_->declare_overload(name, mangled, sym);
+        size_t new_arity = new_fn.params.size();
 
-            // Also register the original as an overload if not already.
-            if (!file_scope_->has_overloads(name)) {
-              auto orig_mangled = ctx_.intern(
-                  std::string(name) + "$" +
-                  std::to_string(existing_arity));
-              // Re-register existing under mangled name + overload set.
-              file_scope_->declare_overload(name, orig_mangled, existing);
+        // Check for same-arity collision against ALL existing overloads
+        // (not just the original declaration). Without this, a third
+        // declaration like fn foo(x, y) after fn foo(a) / fn foo(a, b)
+        // would slip past the lookup_local check since the original
+        // declaration has a different arity.
+        bool arity_collision = false;
+        const auto* overloads = file_scope_->lookup_overloads(name);
+        if (overloads != nullptr) {
+          for (const auto* sym : *overloads) {
+            if (sym->decl != nullptr) {
+              const auto* od = static_cast<const Decl*>(sym->decl);
+              if (od->is<FunctionDecl>() &&
+                  od->as<FunctionDecl>().params.size() == new_arity) {
+                arity_collision = true;
+                break;
+              }
             }
-            return; // success — no duplicate error
           }
+        }
+        // Also check the original (unmangled) declaration's arity.
+        const auto* existing_decl = static_cast<const Decl*>(existing->decl);
+        if (!arity_collision && existing_decl->is<FunctionDecl>() &&
+            existing_decl->as<FunctionDecl>().params.size() == new_arity) {
+          arity_collision = true;
+        }
+
+        if (!arity_collision) {
+          // Different arity → register as overload with mangled name.
+          auto mangled = ctx_.intern(
+              std::string(name) + "$" + std::to_string(new_arity));
+          auto* sym = ctx_.make_symbol(kind, mangled, name_span, &decl);
+          file_scope_->declare_overload(name, mangled, sym);
+
+          // Also register the original as an overload if not already.
+          if (!file_scope_->has_overloads(name)) {
+            size_t existing_arity =
+                existing_decl->as<FunctionDecl>().params.size();
+            auto orig_mangled = ctx_.intern(
+                std::string(name) + "$" +
+                std::to_string(existing_arity));
+            file_scope_->declare_overload(name, orig_mangled, existing);
+          }
+          return; // success — no duplicate error
         }
       }
       diagnostics_.push_back(Diagnostic::error(
@@ -710,7 +733,36 @@ private:
     case NodeKind::PipeExpr: {
       const auto& pipe = expr.as<PipeExpr>();
       resolve_expr(*pipe.left, scope);
-      resolve_expr(*pipe.right, scope);
+      // For overloaded functions on the RHS of a pipe, the effective
+      // arity is 1 (the piped LHS value). Select the matching overload.
+      if (pipe.right->is<IdentifierExpr>()) {
+        const auto& ident = pipe.right->as<IdentifierExpr>();
+        if (scope->has_overloads(ident.name)) {
+          const auto* overloads = scope->find_overloads(ident.name);
+          if (overloads != nullptr) {
+            Symbol* match = nullptr;
+            for (auto* sym : *overloads) {
+              if (sym->decl != nullptr) {
+                const auto* fn_decl = static_cast<const Decl*>(sym->decl);
+                if (fn_decl->is<FunctionDecl>() &&
+                    fn_decl->as<FunctionDecl>().params.size() == 1) {
+                  match = sym;
+                  break;
+                }
+              }
+            }
+            if (match != nullptr) {
+              uses_[pipe.right->span.offset] = match;
+            } else {
+              resolve_expr(*pipe.right, scope);
+            }
+          }
+        } else {
+          resolve_expr(*pipe.right, scope);
+        }
+      } else {
+        resolve_expr(*pipe.right, scope);
+      }
       break;
     }
     case NodeKind::Lambda: {
