@@ -4,6 +4,36 @@ File
       Param self
       Param other: Numeric
       ReturnType: bool
+  ExtendDecl i8 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: i8
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
+  ExtendDecl i16 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: i16
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
   ExtendDecl i32 as Numeric
     FunctionDecl less_than
       Param self
@@ -23,6 +53,81 @@ File
     FunctionDecl less_than
       Param self
       Param other: i64
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
+  ExtendDecl u8 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: u8
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
+  ExtendDecl u16 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: u16
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
+  ExtendDecl u32 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: u32
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
+  ExtendDecl u64 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: u64
+      ReturnType: bool
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier self
+            Identifier other
+        Then
+          ReturnStatement
+            BoolLiteral true
+      ReturnStatement
+        BoolLiteral false
+  ExtendDecl f32 as Numeric
+    FunctionDecl less_than
+      Param self
+      Param other: f32
       ReturnType: bool
       IfStatement
         Condition

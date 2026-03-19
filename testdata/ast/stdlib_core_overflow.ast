@@ -1,4 +1,28 @@
 File
+  ExternFunctionDecl __dao_wrapping_add_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+  ExternFunctionDecl __dao_wrapping_sub_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+  ExternFunctionDecl __dao_wrapping_mul_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+  ExternFunctionDecl __dao_wrapping_add_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+  ExternFunctionDecl __dao_wrapping_sub_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+  ExternFunctionDecl __dao_wrapping_mul_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
   ExternFunctionDecl __dao_wrapping_add_i32
     Param a: i32
     Param b: i32
@@ -23,6 +47,30 @@ File
     Param a: i64
     Param b: i64
     ReturnType: i64
+  ExternFunctionDecl __dao_saturating_add_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+  ExternFunctionDecl __dao_saturating_sub_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+  ExternFunctionDecl __dao_saturating_mul_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+  ExternFunctionDecl __dao_saturating_add_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+  ExternFunctionDecl __dao_saturating_sub_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+  ExternFunctionDecl __dao_saturating_mul_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
   ExternFunctionDecl __dao_saturating_add_i32
     Param a: i32
     Param b: i32
@@ -47,6 +95,72 @@ File
     Param a: i64
     Param b: i64
     ReturnType: i64
+  FunctionDecl wrapping_add_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_add_i8
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_sub_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_sub_i8
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_mul_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_mul_i8
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_add_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_add_i16
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_sub_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_sub_i16
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl wrapping_mul_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_wrapping_mul_i16
+        Args
+          Identifier a
+          Identifier b
   FunctionDecl wrapping_add
     Param a: i32
     Param b: i32
@@ -110,6 +224,72 @@ File
       CallExpr
         Callee
           Identifier __dao_wrapping_mul_i64
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_add_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_add_i8
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_sub_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_sub_i8
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_mul_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: i8
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_mul_i8
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_add_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_add_i16
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_sub_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_sub_i16
+        Args
+          Identifier a
+          Identifier b
+  FunctionDecl saturating_mul_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: i16
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_saturating_mul_i16
         Args
           Identifier a
           Identifier b

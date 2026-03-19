@@ -98,12 +98,24 @@ inline constexpr std::string_view kConvI64ToU64  = "__dao_conv_i64_to_u64";
 inline constexpr std::string_view kConvU64ToI64  = "__dao_conv_u64_to_i64";
 
 // Overflow domain (explicit operations)
+inline constexpr std::string_view kWrappingAddI8     = "__dao_wrapping_add_i8";
+inline constexpr std::string_view kWrappingSubI8     = "__dao_wrapping_sub_i8";
+inline constexpr std::string_view kWrappingMulI8     = "__dao_wrapping_mul_i8";
+inline constexpr std::string_view kWrappingAddI16    = "__dao_wrapping_add_i16";
+inline constexpr std::string_view kWrappingSubI16    = "__dao_wrapping_sub_i16";
+inline constexpr std::string_view kWrappingMulI16    = "__dao_wrapping_mul_i16";
 inline constexpr std::string_view kWrappingAddI32    = "__dao_wrapping_add_i32";
 inline constexpr std::string_view kWrappingSubI32    = "__dao_wrapping_sub_i32";
 inline constexpr std::string_view kWrappingMulI32    = "__dao_wrapping_mul_i32";
 inline constexpr std::string_view kWrappingAddI64    = "__dao_wrapping_add_i64";
 inline constexpr std::string_view kWrappingSubI64    = "__dao_wrapping_sub_i64";
 inline constexpr std::string_view kWrappingMulI64    = "__dao_wrapping_mul_i64";
+inline constexpr std::string_view kSaturatingAddI8   = "__dao_saturating_add_i8";
+inline constexpr std::string_view kSaturatingSubI8   = "__dao_saturating_sub_i8";
+inline constexpr std::string_view kSaturatingMulI8   = "__dao_saturating_mul_i8";
+inline constexpr std::string_view kSaturatingAddI16  = "__dao_saturating_add_i16";
+inline constexpr std::string_view kSaturatingSubI16  = "__dao_saturating_sub_i16";
+inline constexpr std::string_view kSaturatingMulI16  = "__dao_saturating_mul_i16";
 inline constexpr std::string_view kSaturatingAddI32  = "__dao_saturating_add_i32";
 inline constexpr std::string_view kSaturatingSubI32  = "__dao_saturating_sub_i32";
 inline constexpr std::string_view kSaturatingMulI32  = "__dao_saturating_mul_i32";
@@ -143,8 +155,12 @@ inline constexpr std::string_view kAllHooks[] = {
     kConvU32ToU64, kConvU32ToI64,
     kConvI32ToI8,  kConvI32ToI16, kConvU32ToU8,  kConvU32ToU16,
     kConvI32ToU32, kConvU32ToI32, kConvI64ToU64, kConvU64ToI64,
+    kWrappingAddI8,    kWrappingSubI8,    kWrappingMulI8,
+    kWrappingAddI16,   kWrappingSubI16,   kWrappingMulI16,
     kWrappingAddI32,   kWrappingSubI32,   kWrappingMulI32,
     kWrappingAddI64,   kWrappingSubI64,   kWrappingMulI64,
+    kSaturatingAddI8,  kSaturatingSubI8,  kSaturatingMulI8,
+    kSaturatingAddI16, kSaturatingSubI16, kSaturatingMulI16,
     kSaturatingAddI32, kSaturatingSubI32, kSaturatingMulI32,
     kSaturatingAddI64, kSaturatingSubI64, kSaturatingMulI64,
     kGenAlloc, kGenFree,

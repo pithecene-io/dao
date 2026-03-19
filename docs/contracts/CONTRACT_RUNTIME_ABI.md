@@ -125,12 +125,24 @@ Examples:
 | `__dao_conv_u64_to_i64`  | `(x: u64): i64`                       |
 | `__dao_str_concat`       | `(a: string, b: string): string`      |
 | `__dao_str_length`       | `(s: string): i64`                    |
+| `__dao_wrapping_add_i8`  | `(a: i8, b: i8): i8`                 |
+| `__dao_wrapping_sub_i8`  | `(a: i8, b: i8): i8`                 |
+| `__dao_wrapping_mul_i8`  | `(a: i8, b: i8): i8`                 |
+| `__dao_wrapping_add_i16` | `(a: i16, b: i16): i16`              |
+| `__dao_wrapping_sub_i16` | `(a: i16, b: i16): i16`              |
+| `__dao_wrapping_mul_i16` | `(a: i16, b: i16): i16`              |
 | `__dao_wrapping_add_i32` | `(a: i32, b: i32): i32`              |
 | `__dao_wrapping_sub_i32` | `(a: i32, b: i32): i32`              |
 | `__dao_wrapping_mul_i32` | `(a: i32, b: i32): i32`              |
 | `__dao_wrapping_add_i64` | `(a: i64, b: i64): i64`              |
 | `__dao_wrapping_sub_i64` | `(a: i64, b: i64): i64`              |
 | `__dao_wrapping_mul_i64` | `(a: i64, b: i64): i64`              |
+| `__dao_saturating_add_i8` | `(a: i8, b: i8): i8`                |
+| `__dao_saturating_sub_i8` | `(a: i8, b: i8): i8`                |
+| `__dao_saturating_mul_i8` | `(a: i8, b: i8): i8`                |
+| `__dao_saturating_add_i16`| `(a: i16, b: i16): i16`             |
+| `__dao_saturating_sub_i16`| `(a: i16, b: i16): i16`             |
+| `__dao_saturating_mul_i16`| `(a: i16, b: i16): i16`             |
 | `__dao_saturating_add_i32`| `(a: i32, b: i32): i32`             |
 | `__dao_saturating_sub_i32`| `(a: i32, b: i32): i32`             |
 | `__dao_saturating_mul_i32`| `(a: i32, b: i32): i32`             |
