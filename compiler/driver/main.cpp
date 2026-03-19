@@ -129,19 +129,26 @@ auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
 
 auto load_prelude_source() -> std::string {
   std::filesystem::path root(DAO_SOURCE_DIR);
-  auto stdlib_core = root / "stdlib" / "core";
   std::string prelude;
 
-  if (!std::filesystem::exists(stdlib_core)) {
-    return prelude;
-  }
+  // Load stdlib directories in order: core first, then io.
+  // concepts/ is not auto-loaded yet (Iterable needs more infra).
+  const std::filesystem::path dirs[] = {
+      root / "stdlib" / "core",
+      root / "stdlib" / "io",
+  };
 
-  for (const auto& entry : std::filesystem::directory_iterator(stdlib_core)) {
-    if (entry.path().extension() != ".dao") {
+  for (const auto& dir : dirs) {
+    if (!std::filesystem::exists(dir)) {
       continue;
     }
-    prelude += read_file(entry.path());
-    prelude += '\n';
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+      if (entry.path().extension() != ".dao") {
+        continue;
+      }
+      prelude += read_file(entry.path());
+      prelude += '\n';
+    }
   }
   return prelude;
 }

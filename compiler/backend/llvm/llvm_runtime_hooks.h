@@ -30,7 +30,11 @@ class LlvmTypeLowering;
 namespace runtime_hooks {
 
 // IO domain
-inline constexpr std::string_view kWriteStdout = "__dao_io_write_stdout";
+inline constexpr std::string_view kWriteStdout  = "__dao_io_write_stdout";
+inline constexpr std::string_view kWriteStderr  = "__dao_io_write_stderr";
+inline constexpr std::string_view kReadFile     = "__dao_io_read_file";
+inline constexpr std::string_view kWriteFile    = "__dao_io_write_file";
+inline constexpr std::string_view kFileExists   = "__dao_io_file_exists";
 
 // Equality domain
 inline constexpr std::string_view kEqI8     = "__dao_eq_i8";
@@ -143,7 +147,7 @@ inline constexpr std::string_view kStrCompare    = "__dao_str_compare";
 
 // All hook names, for iteration / validation.
 inline constexpr std::string_view kAllHooks[] = {
-    kWriteStdout,
+    kWriteStdout, kWriteStderr, kReadFile, kWriteFile, kFileExists,
     kEqI8,     kEqI16,    kEqI32,    kEqI64,
     kEqU8,     kEqU16,    kEqU32,    kEqU64,
     kEqF32,    kEqF64,    kEqBool,   kEqString,

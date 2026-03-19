@@ -839,12 +839,29 @@ suite<"runtime_abi"> runtime_abi = [] {
     LlvmRuntimeHooks hooks(*module, types);
     hooks.declare_all();
 
-    // IO hook
+    // IO hooks
     auto* write_fn = module->getFunction("__dao_io_write_stdout");
     expect(write_fn != nullptr) << "write_stdout declared";
     expect(write_fn->getReturnType()->isVoidTy()) << "returns void";
     expect(write_fn->arg_size() == 1u) << "1 param";
     expect(write_fn->getArg(0)->getType()->isPointerTy()) << "string ptr param";
+
+    auto* write_err = module->getFunction("__dao_io_write_stderr");
+    expect(write_err != nullptr) << "write_stderr declared";
+    expect(write_err->getReturnType()->isVoidTy()) << "returns void";
+
+    auto* read_fn = module->getFunction("__dao_io_read_file");
+    expect(read_fn != nullptr) << "read_file declared";
+    expect(read_fn->getReturnType()->isStructTy()) << "returns dao.string";
+
+    auto* write_file_fn = module->getFunction("__dao_io_write_file");
+    expect(write_file_fn != nullptr) << "write_file declared";
+    expect(write_file_fn->getReturnType()->isIntegerTy(1)) << "returns bool";
+    expect(write_file_fn->arg_size() == 2u) << "2 params";
+
+    auto* exists_fn = module->getFunction("__dao_io_file_exists");
+    expect(exists_fn != nullptr) << "file_exists declared";
+    expect(exists_fn->getReturnType()->isIntegerTy(1)) << "returns bool";
 
     // Equality hooks
     auto* eq_i32 = module->getFunction("__dao_eq_i32");
@@ -917,6 +934,10 @@ suite<"runtime_abi"> runtime_abi = [] {
 
   "is_runtime_hook recognizes all hooks"_test = [] {
     expect(LlvmRuntimeHooks::is_runtime_hook("__dao_io_write_stdout"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_io_write_stderr"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_io_read_file"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_io_write_file"));
+    expect(LlvmRuntimeHooks::is_runtime_hook("__dao_io_file_exists"));
     expect(LlvmRuntimeHooks::is_runtime_hook("__dao_eq_i32"));
     expect(LlvmRuntimeHooks::is_runtime_hook("__dao_eq_f64"));
     expect(LlvmRuntimeHooks::is_runtime_hook("__dao_eq_bool"));
