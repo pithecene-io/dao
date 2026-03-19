@@ -86,3 +86,46 @@ int64_t pair64_hi(struct Pair64 p) {
 struct Pair64 make_pair64(int32_t lo, int64_t hi) {
   return (struct Pair64){lo, hi};
 }
+
+// --- SSE classification: pure-float structs ---
+
+struct F64Wrap {
+  double val;
+};
+
+// Receive f64 struct by value (passed in XMM register on x86-64).
+double unwrap_f64(struct F64Wrap w) {
+  return w.val * 2.0;
+}
+
+// Return f64 struct by value (returned in XMM register).
+struct F64Wrap wrap_f64(double val) {
+  return (struct F64Wrap){val};
+}
+
+// --- Nested struct with SSE ---
+
+struct NestedF64 {
+  struct F64Wrap w;
+};
+
+// Receive nested f64 struct (recursive walk preserves SSE classification).
+double unwrap_nested_f64(struct NestedF64 n) {
+  return n.w.val + 1.0;
+}
+
+// --- Mixed nested: SSE + INTEGER ---
+
+struct MixedNested {
+  struct F64Wrap w;
+  int32_t tag;
+};
+
+// Receive mixed nested struct: EB0=SSE(double), EB1=INTEGER(i32).
+int32_t mixed_nested_tag(struct MixedNested m) {
+  return m.tag;
+}
+
+double mixed_nested_val(struct MixedNested m) {
+  return m.w.val;
+}

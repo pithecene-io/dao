@@ -21,12 +21,15 @@
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/Type.h>
 
+#include <cstdint>
 #include <vector>
 
 namespace dao {
 
 /// Classification of one eightbyte in the x86-64 System V ABI.
-enum class AbiClass { Integer, Sse, Memory };
+/// NoClass is the identity element for merge — an eightbyte with no
+/// fields starts as NoClass and takes the class of the first field.
+enum class AbiClass : uint8_t { NoClass, Integer, Sse, Memory };
 
 /// Result of classifying a struct for the C ABI.
 struct AbiCoercion {

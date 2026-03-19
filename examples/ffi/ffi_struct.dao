@@ -28,6 +28,22 @@ extern fn make_outer(a: i32, b: f64, tag: i32): Outer
 extern fn pair64_hi(p: Pair64): i64
 extern fn make_pair64(lo: i32, hi: i64): Pair64
 
+class F64Wrap:
+  val: f64
+
+class NestedF64:
+  w: F64Wrap
+
+class MixedNested:
+  w: F64Wrap
+  tag: i32
+
+extern fn unwrap_f64(w: F64Wrap): f64
+extern fn wrap_f64(val: f64): F64Wrap
+extern fn unwrap_nested_f64(n: NestedF64): f64
+extern fn mixed_nested_tag(m: MixedNested): i32
+extern fn mixed_nested_val(m: MixedNested): f64
+
 fn main(): i32
   print("--- struct param: Point ---")
   let p: Point = Point(10, 20)
@@ -76,5 +92,22 @@ fn main(): i32
   let pair2: Pair64 = make_pair64(22, hi2)
   print(pair2.lo)
   print(pair2.hi)
+
+  print("--- SSE: f64 struct param ---")
+  let fw: F64Wrap = F64Wrap(3.14)
+  print(unwrap_f64(fw))
+
+  print("--- SSE: f64 struct return ---")
+  let fw2: F64Wrap = wrap_f64(2.718)
+  print(fw2.val)
+
+  print("--- SSE: nested f64 struct ---")
+  let nf: NestedF64 = NestedF64(F64Wrap(9.0))
+  print(unwrap_nested_f64(nf))
+
+  print("--- SSE+INTEGER: mixed nested ---")
+  let mn: MixedNested = MixedNested(F64Wrap(1.5), 42)
+  print(mixed_nested_tag(mn))
+  print(mixed_nested_val(mn))
 
   return 0

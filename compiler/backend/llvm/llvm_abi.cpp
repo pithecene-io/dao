@@ -30,8 +30,11 @@ auto classify_scalar(llvm::Type* type) -> AbiClass {
 }
 
 /// Merge two ABI classifications per x86-64 SysV rules.
+/// NoClass is the identity element — NoClass + X → X.
 /// INTEGER + SSE → INTEGER (INTEGER dominates in the same eightbyte).
 auto merge_class(AbiClass lhs, AbiClass rhs) -> AbiClass {
+  if (lhs == AbiClass::NoClass) return rhs;
+  if (rhs == AbiClass::NoClass) return lhs;
   if (lhs == AbiClass::Memory || rhs == AbiClass::Memory) {
     return AbiClass::Memory;
   }
@@ -43,7 +46,10 @@ auto merge_class(AbiClass lhs, AbiClass rhs) -> AbiClass {
 
 /// Information about one eightbyte after classification.
 struct EightbyteInfo {
-  AbiClass classification = AbiClass::Integer;
+  // NoClass: no fields have been classified in this eightbyte yet.
+  // This ensures that a pure-SSE eightbyte (e.g. { f64 }) stays SSE
+  // instead of being forced to INTEGER by the default.
+  AbiClass classification = AbiClass::NoClass;
 
   // Track SSE field types for precise coercion (float vs double vs <2xfloat>).
   uint32_t num_floats = 0;   // f32 fields in this eightbyte
@@ -53,6 +59,63 @@ struct EightbyteInfo {
   uint64_t start_byte = 0;
   uint64_t end_byte = 0; // one past last byte with data
 };
+
+/// Recursively classify a field into the eightbyte array.
+/// For scalar fields, classifies directly. For nested struct fields,
+/// walks their sub-fields recursively using the DataLayout to compute
+/// sub-field offsets relative to the parent struct.
+///
+/// `base_offset` is the byte offset of `field_type` within the
+/// top-level struct.
+///
+/// Returns false if the struct should be passed indirectly.
+auto classify_field(llvm::Type* field_type, uint64_t base_offset,
+                    const llvm::DataLayout& data_layout,
+                    std::vector<EightbyteInfo>& eightbytes,
+                    uint32_t num_eightbytes) -> bool {
+  uint64_t field_size = data_layout.getTypeAllocSize(field_type);
+  uint64_t field_end = base_offset + field_size;
+
+  if (field_type->isStructTy()) {
+    // Nested struct: recursively classify each sub-field.
+    auto* nested = llvm::cast<llvm::StructType>(field_type);
+    if (nested->isOpaque()) return false;
+    const auto* nested_layout = data_layout.getStructLayout(nested);
+    for (unsigned sub_idx = 0; sub_idx < nested->getNumElements(); ++sub_idx) {
+      uint64_t sub_offset = base_offset + nested_layout->getElementOffset(sub_idx);
+      if (!classify_field(nested->getElementType(sub_idx), sub_offset,
+                          data_layout, eightbytes, num_eightbytes)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Scalar field.
+  auto eb_idx = static_cast<uint32_t>(base_offset / kEightbyteSize);
+  if (eb_idx >= num_eightbytes) return false;
+
+  // Scalar fields must not straddle eightbyte boundaries.
+  uint64_t eb_boundary = (eb_idx + 1) * kEightbyteSize;
+  if (field_end > eb_boundary && eb_idx + 1 < num_eightbytes) {
+    return false; // misaligned scalar — layout error
+  }
+
+  eightbytes[eb_idx].end_byte =
+      std::max(eightbytes[eb_idx].end_byte, field_end);
+
+  AbiClass field_class = classify_scalar(field_type);
+  eightbytes[eb_idx].classification =
+      merge_class(eightbytes[eb_idx].classification, field_class);
+
+  if (field_type->isFloatTy()) {
+    eightbytes[eb_idx].num_floats++;
+  } else if (field_type->isDoubleTy()) {
+    eightbytes[eb_idx].num_doubles++;
+  }
+
+  return true;
+}
 
 } // namespace
 
@@ -87,62 +150,19 @@ auto classify_struct_for_c_abi(llvm::StructType* struct_type,
     eightbytes[eb_idx].end_byte = eightbytes[eb_idx].start_byte;
   }
 
-  // Classify each field into its eightbyte.
+  // Classify each field into its eightbyte. Nested structs are walked
+  // recursively so their scalar sub-fields are classified individually
+  // — this handles nested structs that span eightbyte boundaries and
+  // preserves SSE classification for float-only nested structs.
   for (unsigned field_idx = 0; field_idx < struct_type->getNumElements();
        ++field_idx) {
     uint64_t field_offset = layout->getElementOffset(field_idx);
     llvm::Type* field_type = struct_type->getElementType(field_idx);
-    uint64_t field_size =
-        data_layout.getTypeAllocSize(field_type);
 
-    // Determine which eightbyte this field starts in.
-    uint32_t eb_idx = static_cast<uint32_t>(field_offset / kEightbyteSize);
-    if (eb_idx >= num_eightbytes) {
-      // Field beyond expected range — shouldn't happen for valid structs.
+    if (!classify_field(field_type, field_offset, data_layout,
+                        eightbytes, num_eightbytes)) {
       result.indirect = true;
       return result;
-    }
-
-    // If a field spans two eightbytes, pass indirectly (conservative).
-    uint64_t field_end = field_offset + field_size;
-    uint64_t eb_boundary = (eb_idx + 1) * kEightbyteSize;
-    if (field_end > eb_boundary && eb_idx + 1 < num_eightbytes) {
-      // Field straddles eightbyte boundary — handle the split.
-      // For nested structs this can happen; pass indirectly for safety.
-      if (!field_type->isStructTy()) {
-        // Scalar fields should not straddle; this would be a layout error.
-        result.indirect = true;
-        return result;
-      }
-      // Nested struct: recursively classify it.
-      // For simplicity in the initial implementation, if a nested struct
-      // straddles an eightbyte boundary, we classify each half by walking
-      // the nested struct's fields. But the simple approach here is to
-      // just mark as indirect for any straddling.
-      result.indirect = true;
-      return result;
-    }
-
-    // Update the end_byte tracker for this eightbyte.
-    eightbytes[eb_idx].end_byte =
-        std::max(eightbytes[eb_idx].end_byte, field_end);
-
-    // Classify the field.
-    if (field_type->isStructTy()) {
-      // Nested struct within one eightbyte: classify as INTEGER
-      // (conservative but correct — nested struct fields are scalar).
-      eightbytes[eb_idx].classification =
-          merge_class(eightbytes[eb_idx].classification, AbiClass::Integer);
-    } else {
-      AbiClass field_class = classify_scalar(field_type);
-      eightbytes[eb_idx].classification =
-          merge_class(eightbytes[eb_idx].classification, field_class);
-
-      if (field_type->isFloatTy()) {
-        eightbytes[eb_idx].num_floats++;
-      } else if (field_type->isDoubleTy()) {
-        eightbytes[eb_idx].num_doubles++;
-      }
     }
   }
 
