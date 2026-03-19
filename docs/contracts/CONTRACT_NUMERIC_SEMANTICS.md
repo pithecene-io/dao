@@ -113,9 +113,10 @@ Rules:
 Explicit overflow operations:
 
 - `wrapping_add`, `wrapping_sub`, `wrapping_mul` — two's complement
-  wrap, no trap — **implemented** for i32 and i64
+  wrap, no trap — **implemented** for all signed types (i8–i64)
 - `saturating_add`, `saturating_sub`, `saturating_mul` — clamp to
-  min/max representable value — **implemented** for i32 and i64
+  min/max representable value — **implemented** for all signed types
+  (i8–i64)
 - `checked_add`, `checked_sub`, `checked_mul` — return an error
   value or status on overflow — **deferred** until Result type exists
 
@@ -124,8 +125,9 @@ it must be introduced as an explicit mode, operator family, or
 intrinsic family — not by overloading `unsafe` or by making
 semantics build-configuration-dependent.
 
-Status: **Specified, implemented** (i32 checked add/sub/mul with
-trap on overflow)
+Status: **Specified, implemented** — default signed arithmetic traps
+on overflow for all signed types (i8–i64); explicit wrapping and
+saturating operations available for all signed types
 
 ### 4.3 Division and remainder
 

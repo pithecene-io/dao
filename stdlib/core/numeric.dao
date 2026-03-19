@@ -1,6 +1,18 @@
 concept Numeric:
   fn less_than(self, other: Numeric): bool
 
+extend i8 as Numeric:
+  fn less_than(self, other: i8): bool
+    if self < other:
+      return true
+    return false
+
+extend i16 as Numeric:
+  fn less_than(self, other: i16): bool
+    if self < other:
+      return true
+    return false
+
 extend i32 as Numeric:
   fn less_than(self, other: i32): bool
     if self < other:
@@ -9,6 +21,36 @@ extend i32 as Numeric:
 
 extend i64 as Numeric:
   fn less_than(self, other: i64): bool
+    if self < other:
+      return true
+    return false
+
+extend u8 as Numeric:
+  fn less_than(self, other: u8): bool
+    if self < other:
+      return true
+    return false
+
+extend u16 as Numeric:
+  fn less_than(self, other: u16): bool
+    if self < other:
+      return true
+    return false
+
+extend u32 as Numeric:
+  fn less_than(self, other: u32): bool
+    if self < other:
+      return true
+    return false
+
+extend u64 as Numeric:
+  fn less_than(self, other: u64): bool
+    if self < other:
+      return true
+    return false
+
+extend f32 as Numeric:
+  fn less_than(self, other: f32): bool
     if self < other:
       return true
     return false

@@ -338,14 +338,17 @@ integers.
 
 #### Tier C — Phase 6+ dedicated task
 
-Priority: **medium** — broadens the numeric surface but does not
-block interop.
+Status: **complete**
 
-- full integer width expansion: i8, i16, u8, u16, u32, u64
-- `f32` surface exposure: type, codegen, stdlib formatting,
-  conversion, runtime hooks
-- float-to-int trapping for all combinations
-- full numeric conversion matrix with explicit cast syntax
+- ✓ full integer width expansion: i8, i16, u8, u16, u32, u64 —
+  type system, LLVM codegen, equality, to_string, C ABI, Equatable,
+  Printable, Numeric concept extensions
+- ✓ `f32` surface exposure: type, codegen, stdlib formatting,
+  conversion, runtime hooks, equality, printing
+- ✓ float-to-int trapping for all combinations (f32/f64 → i32/i64)
+- ✓ full numeric conversion matrix: 27 explicit conversion functions
+  covering widening, narrowing, sign-changing, and float↔int/float
+- ✓ wrapping and saturating overflow for all signed types (i8–i64)
 
 #### Tier D — Phase 8
 

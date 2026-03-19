@@ -1,3 +1,9 @@
+extern fn __dao_wrapping_add_i8(a: i8, b: i8): i8
+extern fn __dao_wrapping_sub_i8(a: i8, b: i8): i8
+extern fn __dao_wrapping_mul_i8(a: i8, b: i8): i8
+extern fn __dao_wrapping_add_i16(a: i16, b: i16): i16
+extern fn __dao_wrapping_sub_i16(a: i16, b: i16): i16
+extern fn __dao_wrapping_mul_i16(a: i16, b: i16): i16
 extern fn __dao_wrapping_add_i32(a: i32, b: i32): i32
 extern fn __dao_wrapping_sub_i32(a: i32, b: i32): i32
 extern fn __dao_wrapping_mul_i32(a: i32, b: i32): i32
@@ -5,6 +11,12 @@ extern fn __dao_wrapping_add_i64(a: i64, b: i64): i64
 extern fn __dao_wrapping_sub_i64(a: i64, b: i64): i64
 extern fn __dao_wrapping_mul_i64(a: i64, b: i64): i64
 
+extern fn __dao_saturating_add_i8(a: i8, b: i8): i8
+extern fn __dao_saturating_sub_i8(a: i8, b: i8): i8
+extern fn __dao_saturating_mul_i8(a: i8, b: i8): i8
+extern fn __dao_saturating_add_i16(a: i16, b: i16): i16
+extern fn __dao_saturating_sub_i16(a: i16, b: i16): i16
+extern fn __dao_saturating_mul_i16(a: i16, b: i16): i16
 extern fn __dao_saturating_add_i32(a: i32, b: i32): i32
 extern fn __dao_saturating_sub_i32(a: i32, b: i32): i32
 extern fn __dao_saturating_mul_i32(a: i32, b: i32): i32
@@ -12,6 +24,12 @@ extern fn __dao_saturating_add_i64(a: i64, b: i64): i64
 extern fn __dao_saturating_sub_i64(a: i64, b: i64): i64
 extern fn __dao_saturating_mul_i64(a: i64, b: i64): i64
 
+fn wrapping_add_i8(a: i8, b: i8): i8 -> __dao_wrapping_add_i8(a, b)
+fn wrapping_sub_i8(a: i8, b: i8): i8 -> __dao_wrapping_sub_i8(a, b)
+fn wrapping_mul_i8(a: i8, b: i8): i8 -> __dao_wrapping_mul_i8(a, b)
+fn wrapping_add_i16(a: i16, b: i16): i16 -> __dao_wrapping_add_i16(a, b)
+fn wrapping_sub_i16(a: i16, b: i16): i16 -> __dao_wrapping_sub_i16(a, b)
+fn wrapping_mul_i16(a: i16, b: i16): i16 -> __dao_wrapping_mul_i16(a, b)
 fn wrapping_add(a: i32, b: i32): i32 -> __dao_wrapping_add_i32(a, b)
 fn wrapping_sub(a: i32, b: i32): i32 -> __dao_wrapping_sub_i32(a, b)
 fn wrapping_mul(a: i32, b: i32): i32 -> __dao_wrapping_mul_i32(a, b)
@@ -19,6 +37,12 @@ fn wrapping_add_i64(a: i64, b: i64): i64 -> __dao_wrapping_add_i64(a, b)
 fn wrapping_sub_i64(a: i64, b: i64): i64 -> __dao_wrapping_sub_i64(a, b)
 fn wrapping_mul_i64(a: i64, b: i64): i64 -> __dao_wrapping_mul_i64(a, b)
 
+fn saturating_add_i8(a: i8, b: i8): i8 -> __dao_saturating_add_i8(a, b)
+fn saturating_sub_i8(a: i8, b: i8): i8 -> __dao_saturating_sub_i8(a, b)
+fn saturating_mul_i8(a: i8, b: i8): i8 -> __dao_saturating_mul_i8(a, b)
+fn saturating_add_i16(a: i16, b: i16): i16 -> __dao_saturating_add_i16(a, b)
+fn saturating_sub_i16(a: i16, b: i16): i16 -> __dao_saturating_sub_i16(a, b)
+fn saturating_mul_i16(a: i16, b: i16): i16 -> __dao_saturating_mul_i16(a, b)
 fn saturating_add(a: i32, b: i32): i32 -> __dao_saturating_add_i32(a, b)
 fn saturating_sub(a: i32, b: i32): i32 -> __dao_saturating_sub_i32(a, b)
 fn saturating_mul(a: i32, b: i32): i32 -> __dao_saturating_mul_i32(a, b)

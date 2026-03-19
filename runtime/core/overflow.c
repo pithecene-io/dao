@@ -1,6 +1,6 @@
 // overflow.c — Dao runtime explicit overflow operation hooks.
 //
-// Implements: wrapping and saturating arithmetic for i32 and i64.
+// Implements: wrapping and saturating arithmetic for i8, i16, i32, i64.
 // Authority:  docs/contracts/CONTRACT_NUMERIC_SEMANTICS.md §4.2
 //
 // Wrapping operations use unsigned arithmetic to avoid C signed
@@ -19,12 +19,38 @@
 
 // Helper: reinterpret unsigned bits as signed via memcpy.
 // Well-defined in all C standards; the compiler optimizes this to a no-op.
+static int8_t  u8_to_i8(uint8_t u)   { int8_t r;  memcpy(&r, &u, sizeof r); return r; }
+static int16_t u16_to_i16(uint16_t u) { int16_t r; memcpy(&r, &u, sizeof r); return r; }
 static int32_t u32_to_i32(uint32_t u) { int32_t r; memcpy(&r, &u, sizeof r); return r; }
 static int64_t u64_to_i64(uint64_t u) { int64_t r; memcpy(&r, &u, sizeof r); return r; }
 
 // ---------------------------------------------------------------------------
 // Wrapping operations — two's complement wrap, no trap
 // ---------------------------------------------------------------------------
+
+int8_t __dao_wrapping_add_i8(int8_t a, int8_t b) {
+  return u8_to_i8((uint8_t)a + (uint8_t)b);
+}
+
+int8_t __dao_wrapping_sub_i8(int8_t a, int8_t b) {
+  return u8_to_i8((uint8_t)a - (uint8_t)b);
+}
+
+int8_t __dao_wrapping_mul_i8(int8_t a, int8_t b) {
+  return u8_to_i8((uint8_t)a * (uint8_t)b);
+}
+
+int16_t __dao_wrapping_add_i16(int16_t a, int16_t b) {
+  return u16_to_i16((uint16_t)a + (uint16_t)b);
+}
+
+int16_t __dao_wrapping_sub_i16(int16_t a, int16_t b) {
+  return u16_to_i16((uint16_t)a - (uint16_t)b);
+}
+
+int16_t __dao_wrapping_mul_i16(int16_t a, int16_t b) {
+  return u16_to_i16((uint16_t)a * (uint16_t)b);
+}
 
 int32_t __dao_wrapping_add_i32(int32_t a, int32_t b) {
   return u32_to_i32((uint32_t)a + (uint32_t)b);
@@ -53,6 +79,48 @@ int64_t __dao_wrapping_mul_i64(int64_t a, int64_t b) {
 // ---------------------------------------------------------------------------
 // Saturating operations — clamp to min/max representable value
 // ---------------------------------------------------------------------------
+
+int8_t __dao_saturating_add_i8(int8_t a, int8_t b) {
+  int32_t r = (int32_t)a + (int32_t)b;
+  if (r > INT8_MAX) return INT8_MAX;
+  if (r < INT8_MIN) return INT8_MIN;
+  return (int8_t)r;
+}
+
+int8_t __dao_saturating_sub_i8(int8_t a, int8_t b) {
+  int32_t r = (int32_t)a - (int32_t)b;
+  if (r > INT8_MAX) return INT8_MAX;
+  if (r < INT8_MIN) return INT8_MIN;
+  return (int8_t)r;
+}
+
+int8_t __dao_saturating_mul_i8(int8_t a, int8_t b) {
+  int32_t r = (int32_t)a * (int32_t)b;
+  if (r > INT8_MAX) return INT8_MAX;
+  if (r < INT8_MIN) return INT8_MIN;
+  return (int8_t)r;
+}
+
+int16_t __dao_saturating_add_i16(int16_t a, int16_t b) {
+  int32_t r = (int32_t)a + (int32_t)b;
+  if (r > INT16_MAX) return INT16_MAX;
+  if (r < INT16_MIN) return INT16_MIN;
+  return (int16_t)r;
+}
+
+int16_t __dao_saturating_sub_i16(int16_t a, int16_t b) {
+  int32_t r = (int32_t)a - (int32_t)b;
+  if (r > INT16_MAX) return INT16_MAX;
+  if (r < INT16_MIN) return INT16_MIN;
+  return (int16_t)r;
+}
+
+int16_t __dao_saturating_mul_i16(int16_t a, int16_t b) {
+  int32_t r = (int32_t)a * (int32_t)b;
+  if (r > INT16_MAX) return INT16_MAX;
+  if (r < INT16_MIN) return INT16_MIN;
+  return (int16_t)r;
+}
 
 int32_t __dao_saturating_add_i32(int32_t a, int32_t b) {
   int64_t r = (int64_t)a + (int64_t)b;

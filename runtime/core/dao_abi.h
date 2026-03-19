@@ -131,6 +131,12 @@ int64_t __dao_conv_u64_to_i64(uint64_t x);
 // ---------------------------------------------------------------------------
 
 // Wrapping arithmetic: two's complement wrap, no trap.
+int8_t __dao_wrapping_add_i8(int8_t a, int8_t b);
+int8_t __dao_wrapping_sub_i8(int8_t a, int8_t b);
+int8_t __dao_wrapping_mul_i8(int8_t a, int8_t b);
+int16_t __dao_wrapping_add_i16(int16_t a, int16_t b);
+int16_t __dao_wrapping_sub_i16(int16_t a, int16_t b);
+int16_t __dao_wrapping_mul_i16(int16_t a, int16_t b);
 int32_t __dao_wrapping_add_i32(int32_t a, int32_t b);
 int32_t __dao_wrapping_sub_i32(int32_t a, int32_t b);
 int32_t __dao_wrapping_mul_i32(int32_t a, int32_t b);
@@ -139,6 +145,12 @@ int64_t __dao_wrapping_sub_i64(int64_t a, int64_t b);
 int64_t __dao_wrapping_mul_i64(int64_t a, int64_t b);
 
 // Saturating arithmetic: clamp to min/max representable value.
+int8_t __dao_saturating_add_i8(int8_t a, int8_t b);
+int8_t __dao_saturating_sub_i8(int8_t a, int8_t b);
+int8_t __dao_saturating_mul_i8(int8_t a, int8_t b);
+int16_t __dao_saturating_add_i16(int16_t a, int16_t b);
+int16_t __dao_saturating_sub_i16(int16_t a, int16_t b);
+int16_t __dao_saturating_mul_i16(int16_t a, int16_t b);
 int32_t __dao_saturating_add_i32(int32_t a, int32_t b);
 int32_t __dao_saturating_sub_i32(int32_t a, int32_t b);
 int32_t __dao_saturating_mul_i32(int32_t a, int32_t b);

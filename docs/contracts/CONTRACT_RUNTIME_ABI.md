@@ -125,12 +125,24 @@ Examples:
 | `__dao_conv_u64_to_i64`  | `(x: u64): i64`                       |
 | `__dao_str_concat`       | `(a: string, b: string): string`      |
 | `__dao_str_length`       | `(s: string): i64`                    |
+| `__dao_wrapping_add_i8`  | `(a: i8, b: i8): i8`                 |
+| `__dao_wrapping_sub_i8`  | `(a: i8, b: i8): i8`                 |
+| `__dao_wrapping_mul_i8`  | `(a: i8, b: i8): i8`                 |
+| `__dao_wrapping_add_i16` | `(a: i16, b: i16): i16`              |
+| `__dao_wrapping_sub_i16` | `(a: i16, b: i16): i16`              |
+| `__dao_wrapping_mul_i16` | `(a: i16, b: i16): i16`              |
 | `__dao_wrapping_add_i32` | `(a: i32, b: i32): i32`              |
 | `__dao_wrapping_sub_i32` | `(a: i32, b: i32): i32`              |
 | `__dao_wrapping_mul_i32` | `(a: i32, b: i32): i32`              |
 | `__dao_wrapping_add_i64` | `(a: i64, b: i64): i64`              |
 | `__dao_wrapping_sub_i64` | `(a: i64, b: i64): i64`              |
 | `__dao_wrapping_mul_i64` | `(a: i64, b: i64): i64`              |
+| `__dao_saturating_add_i8` | `(a: i8, b: i8): i8`                |
+| `__dao_saturating_sub_i8` | `(a: i8, b: i8): i8`                |
+| `__dao_saturating_mul_i8` | `(a: i8, b: i8): i8`                |
+| `__dao_saturating_add_i16`| `(a: i16, b: i16): i16`             |
+| `__dao_saturating_sub_i16`| `(a: i16, b: i16): i16`             |
+| `__dao_saturating_mul_i16`| `(a: i16, b: i16): i16`             |
 | `__dao_saturating_add_i32`| `(a: i32, b: i32): i32`             |
 | `__dao_saturating_sub_i32`| `(a: i32, b: i32): i32`             |
 | `__dao_saturating_mul_i32`| `(a: i32, b: i32): i32`             |
@@ -292,14 +304,13 @@ For the current supported hook slice:
 
 - `__dao_` naming prefix and domain-qualified pattern
 - `dao_string` struct layout (`{ ptr, i64 }`)
-- scalar type mappings (i32, f64, bool, void)
+- scalar type mappings (i8, i16, i32, i64, u8, u16, u32, u64,
+  f32, f64, bool, void)
 - string passing convention (by-pointer in, by-value out)
 - all hooks listed in the table above
 
 ### Provisional (may evolve)
 
-- additional scalar types (i8, i16, i64, u8, u16, u32, u64, f32)
-- additional conversion hooks
 - additional string manipulation hooks (beyond concat)
 - memory allocation hooks (beyond resource domain scope tracking)
 - mode runtime hooks (parallel, GPU)

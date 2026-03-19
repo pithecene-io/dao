@@ -789,6 +789,9 @@ suite<"runtime_abi"> runtime_abi = [] {
     expect(contains(ir, "declare i64 @__dao_conv_f64_to_i64(double)")) << ir;
     expect(contains(ir, "declare i32 @__dao_conv_i8_to_i32(i8)")) << ir;
     expect(contains(ir, "declare i32 @__dao_conv_i32_to_u32(i32)")) << ir;
+    // Narrow overflow (i8/i16)
+    expect(contains(ir, "declare i8 @__dao_wrapping_add_i8(i8, i8)")) << ir;
+    expect(contains(ir, "declare i16 @__dao_saturating_add_i16(i16, i16)")) << ir;
   };
 };
 
