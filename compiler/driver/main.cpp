@@ -489,6 +489,10 @@ void cmd_mir(const std::filesystem::path& path) {
 
 // Build and emit LLVM IR. Output is deterministic.
 void cmd_llvm_ir(const std::filesystem::path& path) {
+  // Initialize targets so the module gets a correct DataLayout
+  // for ABI-sensitive lowering (struct coercion, alignment).
+  dao::LlvmBackend::initialize_targets();
+
   auto mir = run_through_mir(path);
   llvm::LLVMContext llvm_ctx;
   auto llvm_result = lower_to_llvm(mir, llvm_ctx, path);
@@ -500,12 +504,13 @@ void cmd_llvm_ir(const std::filesystem::path& path) {
 // to the system linker.
 void cmd_build(const std::filesystem::path& path,
                std::span<const std::string> link_extras = {}) {
+  // Initialize targets before lowering so the module gets a correct
+  // DataLayout for ABI-sensitive struct coercion.
+  dao::LlvmBackend::initialize_targets();
+
   auto mir = run_through_mir(path);
   llvm::LLVMContext llvm_ctx;
   auto llvm_result = lower_to_llvm(mir, llvm_ctx, path);
-
-  // Initialize LLVM targets and emit object file.
-  dao::LlvmBackend::initialize_targets();
 
   auto obj_path = std::filesystem::temp_directory_path() /
                   (path.stem().string() + ".o");

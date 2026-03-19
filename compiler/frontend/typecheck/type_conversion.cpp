@@ -1,6 +1,19 @@
 #include "frontend/typecheck/type_conversion.h"
 
+#include <unordered_set>
+
 namespace dao {
+
+namespace {
+
+/// Recursive helper for the repr-C-compatible struct predicate.
+/// `visiting` tracks struct decl_ids currently being checked to detect
+/// non-pointer self-reference cycles.
+auto is_c_abi_compatible_impl(const Type* type,
+                               std::unordered_set<const void*>& visiting)
+    -> bool;
+
+} // namespace
 
 auto is_assignable(const Type* source, const Type* target) -> bool {
   if (source == target) {
@@ -97,6 +110,15 @@ auto is_float(const Type* type) -> bool {
 }
 
 auto is_c_abi_compatible(const Type* type) -> bool {
+  std::unordered_set<const void*> visiting;
+  return is_c_abi_compatible_impl(type, visiting);
+}
+
+namespace {
+
+auto is_c_abi_compatible_impl(const Type* type,
+                               std::unordered_set<const void*>& visiting)
+    -> bool {
   if (type == nullptr) {
     return false;
   }
@@ -123,12 +145,38 @@ auto is_c_abi_compatible(const Type* type) -> bool {
     return false;
   }
   case TypeKind::Pointer:
-    return true; // raw pointers
+    return true; // raw pointers — pointee type is not checked
   case TypeKind::Void:
     return true; // void return
+  case TypeKind::Struct: {
+    // Repr-C-compatible struct predicate (CONTRACT_C_ABI_INTEROP §4.3.1):
+    //   1. at least one field (no empty structs)
+    //   2. every field is recursively C-ABI-compatible
+    //   3. no non-pointer self-reference cycle
+    const auto* st = static_cast<const TypeStruct*>(type);
+    if (st->fields().empty()) {
+      return false; // empty struct rejected
+    }
+    // Cycle detection: if we're already visiting this struct, we have
+    // a non-pointer self-reference (pointers don't recurse into this
+    // branch — they return true in the Pointer case above).
+    if (!visiting.insert(st->decl_id()).second) {
+      return false; // recursive struct through non-pointer field
+    }
+    for (const auto& field : st->fields()) {
+      if (!is_c_abi_compatible_impl(field.type, visiting)) {
+        visiting.erase(st->decl_id());
+        return false;
+      }
+    }
+    visiting.erase(st->decl_id());
+    return true;
+  }
   default:
-    return false; // string, struct, function, generator, named, enum, generic
+    return false; // string, function, generator, named, enum, generic
   }
 }
+
+} // namespace
 
 } // namespace dao

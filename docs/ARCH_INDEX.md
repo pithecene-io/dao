@@ -74,7 +74,7 @@ Compiler-internal target-agnostic representations.
 
 Target-specific lowering.
 
-- `llvm/` — initial backend target: MIR→LLVM IR lowering, type lowering, runtime hook declarations, function/block/instruction emission, textual IR output, native object emission
+- `llvm/` — initial backend target: MIR→LLVM IR lowering, type lowering, runtime hook declarations, function/block/instruction emission, x86-64 C ABI struct coercion, textual IR output, native object emission
 
 ### `compiler/driver/`
 

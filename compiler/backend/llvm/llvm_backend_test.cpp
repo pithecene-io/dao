@@ -384,6 +384,129 @@ suite<"externs"> externs = [] {
     expect(!pipe.has_errors()) << "no backend errors";
     expect(contains(ir, "declare void @print")) << ir;
   };
+
+  "extern fn with struct param uses ABI-coerced types"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "extern fn distance(p: Point): f64\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Point { i32, i32 } = 8 bytes → coerced to single i64 param.
+    expect(contains(ir, "declare double @distance(i64)")) << ir;
+  };
+
+  "extern fn returning struct uses ABI-coerced return"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Point:\n"
+        "  x: i32\n"
+        "  y: i32\n"
+        "\n"
+        "extern fn make_point(x: i32, y: i32): Point\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Point { i32, i32 } = 8 bytes → coerced to i64 return.
+    expect(contains(ir, "declare i64 @make_point(i32, i32)")) << ir;
+  };
+
+  "extern fn with large struct uses byval"_test = [] {
+    LlvmTestPipeline pipe(
+        "class Inner:\n"
+        "  a: i32\n"
+        "  b: f64\n"
+        "\n"
+        "class Outer:\n"
+        "  inner: Inner\n"
+        "  tag: i32\n"
+        "\n"
+        "extern fn process(o: Outer): i32\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // Outer { Inner { i32, f64 }, i32 } = 24 bytes → indirect (byval).
+    expect(contains(ir, "declare i32 @process(ptr byval(%dao.Outer))")) << ir;
+  };
+
+  // SSE classification: pure-float structs use XMM registers.
+  "extern fn with f64 struct uses SSE coercion"_test = [] {
+    LlvmTestPipeline pipe(
+        "class F64Wrap:\n"
+        "  val: f64\n"
+        "\n"
+        "extern fn unwrap(w: F64Wrap): f64\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // { f64 } → SSE class → coerced to double.
+    expect(contains(ir, "declare double @unwrap(double)")) << ir;
+  };
+
+  "extern fn with two f32 fields uses SSE vector coercion"_test = [] {
+    LlvmTestPipeline pipe(
+        "class F32Pair:\n"
+        "  a: f32\n"
+        "  b: f32\n"
+        "\n"
+        "extern fn sum_pair(p: F32Pair): f32\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // { f32, f32 } → SSE class → coerced to <2 x float>.
+    expect(contains(ir, "declare float @sum_pair(<2 x float>)")) << ir;
+  };
+
+  // Nested struct classification: recursive field walk preserves SSE.
+  "extern fn with nested f64 struct uses SSE coercion"_test = [] {
+    LlvmTestPipeline pipe(
+        "class F64Wrap:\n"
+        "  val: f64\n"
+        "\n"
+        "class NestedF64:\n"
+        "  w: F64Wrap\n"
+        "\n"
+        "extern fn unwrap_nested(n: NestedF64): f64\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // { { f64 } } → recursive walk → SSE class → double.
+    expect(contains(ir, "declare double @unwrap_nested(double)")) << ir;
+  };
+
+  // Mixed nested: SSE + INTEGER across eightbytes.
+  "extern fn with mixed nested struct coerces correctly"_test = [] {
+    LlvmTestPipeline pipe(
+        "class F64Wrap:\n"
+        "  val: f64\n"
+        "\n"
+        "class MixedNested:\n"
+        "  w: F64Wrap\n"
+        "  tag: i32\n"
+        "\n"
+        "extern fn get_tag(m: MixedNested): i32\n"
+        "\n"
+        "fn main(): i32\n"
+        "  return 0\n");
+    auto ir = pipe.ir();
+    expect(!pipe.has_errors()) << "no backend errors";
+    // { { f64 }, i32 } = 16 bytes: EB0=SSE(double), EB1=INTEGER(i32).
+    expect(contains(ir, "declare i32 @get_tag(double, i32)")) << ir;
+  };
 };
 
 // ---------------------------------------------------------------------------
