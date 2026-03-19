@@ -1129,8 +1129,9 @@ auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
   auto* callee_fn = llvm::dyn_cast<llvm::Function>(callee_val);
 
   // Indirect call: callee is a function pointer (ptr), not a direct
-  // function reference. Look up the semantic function type to build
-  // the LLVM call. No ABI coercion — this is a Dao-to-Dao call.
+  // function reference. Reconstruct the LLVM function type from the
+  // semantic TypeFunction, applying the same adjustments used when
+  // functions are declared (string → ptr, function type → ptr).
   if (callee_fn == nullptr) {
     auto callee_type_it = state.value_types.find(p.callee.id);
     if (callee_type_it == state.value_types.end() ||
@@ -1139,12 +1140,33 @@ auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
       emit_diagnostic(inst.span, "call callee is not a function");
       return false;
     }
-    auto* fn_llvm_type = types_.lower(callee_type_it->second);
-    if (fn_llvm_type == nullptr || !llvm::isa<llvm::FunctionType>(fn_llvm_type)) {
-      emit_diagnostic(inst.span, "cannot lower callee function type");
+    const auto* sem_fn = static_cast<const TypeFunction*>(callee_type_it->second);
+
+    // Build adjusted parameter types matching declare_functions rules.
+    std::vector<llvm::Type*> adj_params;
+    for (const auto* param_type : sem_fn->param_types()) {
+      auto* lowered = types_.lower(param_type);
+      if (lowered == nullptr) {
+        emit_diagnostic(inst.span, "cannot lower indirect call param");
+        return false;
+      }
+      if (LlvmTypeLowering::is_string_type(param_type)) {
+        lowered = llvm::PointerType::getUnqual(lowered);
+      }
+      if (llvm::isa<llvm::FunctionType>(lowered)) {
+        lowered = llvm::PointerType::getUnqual(lowered);
+      }
+      adj_params.push_back(lowered);
+    }
+    auto* adj_ret = types_.lower(sem_fn->return_type());
+    if (adj_ret == nullptr) {
+      emit_diagnostic(inst.span, "cannot lower indirect call return");
       return false;
     }
-    auto* llvm_fn_type = llvm::cast<llvm::FunctionType>(fn_llvm_type);
+    if (llvm::isa<llvm::FunctionType>(adj_ret)) {
+      adj_ret = llvm::PointerType::getUnqual(adj_ret);
+    }
+    auto* llvm_fn_type = llvm::FunctionType::get(adj_ret, adj_params, false);
 
     std::vector<llvm::Value*> indirect_args;
     if (p.args != nullptr) {
@@ -1154,7 +1176,7 @@ auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
           emit_diagnostic(inst.span, "call argument not found");
           return false;
         }
-        // String → pointer coercion for indirect calls too.
+        // String → pointer coercion.
         if (i < llvm_fn_type->getNumParams()) {
           auto* param_type = llvm_fn_type->getParamType(i);
           if (param_type->isPointerTy() &&

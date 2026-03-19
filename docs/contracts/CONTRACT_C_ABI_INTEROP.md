@@ -161,10 +161,15 @@ function's address as the argument value.
   in function-pointer argument positions of extern fn calls must be
   rejected by the type checker with a clear diagnostic. Closures
   cannot be represented as C function pointers.
-- **Indirect calls supported**: calling through a function-typed
-  value is supported for Dao-to-Dao calls (higher-order functions).
-  Indirect calls through function pointers received from C are also
-  supported as long as the function type signature matches.
+- **Indirect calls (Dao-to-Dao)**: calling through a function-typed
+  value is supported for Dao-to-Dao higher-order functions. The
+  indirect call path applies the same parameter adjustments as
+  direct calls (string → pointer, function type → pointer).
+- **Indirect calls (C-origin)**: calling through a function pointer
+  received from C works for scalar-only signatures. C-origin
+  function pointers with struct-by-value parameters or returns
+  would require C ABI coercion in the indirect call path, which
+  is not yet implemented.
 - **Calling convention**: function pointers follow the platform C
   calling convention. No other conventions are supported.
 
@@ -298,7 +303,8 @@ Each expansion requires updating this contract before implementation.
 | Function pointer type syntax     | Implemented     |
 | Function pointer params          | Implemented     |
 | Function pointer return type     | Implemented     |
-| Indirect call through fn ptr     | Implemented     |
+| Indirect call (Dao-to-Dao)       | Implemented     |
+| Indirect call (C-origin struct)  | Not implemented |
 | Named function as callback       | Implemented     |
 | Lambda rejection at ABI boundary | Implemented     |
 | E2E callback example             | Implemented     |
