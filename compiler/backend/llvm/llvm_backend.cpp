@@ -396,6 +396,10 @@ auto LlvmBackend::lower_function(const MirFunction& fn) -> bool {
       emit_diagnostic(local.span, "cannot lower local type: " + types_.error());
       return false;
     }
+    // Function-typed locals are stored as opaque pointers.
+    if (llvm::isa<llvm::FunctionType>(local_type)) {
+      local_type = llvm::PointerType::getUnqual(local_type);
+    }
     // String locals store the struct, not a pointer.
     auto* alloca = builder.CreateAlloca(
         local_type, nullptr,
@@ -1054,6 +1058,10 @@ auto LlvmBackend::lower_load(const MirLoad& p, const MirInst& inst,
     emit_diagnostic(inst.span, "cannot lower load type: " + types_.error());
     return false;
   }
+  // Function-typed loads: the alloca stores a ptr, not a FunctionType.
+  if (llvm::isa<llvm::FunctionType>(local_type)) {
+    local_type = llvm::PointerType::getUnqual(local_type);
+  }
 
   auto* val = state.builder->CreateLoad(local_type, it->second, "load");
   state.values[inst.result.id] = val;
@@ -1119,9 +1127,55 @@ auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
   }
 
   auto* callee_fn = llvm::dyn_cast<llvm::Function>(callee_val);
+
+  // Indirect call: callee is a function pointer (ptr), not a direct
+  // function reference. Look up the semantic function type to build
+  // the LLVM call. No ABI coercion — this is a Dao-to-Dao call.
   if (callee_fn == nullptr) {
-    emit_diagnostic(inst.span, "call callee is not a function");
-    return false;
+    auto callee_type_it = state.value_types.find(p.callee.id);
+    if (callee_type_it == state.value_types.end() ||
+        callee_type_it->second == nullptr ||
+        callee_type_it->second->kind() != TypeKind::Function) {
+      emit_diagnostic(inst.span, "call callee is not a function");
+      return false;
+    }
+    auto* fn_llvm_type = types_.lower(callee_type_it->second);
+    if (fn_llvm_type == nullptr || !llvm::isa<llvm::FunctionType>(fn_llvm_type)) {
+      emit_diagnostic(inst.span, "cannot lower callee function type");
+      return false;
+    }
+    auto* llvm_fn_type = llvm::cast<llvm::FunctionType>(fn_llvm_type);
+
+    std::vector<llvm::Value*> indirect_args;
+    if (p.args != nullptr) {
+      for (size_t i = 0; i < p.args->size(); ++i) {
+        auto* arg_val = get_value((*p.args)[i], state);
+        if (arg_val == nullptr) {
+          emit_diagnostic(inst.span, "call argument not found");
+          return false;
+        }
+        // String → pointer coercion for indirect calls too.
+        if (i < llvm_fn_type->getNumParams()) {
+          auto* param_type = llvm_fn_type->getParamType(i);
+          if (param_type->isPointerTy() &&
+              arg_val->getType() == types_.string_type()) {
+            auto* tmp = state.builder->CreateAlloca(
+                types_.string_type(), nullptr, "str.arg");
+            state.builder->CreateStore(arg_val, tmp);
+            arg_val = tmp;
+          }
+        }
+        indirect_args.push_back(arg_val);
+      }
+    }
+
+    auto* call = state.builder->CreateCall(
+        llvm_fn_type, callee_val, indirect_args, "icall");
+    if (!llvm_fn_type->getReturnType()->isVoidTy() && inst.result.valid()) {
+      state.values[inst.result.id] = call;
+      state.value_types[inst.result.id] = inst.type;
+    }
+    return true;
   }
 
   std::vector<llvm::Value*> args;
