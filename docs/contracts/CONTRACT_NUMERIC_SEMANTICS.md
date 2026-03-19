@@ -55,9 +55,9 @@ with no padding bits.
 | `f64` | binary64    | Implemented         |
 | `f32` | binary32    | Implemented         |
 
-Both types are part of the language design. `f32` surface exposure is
-deferred until type surface, codegen, stdlib formatting/conversion,
-and GPU story are ready together.
+Both types are part of the language design and are implemented. `f32`
+shares the same IEEE 754 conformance obligations as `f64`. GPU-specific
+numeric profiles for `f32` are deferred to Phase 8.
 
 ### 3.3 Decimal types
 
@@ -245,7 +245,8 @@ Status: **Partially implemented** — `f64` → `i32` available via
 - `f64` → `f32`: explicit, rounds to nearest according to the
   default rounding rule
 
-Status: **Deferred** — `f32` not yet surfaced
+Status: **Specified** — `f32` is surfaced; explicit conversion
+functions are deferred to the conversion matrix PR
 
 ### 6.6 Mixed-type binary operators
 

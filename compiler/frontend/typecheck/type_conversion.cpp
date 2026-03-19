@@ -102,19 +102,25 @@ auto is_c_abi_compatible(const Type* type) -> bool {
   }
   switch (type->kind()) {
   case TypeKind::Builtin: {
-    // Only the v1 supported set: i32, i64, f64, bool.
-    // Other builtins (i8, i16, u8-u64, f32) require a contract
-    // update before they are allowed at the C ABI boundary.
+    // All numeric builtins and bool are C ABI compatible — they map
+    // directly to C scalar types (int8_t through uint64_t, float,
+    // double, bool).
     auto kind = static_cast<const TypeBuiltin*>(type)->builtin();
     switch (kind) {
+    case BuiltinKind::I8:
+    case BuiltinKind::I16:
     case BuiltinKind::I32:
     case BuiltinKind::I64:
+    case BuiltinKind::U8:
+    case BuiltinKind::U16:
+    case BuiltinKind::U32:
+    case BuiltinKind::U64:
+    case BuiltinKind::F32:
     case BuiltinKind::F64:
     case BuiltinKind::Bool:
       return true;
-    default:
-      return false;
     }
+    return false;
   }
   case TypeKind::Pointer:
     return true; // raw pointers
