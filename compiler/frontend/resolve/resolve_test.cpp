@@ -238,6 +238,51 @@ suite<"resolve_duplicates"> resolve_duplicates = [] {
   };
 };
 
+suite<"resolve_overloads"> resolve_overloads = [] {
+  "arity-based overloading is allowed"_test = [] {
+    auto result = resolve_source("test",
+        "fn foo(a: i32): i32 -> a\n"
+        "fn foo(a: i32, b: i32): i32 -> a\n");
+    expect(result.resolve_result.diagnostics.empty())
+        << "different arities should not be a duplicate error";
+  };
+
+  "same-arity duplicate is still rejected"_test = [] {
+    auto result = resolve_source("test",
+        "fn foo(a: i32): i32 -> a\n"
+        "fn foo(b: i32): i32 -> b\n");
+    expect(has_diagnostic_containing(result.resolve_result,
+        "duplicate top-level declaration 'foo'"));
+  };
+
+  "three overloads with different arities"_test = [] {
+    auto result = resolve_source("test",
+        "fn bar(): i32 -> 0\n"
+        "fn bar(a: i32): i32 -> a\n"
+        "fn bar(a: i32, b: i32): i32 -> a\n");
+    expect(result.resolve_result.diagnostics.empty())
+        << "three different arities should all be allowed";
+  };
+
+  "same-arity duplicate after overload set exists is rejected"_test = [] {
+    auto result = resolve_source("test",
+        "fn foo(a: i32): i32 -> a\n"
+        "fn foo(a: i32, b: i32): i32 -> a\n"
+        "fn foo(x: i32, y: i32): i32 -> x\n");
+    expect(has_diagnostic_containing(result.resolve_result,
+        "duplicate top-level declaration 'foo'"));
+  };
+
+  "non-function duplicate with same name is still rejected"_test = [] {
+    auto result = resolve_source("test",
+        "fn foo(a: i32): i32 -> a\n"
+        "class foo:\n"
+        "  x: i32\n");
+    expect(has_diagnostic_containing(result.resolve_result,
+        "duplicate top-level declaration 'foo'"));
+  };
+};
+
 suite<"resolve_types"> resolve_types = [] {
   "builtin type resolves"_test = [] {
     auto result = resolve_source("test", "fn foo(x: i32): i32 -> x");

@@ -83,12 +83,57 @@ public:
     return inserted;
   }
 
+  // Register an overloaded function. The symbol is stored under its
+  // mangled name (e.g. "range$2") in declarations_, and also recorded
+  // in the overload set keyed by the base name.
+  void declare_overload(std::string_view base_name,
+                         std::string_view mangled_name, Symbol* sym) {
+    declarations_[mangled_name] = sym;
+    overloads_[base_name].push_back(sym);
+  }
+
+  // Return the overload set for a name (local scope only).
+  // Returns nullptr if no overloads exist.
+  [[nodiscard]] auto lookup_overloads(std::string_view name) const
+      -> const std::vector<Symbol*>* {
+    auto it = overloads_.find(name);
+    if (it != overloads_.end() && !it->second.empty()) {
+      return &it->second;
+    }
+    return nullptr;
+  }
+
+  // Check if a name has overloaded declarations in this scope chain.
+  [[nodiscard]] auto has_overloads(std::string_view name) const -> bool {
+    if (lookup_overloads(name) != nullptr) {
+      return true;
+    }
+    if (parent_ != nullptr) {
+      return parent_->has_overloads(name);
+    }
+    return false;
+  }
+
+  // Look up overloads traversing the scope chain.
+  [[nodiscard]] auto find_overloads(std::string_view name) const
+      -> const std::vector<Symbol*>* {
+    auto* local = lookup_overloads(name);
+    if (local != nullptr) {
+      return local;
+    }
+    if (parent_ != nullptr) {
+      return parent_->find_overloads(name);
+    }
+    return nullptr;
+  }
+
 private:
   ScopeKind kind_;
   Scope* parent_;
   Span range_{};
   std::vector<Scope*> children_;
   std::unordered_map<std::string_view, Symbol*> declarations_;
+  std::unordered_map<std::string_view, std::vector<Symbol*>> overloads_;
 };
 
 } // namespace dao

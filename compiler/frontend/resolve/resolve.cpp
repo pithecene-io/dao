@@ -193,7 +193,45 @@ private:
       return;
     }
 
-    if (file_scope_->lookup_local(name) != nullptr) {
+    auto* existing = file_scope_->lookup_local(name);
+    if (existing != nullptr) {
+      // Allow arity-based function overloading: same name, different
+      // parameter counts. Both must be functions.
+      if (kind == SymbolKind::Function &&
+          existing->kind == SymbolKind::Function &&
+          decl.kind() == NodeKind::FunctionDecl &&
+          existing->decl != nullptr) {
+        size_t new_arity = decl.as<FunctionDecl>().params.size();
+        const auto* existing_decl = static_cast<const Decl*>(existing->decl);
+
+        // Check arity collision against the overload set AND the
+        // original declaration.
+        bool collision = overload_has_arity(name, new_arity);
+        if (!collision && existing_decl->is<FunctionDecl>() &&
+            existing_decl->as<FunctionDecl>().params.size() == new_arity) {
+          collision = true;
+        }
+
+        if (!collision) {
+          // Register the new overload with a mangled internal name.
+          auto mangled = ctx_.intern(
+              std::string(name) + "$" + std::to_string(new_arity));
+          auto* sym = ctx_.make_symbol(kind, mangled, name_span, &decl);
+          file_scope_->declare_overload(name, mangled, sym);
+
+          // Bootstrap the overload set with the original declaration
+          // if this is the first overload being added.
+          if (file_scope_->lookup_overloads(name) != nullptr &&
+              file_scope_->lookup_overloads(name)->size() == 1) {
+            size_t orig_arity =
+                existing_decl->as<FunctionDecl>().params.size();
+            auto orig_mangled = ctx_.intern(
+                std::string(name) + "$" + std::to_string(orig_arity));
+            file_scope_->declare_overload(name, orig_mangled, existing);
+          }
+          return;
+        }
+      }
       diagnostics_.push_back(Diagnostic::error(
           name_span,
           "duplicate top-level declaration '" + std::string(name) + "'"));
@@ -201,6 +239,63 @@ private:
       auto* sym = ctx_.make_symbol(kind, name, name_span, &decl);
       file_scope_->declare(name, sym);
     }
+  }
+
+  // --- Overload helpers ---
+
+  /// Check if any overload of `name` has the given parameter count.
+  auto overload_has_arity(std::string_view name, size_t arity) -> bool {
+    const auto* overloads = file_scope_->lookup_overloads(name);
+    if (overloads != nullptr) {
+      for (const auto* sym : *overloads) {
+        if (sym->decl != nullptr) {
+          const auto* decl = static_cast<const Decl*>(sym->decl);
+          if (decl->is<FunctionDecl>() &&
+              decl->as<FunctionDecl>().params.size() == arity) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Find the overload of `name` with the given arity in the scope chain.
+  /// Returns nullptr if no match.
+  auto find_overload_by_arity(std::string_view name, size_t arity,
+                               Scope* scope) -> Symbol* {
+    const auto* overloads = scope->find_overloads(name);
+    if (overloads == nullptr) {
+      return nullptr;
+    }
+    for (auto* sym : *overloads) {
+      if (sym->decl != nullptr) {
+        const auto* decl = static_cast<const Decl*>(sym->decl);
+        if (decl->is<FunctionDecl>() &&
+            decl->as<FunctionDecl>().params.size() == arity) {
+          return sym;
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  /// Try to resolve an identifier to an overloaded function by arity.
+  /// If the name is overloaded and a match is found, records the use
+  /// and returns true. Otherwise returns false (caller should fall
+  /// through to normal resolution).
+  auto try_resolve_overload(const Expr& ident_expr,
+                             std::string_view name, size_t arity,
+                             Scope* scope) -> bool {
+    if (!scope->has_overloads(name)) {
+      return false;
+    }
+    auto* match = find_overload_by_arity(name, arity, scope);
+    if (match != nullptr) {
+      uses_[ident_expr.span.offset] = match;
+      return true;
+    }
+    return false;
   }
 
   // --- Pass 2: Resolve bodies ---
@@ -621,7 +716,17 @@ private:
     }
     case NodeKind::CallExpr: {
       const auto& call = expr.as<CallExpr>();
-      resolve_expr(*call.callee, scope);
+      // For overloaded functions, select the overload matching the
+      // argument count. Falls through to normal resolution otherwise.
+      bool resolved = false;
+      if (call.callee->is<IdentifierExpr>()) {
+        resolved = try_resolve_overload(
+            *call.callee, call.callee->as<IdentifierExpr>().name,
+            call.args.size(), scope);
+      }
+      if (!resolved) {
+        resolve_expr(*call.callee, scope);
+      }
       for (const auto* arg : call.args) {
         resolve_expr(*arg, scope);
       }
@@ -644,7 +749,16 @@ private:
     case NodeKind::PipeExpr: {
       const auto& pipe = expr.as<PipeExpr>();
       resolve_expr(*pipe.left, scope);
-      resolve_expr(*pipe.right, scope);
+      // Pipe passes the LHS as a single argument → effective arity 1.
+      bool resolved = false;
+      if (pipe.right->is<IdentifierExpr>()) {
+        resolved = try_resolve_overload(
+            *pipe.right, pipe.right->as<IdentifierExpr>().name,
+            1, scope);
+      }
+      if (!resolved) {
+        resolve_expr(*pipe.right, scope);
+      }
       break;
     }
     case NodeKind::Lambda: {
