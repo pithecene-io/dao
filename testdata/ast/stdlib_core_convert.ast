@@ -11,6 +11,84 @@ File
   ExternFunctionDecl __dao_conv_i64_to_i32
     Param x: i64
     ReturnType: i32
+  ExternFunctionDecl __dao_conv_f32_to_f64
+    Param x: f32
+    ReturnType: f64
+  ExternFunctionDecl __dao_conv_f64_to_f32
+    Param x: f64
+    ReturnType: f32
+  ExternFunctionDecl __dao_conv_i32_to_f32
+    Param x: i32
+    ReturnType: f32
+  ExternFunctionDecl __dao_conv_i64_to_f64
+    Param x: i64
+    ReturnType: f64
+  ExternFunctionDecl __dao_conv_i64_to_f32
+    Param x: i64
+    ReturnType: f32
+  ExternFunctionDecl __dao_conv_f64_to_i64
+    Param x: f64
+    ReturnType: i64
+  ExternFunctionDecl __dao_conv_f32_to_i32
+    Param x: f32
+    ReturnType: i32
+  ExternFunctionDecl __dao_conv_f32_to_i64
+    Param x: f32
+    ReturnType: i64
+  ExternFunctionDecl __dao_conv_i8_to_i32
+    Param x: i8
+    ReturnType: i32
+  ExternFunctionDecl __dao_conv_i16_to_i32
+    Param x: i16
+    ReturnType: i32
+  ExternFunctionDecl __dao_conv_i8_to_i64
+    Param x: i8
+    ReturnType: i64
+  ExternFunctionDecl __dao_conv_i16_to_i64
+    Param x: i16
+    ReturnType: i64
+  ExternFunctionDecl __dao_conv_u8_to_u32
+    Param x: u8
+    ReturnType: u32
+  ExternFunctionDecl __dao_conv_u16_to_u32
+    Param x: u16
+    ReturnType: u32
+  ExternFunctionDecl __dao_conv_u8_to_u64
+    Param x: u8
+    ReturnType: u64
+  ExternFunctionDecl __dao_conv_u16_to_u64
+    Param x: u16
+    ReturnType: u64
+  ExternFunctionDecl __dao_conv_u32_to_u64
+    Param x: u32
+    ReturnType: u64
+  ExternFunctionDecl __dao_conv_u32_to_i64
+    Param x: u32
+    ReturnType: i64
+  ExternFunctionDecl __dao_conv_i32_to_i8
+    Param x: i32
+    ReturnType: i8
+  ExternFunctionDecl __dao_conv_i32_to_i16
+    Param x: i32
+    ReturnType: i16
+  ExternFunctionDecl __dao_conv_u32_to_u8
+    Param x: u32
+    ReturnType: u8
+  ExternFunctionDecl __dao_conv_u32_to_u16
+    Param x: u32
+    ReturnType: u16
+  ExternFunctionDecl __dao_conv_i32_to_u32
+    Param x: i32
+    ReturnType: u32
+  ExternFunctionDecl __dao_conv_u32_to_i32
+    Param x: u32
+    ReturnType: i32
+  ExternFunctionDecl __dao_conv_i64_to_u64
+    Param x: i64
+    ReturnType: u64
+  ExternFunctionDecl __dao_conv_u64_to_i64
+    Param x: u64
+    ReturnType: i64
   FunctionDecl to_f64
     Param x: i32
     ReturnType: f64
@@ -45,5 +123,239 @@ File
       CallExpr
         Callee
           Identifier __dao_conv_i64_to_i32
+        Args
+          Identifier x
+  FunctionDecl f32_to_f64
+    Param x: f32
+    ReturnType: f64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_f32_to_f64
+        Args
+          Identifier x
+  FunctionDecl f64_to_f32
+    Param x: f64
+    ReturnType: f32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_f64_to_f32
+        Args
+          Identifier x
+  FunctionDecl i32_to_f32
+    Param x: i32
+    ReturnType: f32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i32_to_f32
+        Args
+          Identifier x
+  FunctionDecl i64_to_f64
+    Param x: i64
+    ReturnType: f64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i64_to_f64
+        Args
+          Identifier x
+  FunctionDecl i64_to_f32
+    Param x: i64
+    ReturnType: f32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i64_to_f32
+        Args
+          Identifier x
+  FunctionDecl f64_to_i64
+    Param x: f64
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_f64_to_i64
+        Args
+          Identifier x
+  FunctionDecl f32_to_i32
+    Param x: f32
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_f32_to_i32
+        Args
+          Identifier x
+  FunctionDecl f32_to_i64
+    Param x: f32
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_f32_to_i64
+        Args
+          Identifier x
+  FunctionDecl i8_to_i32
+    Param x: i8
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i8_to_i32
+        Args
+          Identifier x
+  FunctionDecl i16_to_i32
+    Param x: i16
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i16_to_i32
+        Args
+          Identifier x
+  FunctionDecl i8_to_i64
+    Param x: i8
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i8_to_i64
+        Args
+          Identifier x
+  FunctionDecl i16_to_i64
+    Param x: i16
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i16_to_i64
+        Args
+          Identifier x
+  FunctionDecl u8_to_u32
+    Param x: u8
+    ReturnType: u32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u8_to_u32
+        Args
+          Identifier x
+  FunctionDecl u16_to_u32
+    Param x: u16
+    ReturnType: u32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u16_to_u32
+        Args
+          Identifier x
+  FunctionDecl u8_to_u64
+    Param x: u8
+    ReturnType: u64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u8_to_u64
+        Args
+          Identifier x
+  FunctionDecl u16_to_u64
+    Param x: u16
+    ReturnType: u64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u16_to_u64
+        Args
+          Identifier x
+  FunctionDecl u32_to_u64
+    Param x: u32
+    ReturnType: u64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u32_to_u64
+        Args
+          Identifier x
+  FunctionDecl u32_to_i64
+    Param x: u32
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u32_to_i64
+        Args
+          Identifier x
+  FunctionDecl i32_to_i8
+    Param x: i32
+    ReturnType: i8
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i32_to_i8
+        Args
+          Identifier x
+  FunctionDecl i32_to_i16
+    Param x: i32
+    ReturnType: i16
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i32_to_i16
+        Args
+          Identifier x
+  FunctionDecl u32_to_u8
+    Param x: u32
+    ReturnType: u8
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u32_to_u8
+        Args
+          Identifier x
+  FunctionDecl u32_to_u16
+    Param x: u32
+    ReturnType: u16
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u32_to_u16
+        Args
+          Identifier x
+  FunctionDecl i32_to_u32
+    Param x: i32
+    ReturnType: u32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i32_to_u32
+        Args
+          Identifier x
+  FunctionDecl u32_to_i32
+    Param x: u32
+    ReturnType: i32
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u32_to_i32
+        Args
+          Identifier x
+  FunctionDecl i64_to_u64
+    Param x: i64
+    ReturnType: u64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_i64_to_u64
+        Args
+          Identifier x
+  FunctionDecl u64_to_i64
+    Param x: u64
+    ReturnType: i64
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_conv_u64_to_i64
         Args
           Identifier x

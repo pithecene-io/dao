@@ -64,6 +64,38 @@ inline constexpr std::string_view kConvI32ToF64  = "__dao_conv_i32_to_f64";
 inline constexpr std::string_view kConvI32ToI64  = "__dao_conv_i32_to_i64";
 inline constexpr std::string_view kConvF64ToI32  = "__dao_conv_f64_to_i32";
 inline constexpr std::string_view kConvI64ToI32  = "__dao_conv_i64_to_i32";
+// Float ↔ float
+inline constexpr std::string_view kConvF32ToF64  = "__dao_conv_f32_to_f64";
+inline constexpr std::string_view kConvF64ToF32  = "__dao_conv_f64_to_f32";
+// Integer → float
+inline constexpr std::string_view kConvI32ToF32  = "__dao_conv_i32_to_f32";
+inline constexpr std::string_view kConvI64ToF64  = "__dao_conv_i64_to_f64";
+inline constexpr std::string_view kConvI64ToF32  = "__dao_conv_i64_to_f32";
+// Float → integer (trapping)
+inline constexpr std::string_view kConvF64ToI64  = "__dao_conv_f64_to_i64";
+inline constexpr std::string_view kConvF32ToI32  = "__dao_conv_f32_to_i32";
+inline constexpr std::string_view kConvF32ToI64  = "__dao_conv_f32_to_i64";
+// Integer widening
+inline constexpr std::string_view kConvI8ToI32   = "__dao_conv_i8_to_i32";
+inline constexpr std::string_view kConvI16ToI32  = "__dao_conv_i16_to_i32";
+inline constexpr std::string_view kConvI8ToI64   = "__dao_conv_i8_to_i64";
+inline constexpr std::string_view kConvI16ToI64  = "__dao_conv_i16_to_i64";
+inline constexpr std::string_view kConvU8ToU32   = "__dao_conv_u8_to_u32";
+inline constexpr std::string_view kConvU16ToU32  = "__dao_conv_u16_to_u32";
+inline constexpr std::string_view kConvU8ToU64   = "__dao_conv_u8_to_u64";
+inline constexpr std::string_view kConvU16ToU64  = "__dao_conv_u16_to_u64";
+inline constexpr std::string_view kConvU32ToU64  = "__dao_conv_u32_to_u64";
+inline constexpr std::string_view kConvU32ToI64  = "__dao_conv_u32_to_i64";
+// Integer narrowing (trapping)
+inline constexpr std::string_view kConvI32ToI8   = "__dao_conv_i32_to_i8";
+inline constexpr std::string_view kConvI32ToI16  = "__dao_conv_i32_to_i16";
+inline constexpr std::string_view kConvU32ToU8   = "__dao_conv_u32_to_u8";
+inline constexpr std::string_view kConvU32ToU16  = "__dao_conv_u32_to_u16";
+// Sign conversions (trapping)
+inline constexpr std::string_view kConvI32ToU32  = "__dao_conv_i32_to_u32";
+inline constexpr std::string_view kConvU32ToI32  = "__dao_conv_u32_to_i32";
+inline constexpr std::string_view kConvI64ToU64  = "__dao_conv_i64_to_u64";
+inline constexpr std::string_view kConvU64ToI64  = "__dao_conv_u64_to_i64";
 
 // Overflow domain (explicit operations)
 inline constexpr std::string_view kWrappingAddI32    = "__dao_wrapping_add_i32";
@@ -103,6 +135,14 @@ inline constexpr std::string_view kAllHooks[] = {
     kConvU32ToString, kConvU64ToString,
     kConvF32ToString, kConvF64ToString, kConvBoolToString,
     kConvI32ToF64, kConvI32ToI64, kConvF64ToI32, kConvI64ToI32,
+    kConvF32ToF64, kConvF64ToF32,
+    kConvI32ToF32, kConvI64ToF64, kConvI64ToF32,
+    kConvF64ToI64, kConvF32ToI32, kConvF32ToI64,
+    kConvI8ToI32,  kConvI16ToI32, kConvI8ToI64,  kConvI16ToI64,
+    kConvU8ToU32,  kConvU16ToU32, kConvU8ToU64,  kConvU16ToU64,
+    kConvU32ToU64, kConvU32ToI64,
+    kConvI32ToI8,  kConvI32ToI16, kConvU32ToU8,  kConvU32ToU16,
+    kConvI32ToU32, kConvU32ToI32, kConvI64ToU64, kConvU64ToI64,
     kWrappingAddI32,   kWrappingSubI32,   kWrappingMulI32,
     kWrappingAddI64,   kWrappingSubI64,   kWrappingMulI64,
     kSaturatingAddI32, kSaturatingSubI32, kSaturatingMulI32,
