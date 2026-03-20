@@ -1359,7 +1359,7 @@ void TypeChecker::infer_type_bindings(
     auto it = bindings.find(gp->index());
     if (it != bindings.end()) {
       // Already bound — check consistency.
-      if (it->second != concrete) {
+      if (it->second != concrete && !is_assignable(it->second, concrete)) {
         error(error_span,
               "conflicting types for generic parameter '" +
                   std::string(gp->name()) + "': '" +
@@ -1396,6 +1396,18 @@ void TypeChecker::infer_type_bindings(
       }
       infer_type_bindings(fp->return_type(), fc->return_type(),
                           bindings, error_span);
+    }
+  } else if (pattern->kind() == TypeKind::Struct &&
+             concrete->kind() == TypeKind::Struct) {
+    const auto* sp = static_cast<const TypeStruct*>(pattern);
+    const auto* sc = static_cast<const TypeStruct*>(concrete);
+    // Only infer bindings between instances of the same class.
+    if (sp->decl_id() == sc->decl_id() &&
+        sp->fields().size() == sc->fields().size()) {
+      for (size_t j = 0; j < sp->fields().size(); ++j) {
+        infer_type_bindings(sp->fields()[j].type, sc->fields()[j].type,
+                            bindings, error_span);
+      }
     }
   }
 }
@@ -1760,13 +1772,24 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
   }
 
   // Try method lookup on any type (struct conformances + extend decls).
+  // Skip static methods (no self parameter) — those are only callable
+  // via Type::method(), not through an instance.
   const Decl* method_decl = nullptr;
   const auto* method_type = lookup_method(obj_type, field.field, &method_decl);
   if (method_type != nullptr) {
+    // Check if this is a static method (no self) — reject for instance calls.
+    bool is_static = false;
     if (method_decl != nullptr) {
-      typed_.set_method_resolution(expr, method_decl);
+      const auto& fn = method_decl->as<FunctionDecl>();
+      is_static = fn.params.empty() || fn.params[0].name != "self";
     }
-    return method_type;
+    if (!is_static) {
+      if (method_decl != nullptr) {
+        typed_.set_method_resolution(expr, method_decl);
+      }
+      return method_type;
+    }
+    // Static method — fall through to field-not-found error.
   }
 
   if (obj_type->kind() == TypeKind::Struct) {

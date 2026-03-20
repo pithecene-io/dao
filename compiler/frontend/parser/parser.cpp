@@ -1073,7 +1073,9 @@ private:
 
     while (true) {
       if (peek_kind() == TokenKind::Lt &&
-          expr->kind() == NodeKind::Identifier) {
+          (expr->kind() == NodeKind::Identifier ||
+           expr->kind() == NodeKind::FieldExpr ||
+           expr->kind() == NodeKind::QualifiedName)) {
         // Speculatively try call-site type arguments: ident<Type>(args).
         auto type_args = try_parse_call_type_args();
         if (!type_args.empty()) {

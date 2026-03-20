@@ -1658,6 +1658,22 @@ suite<"class_methods"> class_methods = [] {
     expect(result.diagnostics.empty());
   };
 
+  "static method not callable through instance"_test = [] {
+    auto result = check_source(
+        "class Box:\n"
+        "    x: i32\n"
+        "\n"
+        "    fn zero(): Box\n"
+        "        let z: i32 = 0\n"
+        "        return Box(z)\n"
+        "\n"
+        "fn main(): i32\n"
+        "    let b = Box(1)\n"
+        "    let z = b.zero()\n"
+        "    return z.x\n");
+    expect(!result.diagnostics.empty()) << "static method should not be callable on instance";
+  };
+
   "struct field assignability is exact not covariant"_test = [] {
     // Two non-generic structs with mismatched fields are rejected.
     auto result = check_source(
