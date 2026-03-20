@@ -1567,6 +1567,144 @@ suite<"typecheck_generator"> typecheck_generator = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Pointer operations
+// ---------------------------------------------------------------------------
+
+suite<"pointer_ops"> pointer_ops = [] {
+  "store through pointer requires unsafe"_test = [] {
+    auto result = check_source(
+        "fn f(p: *i32): void\n"
+        "    *p = 42\n");
+    expect(!result.diagnostics.empty());
+    bool found = false;
+    for (const auto& d : result.diagnostics) {
+      if (d.message.find("unsafe") != std::string::npos) found = true;
+    }
+    expect(found) << "should require mode unsafe";
+  };
+
+  "store through pointer in unsafe accepted"_test = [] {
+    auto result = check_source(
+        "fn f(p: *i32): void\n"
+        "    mode unsafe =>\n"
+        "        *p = 42\n");
+    expect(result.diagnostics.empty());
+  };
+
+  "pointer equality accepted"_test = [] {
+    auto result = check_source(
+        "fn f(a: *i32, b: *i32): bool\n"
+        "    return a == b\n");
+    expect(result.diagnostics.empty());
+  };
+
+  "void pointer assignability"_test = [] {
+    auto result = check_source(
+        "fn f(p: *i32): *void\n"
+        "    return p\n");
+    expect(result.diagnostics.empty());
+  };
+
+  "void pointer not assignable to typed pointer"_test = [] {
+    auto result = check_source(
+        "fn f(p: *void): *i32\n"
+        "    return p\n");
+    expect(!result.diagnostics.empty());
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Class body methods and static calls
+// ---------------------------------------------------------------------------
+
+suite<"class_methods"> class_methods = [] {
+  "class with instance method typechecks"_test = [] {
+    auto result = check_source(
+        "class Box:\n"
+        "    x: i32\n"
+        "\n"
+        "    fn get(self): i32 -> self.x\n"
+        "\n"
+        "fn main(): i32\n"
+        "    let b = Box(42)\n"
+        "    return b.get()\n");
+    expect(result.diagnostics.empty());
+  };
+
+  "class with static method typechecks"_test = [] {
+    auto result = check_source(
+        "class Box:\n"
+        "    x: i32\n"
+        "\n"
+        "    fn zero(): Box\n"
+        "        let z: i32 = 0\n"
+        "        return Box(z)\n"
+        "\n"
+        "fn main(): i32\n"
+        "    let b = Box::zero()\n"
+        "    return b.x\n");
+    expect(result.diagnostics.empty());
+  };
+
+  "generic constructor infers type"_test = [] {
+    auto result = check_source(
+        "class Box<T>:\n"
+        "    value: T\n"
+        "\n"
+        "fn main(): i32\n"
+        "    let b = Box(42)\n"
+        "    return b.value\n");
+    expect(result.diagnostics.empty());
+  };
+
+  "struct field assignability is exact not covariant"_test = [] {
+    // Two non-generic structs with mismatched fields are rejected.
+    auto result = check_source(
+        "class A:\n"
+        "    x: i32\n"
+        "\n"
+        "class B:\n"
+        "    x: i32\n"
+        "\n"
+        "fn f(a: A): i32 -> a.x\n"
+        "\n"
+        "fn main(): i32\n"
+        "    let b = B(42)\n"
+        "    return f(b)\n");
+    expect(!result.diagnostics.empty()) << "A and B are different nominal types";
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Explicit type arguments
+// ---------------------------------------------------------------------------
+
+suite<"explicit_type_args"> explicit_type_args = [] {
+  "call with explicit type arg typechecks"_test = [] {
+    auto result = check_source(
+        "fn identity<T>(x: T): T -> x\n"
+        "\n"
+        "fn main(): i32\n"
+        "    return identity<i32>(42)\n");
+    expect(result.diagnostics.empty());
+  };
+
+  "wrong type arg count rejected"_test = [] {
+    auto result = check_source(
+        "fn identity<T>(x: T): T -> x\n"
+        "\n"
+        "fn main(): i32\n"
+        "    return identity<i32, f64>(42)\n");
+    expect(!result.diagnostics.empty());
+    bool found = false;
+    for (const auto& d : result.diagnostics) {
+      if (d.message.find("type argument") != std::string::npos) found = true;
+    }
+    expect(found) << "should mention type argument count";
+  };
+};
+
 // NOLINTEND(readability-magic-numbers)
 
 auto main() -> int {} // NOLINT(readability-named-parameter)
