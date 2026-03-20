@@ -32,6 +32,8 @@ auto token_kind_name(TokenKind kind) -> const char* {
     return "KwReturn";
   case TokenKind::KwYield:
     return "KwYield";
+  case TokenKind::KwBreak:
+    return "KwBreak";
   case TokenKind::KwMode:
     return "KwMode";
   case TokenKind::KwResource:
@@ -557,6 +559,9 @@ private:
     }
     if (word == "yield") {
       return TokenKind::KwYield;
+    }
+    if (word == "break") {
+      return TokenKind::KwBreak;
     }
     if (word == "mode") {
       return TokenKind::KwMode;

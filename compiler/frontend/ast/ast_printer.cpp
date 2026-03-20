@@ -314,6 +314,10 @@ private:
           Scope scope(depth_);
           print_expr(*node.value);
         },
+        [&](const BreakStmtNode&) {
+          indent();
+          out_ << "BreakStatement\n";
+        },
         [&](const ReturnStatement& node) {
           indent();
           out_ << "ReturnStatement\n";

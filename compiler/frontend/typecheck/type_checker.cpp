@@ -781,6 +781,11 @@ void TypeChecker::check_statement(const Stmt* stmt) {
   case NodeKind::YieldStatement:
     check_yield(stmt);
     break;
+  case NodeKind::BreakStatement:
+    if (ctx_.loop_depth == 0) {
+      error(stmt->span, "'break' is only allowed inside a loop");
+    }
+    break;
   case NodeKind::ModeBlock:
     check_mode_block(stmt);
     break;
@@ -881,7 +886,9 @@ void TypeChecker::check_while(const Stmt* stmt) {
     error(wh.condition->span,
           "condition must be 'bool', got '" + print_type(cond_type) + "'");
   }
+  ctx_.loop_depth++;
   check_body(wh.body);
+  ctx_.loop_depth--;
 }
 
 void TypeChecker::check_for(const Stmt* stmt) {
@@ -907,7 +914,9 @@ void TypeChecker::check_for(const Stmt* stmt) {
     typed_.set_local_type(stmt, elem_type);
   }
 
+  ctx_.loop_depth++;
   check_body(fo.body);
+  ctx_.loop_depth--;
 }
 
 void TypeChecker::check_yield(const Stmt* stmt) {

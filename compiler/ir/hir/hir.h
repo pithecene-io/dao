@@ -115,9 +115,11 @@ struct HirResource {
   std::vector<HirStmt*> body;
 };
 
+struct HirBreak {};
+
 using HirStmtPayload = std::variant<
     HirLet, HirAssign, HirIf, HirWhile, HirFor,
-    HirReturn, HirYield, HirExprStmt, HirMode, HirResource>;
+    HirReturn, HirYield, HirBreak, HirExprStmt, HirMode, HirResource>;
 
 // ---------------------------------------------------------------------------
 // Expression payloads

@@ -46,6 +46,9 @@ private:
   uint32_t next_block_id_ = 0;
   std::unordered_map<const Symbol*, LocalId> symbol_to_local_;
 
+  // Loop exit block stack for break statement lowering.
+  std::vector<BlockId> loop_exit_stack_;
+
   // Active mode/resource region stack for exit-on-return.
   struct ActiveRegion {
     MirPayload exit_payload;

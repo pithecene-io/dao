@@ -41,6 +41,7 @@ struct CheckContext {
   const Type* return_type = nullptr; // enclosing function return type
   const Type* self_type = nullptr;   // type of `self` in current scope (class/extend)
   std::unordered_set<std::string_view> active_modes; // e.g. "unsafe"
+  uint32_t loop_depth = 0;           // nesting depth for break validation
 };
 
 // ---------------------------------------------------------------------------

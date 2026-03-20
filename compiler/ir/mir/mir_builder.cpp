@@ -224,9 +224,11 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
                         MirCondBr{cond_val, body_bb->id, exit_bb->id});
 
         switch_to_block(body_bb);
+        loop_exit_stack_.push_back(exit_bb->id);
         for (const auto* s : hir_while.body) {
           lower_stmt(*s);
         }
+        loop_exit_stack_.pop_back();
         if (!block_terminated()) {
           emit_terminator(stmt.span, MirBr{cond_bb->id});
         }
@@ -272,9 +274,11 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
         active_regions_.push_back(
             ActiveRegion{MirIterDestroy{iter_val}, stmt.span});
 
+        loop_exit_stack_.push_back(exit_bb->id);
         for (const auto* s : hir_for.body) {
           lower_stmt(*s);
         }
+        loop_exit_stack_.pop_back();
         if (!block_terminated()) {
           emit_terminator(stmt.span, MirBr{cond_bb->id});
         }
@@ -284,6 +288,11 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
         switch_to_block(exit_bb);
         // Free the generator frame on the normal loop-exit path.
         emit_effect(stmt.span, MirIterDestroy{iter_val});
+      },
+      [&](const HirBreak&) {
+        if (!loop_exit_stack_.empty()) {
+          emit_terminator(stmt.span, MirBr{loop_exit_stack_.back()});
+        }
       },
       [&](const HirYield& yield) {
         auto val = lower_expr_value(*yield.value);

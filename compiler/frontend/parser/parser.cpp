@@ -615,6 +615,10 @@ private:
       return parse_return_statement();
     case TokenKind::KwYield:
       return parse_yield_statement();
+    case TokenKind::KwBreak: {
+      const auto& kw = advance();
+      return ctx_.alloc<Stmt>(kw.span, BreakStmtNode{});
+    }
     default:
       break;
     }

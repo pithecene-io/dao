@@ -25,6 +25,7 @@ enum class HirKind : std::uint8_t {
   For,
   Return,
   Yield,
+  Break,
   ExprStmt,
   Mode,
   Resource,
