@@ -131,8 +131,30 @@ Add three runtime hooks under the `mem` domain:
 | `__dao_mem_realloc` | `(ptr: *void, new_size: i64, align: i64): *void` | Resize allocation. Trap on failure. `ptr` may be null (acts as alloc). |
 | `__dao_mem_free` | `(ptr: *void): void` | Free allocation. Null is a no-op. |
 
-**C implementation:** thin wrappers around `aligned_alloc` / `realloc`
-/ `free` in `runtime/core/memory.c`.
+**C implementation:** in `runtime/memory/alloc.c`. The allocation
+hooks live under `runtime/memory/`, not `runtime/core/`, because
+`runtime/core/` is reserved for the minimal always-linked runtime
+slice and `runtime/memory/` is the designated home for allocation-
+domain support per `ARCH_INDEX.md`.
+
+Implementation constraints:
+
+- `__dao_mem_alloc` must return memory aligned to at least `align`.
+  Note that C11 `aligned_alloc` requires `size` to be a multiple of
+  `align` — the implementation must round `size` up to satisfy this
+  or use a platform-appropriate alternative (e.g. `posix_memalign`
+  on POSIX, `_aligned_malloc` on Windows).
+- `__dao_mem_realloc` must preserve the alignment guarantee of the
+  original allocation. Standard C `realloc` does not accept an
+  alignment parameter and only guarantees `max_align_t` alignment.
+  The implementation must handle stronger alignments explicitly
+  (e.g. allocate new aligned block, `memcpy`, free old block).
+- `__dao_mem_free` must correctly free allocations made by the
+  corresponding alloc/realloc. If the implementation uses
+  platform-specific aligned allocation, the free path must match
+  (e.g. `_aligned_free` on Windows).
+- All three hooks trap (abort) on allocation failure rather than
+  returning null.
 
 **Dao declarations:** in `stdlib/core/memory.dao`:
 
