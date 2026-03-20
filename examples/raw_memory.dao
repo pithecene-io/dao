@@ -1,0 +1,39 @@
+// raw_memory.dao — Low-level memory substrate proof of concept.
+//
+// Demonstrates: alloc, ptr_cast, ptr_offset, store through pointer,
+// deref, size_of, align_of, null_ptr, pointer equality, free.
+
+fn main(): i32
+  // Allocate space for 4 i32 values.
+  let raw = __dao_mem_alloc(size_of<i32>() * 4, align_of<i32>())
+  mode unsafe =>
+    let data = ptr_cast<i32>(raw)
+
+    // Store values via pointer offset.
+    *data = 10
+    *ptr_offset<i32>(data, 1) = 20
+    *ptr_offset<i32>(data, 2) = 30
+    *ptr_offset<i32>(data, 3) = 40
+
+    // Read them back.
+    print(*data)
+    print(*ptr_offset<i32>(data, 1))
+    print(*ptr_offset<i32>(data, 2))
+    print(*ptr_offset<i32>(data, 3))
+
+    // Null pointer check.
+    let np = null_ptr<i32>()
+    if np == null_ptr<i32>():
+      print("null check passed")
+    if data != null_ptr<i32>():
+      print("non-null check passed")
+
+  __dao_mem_free(raw)
+
+  // Size and alignment queries.
+  print(size_of<i32>())
+  print(size_of<f64>())
+  print(align_of<i32>())
+  print(align_of<f64>())
+
+  return 0
