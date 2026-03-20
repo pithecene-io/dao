@@ -70,11 +70,25 @@ public:
     return it != method_resolutions_.end() ? it->second : nullptr;
   }
 
+  // --- Call-site explicit type arguments ---
+
+  void set_call_type_args(const Expr* call_expr,
+                          std::vector<const Type*> type_args) {
+    call_type_args_[call_expr] = std::move(type_args);
+  }
+
+  [[nodiscard]] auto call_type_args(const Expr* call_expr) const
+      -> const std::vector<const Type*>* {
+    auto it = call_type_args_.find(call_expr);
+    return it != call_type_args_.end() ? &it->second : nullptr;
+  }
+
 private:
   std::unordered_map<const Expr*, const Type*> expr_types_;
   std::unordered_map<const Stmt*, const Type*> local_types_;
   std::unordered_map<const Decl*, const Type*> decl_types_;
   std::unordered_map<const Expr*, const Decl*> method_resolutions_;
+  std::unordered_map<const Expr*, std::vector<const Type*>> call_type_args_;
 };
 
 } // namespace dao

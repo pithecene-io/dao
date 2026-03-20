@@ -1,0 +1,19 @@
+File
+  FunctionDecl size_of<T>
+    ReturnType: i64
+    LetStatement r: i64
+      IntLiteral 0
+    ReturnStatement
+      Identifier r
+  FunctionDecl align_of<T>
+    ReturnType: i64
+    LetStatement r: i64
+      IntLiteral 0
+    ReturnStatement
+      Identifier r
+  FunctionDecl ptr_offset<T>
+    Param ptr: *T
+    Param index: i64
+    ReturnType: *T
+    ExprBody
+      Identifier ptr

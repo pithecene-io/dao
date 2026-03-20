@@ -91,7 +91,8 @@ struct MirFieldAccess { MirValueId object; std::string_view field; uint32_t fiel
 struct MirIndexAccess { MirValueId object; MirValueId index; };
 
 struct MirFnRef { const Symbol* symbol; };
-struct MirCall  { MirValueId callee; std::vector<MirValueId>* args; };
+struct MirCall  { MirValueId callee; std::vector<MirValueId>* args;
+                  std::vector<const Type*>* explicit_type_args = nullptr; };
 struct MirConstruct { const TypeStruct* struct_type; std::vector<MirValueId>* field_values; };
 
 struct MirIterInit    { MirValueId iter_operand; };

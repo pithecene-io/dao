@@ -913,6 +913,117 @@ auto LlvmBackend::lower_binary(const MirBinary& p, const MirInst& inst,
 // ---------------------------------------------------------------------------
 // Place resolution — walk projection chains to an LLVM pointer.
 // ---------------------------------------------------------------------------
+// Compiler builtin intrinsic lowering
+// ---------------------------------------------------------------------------
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+auto LlvmBackend::lower_builtin_call(
+    std::string_view name, const MirCall& p, const MirInst& inst,
+    FunctionState& state) -> bool {
+  auto* builder = state.builder;
+  auto& ctx = module_->getContext();
+  const auto& layout = module_->getDataLayout();
+
+  // inst.type on a MirCall is the result type of the call, not a
+  // TypeFunction wrapper. Use it directly as the semantic result type.
+  const Type* result_type = inst.type;
+
+  // size_of$T(): i64 — return sizeof(T) as constant.
+  if (name == "size_of" || name.starts_with("size_of$")) {
+    if (p.explicit_type_args != nullptr && !p.explicit_type_args->empty()) {
+      auto* elem_type = types_.lower((*p.explicit_type_args)[0]);
+      uint64_t size = layout.getTypeAllocSize(elem_type);
+      state.values[inst.result.id] =
+          llvm::ConstantInt::get(llvm::Type::getInt64Ty(ctx), size);
+      state.value_types[inst.result.id] = result_type;
+      return true;
+    }
+    emit_diagnostic(inst.span, "size_of: missing type argument");
+    return false;
+  }
+
+  // align_of$T(): i64 — return alignof(T) as constant.
+  if (name == "align_of" || name.starts_with("align_of$")) {
+    if (p.explicit_type_args != nullptr && !p.explicit_type_args->empty()) {
+      auto* elem_type = types_.lower((*p.explicit_type_args)[0]);
+      uint64_t align = layout.getABITypeAlign(elem_type).value();
+      state.values[inst.result.id] =
+          llvm::ConstantInt::get(llvm::Type::getInt64Ty(ctx), align);
+      state.value_types[inst.result.id] = result_type;
+      return true;
+    }
+    emit_diagnostic(inst.span, "align_of: missing type argument");
+    return false;
+  }
+
+  // null_ptr$T(): *T — return typed null pointer.
+  if (name == "null_ptr" || name.starts_with("null_ptr$")) {
+    auto* ptr_type = llvm::PointerType::getUnqual(ctx);
+    state.values[inst.result.id] =
+        llvm::ConstantPointerNull::get(ptr_type);
+    state.value_types[inst.result.id] = result_type;
+    return true;
+  }
+
+  // ptr_offset$T(ptr: *T, index: i64): *T — GEP with element type T.
+  if (name == "ptr_offset" || name.starts_with("ptr_offset$")) {
+    if (p.args == nullptr || p.args->size() != 2) {
+      emit_diagnostic(inst.span, "ptr_offset: expected 2 arguments");
+      return false;
+    }
+    auto* ptr_val = get_value((*p.args)[0], state);
+    auto* index_val = get_value((*p.args)[1], state);
+
+    // Get element type T: first from the result type (*T), then from
+    // the argument's value type, then from explicit type args.
+    const Type* pointee_type = nullptr;
+    if (result_type != nullptr &&
+        result_type->kind() == TypeKind::Pointer) {
+      pointee_type =
+          static_cast<const TypePointer*>(result_type)->pointee();
+    }
+    if (pointee_type == nullptr) {
+      auto arg_type_it = state.value_types.find((*p.args)[0].id);
+      if (arg_type_it != state.value_types.end() &&
+          arg_type_it->second != nullptr &&
+          arg_type_it->second->kind() == TypeKind::Pointer) {
+        pointee_type =
+            static_cast<const TypePointer*>(arg_type_it->second)->pointee();
+      }
+    }
+    if (pointee_type == nullptr && p.explicit_type_args != nullptr &&
+        !p.explicit_type_args->empty()) {
+      pointee_type = (*p.explicit_type_args)[0];
+    }
+    if (pointee_type == nullptr) {
+      emit_diagnostic(inst.span, "ptr_offset: cannot determine element type");
+      return false;
+    }
+    auto* elem_llvm_type = types_.lower(pointee_type);
+    state.values[inst.result.id] =
+        builder->CreateGEP(elem_llvm_type, ptr_val, {index_val}, "ptr.offset");
+    state.value_types[inst.result.id] = result_type;
+    return true;
+  }
+
+  // ptr_cast$T(ptr: *void): *T — no-op with opaque pointers.
+  if (name == "ptr_cast" || name.starts_with("ptr_cast$")) {
+    if (p.args == nullptr || p.args->size() != 1) {
+      emit_diagnostic(inst.span, "ptr_cast: expected 1 argument");
+      return false;
+    }
+    // With opaque pointers, this is a semantic no-op — just pass through.
+    state.values[inst.result.id] = get_value((*p.args)[0], state);
+    state.value_types[inst.result.id] = result_type;
+    return true;
+  }
+
+  emit_diagnostic(inst.span,
+                  "unknown builtin intrinsic: " + std::string(name));
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto LlvmBackend::resolve_place(const MirPlace& place,
@@ -1099,11 +1210,33 @@ auto LlvmBackend::lower_field_access(const MirFieldAccess& p,
 // Function reference and calls
 // ---------------------------------------------------------------------------
 
+// Check if a function name is a compiler builtin intrinsic.
+// Matches both unmangled names (size_of) and mangled (size_of$i32).
+static auto is_builtin_intrinsic(std::string_view name) -> bool {
+  // Check for exact name or mangled variant (name$type).
+  for (auto base : {"size_of", "align_of", "null_ptr",
+                     "ptr_offset", "ptr_cast"}) {
+    if (name == base || name.starts_with(std::string(base) + "$")) {
+      return true;
+    }
+  }
+  return false;
+}
+
 auto LlvmBackend::lower_fn_ref(const MirFnRef& p, const MirInst& inst,
                                  FunctionState& state) -> bool {
   if (p.symbol == nullptr) {
     emit_diagnostic(inst.span, "FnRef with null symbol");
     return false;
+  }
+
+  // Compiler builtin intrinsics don't have LLVM function declarations.
+  // Store a nullptr marker; lower_call will generate inline IR.
+  if (is_builtin_intrinsic(p.symbol->name)) {
+    state.values[inst.result.id] = nullptr;
+    state.value_types[inst.result.id] = inst.type;
+    state.builtin_names[inst.result.id] = p.symbol->name;
+    return true;
   }
 
   auto* fn = module_->getFunction(std::string(p.symbol->name));
@@ -1120,6 +1253,12 @@ auto LlvmBackend::lower_fn_ref(const MirFnRef& p, const MirInst& inst,
 
 auto LlvmBackend::lower_call(const MirCall& p, const MirInst& inst,
                                FunctionState& state) -> bool {
+  // Check for compiler builtin intrinsics (size_of$T, null_ptr$T, etc.).
+  auto builtin_it = state.builtin_names.find(p.callee.id);
+  if (builtin_it != state.builtin_names.end()) {
+    return lower_builtin_call(builtin_it->second, p, inst, state);
+  }
+
   auto* callee_val = get_value(p.callee, state);
   if (callee_val == nullptr) {
     emit_diagnostic(inst.span, "call callee not found");

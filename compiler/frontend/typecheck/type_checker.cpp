@@ -177,6 +177,8 @@ auto TypeChecker::resolve_symbol_type(const Symbol* sym) -> const Type* {
   case SymbolKind::Function: {
     // Function symbol -> derive TypeFunction from declaration.
     if (sym->decl == nullptr) {
+      // Compiler builtin functions with no AST declaration.
+      result = resolve_builtin_function_type(sym->name);
       break;
     }
     const auto& fn = sym->decl_as_decl()->as<FunctionDecl>();
@@ -1493,6 +1495,42 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
   // type_bindings maps generic param index → concrete type.
   std::unordered_map<uint32_t, const Type*> type_bindings;
 
+  // Populate bindings from explicit type arguments: f<i32, f64>(x).
+  if (!call.type_args.empty() && call.callee->is<IdentifierExpr>()) {
+    auto sym_it = resolve_.uses.find(call.callee->span.offset);
+    if (sym_it != resolve_.uses.end() &&
+        sym_it->second->kind == SymbolKind::Function) {
+      // Determine expected type param count.
+      size_t expected_count = 0;
+      if (sym_it->second->decl != nullptr) {
+        const auto* fn_decl = static_cast<const Decl*>(sym_it->second->decl);
+        if (fn_decl->is<FunctionDecl>()) {
+          expected_count = fn_decl->as<FunctionDecl>().type_params.size();
+        }
+      } else {
+        // Compiler builtin functions (null_ptr, ptr_cast) take 1 type param.
+        expected_count = 1;
+      }
+
+      if (call.type_args.size() != expected_count) {
+        error(expr->span,
+              "expected " + std::to_string(expected_count) +
+                  " type argument(s), got " +
+                  std::to_string(call.type_args.size()));
+      } else {
+        std::vector<const Type*> resolved_type_args;
+        for (size_t i = 0; i < call.type_args.size(); ++i) {
+          const auto* resolved = resolve_type_node(call.type_args[i]);
+          if (resolved != nullptr) {
+            type_bindings[static_cast<uint32_t>(i)] = resolved;
+            resolved_type_args.push_back(resolved);
+          }
+        }
+        typed_.set_call_type_args(expr, std::move(resolved_type_args));
+      }
+    }
+  }
+
   for (size_t i = 0; i < params.size(); ++i) {
     // Reject lambdas in function-pointer positions of extern fn calls.
     // Lambdas cannot cross the C ABI boundary as closures have no
@@ -1984,6 +2022,28 @@ auto TypeChecker::find_generic_param_index(const Symbol* sym) -> uint32_t {
     }
   }
   return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Compiler builtin function types
+// ---------------------------------------------------------------------------
+
+auto TypeChecker::resolve_builtin_function_type(std::string_view name)
+    -> const Type* {
+  // null_ptr<T>(): *T
+  if (name == "null_ptr") {
+    auto* generic_t = types_.generic_param(nullptr, "T", 0);
+    auto* ptr_t = types_.pointer_to(generic_t);
+    return types_.function_type({}, ptr_t);
+  }
+  // ptr_cast<T>(ptr: *void): *T
+  if (name == "ptr_cast") {
+    auto* generic_t = types_.generic_param(nullptr, "T", 0);
+    auto* ptr_t = types_.pointer_to(generic_t);
+    auto* void_ptr = types_.pointer_to(types_.void_type());
+    return types_.function_type({void_ptr}, ptr_t);
+  }
+  return nullptr;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,7 @@
+// memory.dao — Low-level allocation hooks.
+//
+// Authority: docs/contracts/CONTRACT_RUNTIME_ABI.md
+
+extern fn __dao_mem_alloc(size: i64, align: i64): *void
+extern fn __dao_mem_realloc(ptr: *void, old_size: i64, new_size: i64, align: i64): *void
+extern fn __dao_mem_free(ptr: *void): void

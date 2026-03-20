@@ -1,0 +1,209 @@
+File
+  FunctionDecl main
+    ReturnType: i32
+    LetStatement raw
+      CallExpr
+        Callee
+          Identifier __dao_mem_alloc
+        Args
+          BinaryExpr *
+            CallExpr
+              Callee
+                Identifier size_of
+              TypeArgs
+                i32
+            IntLiteral 4
+          CallExpr
+            Callee
+              Identifier align_of
+            TypeArgs
+              i32
+    ModeBlock unsafe
+      LetStatement data
+        CallExpr
+          Callee
+            Identifier ptr_cast
+          TypeArgs
+            i32
+          Args
+            Identifier raw
+      Assignment
+        Target
+          UnaryExpr *
+            Identifier data
+        Value
+          IntLiteral 10
+      Assignment
+        Target
+          UnaryExpr *
+            CallExpr
+              Callee
+                Identifier ptr_offset
+              TypeArgs
+                i32
+              Args
+                Identifier data
+                IntLiteral 1
+        Value
+          IntLiteral 20
+      Assignment
+        Target
+          UnaryExpr *
+            CallExpr
+              Callee
+                Identifier ptr_offset
+              TypeArgs
+                i32
+              Args
+                Identifier data
+                IntLiteral 2
+        Value
+          IntLiteral 30
+      Assignment
+        Target
+          UnaryExpr *
+            CallExpr
+              Callee
+                Identifier ptr_offset
+              TypeArgs
+                i32
+              Args
+                Identifier data
+                IntLiteral 3
+        Value
+          IntLiteral 40
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
+            UnaryExpr *
+              Identifier data
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
+            UnaryExpr *
+              CallExpr
+                Callee
+                  Identifier ptr_offset
+                TypeArgs
+                  i32
+                Args
+                  Identifier data
+                  IntLiteral 1
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
+            UnaryExpr *
+              CallExpr
+                Callee
+                  Identifier ptr_offset
+                TypeArgs
+                  i32
+                Args
+                  Identifier data
+                  IntLiteral 2
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
+            UnaryExpr *
+              CallExpr
+                Callee
+                  Identifier ptr_offset
+                TypeArgs
+                  i32
+                Args
+                  Identifier data
+                  IntLiteral 3
+      LetStatement np
+        CallExpr
+          Callee
+            Identifier null_ptr
+          TypeArgs
+            i32
+      IfStatement
+        Condition
+          BinaryExpr ==
+            Identifier np
+            CallExpr
+              Callee
+                Identifier null_ptr
+              TypeArgs
+                i32
+        Then
+          ExpressionStatement
+            CallExpr
+              Callee
+                Identifier print
+              Args
+                StringLiteral "null check passed"
+      IfStatement
+        Condition
+          BinaryExpr !=
+            Identifier data
+            CallExpr
+              Callee
+                Identifier null_ptr
+              TypeArgs
+                i32
+        Then
+          ExpressionStatement
+            CallExpr
+              Callee
+                Identifier print
+              Args
+                StringLiteral "non-null check passed"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier __dao_mem_free
+        Args
+          Identifier raw
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier size_of
+            TypeArgs
+              i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier size_of
+            TypeArgs
+              f64
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier align_of
+            TypeArgs
+              i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier align_of
+            TypeArgs
+              f64
+    ReturnStatement
+      IntLiteral 0

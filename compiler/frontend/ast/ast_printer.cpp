@@ -443,6 +443,16 @@ private:
             Scope callee_scope(depth_);
             print_expr(*node.callee);
           }
+          if (!node.type_args.empty()) {
+            indent();
+            out_ << "TypeArgs\n";
+            Scope ta_scope(depth_);
+            for (const auto* ta : node.type_args) {
+              indent();
+              print_type_inline(*ta);
+              out_ << "\n";
+            }
+          }
           if (!node.args.empty()) {
             indent();
             out_ << "Args\n";

@@ -135,6 +135,14 @@ inline constexpr std::string_view kGenFree  = "__dao_gen_free";
 inline constexpr std::string_view kMemResourceEnter = "__dao_mem_resource_enter";
 inline constexpr std::string_view kMemResourceExit  = "__dao_mem_resource_exit";
 
+// Allocation domain
+inline constexpr std::string_view kMemAlloc   = "__dao_mem_alloc";
+inline constexpr std::string_view kMemRealloc = "__dao_mem_realloc";
+inline constexpr std::string_view kMemFree    = "__dao_mem_free";
+
+// Panic domain
+inline constexpr std::string_view kPanic = "__dao_panic";
+
 // String domain
 inline constexpr std::string_view kStrConcat     = "__dao_str_concat";
 inline constexpr std::string_view kStrLength     = "__dao_str_length";
@@ -175,6 +183,8 @@ inline constexpr std::string_view kAllHooks[] = {
     kSaturatingAddI64, kSaturatingSubI64, kSaturatingMulI64,
     kGenAlloc, kGenFree,
     kMemResourceEnter, kMemResourceExit,
+    kMemAlloc, kMemRealloc, kMemFree,
+    kPanic,
     kStrConcat, kStrLength,
     kStrCharAt, kStrSubstring, kStrIndexOf,
     kStrStartsWith, kStrEndsWith, kStrCompare,
@@ -208,6 +218,8 @@ private:
   void declare_generator_hooks();
   void declare_mem_resource_hooks();
   void declare_string_hooks();
+  void declare_alloc_hooks();
+  void declare_panic_hooks();
 
   // Helper: get-or-create a function declaration.
   auto ensure_declared(std::string_view name, llvm::FunctionType* fn_type)

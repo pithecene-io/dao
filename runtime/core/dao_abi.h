@@ -232,6 +232,32 @@ void *__dao_mem_resource_enter(void);
 // Exit a scoped resource domain. Takes the handle returned by enter.
 void __dao_mem_resource_exit(void *domain);
 
+// ---------------------------------------------------------------------------
+// Runtime hook declarations — Allocation domain
+// ---------------------------------------------------------------------------
+
+// Allocate size bytes with the given alignment. Traps on failure.
+// aligned_alloc requires size to be a multiple of alignment; the
+// implementation rounds up internally.
+void *__dao_mem_alloc(int64_t size, int64_t align);
+
+// Resize allocation. Traps on failure. ptr may be null (acts as alloc).
+// old_size is the number of bytes to preserve from the old allocation.
+// Preserves alignment for alignments within max_align_t; for stronger
+// alignments, allocates a new aligned block and copies old_size bytes.
+void *__dao_mem_realloc(void *ptr, int64_t old_size, int64_t new_size,
+                        int64_t align);
+
+// Free allocation. Null is a no-op.
+void __dao_mem_free(void *ptr);
+
+// ---------------------------------------------------------------------------
+// Runtime hook declarations — Panic domain
+// ---------------------------------------------------------------------------
+
+// Print message to stderr and abort. Does not return.
+void __dao_panic(const struct dao_string *msg);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

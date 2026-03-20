@@ -24,6 +24,8 @@ void LlvmRuntimeHooks::declare_all() {
   declare_overflow_hooks();
   declare_generator_hooks();
   declare_mem_resource_hooks();
+  declare_alloc_hooks();
+  declare_panic_hooks();
   declare_string_hooks();
 }
 
@@ -321,6 +323,43 @@ void LlvmRuntimeHooks::declare_mem_resource_hooks() {
   // __dao_mem_resource_exit(domain: ptr): void
   ensure_declared(runtime_hooks::kMemResourceExit,
                   llvm::FunctionType::get(void_ty, {ptr}, false));
+}
+
+// ---------------------------------------------------------------------------
+// Allocation hooks
+// ---------------------------------------------------------------------------
+
+void LlvmRuntimeHooks::declare_alloc_hooks() {
+  auto& ctx = module_.getContext();
+  auto* ptr = llvm::PointerType::getUnqual(ctx);
+  auto* i64 = llvm::Type::getInt64Ty(ctx);
+  auto* void_ty = llvm::Type::getVoidTy(ctx);
+
+  // __dao_mem_alloc(size: i64, align: i64): ptr
+  ensure_declared(runtime_hooks::kMemAlloc,
+                  llvm::FunctionType::get(ptr, {i64, i64}, false));
+
+  // __dao_mem_realloc(ptr, old_size: i64, new_size: i64, align: i64): ptr
+  ensure_declared(runtime_hooks::kMemRealloc,
+                  llvm::FunctionType::get(ptr, {ptr, i64, i64, i64}, false));
+
+  // __dao_mem_free(ptr): void
+  ensure_declared(runtime_hooks::kMemFree,
+                  llvm::FunctionType::get(void_ty, {ptr}, false));
+}
+
+// ---------------------------------------------------------------------------
+// Panic hooks
+// ---------------------------------------------------------------------------
+
+void LlvmRuntimeHooks::declare_panic_hooks() {
+  auto* void_ty = llvm::Type::getVoidTy(module_.getContext());
+  auto* str_ptr = llvm::PointerType::getUnqual(types_.string_type());
+
+  // __dao_panic(msg: *dao.string): void
+  auto* fn = ensure_declared(runtime_hooks::kPanic,
+                             llvm::FunctionType::get(void_ty, {str_ptr}, false));
+  fn->addFnAttr(llvm::Attribute::NoReturn);
 }
 
 // ---------------------------------------------------------------------------

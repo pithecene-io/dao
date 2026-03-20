@@ -1,0 +1,13 @@
+File
+  ExternFunctionDecl __dao_panic
+    Param msg: string
+    ReturnType: void
+  FunctionDecl panic
+    Param msg: string
+    ReturnType: void
+    ExprBody
+      CallExpr
+        Callee
+          Identifier __dao_panic
+        Args
+          Identifier msg

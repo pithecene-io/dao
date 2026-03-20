@@ -1,0 +1,19 @@
+// builtins.dao — Compiler-recognized builtin functions.
+//
+// These are generic functions whose bodies are replaced by the
+// compiler backend with inline LLVM IR after monomorphization.
+// The expression bodies exist only to satisfy the type checker;
+// the backend replaces them entirely.
+
+// Return the size of type T in bytes.
+fn size_of<T>(): i64
+  let r: i64 = 0
+  return r
+
+// Return the alignment of type T in bytes.
+fn align_of<T>(): i64
+  let r: i64 = 0
+  return r
+
+// Compute a typed pointer offset: ptr + index (in units of T).
+fn ptr_offset<T>(ptr: *T, index: i64): *T -> ptr

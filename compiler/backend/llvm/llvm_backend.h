@@ -87,6 +87,9 @@ private:
     // MIR MirValueId → semantic Type* (for signedness decisions)
     std::unordered_map<uint32_t, const Type*> value_types;
 
+    // MIR MirValueId → builtin intrinsic name (for compiler builtins)
+    std::unordered_map<uint32_t, std::string_view> builtin_names;
+
     // MIR BlockId → LLVM BasicBlock*
     std::unordered_map<uint32_t, llvm::BasicBlock*> blocks;
 
@@ -170,6 +173,11 @@ private:
                                llvm::Value* lhs, llvm::Value* rhs,
                                const char* name,
                                FunctionState& state) -> llvm::Value*;
+
+  // Compiler builtin intrinsic lowering.
+  auto lower_builtin_call(std::string_view name, const MirCall& p,
+                          const MirInst& inst,
+                          FunctionState& state) -> bool;
 
   // Place resolution — walk projection chains to an LLVM pointer.
   auto resolve_place(const MirPlace& place,

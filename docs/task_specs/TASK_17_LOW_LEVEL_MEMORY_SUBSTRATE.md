@@ -128,7 +128,7 @@ Add three runtime hooks under the `mem` domain:
 | Hook | Signature | Semantics |
 |------|-----------|-----------|
 | `__dao_mem_alloc` | `(size: i64, align: i64): *void` | Allocate `size` bytes with `align` alignment. Trap on failure. |
-| `__dao_mem_realloc` | `(ptr: *void, new_size: i64, align: i64): *void` | Resize allocation. Trap on failure. `ptr` may be null (acts as alloc). |
+| `__dao_mem_realloc` | `(ptr: *void, old_size: i64, new_size: i64, align: i64): *void` | Resize allocation. Copies `min(old_size, new_size)` bytes. Trap on failure. `ptr` may be null (acts as alloc). |
 | `__dao_mem_free` | `(ptr: *void): void` | Free allocation. Null is a no-op. |
 
 **C implementation:** in `runtime/memory/alloc.c`. The allocation
@@ -160,7 +160,7 @@ Implementation constraints:
 
 ```dao
 extern fn __dao_mem_alloc(size: i64, align: i64): *void
-extern fn __dao_mem_realloc(ptr: *void, new_size: i64, align: i64): *void
+extern fn __dao_mem_realloc(ptr: *void, old_size: i64, new_size: i64, align: i64): *void
 extern fn __dao_mem_free(ptr: *void): void
 ```
 

@@ -362,8 +362,16 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
     for (const auto* arg : call.args) {
       args.push_back(lower_expr(arg));
     }
+
+    // Propagate explicit type arguments resolved by the type checker.
+    std::vector<const Type*> explicit_type_args;
+    const auto* resolved_ta = typed_.typed.call_type_args(expr);
+    if (resolved_ta != nullptr) {
+      explicit_type_args = *resolved_ta;
+    }
     return ctx_.alloc<HirExpr>(span, type,
-                                HirCall{callee, std::move(args)});
+                                HirCall{callee, std::move(args),
+                                        std::move(explicit_type_args)});
   }
 
   case NodeKind::PipeExpr: {

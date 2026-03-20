@@ -410,7 +410,12 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
         for (const auto* arg : call.args) {
           args->push_back(lower_expr_value(*arg));
         }
-        return emit_value(expr, MirCall{callee_val, args});
+        std::vector<const Type*>* type_args = nullptr;
+        if (!call.explicit_type_args.empty()) {
+          type_args = ctx_.alloc<std::vector<const Type*>>(
+              call.explicit_type_args);
+        }
+        return emit_value(expr, MirCall{callee_val, args, type_args});
       },
       [&](const HirConstruct& ctor) -> MirValueId {
         auto* field_vals = ctx_.alloc<std::vector<MirValueId>>();
@@ -532,13 +537,36 @@ auto MirBuilder::lower_expr_place(const HirExpr& expr) -> MirPlace {
       },
       [&](const HirUnary& un) -> MirPlace {
         if (un.op == UnaryOp::Deref) {
-          auto base = lower_expr_place(*un.operand);
-          base.projections.push_back(
+          // Try to lower as a place first (e.g., *local_var).
+          // If that fails (e.g., *fn_call()), lower as a value,
+          // store to a temp, and create a place with Deref.
+          bool operand_is_place =
+              std::holds_alternative<HirSymbolRef>(un.operand->payload) ||
+              std::holds_alternative<HirField>(un.operand->payload) ||
+              std::holds_alternative<HirUnary>(un.operand->payload);
+          if (operand_is_place) {
+            auto base = lower_expr_place(*un.operand);
+            base.projections.push_back(
+                {.kind = MirProjectionKind::Deref,
+                 .field_name = {},
+                 .field_index = 0,
+                 .index_value = {}});
+            return base;
+          }
+          // Operand is a value expression (call, etc.) — store to temp.
+          auto val = lower_expr_value(*un.operand);
+          auto tmp_id = declare_local(nullptr, un.operand->type, expr.span);
+          auto* tmp_place = ctx_.alloc<MirPlace>();
+          tmp_place->local = tmp_id;
+          emit_effect(expr.span, MirStore{tmp_place, val});
+          MirPlace result;
+          result.local = tmp_id;
+          result.projections.push_back(
               {.kind = MirProjectionKind::Deref,
                .field_name = {},
                .field_index = 0,
                .index_value = {}});
-          return base;
+          return result;
         }
         error(expr.span, "expression is not a valid place");
         return {};

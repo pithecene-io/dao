@@ -26,6 +26,15 @@ auto is_assignable(const Type* source, const Type* target) -> bool {
     return true;
   }
 
+  // Any pointer *T is assignable to *void (opaque pointer upcast).
+  if (source->kind() == TypeKind::Pointer &&
+      target->kind() == TypeKind::Pointer) {
+    const auto* target_ptr = static_cast<const TypePointer*>(target);
+    if (target_ptr->pointee()->kind() == TypeKind::Void) {
+      return true;
+    }
+  }
+
   // Structural recursion for composite types containing generic params.
   if (source->kind() == target->kind()) {
     switch (target->kind()) {

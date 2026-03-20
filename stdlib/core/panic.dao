@@ -1,0 +1,7 @@
+// panic.dao — Program abort primitive.
+//
+// Authority: docs/contracts/CONTRACT_RUNTIME_ABI.md
+
+extern fn __dao_panic(msg: string): void
+
+fn panic(msg: string): void -> __dao_panic(msg)
