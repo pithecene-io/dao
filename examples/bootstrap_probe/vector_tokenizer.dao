@@ -1,0 +1,347 @@
+// vector_tokenizer.dao — Bootstrap probe 3: structured tokenizer.
+//
+// Unlike earlier probes that print tokens inline, this lexer
+// accumulates Token values into a Vector<Token> and hands the
+// collected stream to second-pass consumers.
+//
+// Tests: Vector<T> with user-defined value type, push, indexed
+// access, iteration, pass-by-value semantics, function-level
+// collection passing, second-pass compiler-adjacent analysis.
+//
+// Token is span-based — no eagerly copied text. Lexemes are
+// derived from the source string on demand.
+
+// ---------------------------------------------------------------
+// Token representation
+// ---------------------------------------------------------------
+
+// Token kind constants (no enums yet — plain i32).
+// Using a function for each avoids magic numbers at use sites.
+
+fn TK_KW(): i32       -> 1
+fn TK_IDENT(): i32    -> 2
+fn TK_INT(): i32       -> 3
+fn TK_STRING(): i32    -> 4
+fn TK_OP(): i32        -> 5
+fn TK_NEWLINE(): i32   -> 6
+fn TK_ERROR(): i32     -> 7
+
+fn kind_name(k: i32): string
+  if k == 1:
+    return "KW"
+  if k == 2:
+    return "IDENT"
+  if k == 3:
+    return "INT"
+  if k == 4:
+    return "STRING"
+  if k == 5:
+    return "OP"
+  if k == 6:
+    return "NEWLINE"
+  if k == 7:
+    return "ERROR"
+  return "?"
+
+class Token:
+  kind: i32
+  offset: i64
+  len: i64
+
+fn make_token(k: i32, off: i64, l: i64): Token
+  return Token(k, off, l)
+
+// ---------------------------------------------------------------
+// Character classification
+// ---------------------------------------------------------------
+
+fn is_digit(ch: i32): bool
+  return ch >= 48 and ch <= 57
+
+fn is_alpha(ch: i32): bool
+  if ch >= 65 and ch <= 90:
+    return true
+  if ch >= 97 and ch <= 122:
+    return true
+  return ch == 95
+
+fn is_alnum(ch: i32): bool
+  return is_digit(ch) or is_alpha(ch)
+
+fn is_whitespace(ch: i32): bool
+  return ch == 32 or ch == 9
+
+// ---------------------------------------------------------------
+// Keyword detection
+// ---------------------------------------------------------------
+
+fn is_keyword(word: string): bool
+  if word == "fn":
+    return true
+  if word == "let":
+    return true
+  if word == "return":
+    return true
+  if word == "if":
+    return true
+  if word == "else":
+    return true
+  if word == "while":
+    return true
+  if word == "for":
+    return true
+  if word == "in":
+    return true
+  if word == "and":
+    return true
+  if word == "or":
+    return true
+  if word == "not":
+    return true
+  if word == "true":
+    return true
+  if word == "false":
+    return true
+  if word == "extern":
+    return true
+  if word == "class":
+    return true
+  if word == "concept":
+    return true
+  if word == "extend":
+    return true
+  if word == "as":
+    return true
+  if word == "yield":
+    return true
+  if word == "mode":
+    return true
+  if word == "resource":
+    return true
+  if word == "break":
+    return true
+  return false
+
+// ---------------------------------------------------------------
+// Skip helpers
+// ---------------------------------------------------------------
+
+fn skip_while(source: string, pos: i64, pred: fn(i32): bool): i64
+  let cur: i64 = pos
+  let slen: i64 = length(source)
+  while cur < slen:
+    if pred(char_at(source, cur)):
+      cur = cur + 1
+    else:
+      break
+  return cur
+
+// ---------------------------------------------------------------
+// Lexer core — returns Vector<Token>
+// ---------------------------------------------------------------
+
+fn lex(source: string): Vector<Token>
+  let tokens = Vector<Token>::new()
+  let pos: i64 = 0
+  let slen: i64 = length(source)
+  while pos < slen:
+    let ch: i32 = char_at(source, pos)
+
+    // Skip whitespace (not newlines).
+    if is_whitespace(ch):
+      pos = skip_while(source, pos, is_whitespace)
+    else:
+      // Newlines.
+      if ch == 10:
+        tokens = tokens.push(make_token(TK_NEWLINE(), pos, to_i64(1)))
+        pos = pos + 1
+      else:
+        // Line comments — skip, no token emitted.
+        if ch == 47 and pos + 1 < slen and char_at(source, pos + 1) == 47:
+          let end: i64 = pos + 2
+          while end < slen:
+            if char_at(source, end) == 10:
+              break
+            end = end + 1
+          pos = end
+        else:
+          // Identifiers and keywords.
+          if is_alpha(ch):
+            let end: i64 = skip_while(source, pos, is_alnum)
+            let word: string = substring(source, pos, end - pos)
+            if is_keyword(word):
+              tokens = tokens.push(make_token(TK_KW(), pos, end - pos))
+            else:
+              tokens = tokens.push(make_token(TK_IDENT(), pos, end - pos))
+            pos = end
+          else:
+            // Number literals.
+            if is_digit(ch):
+              let end: i64 = skip_while(source, pos, is_digit)
+              tokens = tokens.push(make_token(TK_INT(), pos, end - pos))
+              pos = end
+            else:
+              // String literals.
+              if ch == 34:
+                let end: i64 = pos + 1
+                let found_end: bool = false
+                while end < slen:
+                  if char_at(source, end) == 34:
+                    found_end = true
+                    break
+                  end = end + 1
+                if found_end:
+                  tokens = tokens.push(make_token(TK_STRING(), pos, end + 1 - pos))
+                  pos = end + 1
+                else:
+                  tokens = tokens.push(make_token(TK_ERROR(), pos, slen - pos))
+                  pos = slen
+              else:
+                // Two-character operators.
+                if pos + 1 < slen:
+                  let next: i32 = char_at(source, pos + 1)
+                  if (ch == 61 and next == 61) or (ch == 33 and next == 61) or (ch == 60 and next == 61) or (ch == 62 and next == 61) or (ch == 45 and next == 62) or (ch == 61 and next == 62) or (ch == 124 and next == 62) or (ch == 58 and next == 58):
+                    tokens = tokens.push(make_token(TK_OP(), pos, to_i64(2)))
+                    pos = pos + 2
+                  else:
+                    // Single-character operators and punctuation.
+                    tokens = tokens.push(make_token(TK_OP(), pos, to_i64(1)))
+                    pos = pos + 1
+                else:
+                  // Single character at end of input.
+                  tokens = tokens.push(make_token(TK_OP(), pos, to_i64(1)))
+                  pos = pos + 1
+  return tokens
+
+// ---------------------------------------------------------------
+// Second pass: token kind counts
+// ---------------------------------------------------------------
+
+fn count_by_kind(tokens: Vector<Token>): i32
+  let kw_count: i32 = 0
+  let ident_count: i32 = 0
+  let int_count: i32 = 0
+  let string_count: i32 = 0
+  let op_count: i32 = 0
+  let newline_count: i32 = 0
+  let error_count: i32 = 0
+  for tok in tokens.iter():
+    if tok.kind == TK_KW():
+      kw_count = kw_count + 1
+    if tok.kind == TK_IDENT():
+      ident_count = ident_count + 1
+    if tok.kind == TK_INT():
+      int_count = int_count + 1
+    if tok.kind == TK_STRING():
+      string_count = string_count + 1
+    if tok.kind == TK_OP():
+      op_count = op_count + 1
+    if tok.kind == TK_NEWLINE():
+      newline_count = newline_count + 1
+    if tok.kind == TK_ERROR():
+      error_count = error_count + 1
+  print("  keywords:    " + i32_to_string(kw_count))
+  print("  identifiers: " + i32_to_string(ident_count))
+  print("  integers:    " + i32_to_string(int_count))
+  print("  strings:     " + i32_to_string(string_count))
+  print("  operators:   " + i32_to_string(op_count))
+  print("  newlines:    " + i32_to_string(newline_count))
+  print("  errors:      " + i32_to_string(error_count))
+  return kw_count + ident_count + int_count + string_count + op_count + newline_count + error_count
+
+// ---------------------------------------------------------------
+// Second pass: balanced delimiter check
+// ---------------------------------------------------------------
+
+fn check_delimiters(tokens: Vector<Token>, source: string): bool
+  let paren_depth: i32 = 0
+  let bracket_depth: i32 = 0
+  let balanced: bool = true
+  for tok in tokens.iter():
+    if tok.kind == TK_OP() and tok.len == to_i64(1):
+      let ch: i32 = char_at(source, tok.offset)
+      if ch == 40:
+        paren_depth = paren_depth + 1
+      if ch == 41:
+        paren_depth = paren_depth - 1
+      if ch == 91:
+        bracket_depth = bracket_depth + 1
+      if ch == 93:
+        bracket_depth = bracket_depth - 1
+      if paren_depth < 0:
+        balanced = false
+      if bracket_depth < 0:
+        balanced = false
+  if paren_depth != 0:
+    balanced = false
+  if bracket_depth != 0:
+    balanced = false
+  print("  parens:   depth " + i32_to_string(paren_depth))
+  print("  brackets: depth " + i32_to_string(bracket_depth))
+  return balanced
+
+// ---------------------------------------------------------------
+// Second pass: nontrivia token stream summary
+//
+// Extracts the first N non-whitespace, non-newline tokens and
+// prints their lexemes — a quick structural fingerprint of the
+// source, similar to what a parser would see first.
+// ---------------------------------------------------------------
+
+fn nontrivia_head(tokens: Vector<Token>, source: string, limit: i32): i32
+  let printed: i32 = 0
+  let i: i64 = 0
+  while i < tokens.length() and printed < limit:
+    let tok: Token = tokens.get(i)
+    if tok.kind != TK_NEWLINE():
+      let lexeme: string = substring(source, tok.offset, tok.len)
+      print("  " + kind_name(tok.kind) + " " + lexeme)
+      printed = printed + 1
+    i = i + 1
+  return printed
+
+// ---------------------------------------------------------------
+// Entry point — self-lex and analyze
+// ---------------------------------------------------------------
+
+fn main(): i32
+  let self_path: string = "examples/bootstrap_probe/vector_tokenizer.dao"
+  if file_exists(self_path) == false:
+    eprint("file not found: " + self_path)
+    return 1
+
+  let source: string = read_file(self_path)
+  print("=== vector_tokenizer: self-lex ===")
+  print("source bytes: " + i64_to_string(length(source)))
+
+  // Lex into Vector<Token>.
+  let tokens: Vector<Token> = lex(source)
+  print("total tokens: " + i64_to_string(tokens.length()))
+
+  // Pass 1: count by kind.
+  print("")
+  print("--- token distribution ---")
+  let total: i32 = count_by_kind(tokens)
+
+  // Pass 2: delimiter balance.
+  print("")
+  print("--- delimiter balance ---")
+  let balanced: bool = check_delimiters(tokens, source)
+  if balanced:
+    print("  result: balanced")
+  else:
+    print("  result: UNBALANCED")
+
+  // Pass 3: nontrivia head — first 20 real tokens.
+  print("")
+  print("--- nontrivia head (first 20) ---")
+  let shown: i32 = nontrivia_head(tokens, source, 20)
+
+  // Indexed access spot-check: read the last token.
+  if tokens.length() > to_i64(0):
+    let last: Token = tokens.get(tokens.length() - 1)
+    let last_lexeme: string = substring(source, last.offset, last.len)
+    print("")
+    print("last token: " + kind_name(last.kind) + " " + last_lexeme)
+
+  return 0
