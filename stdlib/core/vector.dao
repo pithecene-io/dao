@@ -2,6 +2,10 @@
 //
 // Vector<T> is an ordinary library type built on the low-level memory
 // substrate. No compiler-privileged container semantics.
+//
+// Value semantics: every mutation returns a freshly allocated copy.
+// No aliased Vector values share mutable storage. This is correct
+// but expensive; future COW or ownership tracking can optimize.
 
 class Vector<T>:
   data: *T
@@ -9,26 +13,25 @@ class Vector<T>:
   cap: i64
 
   fn push(self, elem: T): Vector<T>
-    let new_len = self.len + 1
-    if new_len > self.cap:
-      let new_cap: i64 = self.cap * 2
+    let new_cap: i64 = self.cap
+    if self.len + 1 > self.cap:
+      new_cap = self.cap * 2
       if self.cap == 0:
         new_cap = 8
-      let new_data_raw = __dao_mem_alloc(
-        size_of<T>() * new_cap, align_of<T>())
-      mode unsafe =>
-        let new_data = ptr_cast<T>(new_data_raw)
-        let i: i64 = 0
-        while i < self.len:
-          *ptr_offset(new_data, i) = *ptr_offset(self.data, i)
-          i = i + 1
-        *ptr_offset(new_data, self.len) = elem
-        if self.cap > 0:
-          __dao_mem_free(self.data)
-        return Vector(new_data, new_len, new_cap)
+    // Always allocate a fresh buffer for the returned vector.
+    let new_data_raw = __dao_mem_alloc(
+      size_of<T>() * new_cap, align_of<T>())
     mode unsafe =>
-      *ptr_offset(self.data, self.len) = elem
-    return Vector(self.data, new_len, self.cap)
+      let new_data = ptr_cast<T>(new_data_raw)
+      // Copy existing elements.
+      let i: i64 = 0
+      while i < self.len:
+        *ptr_offset(new_data, i) = *ptr_offset(self.data, i)
+        i = i + 1
+      // Append the new element.
+      *ptr_offset(new_data, self.len) = elem
+      return Vector(new_data, self.len + 1, new_cap)
+    panic("unreachable")
 
   fn get(self, index: i64): T
     if index < 0:
@@ -44,9 +47,18 @@ class Vector<T>:
       panic("Vector.set: index out of bounds")
     if index >= self.len:
       panic("Vector.set: index out of bounds")
+    // Allocate a fresh copy — do not mutate self.data in place.
+    let new_data_raw = __dao_mem_alloc(
+      size_of<T>() * self.cap, align_of<T>())
     mode unsafe =>
-      *ptr_offset(self.data, index) = elem
-    return Vector(self.data, self.len, self.cap)
+      let new_data = ptr_cast<T>(new_data_raw)
+      let i: i64 = 0
+      while i < self.len:
+        *ptr_offset(new_data, i) = *ptr_offset(self.data, i)
+        i = i + 1
+      *ptr_offset(new_data, index) = elem
+      return Vector(new_data, self.len, self.cap)
+    panic("unreachable")
 
   fn length(self): i64 -> self.len
 

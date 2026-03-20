@@ -62,7 +62,9 @@ auto is_assignable(const Type* source, const Type* target) -> bool {
     case TypeKind::Struct: {
       const auto* ss = static_cast<const TypeStruct*>(source);
       const auto* ts = static_cast<const TypeStruct*>(target);
-      // Same class: match by decl_id and structural field compatibility.
+      // Same class: match by decl_id and exact field type equality.
+      // NOT assignability — that would allow unsound covariance
+      // (e.g., Vector<*i32> -> Vector<*void>).
       if (ss->decl_id() != ts->decl_id() || ss->name() != ts->name()) {
         return false;
       }
@@ -70,9 +72,27 @@ auto is_assignable(const Type* source, const Type* target) -> bool {
         return false;
       }
       for (size_t i = 0; i < ss->fields().size(); ++i) {
-        if (!is_assignable(ss->fields()[i].type, ts->fields()[i].type)) {
-          return false;
+        const auto* sf = ss->fields()[i].type;
+        const auto* tf = ts->fields()[i].type;
+        if (sf == tf) {
+          continue; // Interned identity — always matches.
         }
+        // Allow generic param matching (needed during type checking
+        // when the same T appears in differently-instantiated structs).
+        if (sf->kind() == TypeKind::GenericParam ||
+            tf->kind() == TypeKind::GenericParam) {
+          continue;
+        }
+        // Recurse for nested structs (same decl_id check applies
+        // recursively), but NOT for pointer covariance.
+        if (sf->kind() == tf->kind() && sf->kind() == TypeKind::Struct) {
+          if (!is_assignable(sf, tf)) {
+            return false;
+          }
+          continue;
+        }
+        // All other field types: exact match only.
+        return false;
       }
       return true;
     }

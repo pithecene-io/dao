@@ -7,23 +7,27 @@ File
       Param self
       Param elem: T
       ReturnType: Vector<T>
-      LetStatement new_len
-        BinaryExpr +
-          FieldExpr .len
-            Identifier self
-          IntLiteral 1
+      LetStatement new_cap: i64
+        FieldExpr .cap
+          Identifier self
       IfStatement
         Condition
           BinaryExpr >
-            Identifier new_len
+            BinaryExpr +
+              FieldExpr .len
+                Identifier self
+              IntLiteral 1
             FieldExpr .cap
               Identifier self
         Then
-          LetStatement new_cap: i64
-            BinaryExpr *
-              FieldExpr .cap
-                Identifier self
-              IntLiteral 2
+          Assignment
+            Target
+              Identifier new_cap
+            Value
+              BinaryExpr *
+                FieldExpr .cap
+                  Identifier self
+                IntLiteral 2
           IfStatement
             Condition
               BinaryExpr ==
@@ -36,100 +40,65 @@ File
                   Identifier new_cap
                 Value
                   IntLiteral 8
-          LetStatement new_data_raw
-            CallExpr
-              Callee
-                Identifier __dao_mem_alloc
-              Args
-                BinaryExpr *
-                  CallExpr
-                    Callee
-                      Identifier size_of
-                    TypeArgs
-                      T
-                  Identifier new_cap
-                CallExpr
-                  Callee
-                    Identifier align_of
-                  TypeArgs
-                    T
-          ModeBlock unsafe
-            LetStatement new_data
+      LetStatement new_data_raw
+        CallExpr
+          Callee
+            Identifier __dao_mem_alloc
+          Args
+            BinaryExpr *
               CallExpr
                 Callee
-                  Identifier ptr_cast
+                  Identifier size_of
                 TypeArgs
                   T
-                Args
-                  Identifier new_data_raw
-            LetStatement i: i64
-              IntLiteral 0
-            WhileStatement
-              Condition
-                BinaryExpr <
-                  Identifier i
-                  FieldExpr .len
-                    Identifier self
-              Assignment
-                Target
-                  UnaryExpr *
-                    CallExpr
-                      Callee
-                        Identifier ptr_offset
-                      Args
-                        Identifier new_data
-                        Identifier i
-                Value
-                  UnaryExpr *
-                    CallExpr
-                      Callee
-                        Identifier ptr_offset
-                      Args
-                        FieldExpr .data
-                          Identifier self
-                        Identifier i
-              Assignment
-                Target
-                  Identifier i
-                Value
-                  BinaryExpr +
-                    Identifier i
-                    IntLiteral 1
-            Assignment
-              Target
-                UnaryExpr *
-                  CallExpr
-                    Callee
-                      Identifier ptr_offset
-                    Args
-                      Identifier new_data
-                      FieldExpr .len
-                        Identifier self
-              Value
-                Identifier elem
-            IfStatement
-              Condition
-                BinaryExpr >
-                  FieldExpr .cap
-                    Identifier self
-                  IntLiteral 0
-              Then
-                ExpressionStatement
-                  CallExpr
-                    Callee
-                      Identifier __dao_mem_free
-                    Args
-                      FieldExpr .data
-                        Identifier self
-            ReturnStatement
-              CallExpr
-                Callee
-                  Identifier Vector
-                Args
-                  Identifier new_data
-                  Identifier new_len
-                  Identifier new_cap
+              Identifier new_cap
+            CallExpr
+              Callee
+                Identifier align_of
+              TypeArgs
+                T
       ModeBlock unsafe
+        LetStatement new_data
+          CallExpr
+            Callee
+              Identifier ptr_cast
+            TypeArgs
+              T
+            Args
+              Identifier new_data_raw
+        LetStatement i: i64
+          IntLiteral 0
+        WhileStatement
+          Condition
+            BinaryExpr <
+              Identifier i
+              FieldExpr .len
+                Identifier self
+          Assignment
+            Target
+              UnaryExpr *
+                CallExpr
+                  Callee
+                    Identifier ptr_offset
+                  Args
+                    Identifier new_data
+                    Identifier i
+            Value
+              UnaryExpr *
+                CallExpr
+                  Callee
+                    Identifier ptr_offset
+                  Args
+                    FieldExpr .data
+                      Identifier self
+                    Identifier i
+          Assignment
+            Target
+              Identifier i
+            Value
+              BinaryExpr +
+                Identifier i
+                IntLiteral 1
         Assignment
           Target
             UnaryExpr *
@@ -137,22 +106,28 @@ File
                 Callee
                   Identifier ptr_offset
                 Args
-                  FieldExpr .data
-                    Identifier self
+                  Identifier new_data
                   FieldExpr .len
                     Identifier self
           Value
             Identifier elem
-      ReturnStatement
+        ReturnStatement
+          CallExpr
+            Callee
+              Identifier Vector
+            Args
+              Identifier new_data
+              BinaryExpr +
+                FieldExpr .len
+                  Identifier self
+                IntLiteral 1
+              Identifier new_cap
+      ExpressionStatement
         CallExpr
           Callee
-            Identifier Vector
+            Identifier panic
           Args
-            FieldExpr .data
-              Identifier self
-            Identifier new_len
-            FieldExpr .cap
-              Identifier self
+            StringLiteral "unreachable"
     FunctionDecl get
       Param self
       Param index: i64
@@ -228,7 +203,66 @@ File
                 Identifier panic
               Args
                 StringLiteral "Vector.set: index out of bounds"
+      LetStatement new_data_raw
+        CallExpr
+          Callee
+            Identifier __dao_mem_alloc
+          Args
+            BinaryExpr *
+              CallExpr
+                Callee
+                  Identifier size_of
+                TypeArgs
+                  T
+              FieldExpr .cap
+                Identifier self
+            CallExpr
+              Callee
+                Identifier align_of
+              TypeArgs
+                T
       ModeBlock unsafe
+        LetStatement new_data
+          CallExpr
+            Callee
+              Identifier ptr_cast
+            TypeArgs
+              T
+            Args
+              Identifier new_data_raw
+        LetStatement i: i64
+          IntLiteral 0
+        WhileStatement
+          Condition
+            BinaryExpr <
+              Identifier i
+              FieldExpr .len
+                Identifier self
+          Assignment
+            Target
+              UnaryExpr *
+                CallExpr
+                  Callee
+                    Identifier ptr_offset
+                  Args
+                    Identifier new_data
+                    Identifier i
+            Value
+              UnaryExpr *
+                CallExpr
+                  Callee
+                    Identifier ptr_offset
+                  Args
+                    FieldExpr .data
+                      Identifier self
+                    Identifier i
+          Assignment
+            Target
+              Identifier i
+            Value
+              BinaryExpr +
+                Identifier i
+                IntLiteral 1
         Assignment
           Target
             UnaryExpr *
@@ -236,22 +270,26 @@ File
                 Callee
                   Identifier ptr_offset
                 Args
-                  FieldExpr .data
-                    Identifier self
+                  Identifier new_data
                   Identifier index
           Value
             Identifier elem
-      ReturnStatement
+        ReturnStatement
+          CallExpr
+            Callee
+              Identifier Vector
+            Args
+              Identifier new_data
+              FieldExpr .len
+                Identifier self
+              FieldExpr .cap
+                Identifier self
+      ExpressionStatement
         CallExpr
           Callee
-            Identifier Vector
+            Identifier panic
           Args
-            FieldExpr .data
-              Identifier self
-            FieldExpr .len
-              Identifier self
-            FieldExpr .cap
-              Identifier self
+            StringLiteral "unreachable"
     FunctionDecl length
       Param self
       ReturnType: i64
