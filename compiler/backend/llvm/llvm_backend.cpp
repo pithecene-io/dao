@@ -924,24 +924,18 @@ auto LlvmBackend::lower_builtin_call(
   auto& ctx = module_->getContext();
   const auto& layout = module_->getDataLayout();
 
-  // Extract the return type from the monomorphized function type.
-  const TypeFunction* fn_type = nullptr;
-  if (inst.type != nullptr && inst.type->kind() == TypeKind::Function) {
-    fn_type = static_cast<const TypeFunction*>(inst.type);
-  }
+  // inst.type on a MirCall is the result type of the call, not a
+  // TypeFunction wrapper. Use it directly as the semantic result type.
+  const Type* result_type = inst.type;
 
   // size_of$T(): i64 — return sizeof(T) as constant.
   if (name == "size_of" || name.starts_with("size_of$")) {
-    // T is the first type arg. Extract from the monomorphized function's
-    // generic context: size_of$i32 → T=i32. We need the semantic Type*
-    // for T. Get it from the call's explicit_type_args.
     if (p.explicit_type_args != nullptr && !p.explicit_type_args->empty()) {
       auto* elem_type = types_.lower((*p.explicit_type_args)[0]);
       uint64_t size = layout.getTypeAllocSize(elem_type);
       state.values[inst.result.id] =
           llvm::ConstantInt::get(llvm::Type::getInt64Ty(ctx), size);
-      state.value_types[inst.result.id] =
-          fn_type != nullptr ? fn_type->return_type() : nullptr;
+      state.value_types[inst.result.id] = result_type;
       return true;
     }
     emit_diagnostic(inst.span, "size_of: missing type argument");
@@ -955,8 +949,7 @@ auto LlvmBackend::lower_builtin_call(
       uint64_t align = layout.getABITypeAlign(elem_type).value();
       state.values[inst.result.id] =
           llvm::ConstantInt::get(llvm::Type::getInt64Ty(ctx), align);
-      state.value_types[inst.result.id] =
-          fn_type != nullptr ? fn_type->return_type() : nullptr;
+      state.value_types[inst.result.id] = result_type;
       return true;
     }
     emit_diagnostic(inst.span, "align_of: missing type argument");
@@ -968,8 +961,7 @@ auto LlvmBackend::lower_builtin_call(
     auto* ptr_type = llvm::PointerType::getUnqual(ctx);
     state.values[inst.result.id] =
         llvm::ConstantPointerNull::get(ptr_type);
-    state.value_types[inst.result.id] =
-        fn_type != nullptr ? fn_type->return_type() : nullptr;
+    state.value_types[inst.result.id] = result_type;
     return true;
   }
 
@@ -982,14 +974,22 @@ auto LlvmBackend::lower_builtin_call(
     auto* ptr_val = get_value((*p.args)[0], state);
     auto* index_val = get_value((*p.args)[1], state);
 
-    // Get element type T from the pointer's semantic type.
+    // Get element type T: first from the result type (*T), then from
+    // the argument's value type, then from explicit type args.
     const Type* pointee_type = nullptr;
-    auto arg_type_it = state.value_types.find((*p.args)[0].id);
-    if (arg_type_it != state.value_types.end() &&
-        arg_type_it->second != nullptr &&
-        arg_type_it->second->kind() == TypeKind::Pointer) {
+    if (result_type != nullptr &&
+        result_type->kind() == TypeKind::Pointer) {
       pointee_type =
-          static_cast<const TypePointer*>(arg_type_it->second)->pointee();
+          static_cast<const TypePointer*>(result_type)->pointee();
+    }
+    if (pointee_type == nullptr) {
+      auto arg_type_it = state.value_types.find((*p.args)[0].id);
+      if (arg_type_it != state.value_types.end() &&
+          arg_type_it->second != nullptr &&
+          arg_type_it->second->kind() == TypeKind::Pointer) {
+        pointee_type =
+            static_cast<const TypePointer*>(arg_type_it->second)->pointee();
+      }
     }
     if (pointee_type == nullptr && p.explicit_type_args != nullptr &&
         !p.explicit_type_args->empty()) {
@@ -1002,12 +1002,11 @@ auto LlvmBackend::lower_builtin_call(
     auto* elem_llvm_type = types_.lower(pointee_type);
     state.values[inst.result.id] =
         builder->CreateGEP(elem_llvm_type, ptr_val, {index_val}, "ptr.offset");
-    state.value_types[inst.result.id] =
-        fn_type != nullptr ? fn_type->return_type() : nullptr;
+    state.value_types[inst.result.id] = result_type;
     return true;
   }
 
-  // ptr_cast$T(ptr: *i8): *T — no-op with opaque pointers.
+  // ptr_cast$T(ptr: *void): *T — no-op with opaque pointers.
   if (name == "ptr_cast" || name.starts_with("ptr_cast$")) {
     if (p.args == nullptr || p.args->size() != 1) {
       emit_diagnostic(inst.span, "ptr_cast: expected 1 argument");
@@ -1015,8 +1014,7 @@ auto LlvmBackend::lower_builtin_call(
     }
     // With opaque pointers, this is a semantic no-op — just pass through.
     state.values[inst.result.id] = get_value((*p.args)[0], state);
-    state.value_types[inst.result.id] =
-        fn_type != nullptr ? fn_type->return_type() : nullptr;
+    state.value_types[inst.result.id] = result_type;
     return true;
   }
 
