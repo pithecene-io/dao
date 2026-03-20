@@ -5,7 +5,7 @@
 
 fn main(): i32
   // Create and populate a vector.
-  let v = vec_new<i32>()
+  let v = Vector<i32>::new()
   v = v.push(10)
   v = v.push(20)
   v = v.push(30)

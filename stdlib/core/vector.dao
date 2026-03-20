@@ -50,6 +50,6 @@ class Vector<T>:
 
   fn length(self): i64 -> self.len
 
-fn vec_new<T>(): Vector<T>
-  let zero: i64 = 0
-  return Vector(null_ptr<T>(), zero, zero)
+  fn new(): Vector<T>
+    let zero: i64 = 0
+    return Vector(null_ptr<T>(), zero, zero)

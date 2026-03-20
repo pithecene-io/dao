@@ -4,7 +4,7 @@ File
     LetStatement v
       CallExpr
         Callee
-          Identifier vec_new
+          Identifier Vector.new
         TypeArgs
           i32
     Assignment

@@ -258,19 +258,19 @@ File
       ExprBody
         FieldExpr .len
           Identifier self
-  FunctionDecl vec_new<T>
-    ReturnType: Vector<T>
-    LetStatement zero: i64
-      IntLiteral 0
-    ReturnStatement
-      CallExpr
-        Callee
-          Identifier Vector
-        Args
-          CallExpr
-            Callee
-              Identifier null_ptr
-            TypeArgs
-              T
-          Identifier zero
-          Identifier zero
+    FunctionDecl new
+      ReturnType: Vector<T>
+      LetStatement zero: i64
+        IntLiteral 0
+      ReturnStatement
+        CallExpr
+          Callee
+            Identifier Vector
+          Args
+            CallExpr
+              Callee
+                Identifier null_ptr
+              TypeArgs
+                T
+            Identifier zero
+            Identifier zero

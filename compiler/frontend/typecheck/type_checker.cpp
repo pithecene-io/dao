@@ -767,9 +767,12 @@ void TypeChecker::check_class(const Decl* decl) {
   }
 
   // Validate and check direct class methods.
+  // Static methods (no self parameter) are allowed in class bodies.
   for (const auto* method : cls.methods) {
-    validate_receiver(method, cls.name_span);
     const auto& fn = method->as<FunctionDecl>();
+    if (!fn.params.empty() && fn.params[0].name == "self") {
+      validate_receiver(method, cls.name_span);
+    }
     if (!fn.body.empty() || fn.expr_body != nullptr) {
       check_function(method);
     }
@@ -1557,6 +1560,20 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
         const auto* fn_decl = static_cast<const Decl*>(sym_it->second->decl);
         if (fn_decl->is<FunctionDecl>()) {
           expected_count = fn_decl->as<FunctionDecl>().type_params.size();
+          // For class methods (no own type params), use the enclosing
+          // class's type params when invoked via Type<Args>::method().
+          if (expected_count == 0 && sym_it->second->name.find('.') != std::string_view::npos) {
+            // Find the enclosing ClassDecl by checking file declarations.
+            auto class_name = sym_it->second->name.substr(
+                0, sym_it->second->name.find('.'));
+            for (const auto* file_decl : file_->declarations) {
+              if (file_decl->kind() == NodeKind::ClassDecl &&
+                  file_decl->as<ClassDecl>().name == class_name) {
+                expected_count = file_decl->as<ClassDecl>().type_params.size();
+                break;
+              }
+            }
+          }
         }
       } else {
         // Compiler builtin functions (null_ptr, ptr_cast) take 1 type param.

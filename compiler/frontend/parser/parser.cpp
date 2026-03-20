@@ -1056,8 +1056,9 @@ private:
     }
     if (peek_kind() == TokenKind::Gt) {
       advance(); // consume >
-      if (peek_kind() == TokenKind::LParen) {
-        // Success: <Types>(  — these are call-site type arguments.
+      if (peek_kind() == TokenKind::LParen ||
+          peek_kind() == TokenKind::ColonColon) {
+        // Success: <Types>( or <Types>:: — call-site type arguments.
         return type_args;
       }
     }
@@ -1076,6 +1077,39 @@ private:
         // Speculatively try call-site type arguments: ident<Type>(args).
         auto type_args = try_parse_call_type_args();
         if (!type_args.empty()) {
+          // Static method call: Type<Args>::method(args)
+          if (peek_kind() == TokenKind::ColonColon) {
+            advance(); // ::
+            const auto& method_tok = consume(TokenKind::Identifier);
+            // Synthesize a mangled callee: "Type.method"
+            const auto& ident = expr->as<IdentifierExpr>();
+            auto* mangled_str = ctx_.alloc<std::string>(
+                std::string(ident.name) + "." + std::string(method_tok.text));
+            std::string_view mangled(*mangled_str);
+            auto* callee = ctx_.alloc<Expr>(
+                Span{.offset = expr->span.offset,
+                     .length = (method_tok.span.offset + method_tok.span.length) -
+                               expr->span.offset},
+                IdentifierExpr{.name = mangled});
+            consume(TokenKind::LParen);
+            std::vector<Expr*> args;
+            if (peek_kind() != TokenKind::RParen) {
+              args.push_back(parse_expression());
+              while (peek_kind() == TokenKind::Comma) {
+                advance();
+                args.push_back(parse_expression());
+              }
+            }
+            const auto& rparen = consume(TokenKind::RParen);
+            Span span = {.offset = expr->span.offset,
+                         .length = (rparen.span.offset + rparen.span.length) -
+                                   expr->span.offset};
+            expr = ctx_.alloc<Expr>(span,
+                                    CallExpr{.callee = callee,
+                                             .args = std::move(args),
+                                             .type_args = std::move(type_args)});
+            continue;
+          }
           // Commit: parse the call arguments.
           advance(); // (
           std::vector<Expr*> args;

@@ -430,13 +430,16 @@ private:
     // Resolve direct class methods and create Function symbols with
     // mangled names (e.g. "Vector.push") so HIR method desugaring
     // can find them — same pattern as extend method symbols.
+    // Also declare in file scope for static method calls (Type::method()).
     for (const auto* method : st.methods) {
       resolve_function(*method, struct_scope);
       const auto& fn_decl = method->as<FunctionDecl>();
       auto mangled_name = ctx_.intern(
           std::string(st.name) + "." + std::string(fn_decl.name));
-      ctx_.make_symbol(SymbolKind::Function, mangled_name,
-                       fn_decl.name_span, method);
+      auto* method_sym = ctx_.make_symbol(SymbolKind::Function,
+                                          mangled_name,
+                                          fn_decl.name_span, method);
+      file_scope_->declare(mangled_name, method_sym);
     }
 
     // Resolve conformance blocks — concept name + method signatures.
