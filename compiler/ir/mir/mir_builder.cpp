@@ -291,6 +291,9 @@ void MirBuilder::lower_stmt(const HirStmt& stmt) {
       },
       [&](const HirBreak&) {
         if (!loop_exit_stack_.empty()) {
+          // Emit region exits (mode/resource cleanup) before branching
+          // out of the loop, same as early return.
+          emit_region_exits(stmt.span);
           emit_terminator(stmt.span, MirBr{loop_exit_stack_.back()});
         }
       },
