@@ -237,8 +237,12 @@ auto clone_function(const MirFunction* src, const TypeSubst& subst,
           call->args = new_args;
         }
         if (call->explicit_type_args != nullptr) {
-          call->explicit_type_args =
-              ctx.alloc<std::vector<const Type*>>(*call->explicit_type_args);
+          auto* new_ta = ctx.alloc<std::vector<const Type*>>();
+          new_ta->reserve(call->explicit_type_args->size());
+          for (const auto* ta : *call->explicit_type_args) {
+            new_ta->push_back(substitute_type(ta, subst, types));
+          }
+          call->explicit_type_args = new_ta;
         }
       } else if (auto* ctor = std::get_if<MirConstruct>(&dst_inst->payload)) {
         if (ctor->field_values != nullptr) {
