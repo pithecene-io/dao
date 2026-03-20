@@ -121,15 +121,30 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
       // If the AST node carries type arguments (e.g. Vector<i32>),
       // resolve them and substitute into the base type so that
       // function parameters and return types are fully instantiated.
-      if (base_type != nullptr && !named.type_args.empty() &&
-          base_type->kind() == TypeKind::Struct) {
+      if (base_type != nullptr && base_type->kind() == TypeKind::Struct) {
         const auto* decl_node = sym->decl_as_decl();
         const std::vector<GenericParam>* type_params = nullptr;
         if (decl_node->is<ClassDecl>()) {
           type_params = &decl_node->as<ClassDecl>().type_params;
         }
-        if (type_params != nullptr &&
-            type_params->size() == named.type_args.size()) {
+
+        // Diagnose generic arity mismatches.
+        if (type_params != nullptr && !type_params->empty()) {
+          if (named.type_args.empty()) {
+            error(node->span,
+                  "generic type '" + std::string(name) + "' requires " +
+                      std::to_string(type_params->size()) +
+                      " type argument(s)");
+            return nullptr;
+          }
+          if (named.type_args.size() != type_params->size()) {
+            error(node->span,
+                  "'" + std::string(name) + "' expects " +
+                      std::to_string(type_params->size()) +
+                      " type argument(s), got " +
+                      std::to_string(named.type_args.size()));
+            return nullptr;
+          }
           std::unordered_map<uint32_t, const Type*> bindings;
           bool valid = true;
           for (size_t i = 0; i < named.type_args.size(); ++i) {
@@ -143,6 +158,16 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
           if (valid) {
             return substitute_generics(base_type, bindings);
           }
+          return nullptr;
+        }
+
+        // Non-generic class used with type arguments.
+        if (type_params != nullptr && type_params->empty() &&
+            !named.type_args.empty()) {
+          error(node->span,
+                "'" + std::string(name) +
+                    "' is not generic but was given type arguments");
+          return nullptr;
         }
       }
 
