@@ -145,6 +145,7 @@ struct HirBinary {
 struct HirCall {
   HirExpr* callee;
   std::vector<HirExpr*> args;
+  std::vector<const Type*> explicit_type_args; // From f<i32>(x) syntax
 };
 
 struct HirConstruct {

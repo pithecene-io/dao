@@ -410,7 +410,12 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
         for (const auto* arg : call.args) {
           args->push_back(lower_expr_value(*arg));
         }
-        return emit_value(expr, MirCall{callee_val, args});
+        std::vector<const Type*>* type_args = nullptr;
+        if (!call.explicit_type_args.empty()) {
+          type_args = ctx_.alloc<std::vector<const Type*>>(
+              call.explicit_type_args);
+        }
+        return emit_value(expr, MirCall{callee_val, args, type_args});
       },
       [&](const HirConstruct& ctor) -> MirValueId {
         auto* field_vals = ctx_.alloc<std::vector<MirValueId>>();

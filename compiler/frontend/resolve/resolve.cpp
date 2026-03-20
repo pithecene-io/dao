@@ -53,6 +53,14 @@ constexpr std::string_view kPredeclaredTypes[] = {
     "Generator",
 };
 
+// Compiler builtin functions — generic functions whose bodies are
+// replaced by the LLVM backend with inline IR. These are registered
+// as predeclared function symbols so they're available without import.
+constexpr std::string_view kBuiltinFunctions[] = {
+    "null_ptr",
+    "ptr_cast",
+};
+
 // ---------------------------------------------------------------------------
 // Resolver — two-pass name resolution over the AST
 // ---------------------------------------------------------------------------
@@ -95,6 +103,10 @@ private:
     }
     for (auto name : kPredeclaredTypes) {
       auto* sym = ctx_.make_symbol(SymbolKind::Predeclared, name, Span{}, nullptr);
+      file_scope_->declare(name, sym);
+    }
+    for (auto name : kBuiltinFunctions) {
+      auto* sym = ctx_.make_symbol(SymbolKind::Function, name, Span{}, nullptr);
       file_scope_->declare(name, sym);
     }
   }

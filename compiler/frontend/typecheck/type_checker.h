@@ -198,6 +198,7 @@ private:
 
   auto is_lvalue(const Expr* expr) -> bool;
   auto find_generic_param_index(const Symbol* sym) -> uint32_t;
+  auto resolve_builtin_function_type(std::string_view name) -> const Type*;
 };
 
 // ---------------------------------------------------------------------------

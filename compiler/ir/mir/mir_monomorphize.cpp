@@ -208,6 +208,10 @@ auto clone_function(const MirFunction* src, const TypeSubst& subst,
           auto* new_args = ctx.alloc<std::vector<MirValueId>>(*call->args);
           call->args = new_args;
         }
+        if (call->explicit_type_args != nullptr) {
+          call->explicit_type_args =
+              ctx.alloc<std::vector<const Type*>>(*call->explicit_type_args);
+        }
       } else if (auto* ctor = std::get_if<MirConstruct>(&dst_inst->payload)) {
         if (ctor->field_values != nullptr) {
           auto* new_fv =
@@ -484,6 +488,16 @@ auto specialize_call_site(
 
   // Infer substitution from argument types.
   auto subst = infer_substitution(git->second, arg_types);
+
+  // If inference failed (e.g. zero-arg builtin), use explicit type args.
+  if (subst.empty() && call_payload->explicit_type_args != nullptr &&
+      !call_payload->explicit_type_args->empty()) {
+    for (size_t i = 0; i < call_payload->explicit_type_args->size(); ++i) {
+      subst[static_cast<uint32_t>(i)] =
+          (*call_payload->explicit_type_args)[i];
+    }
+  }
+
   if (subst.empty()) {
     return false;
   }
