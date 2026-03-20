@@ -632,8 +632,15 @@ private:
     // Check for assignment: expr = expr
     if (peek_kind() == TokenKind::Eq) {
       // Validate LHS is a legal assignment target.
-      if (expr->kind() != NodeKind::Identifier && expr->kind() != NodeKind::FieldExpr &&
-          expr->kind() != NodeKind::IndexExpr) {
+      bool valid_target = expr->kind() == NodeKind::Identifier ||
+                          expr->kind() == NodeKind::FieldExpr ||
+                          expr->kind() == NodeKind::IndexExpr;
+      // Dereference (*ptr) is a valid assignment target for store-through-pointer.
+      if (!valid_target && expr->kind() == NodeKind::UnaryExpr) {
+        const auto& un = expr->as<UnaryExpr>();
+        valid_target = un.op == UnaryOp::Deref;
+      }
+      if (!valid_target) {
         error("invalid assignment target");
       }
       advance(); // =
@@ -1035,10 +1042,62 @@ private:
   }
 
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+  // Try to speculatively parse <Type, ...> as call-site type arguments.
+  // Returns type args and advances pos_ on success; returns empty and
+  // leaves pos_ unchanged on failure.
+  auto try_parse_call_type_args() -> std::vector<TypeNode*> {
+    auto saved_pos = pos_;
+    auto saved_diag_size = diagnostics_.size();
+    advance(); // consume <
+    std::vector<TypeNode*> type_args;
+    type_args.push_back(parse_type());
+    while (peek_kind() == TokenKind::Comma) {
+      advance();
+      type_args.push_back(parse_type());
+    }
+    if (peek_kind() == TokenKind::Gt) {
+      advance(); // consume >
+      if (peek_kind() == TokenKind::LParen) {
+        // Success: <Types>(  — these are call-site type arguments.
+        return type_args;
+      }
+    }
+    // Failed: restore position and discard any diagnostics added.
+    pos_ = saved_pos;
+    diagnostics_.resize(saved_diag_size);
+    return {};
+  }
+
   auto parse_postfix() -> Expr* {
     auto* expr = parse_primary();
 
     while (true) {
+      if (peek_kind() == TokenKind::Lt &&
+          expr->kind() == NodeKind::Identifier) {
+        // Speculatively try call-site type arguments: ident<Type>(args).
+        auto type_args = try_parse_call_type_args();
+        if (!type_args.empty()) {
+          // Commit: parse the call arguments.
+          advance(); // (
+          std::vector<Expr*> args;
+          if (peek_kind() != TokenKind::RParen) {
+            args.push_back(parse_expression());
+            while (peek_kind() == TokenKind::Comma) {
+              advance();
+              args.push_back(parse_expression());
+            }
+          }
+          const auto& rparen = consume(TokenKind::RParen);
+          Span span = {.offset = expr->span.offset,
+                       .length = (rparen.span.offset + rparen.span.length) - expr->span.offset};
+          expr = ctx_.alloc<Expr>(span, CallExpr{.callee = expr,
+                                                    .args = std::move(args),
+                                                    .type_args = std::move(type_args)});
+          continue;
+        }
+        // Fall through to normal expression parsing (< as comparison).
+        break;
+      }
       if (peek_kind() == TokenKind::LParen) {
         // Call: expr(args)
         advance(); // (

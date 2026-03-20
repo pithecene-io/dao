@@ -342,6 +342,7 @@ struct UnaryExpr {
 struct CallExpr {
   Expr* callee;
   std::vector<Expr*> args;
+  std::vector<TypeNode*> type_args; // Explicit type arguments: f<i32>(x)
 };
 
 struct IndexExpr {

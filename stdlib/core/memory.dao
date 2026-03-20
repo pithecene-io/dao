@@ -1,0 +1,9 @@
+// memory.dao — Low-level allocation hooks.
+//
+// Authority: docs/contracts/CONTRACT_RUNTIME_ABI.md
+// These are the raw runtime hooks. Typed allocation wrappers
+// will be added once size_of<T> and ptr_cast<T> are available.
+
+extern fn __dao_mem_alloc(size: i64, align: i64): *i8
+extern fn __dao_mem_realloc(ptr: *i8, new_size: i64, align: i64): *i8
+extern fn __dao_mem_free(ptr: *i8): void

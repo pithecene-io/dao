@@ -6,6 +6,8 @@ add_library(dao_runtime STATIC
   generator.c
   resource.c
   string.c
+  panic.c
+  ${CMAKE_SOURCE_DIR}/runtime/memory/alloc.c
 )
 
 # This is C code, not C++.

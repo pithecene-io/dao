@@ -1,0 +1,13 @@
+File
+  ExternFunctionDecl __dao_mem_alloc
+    Param size: i64
+    Param align: i64
+    ReturnType: *i8
+  ExternFunctionDecl __dao_mem_realloc
+    Param ptr: *i8
+    Param new_size: i64
+    Param align: i64
+    ReturnType: *i8
+  ExternFunctionDecl __dao_mem_free
+    Param ptr: *i8
+    ReturnType: void
