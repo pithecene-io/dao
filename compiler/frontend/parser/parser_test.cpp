@@ -788,6 +788,107 @@ suite<"error_recovery"> error_recovery = [] {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Call-site explicit type arguments
+// ---------------------------------------------------------------------------
+
+suite<"call_type_arg_tests"> call_type_arg_tests = [] {
+  "explicit type arg parsed"_test = [] {
+    auto output = parse_string("fn f(): i32\n    size_of<i32>()\n");
+    expect(output.parse_result.diagnostics.empty());
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& call = fn.body[0]->as<ExpressionStatement>().expr->as<CallExpr>();
+    expect(call.type_args.size() == 1_u);
+    expect(call.args.empty());
+  };
+
+  "explicit type arg does not break comparison"_test = [] {
+    auto output = parse_string("fn f(x: i32): i32\n    if x < 3:\n        return 1\n    return 0\n");
+    expect(output.parse_result.diagnostics.empty());
+  };
+
+  "multiple type args parsed"_test = [] {
+    auto output = parse_string("fn f(): i32\n    g<i32, f64>(1)\n");
+    expect(output.parse_result.diagnostics.empty());
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& call = fn.body[0]->as<ExpressionStatement>().expr->as<CallExpr>();
+    expect(call.type_args.size() == 2_u);
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Class body methods
+// ---------------------------------------------------------------------------
+
+suite<"class_method_tests"> class_method_tests = [] {
+  "class with method parses"_test = [] {
+    auto output = parse_string(
+        "class Foo:\n"
+        "    x: i32\n"
+        "\n"
+        "    fn get(self): i32 -> self.x\n");
+    expect(output.parse_result.diagnostics.empty());
+    const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
+    expect(cls.fields.size() == 1_u);
+    expect(cls.methods.size() == 1_u);
+    expect(cls.methods[0]->as<FunctionDecl>().name == "get");
+  };
+
+  "class with static method parses"_test = [] {
+    auto output = parse_string(
+        "class Foo:\n"
+        "    x: i32\n"
+        "\n"
+        "    fn zero(): Foo\n"
+        "        let z: i32 = 0\n"
+        "        return Foo(z)\n");
+    expect(output.parse_result.diagnostics.empty());
+    const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
+    expect(cls.methods.size() == 1_u);
+    expect(cls.methods[0]->as<FunctionDecl>().name == "zero");
+    expect(cls.methods[0]->as<FunctionDecl>().params.empty());
+  };
+
+  "store through pointer parses"_test = [] {
+    auto output = parse_string(
+        "fn f(p: *i32): void\n"
+        "    mode unsafe =>\n"
+        "        *p = 42\n");
+    expect(output.parse_result.diagnostics.empty());
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& mode = fn.body[0]->as<ModeBlock>();
+    const auto& assign = mode.body[0]->as<Assignment>();
+    expect(assign.target->kind() == NodeKind::UnaryExpr);
+    expect(assign.target->as<UnaryExpr>().op == UnaryOp::Deref);
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Static method call syntax
+// ---------------------------------------------------------------------------
+
+suite<"static_method_tests"> static_method_tests = [] {
+  "nongeneric static call parses as mangled identifier"_test = [] {
+    auto output = parse_string("fn f(): i32\n    Foo::bar()\n");
+    expect(output.parse_result.diagnostics.empty());
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& call = fn.body[0]->as<ExpressionStatement>().expr->as<CallExpr>();
+    // When followed by (, 2-segment QualifiedName stays as QualifiedName
+    // but the resolver mangles it. Parser preserves the QualifiedName.
+    expect(call.callee->kind() == NodeKind::QualifiedName);
+  };
+
+  "generic static call parses with type args"_test = [] {
+    auto output = parse_string("fn f(): i32\n    Foo<i32>::bar()\n");
+    expect(output.parse_result.diagnostics.empty());
+    const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
+    const auto& call = fn.body[0]->as<ExpressionStatement>().expr->as<CallExpr>();
+    expect(call.type_args.size() == 1_u);
+    expect(call.callee->kind() == NodeKind::Identifier);
+    expect(call.callee->as<IdentifierExpr>().name == "Foo.bar");
+  };
+};
+
 // NOLINTEND(readability-function-cognitive-complexity,readability-magic-numbers,modernize-use-trailing-return-type)
 
 } // namespace

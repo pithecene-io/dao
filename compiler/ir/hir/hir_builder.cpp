@@ -136,6 +136,24 @@ auto HirBuilder::lower_class(const Decl* decl) -> HirDecl* {
     struct_type = static_cast<const TypeStruct*>(decl_type);
   }
 
+  // Lower direct class methods as standalone functions.
+  for (const auto* method : st.methods) {
+    auto* hir_fn = lower_function(method);
+    if (hir_fn != nullptr) {
+      extend_decls_.push_back(hir_fn);
+    }
+  }
+
+  // Lower conformance-block methods as standalone functions.
+  for (const auto& conf : st.conformances) {
+    for (const auto* method : conf.methods) {
+      auto* hir_fn = lower_function(method);
+      if (hir_fn != nullptr) {
+        extend_decls_.push_back(hir_fn);
+      }
+    }
+  }
+
   return ctx_.alloc<HirDecl>(decl->span, HirClassDecl{sym, struct_type});
 }
 
@@ -287,7 +305,10 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
     return ctx_.alloc<HirExpr>(span, type, HirBoolLiteral{lit.value});
   }
 
-  case NodeKind::Identifier: {
+  case NodeKind::Identifier:
+  case NodeKind::QualifiedName: {
+    // QualifiedName for static method calls (Type::method) is resolved
+    // by the resolver to a function symbol, same as an identifier.
     const auto* sym = find_symbol_at_use(expr->span.offset);
     return ctx_.alloc<HirExpr>(span, type, HirSymbolRef{sym});
   }

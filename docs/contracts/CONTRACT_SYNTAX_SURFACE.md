@@ -92,15 +92,28 @@ Rules:
 class Point:
     x: f64
     y: f64
+
+    fn magnitude(self): f64
+        return sqrt(self.x * self.x + self.y * self.y)
 ```
 
 Rules:
 - `class <name> :` introduces a class declaration
-- the body is an indented block of field specifiers
+- the body is an indented block of field specifiers and method
+  declarations
 - each field specifier is `name: type` on its own line
 - field specifiers are not statements; `let` is not used inside class bodies
 - the body must contain at least one field
 - field names must be unique within a class
+- method declarations use `fn` and follow the same syntax as
+  top-level function declarations
+- methods must appear after all field specifiers
+- methods with a bare `self` parameter receive the enclosing class
+  type as the receiver; `self` has no special meaning outside a
+  class or extend body
+- methods defined inside the class body are equivalent to methods
+  defined in an `extend` block — they are ordinary functions
+  attached to the type
 
 ## Concepts
 

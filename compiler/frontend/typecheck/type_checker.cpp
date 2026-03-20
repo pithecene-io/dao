@@ -368,6 +368,33 @@ void TypeChecker::register_declarations(const FileNode& file) {
           types_.make_struct(sym, st.name, std::move(fields));
       symbol_types_[sym] = struct_type;
       typed_.set_decl_type(decl, struct_type);
+
+      // Register class body methods as function declarations so
+      // they get proper TypeFunction entries in the typed results.
+      for (const auto* method : st.methods) {
+        const auto& fn = method->as<FunctionDecl>();
+        auto mdecl_it = decl_symbols_.find(fn.name_span.offset);
+        if (mdecl_it == decl_symbols_.end()) {
+          continue;
+        }
+        const auto* method_sym = mdecl_it->second;
+        std::vector<const Type*> param_types;
+        for (const auto& param : fn.params) {
+          if (param.name == "self") {
+            param_types.push_back(struct_type);
+          } else {
+            const auto* param_type = resolve_type_node(param.type);
+            param_types.push_back(param_type);
+          }
+        }
+        const auto* ret = fn.return_type != nullptr
+                              ? resolve_type_node(fn.return_type)
+                              : types_.void_type();
+        const auto* fn_type =
+            types_.function_type(std::move(param_types), ret);
+        symbol_types_[method_sym] = fn_type;
+        typed_.set_decl_type(method, fn_type);
+      }
       break;
     }
 
@@ -739,6 +766,18 @@ void TypeChecker::check_class(const Decl* decl) {
     }
   }
 
+  // Validate and check direct class methods.
+  // Static methods (no self parameter) are allowed in class bodies.
+  for (const auto* method : cls.methods) {
+    const auto& fn = method->as<FunctionDecl>();
+    if (!fn.params.empty() && fn.params[0].name == "self") {
+      validate_receiver(method, cls.name_span);
+    }
+    if (!fn.body.empty() || fn.expr_body != nullptr) {
+      check_function(method);
+    }
+  }
+
   // Validate and check conformance-block methods.
   for (const auto& conf : cls.conformances) {
     for (const auto* method : conf.methods) {
@@ -1051,6 +1090,11 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
   case NodeKind::ListLiteral:
     result = check_list_literal(expr);
     break;
+  case NodeKind::QualifiedName:
+    // Static method call: Type::method resolved by the resolver
+    // to a mangled function symbol. Treat like an identifier.
+    result = check_identifier(expr);
+    break;
   case NodeKind::ErrorExpr:
     // Recovery placeholder — skip silently.
     break;
@@ -1071,16 +1115,26 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
 // ---------------------------------------------------------------------------
 
 auto TypeChecker::check_identifier(const Expr* expr) -> const Type* {
-  const auto& id = expr->as<IdentifierExpr>();
+  // Works for both IdentifierExpr and QualifiedName (static method calls).
   auto it = resolve_.uses.find(expr->span.offset);
   if (it == resolve_.uses.end()) {
-    error(expr->span, "unresolved identifier '" + std::string(id.name) + "'");
+    std::string name_str;
+    if (expr->is<IdentifierExpr>()) {
+      name_str = expr->as<IdentifierExpr>().name;
+    } else if (expr->is<QualifiedName>()) {
+      const auto& qn = expr->as<QualifiedName>();
+      for (size_t i = 0; i < qn.segments.size(); ++i) {
+        if (i > 0) name_str += "::";
+        name_str += qn.segments[i];
+      }
+    }
+    error(expr->span, "unresolved identifier '" + name_str + "'");
     return nullptr;
   }
   const auto* result = resolve_symbol_type(it->second);
   if (result == nullptr && it->second->kind == SymbolKind::Param) {
     error(expr->span,
-          "'" + std::string(id.name) + "' has no known type in this context");
+          "'" + std::string(it->second->name) + "' has no known type in this context");
   }
   return result;
 }
@@ -1305,7 +1359,7 @@ void TypeChecker::infer_type_bindings(
     auto it = bindings.find(gp->index());
     if (it != bindings.end()) {
       // Already bound — check consistency.
-      if (it->second != concrete) {
+      if (it->second != concrete && !is_assignable(it->second, concrete)) {
         error(error_span,
               "conflicting types for generic parameter '" +
                   std::string(gp->name()) + "': '" +
@@ -1342,6 +1396,18 @@ void TypeChecker::infer_type_bindings(
       }
       infer_type_bindings(fp->return_type(), fc->return_type(),
                           bindings, error_span);
+    }
+  } else if (pattern->kind() == TypeKind::Struct &&
+             concrete->kind() == TypeKind::Struct) {
+    const auto* sp = static_cast<const TypeStruct*>(pattern);
+    const auto* sc = static_cast<const TypeStruct*>(concrete);
+    // Only infer bindings between instances of the same class.
+    if (sp->decl_id() == sc->decl_id() &&
+        sp->fields().size() == sc->fields().size()) {
+      for (size_t j = 0; j < sp->fields().size(); ++j) {
+        infer_type_bindings(sp->fields()[j].type, sc->fields()[j].type,
+                            bindings, error_span);
+      }
     }
   }
 }
@@ -1383,6 +1449,21 @@ auto TypeChecker::substitute_generics(
     const auto* ret = substitute_generics(fn->return_type(), bindings);
     if (ret != fn->return_type()) changed = true;
     return changed ? types_.function_type(std::move(params), ret) : type;
+  }
+  case TypeKind::Struct: {
+    const auto* st = static_cast<const TypeStruct*>(type);
+    bool changed = false;
+    std::vector<StructField> new_fields;
+    new_fields.reserve(st->fields().size());
+    for (const auto& field : st->fields()) {
+      const auto* sub = substitute_generics(field.type, bindings);
+      if (sub != field.type) changed = true;
+      new_fields.push_back({field.name, sub});
+    }
+    return changed
+               ? types_.make_struct(st->decl_id(), st->name(),
+                                    std::move(new_fields))
+               : type;
   }
   default:
     return type;
@@ -1506,6 +1587,20 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
         const auto* fn_decl = static_cast<const Decl*>(sym_it->second->decl);
         if (fn_decl->is<FunctionDecl>()) {
           expected_count = fn_decl->as<FunctionDecl>().type_params.size();
+          // For class methods (no own type params), use the enclosing
+          // class's type params when invoked via Type<Args>::method().
+          if (expected_count == 0 && sym_it->second->name.find('.') != std::string_view::npos) {
+            // Find the enclosing ClassDecl by checking file declarations.
+            auto class_name = sym_it->second->name.substr(
+                0, sym_it->second->name.find('.'));
+            for (const auto* file_decl : file_->declarations) {
+              if (file_decl->kind() == NodeKind::ClassDecl &&
+                  file_decl->as<ClassDecl>().name == class_name) {
+                expected_count = file_decl->as<ClassDecl>().type_params.size();
+                break;
+              }
+            }
+          }
         }
       } else {
         // Compiler builtin functions (null_ptr, ptr_cast) take 1 type param.
@@ -1583,17 +1678,24 @@ auto TypeChecker::check_construct(const Expr* expr,
     return nullptr;
   }
 
+  std::unordered_map<uint32_t, const Type*> type_bindings;
   for (size_t i = 0; i < fields.size(); ++i) {
     const auto* arg_type = check_expr(call.args[i]);
-    if (arg_type != nullptr && fields[i].type != nullptr &&
-        !is_assignable(arg_type, fields[i].type)) {
-      error(call.args[i]->span,
-            "field '" + std::string(fields[i].name) + "' expects type '" +
-                print_type(fields[i].type) + "', got '" +
-                print_type(arg_type) + "'");
+    if (arg_type != nullptr && fields[i].type != nullptr) {
+      if (!is_assignable(arg_type, fields[i].type)) {
+        error(call.args[i]->span,
+              "field '" + std::string(fields[i].name) + "' expects type '" +
+                  print_type(fields[i].type) + "', got '" +
+                  print_type(arg_type) + "'");
+      }
+      infer_type_bindings(fields[i].type, arg_type, type_bindings,
+                          call.args[i]->span);
     }
   }
 
+  if (!type_bindings.empty()) {
+    return substitute_generics(struct_type, type_bindings);
+  }
   return struct_type;
 }
 
@@ -1670,13 +1772,24 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
   }
 
   // Try method lookup on any type (struct conformances + extend decls).
+  // Skip static methods (no self parameter) — those are only callable
+  // via Type::method(), not through an instance.
   const Decl* method_decl = nullptr;
   const auto* method_type = lookup_method(obj_type, field.field, &method_decl);
   if (method_type != nullptr) {
+    // Check if this is a static method (no self) — reject for instance calls.
+    bool is_static = false;
     if (method_decl != nullptr) {
-      typed_.set_method_resolution(expr, method_decl);
+      const auto& fn = method_decl->as<FunctionDecl>();
+      is_static = fn.params.empty() || fn.params[0].name != "self";
     }
-    return method_type;
+    if (!is_static) {
+      if (method_decl != nullptr) {
+        typed_.set_method_resolution(expr, method_decl);
+      }
+      return method_type;
+    }
+    // Static method — fall through to field-not-found error.
   }
 
   if (obj_type->kind() == TypeKind::Struct) {
@@ -1738,6 +1851,16 @@ void TypeChecker::build_method_table(const FileNode& file) {
     if (struct_type == nullptr || struct_type->kind() != TypeKind::Struct) {
       continue;
     }
+    // Direct class methods.
+    for (const auto* method_decl : cls.methods) {
+      const auto& method = method_decl->as<FunctionDecl>();
+      MethodKey key{struct_type, method.name};
+      if (method_table_.find(key) == method_table_.end()) {
+        const auto* fn_type = build_method_fn_type(method);
+        method_table_.insert({key, {fn_type, method_decl}});
+      }
+    }
+    // Conformance block methods.
     for (const auto& conf : cls.conformances) {
       for (const auto* method_decl : conf.methods) {
         const auto& method = method_decl->as<FunctionDecl>();
@@ -1822,6 +1945,41 @@ auto TypeChecker::lookup_method(const Type* obj_type,
       *resolved_decl = it->second.method_decl;
     }
     return it->second.fn_type;
+  }
+
+  // For concrete struct instantiations (e.g., Vector<i32>), fall back to
+  // the generic struct type (Vector<T>) which is how class methods are
+  // registered. Build type bindings from the concrete field types to
+  // substitute into the method's return/param types.
+  if (obj_type->kind() == TypeKind::Struct) {
+    const auto* concrete_st = static_cast<const TypeStruct*>(obj_type);
+    // Look up the class declaration's generic struct type.
+    for (const auto& [key, entry] : method_table_) {
+      if (key.name != name || key.type == nullptr ||
+          key.type->kind() != TypeKind::Struct) {
+        continue;
+      }
+      const auto* generic_st = static_cast<const TypeStruct*>(key.type);
+      if (generic_st->decl_id() != concrete_st->decl_id()) {
+        continue;
+      }
+      // Found matching class. Build substitution from generic → concrete
+      // field types.
+      std::unordered_map<uint32_t, const Type*> bindings;
+      for (size_t i = 0; i < generic_st->fields().size() &&
+                          i < concrete_st->fields().size(); ++i) {
+        infer_type_bindings(generic_st->fields()[i].type,
+                            concrete_st->fields()[i].type,
+                            bindings, Span{});
+      }
+      if (resolved_decl != nullptr) {
+        *resolved_decl = entry.method_decl;
+      }
+      if (bindings.empty()) {
+        return entry.fn_type;
+      }
+      return substitute_generics(entry.fn_type, bindings);
+    }
   }
 
   // Generic type parameter constraint search — this can't be pre-built

@@ -427,6 +427,21 @@ private:
       }
     }
 
+    // Resolve direct class methods and create Function symbols with
+    // mangled names (e.g. "Vector.push") so HIR method desugaring
+    // can find them — same pattern as extend method symbols.
+    // Also declare in file scope for static method calls (Type::method()).
+    for (const auto* method : st.methods) {
+      resolve_function(*method, struct_scope);
+      const auto& fn_decl = method->as<FunctionDecl>();
+      auto mangled_name = ctx_.intern(
+          std::string(st.name) + "." + std::string(fn_decl.name));
+      auto* method_sym = ctx_.make_symbol(SymbolKind::Function,
+                                          mangled_name,
+                                          fn_decl.name_span, method);
+      file_scope_->declare(mangled_name, method_sym);
+    }
+
     // Resolve conformance blocks — concept name + method signatures.
     for (const auto& conf : st.conformances) {
       auto* sym = parent->lookup(conf.concept_name);
@@ -703,6 +718,21 @@ private:
         diagnostics_.push_back(Diagnostic::error(
             seg_span,
             "unknown name '" + std::string(first_seg) + "'"));
+      } else if (sym->kind == SymbolKind::Type &&
+                 qn.segments.size() == 2) {
+        // Static method call: Type::method — resolve as the mangled
+        // symbol "Type.method" registered during resolve_class.
+        auto mangled_name = ctx_.intern(
+            std::string(qn.segments[0]) + "." + std::string(qn.segments[1]));
+        auto* method_sym = file_scope_->lookup(mangled_name);
+        if (method_sym != nullptr) {
+          uses_[expr.span.offset] = method_sym;
+        } else {
+          diagnostics_.push_back(Diagnostic::error(
+              expr.span,
+              "'" + std::string(first_seg) + "' has no static method '" +
+                  std::string(qn.segments[1]) + "'"));
+        }
       } else if (sym->kind != SymbolKind::Module) {
         diagnostics_.push_back(Diagnostic::error(
             seg_span,
@@ -741,6 +771,10 @@ private:
       }
       for (const auto* arg : call.args) {
         resolve_expr(*arg, scope);
+      }
+      // Resolve explicit type arguments (e.g., size_of<T>()).
+      for (const auto* ta : call.type_args) {
+        resolve_type(*ta, scope);
       }
       break;
     }

@@ -75,6 +75,25 @@ auto substitute_type(const Type* type, const TypeSubst& subst,
     return types.generator_type(sub);
   }
 
+  case TypeKind::Struct: {
+    const auto* st = static_cast<const TypeStruct*>(type);
+    bool changed = false;
+    std::vector<StructField> new_fields;
+    new_fields.reserve(st->fields().size());
+    for (const auto& field : st->fields()) {
+      auto* sub = substitute_type(field.type, subst, types);
+      if (sub != field.type) {
+        changed = true;
+      }
+      new_fields.push_back({field.name, sub});
+    }
+    if (!changed) {
+      return type;
+    }
+    return types.make_struct(st->decl_id(), st->name(),
+                             std::move(new_fields));
+  }
+
   default:
     return type;
   }
@@ -107,6 +126,15 @@ auto type_has_generic(const Type* type) -> bool {
   case TypeKind::Generator:
     return type_has_generic(
         static_cast<const TypeGenerator*>(type)->yield_type());
+  case TypeKind::Struct: {
+    const auto* st = static_cast<const TypeStruct*>(type);
+    for (const auto& field : st->fields()) {
+      if (type_has_generic(field.type)) {
+        return true;
+      }
+    }
+    return false;
+  }
   default:
     return false;
   }
@@ -209,8 +237,12 @@ auto clone_function(const MirFunction* src, const TypeSubst& subst,
           call->args = new_args;
         }
         if (call->explicit_type_args != nullptr) {
-          call->explicit_type_args =
-              ctx.alloc<std::vector<const Type*>>(*call->explicit_type_args);
+          auto* new_ta = ctx.alloc<std::vector<const Type*>>();
+          new_ta->reserve(call->explicit_type_args->size());
+          for (const auto* ta : *call->explicit_type_args) {
+            new_ta->push_back(substitute_type(ta, subst, types));
+          }
+          call->explicit_type_args = new_ta;
         }
       } else if (auto* ctor = std::get_if<MirConstruct>(&dst_inst->payload)) {
         if (ctor->field_values != nullptr) {
@@ -388,6 +420,16 @@ void infer_bindings_recursive(const Type* pattern, const Type* concrete,
                                  fc->param_types()[i], subst);
       }
       infer_bindings_recursive(fp->return_type(), fc->return_type(), subst);
+    }
+  } else if (pattern->kind() == TypeKind::Struct &&
+             concrete->kind() == TypeKind::Struct) {
+    const auto* sp = static_cast<const TypeStruct*>(pattern);
+    const auto* sc = static_cast<const TypeStruct*>(concrete);
+    if (sp->fields().size() == sc->fields().size()) {
+      for (size_t i = 0; i < sp->fields().size(); ++i) {
+        infer_bindings_recursive(sp->fields()[i].type,
+                                 sc->fields()[i].type, subst);
+      }
     }
   }
 }
