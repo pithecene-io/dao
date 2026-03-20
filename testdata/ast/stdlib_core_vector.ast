@@ -296,6 +296,34 @@ File
       ExprBody
         FieldExpr .len
           Identifier self
+    FunctionDecl iter
+      Param self
+      ReturnType: Generator<T>
+      LetStatement i: i64
+        IntLiteral 0
+      WhileStatement
+        Condition
+          BinaryExpr <
+            Identifier i
+            FieldExpr .len
+              Identifier self
+        ModeBlock unsafe
+          YieldStatement
+            UnaryExpr *
+              CallExpr
+                Callee
+                  Identifier ptr_offset
+                Args
+                  FieldExpr .data
+                    Identifier self
+                  Identifier i
+        Assignment
+          Target
+            Identifier i
+          Value
+            BinaryExpr +
+              Identifier i
+              IntLiteral 1
     FunctionDecl new
       ReturnType: Vector<T>
       LetStatement zero: i64

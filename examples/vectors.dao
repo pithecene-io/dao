@@ -1,7 +1,7 @@
 // vectors.dao — Vector<T> as an ordinary library type.
 //
-// Demonstrates push, get, set, and length on a generic dynamic array
-// built entirely from the low-level memory substrate.
+// Demonstrates push, get, set, length, and iteration on a generic
+// dynamic array built entirely from the low-level memory substrate.
 
 fn main(): i32
   // Create and populate a vector.
@@ -21,5 +21,10 @@ fn main(): i32
   // Mutation via set.
   v = v.set(1, 99)
   print(v.get(1))
+
+  // Iteration.
+  print("iterating:")
+  for x in v.iter():
+    print(x)
 
   return 0
