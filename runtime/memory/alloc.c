@@ -31,7 +31,8 @@ void *__dao_mem_alloc(int64_t size, int64_t align) {
   return ptr;
 }
 
-void *__dao_mem_realloc(void *ptr, int64_t new_size, int64_t align) {
+void *__dao_mem_realloc(void *ptr, int64_t old_size, int64_t new_size,
+                        int64_t align) {
   if (ptr == NULL) {
     return __dao_mem_alloc(new_size, align);
   }
@@ -54,12 +55,10 @@ void *__dao_mem_realloc(void *ptr, int64_t new_size, int64_t align) {
   }
   // Strong alignment: allocate fresh aligned block and copy.
   void *fresh = __dao_mem_alloc(new_size, align);
-  // We must copy min(old_size, new_size) bytes, but we don't know old_size.
-  // The caller must ensure new_size >= the data they need to preserve.
-  // Copy new_size bytes (may read past old allocation if caller misuses,
-  // but this matches the contract where the caller is responsible for
-  // correct sizing).
-  memcpy(fresh, ptr, (size_t)new_size);
+  int64_t copy_size = old_size < new_size ? old_size : new_size;
+  if (copy_size > 0) {
+    memcpy(fresh, ptr, (size_t)copy_size);
+  }
   free(ptr);
   return fresh;
 }

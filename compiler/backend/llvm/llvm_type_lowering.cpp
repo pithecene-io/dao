@@ -25,6 +25,10 @@ auto LlvmTypeLowering::lower(const Type* type) -> llvm::Type* {
 
   case TypeKind::Pointer: {
     const auto* p = static_cast<const TypePointer*>(type);
+    // *void is an opaque pointer — don't try to lower void as a pointee.
+    if (p->pointee()->kind() == TypeKind::Void) {
+      return llvm::PointerType::getUnqual(ctx_);
+    }
     auto* pointee = lower(p->pointee());
     if (pointee == nullptr) {
       return nullptr;

@@ -2036,12 +2036,12 @@ auto TypeChecker::resolve_builtin_function_type(std::string_view name)
     auto* ptr_t = types_.pointer_to(generic_t);
     return types_.function_type({}, ptr_t);
   }
-  // ptr_cast<T>(ptr: *i8): *T
+  // ptr_cast<T>(ptr: *void): *T
   if (name == "ptr_cast") {
     auto* generic_t = types_.generic_param(nullptr, "T", 0);
     auto* ptr_t = types_.pointer_to(generic_t);
-    auto* i8_ptr = types_.pointer_to(types_.i8());
-    return types_.function_type({i8_ptr}, ptr_t);
+    auto* void_ptr = types_.pointer_to(types_.void_type());
+    return types_.function_type({void_ptr}, ptr_t);
   }
   return nullptr;
 }

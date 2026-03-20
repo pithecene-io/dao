@@ -339,9 +339,9 @@ void LlvmRuntimeHooks::declare_alloc_hooks() {
   ensure_declared(runtime_hooks::kMemAlloc,
                   llvm::FunctionType::get(ptr, {i64, i64}, false));
 
-  // __dao_mem_realloc(ptr, new_size: i64, align: i64): ptr
+  // __dao_mem_realloc(ptr, old_size: i64, new_size: i64, align: i64): ptr
   ensure_declared(runtime_hooks::kMemRealloc,
-                  llvm::FunctionType::get(ptr, {ptr, i64, i64}, false));
+                  llvm::FunctionType::get(ptr, {ptr, i64, i64, i64}, false));
 
   // __dao_mem_free(ptr): void
   ensure_declared(runtime_hooks::kMemFree,

@@ -242,9 +242,11 @@ void __dao_mem_resource_exit(void *domain);
 void *__dao_mem_alloc(int64_t size, int64_t align);
 
 // Resize allocation. Traps on failure. ptr may be null (acts as alloc).
+// old_size is the number of bytes to preserve from the old allocation.
 // Preserves alignment for alignments within max_align_t; for stronger
-// alignments, allocates a new aligned block and copies.
-void *__dao_mem_realloc(void *ptr, int64_t new_size, int64_t align);
+// alignments, allocates a new aligned block and copies old_size bytes.
+void *__dao_mem_realloc(void *ptr, int64_t old_size, int64_t new_size,
+                        int64_t align);
 
 // Free allocation. Null is a no-op.
 void __dao_mem_free(void *ptr);
