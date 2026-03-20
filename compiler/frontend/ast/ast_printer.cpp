@@ -153,6 +153,9 @@ private:
       print_type_inline(*field->type);
       out_ << "\n";
     }
+    for (const auto* method : node.methods) {
+      print_decl(*method);
+    }
     for (const auto& conf : node.conformances) {
       indent();
       out_ << "Conformance " << conf.concept_name << "\n";

@@ -218,6 +218,7 @@ struct ClassDecl {
   Span name_span;
   std::vector<GenericParam> type_params;
   std::vector<FieldSpec*> fields;
+  std::vector<Decl*> methods; // Direct method declarations (FunctionDecl)
   std::vector<ConformanceBlock> conformances;
   std::vector<DenySpec> denials;
 };

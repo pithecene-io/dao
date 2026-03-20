@@ -375,12 +375,14 @@ private:
         span, ClassDecl{.name = name_tok.text, .name_span = name_tok.span,
                         .type_params = std::move(type_params),
                         .fields = std::move(body.fields),
+                        .methods = std::move(body.methods),
                         .conformances = std::move(body.conformances),
                         .denials = std::move(body.denials)});
   }
 
   struct ClassBody {
     std::vector<FieldSpec*> fields;
+    std::vector<Decl*> methods;
     std::vector<ConformanceBlock> conformances;
     std::vector<DenySpec> denials;
   };
@@ -396,10 +398,7 @@ private:
       } else if (peek_kind() == TokenKind::KwDeny) {
         body.denials.push_back(parse_deny_spec());
       } else if (peek_kind() == TokenKind::KwFn) {
-        // Method declaration inside class body (future: §11.5).
-        // For now, skip ahead and emit a diagnostic.
-        error("methods inside class bodies are not yet supported");
-        advance();
+        body.methods.push_back(parse_method_decl());
       } else {
         body.fields.push_back(parse_field_spec());
       }

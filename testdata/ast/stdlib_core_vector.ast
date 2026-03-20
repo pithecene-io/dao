@@ -1,0 +1,274 @@
+File
+  ClassDecl Vector<T>
+    Field data: *T
+    Field len: i64
+    Field cap: i64
+    FunctionDecl push
+      Param self
+      Param elem: T
+      ReturnType: Vector<T>
+      LetStatement new_len
+        BinaryExpr +
+          FieldExpr .len
+            Identifier self
+          IntLiteral 1
+      IfStatement
+        Condition
+          BinaryExpr >
+            Identifier new_len
+            FieldExpr .cap
+              Identifier self
+        Then
+          LetStatement new_cap: i64
+            BinaryExpr *
+              FieldExpr .cap
+                Identifier self
+              IntLiteral 2
+          IfStatement
+            Condition
+              BinaryExpr ==
+                FieldExpr .cap
+                  Identifier self
+                IntLiteral 0
+            Then
+              Assignment
+                Target
+                  Identifier new_cap
+                Value
+                  IntLiteral 8
+          LetStatement new_data_raw
+            CallExpr
+              Callee
+                Identifier __dao_mem_alloc
+              Args
+                BinaryExpr *
+                  CallExpr
+                    Callee
+                      Identifier size_of
+                    TypeArgs
+                      T
+                  Identifier new_cap
+                CallExpr
+                  Callee
+                    Identifier align_of
+                  TypeArgs
+                    T
+          ModeBlock unsafe
+            LetStatement new_data
+              CallExpr
+                Callee
+                  Identifier ptr_cast
+                TypeArgs
+                  T
+                Args
+                  Identifier new_data_raw
+            LetStatement i: i64
+              IntLiteral 0
+            WhileStatement
+              Condition
+                BinaryExpr <
+                  Identifier i
+                  FieldExpr .len
+                    Identifier self
+              Assignment
+                Target
+                  UnaryExpr *
+                    CallExpr
+                      Callee
+                        Identifier ptr_offset
+                      Args
+                        Identifier new_data
+                        Identifier i
+                Value
+                  UnaryExpr *
+                    CallExpr
+                      Callee
+                        Identifier ptr_offset
+                      Args
+                        FieldExpr .data
+                          Identifier self
+                        Identifier i
+              Assignment
+                Target
+                  Identifier i
+                Value
+                  BinaryExpr +
+                    Identifier i
+                    IntLiteral 1
+            Assignment
+              Target
+                UnaryExpr *
+                  CallExpr
+                    Callee
+                      Identifier ptr_offset
+                    Args
+                      Identifier new_data
+                      FieldExpr .len
+                        Identifier self
+              Value
+                Identifier elem
+            IfStatement
+              Condition
+                BinaryExpr >
+                  FieldExpr .cap
+                    Identifier self
+                  IntLiteral 0
+              Then
+                ExpressionStatement
+                  CallExpr
+                    Callee
+                      Identifier __dao_mem_free
+                    Args
+                      FieldExpr .data
+                        Identifier self
+            ReturnStatement
+              CallExpr
+                Callee
+                  Identifier Vector
+                Args
+                  Identifier new_data
+                  Identifier new_len
+                  Identifier new_cap
+      ModeBlock unsafe
+        Assignment
+          Target
+            UnaryExpr *
+              CallExpr
+                Callee
+                  Identifier ptr_offset
+                Args
+                  FieldExpr .data
+                    Identifier self
+                  FieldExpr .len
+                    Identifier self
+          Value
+            Identifier elem
+      ReturnStatement
+        CallExpr
+          Callee
+            Identifier Vector
+          Args
+            FieldExpr .data
+              Identifier self
+            Identifier new_len
+            FieldExpr .cap
+              Identifier self
+    FunctionDecl get
+      Param self
+      Param index: i64
+      ReturnType: T
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier index
+            IntLiteral 0
+        Then
+          ExpressionStatement
+            CallExpr
+              Callee
+                Identifier panic
+              Args
+                StringLiteral "Vector.get: index out of bounds"
+      IfStatement
+        Condition
+          BinaryExpr >=
+            Identifier index
+            FieldExpr .len
+              Identifier self
+        Then
+          ExpressionStatement
+            CallExpr
+              Callee
+                Identifier panic
+              Args
+                StringLiteral "Vector.get: index out of bounds"
+      ModeBlock unsafe
+        ReturnStatement
+          UnaryExpr *
+            CallExpr
+              Callee
+                Identifier ptr_offset
+              Args
+                FieldExpr .data
+                  Identifier self
+                Identifier index
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier panic
+          Args
+            StringLiteral "unreachable"
+    FunctionDecl set
+      Param self
+      Param index: i64
+      Param elem: T
+      ReturnType: Vector<T>
+      IfStatement
+        Condition
+          BinaryExpr <
+            Identifier index
+            IntLiteral 0
+        Then
+          ExpressionStatement
+            CallExpr
+              Callee
+                Identifier panic
+              Args
+                StringLiteral "Vector.set: index out of bounds"
+      IfStatement
+        Condition
+          BinaryExpr >=
+            Identifier index
+            FieldExpr .len
+              Identifier self
+        Then
+          ExpressionStatement
+            CallExpr
+              Callee
+                Identifier panic
+              Args
+                StringLiteral "Vector.set: index out of bounds"
+      ModeBlock unsafe
+        Assignment
+          Target
+            UnaryExpr *
+              CallExpr
+                Callee
+                  Identifier ptr_offset
+                Args
+                  FieldExpr .data
+                    Identifier self
+                  Identifier index
+          Value
+            Identifier elem
+      ReturnStatement
+        CallExpr
+          Callee
+            Identifier Vector
+          Args
+            FieldExpr .data
+              Identifier self
+            FieldExpr .len
+              Identifier self
+            FieldExpr .cap
+              Identifier self
+    FunctionDecl length
+      Param self
+      ReturnType: i64
+      ExprBody
+        FieldExpr .len
+          Identifier self
+  FunctionDecl vec_new<T>
+    ReturnType: Vector<T>
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier Vector
+        Args
+          CallExpr
+            Callee
+              Identifier null_ptr
+            TypeArgs
+              T
+          IntLiteral 0
+          IntLiteral 0

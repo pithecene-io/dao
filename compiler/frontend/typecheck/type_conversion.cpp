@@ -59,6 +59,23 @@ auto is_assignable(const Type* source, const Type* target) -> bool {
       }
       return is_assignable(sf->return_type(), tf->return_type());
     }
+    case TypeKind::Struct: {
+      const auto* ss = static_cast<const TypeStruct*>(source);
+      const auto* ts = static_cast<const TypeStruct*>(target);
+      // Same class: match by decl_id and structural field compatibility.
+      if (ss->decl_id() != ts->decl_id() || ss->name() != ts->name()) {
+        return false;
+      }
+      if (ss->fields().size() != ts->fields().size()) {
+        return false;
+      }
+      for (size_t i = 0; i < ss->fields().size(); ++i) {
+        if (!is_assignable(ss->fields()[i].type, ts->fields()[i].type)) {
+          return false;
+        }
+      }
+      return true;
+    }
     default:
       break;
     }

@@ -427,6 +427,11 @@ private:
       }
     }
 
+    // Resolve direct class methods.
+    for (const auto* method : st.methods) {
+      resolve_function(*method, struct_scope);
+    }
+
     // Resolve conformance blocks — concept name + method signatures.
     for (const auto& conf : st.conformances) {
       auto* sym = parent->lookup(conf.concept_name);

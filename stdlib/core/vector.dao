@@ -1,0 +1,54 @@
+// vector.dao — Generic dynamic array.
+//
+// Vector<T> is an ordinary library type built on the low-level memory
+// substrate. No compiler-privileged container semantics.
+
+class Vector<T>:
+  data: *T
+  len: i64
+  cap: i64
+
+  fn push(self, elem: T): Vector<T>
+    let new_len = self.len + 1
+    if new_len > self.cap:
+      let new_cap: i64 = self.cap * 2
+      if self.cap == 0:
+        new_cap = 8
+      let new_data_raw = __dao_mem_alloc(
+        size_of<T>() * new_cap, align_of<T>())
+      mode unsafe =>
+        let new_data = ptr_cast<T>(new_data_raw)
+        let i: i64 = 0
+        while i < self.len:
+          *ptr_offset(new_data, i) = *ptr_offset(self.data, i)
+          i = i + 1
+        *ptr_offset(new_data, self.len) = elem
+        if self.cap > 0:
+          __dao_mem_free(self.data)
+        return Vector(new_data, new_len, new_cap)
+    mode unsafe =>
+      *ptr_offset(self.data, self.len) = elem
+    return Vector(self.data, new_len, self.cap)
+
+  fn get(self, index: i64): T
+    if index < 0:
+      panic("Vector.get: index out of bounds")
+    if index >= self.len:
+      panic("Vector.get: index out of bounds")
+    mode unsafe =>
+      return *ptr_offset(self.data, index)
+    panic("unreachable")
+
+  fn set(self, index: i64, elem: T): Vector<T>
+    if index < 0:
+      panic("Vector.set: index out of bounds")
+    if index >= self.len:
+      panic("Vector.set: index out of bounds")
+    mode unsafe =>
+      *ptr_offset(self.data, index) = elem
+    return Vector(self.data, self.len, self.cap)
+
+  fn length(self): i64 -> self.len
+
+fn vec_new<T>(): Vector<T>
+  return Vector(null_ptr<T>(), 0, 0)

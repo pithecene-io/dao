@@ -158,10 +158,16 @@ type metadata or vtable pointers at runtime. Dynamic dispatch, if
 needed, is expressed through concept objects or explicit indirection,
 not through the class mechanism itself.
 
-### 8.5 Field access
+### 8.5 Field access and methods
 
 Fields are accessed via `.` (dot notation). There are no synthesized
 getters, setters, or property wrappers at the class level.
+
+Methods may be declared inside the class body after all field
+specifiers. A method with a bare `self` parameter receives the
+enclosing class type as the receiver. Methods defined inside the
+class body are semantically equivalent to methods attached via
+`extend` blocks — they are ordinary functions with static dispatch.
 
 ### 8.6 Why "class"
 

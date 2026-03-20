@@ -739,6 +739,15 @@ void TypeChecker::check_class(const Decl* decl) {
     }
   }
 
+  // Validate and check direct class methods.
+  for (const auto* method : cls.methods) {
+    validate_receiver(method, cls.name_span);
+    const auto& fn = method->as<FunctionDecl>();
+    if (!fn.body.empty() || fn.expr_body != nullptr) {
+      check_function(method);
+    }
+  }
+
   // Validate and check conformance-block methods.
   for (const auto& conf : cls.conformances) {
     for (const auto* method : conf.methods) {
@@ -1384,6 +1393,21 @@ auto TypeChecker::substitute_generics(
     if (ret != fn->return_type()) changed = true;
     return changed ? types_.function_type(std::move(params), ret) : type;
   }
+  case TypeKind::Struct: {
+    const auto* st = static_cast<const TypeStruct*>(type);
+    bool changed = false;
+    std::vector<StructField> new_fields;
+    new_fields.reserve(st->fields().size());
+    for (const auto& field : st->fields()) {
+      const auto* sub = substitute_generics(field.type, bindings);
+      if (sub != field.type) changed = true;
+      new_fields.push_back({field.name, sub});
+    }
+    return changed
+               ? types_.make_struct(st->decl_id(), st->name(),
+                                    std::move(new_fields))
+               : type;
+  }
   default:
     return type;
   }
@@ -1738,6 +1762,16 @@ void TypeChecker::build_method_table(const FileNode& file) {
     if (struct_type == nullptr || struct_type->kind() != TypeKind::Struct) {
       continue;
     }
+    // Direct class methods.
+    for (const auto* method_decl : cls.methods) {
+      const auto& method = method_decl->as<FunctionDecl>();
+      MethodKey key{struct_type, method.name};
+      if (method_table_.find(key) == method_table_.end()) {
+        const auto* fn_type = build_method_fn_type(method);
+        method_table_.insert({key, {fn_type, method_decl}});
+      }
+    }
+    // Conformance block methods.
     for (const auto& conf : cls.conformances) {
       for (const auto* method_decl : conf.methods) {
         const auto& method = method_decl->as<FunctionDecl>();
