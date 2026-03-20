@@ -51,4 +51,5 @@ class Vector<T>:
   fn length(self): i64 -> self.len
 
 fn vec_new<T>(): Vector<T>
-  return Vector(null_ptr<T>(), 0, 0)
+  let zero: i64 = 0
+  return Vector(null_ptr<T>(), zero, zero)

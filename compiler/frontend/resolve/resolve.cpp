@@ -747,6 +747,10 @@ private:
       for (const auto* arg : call.args) {
         resolve_expr(*arg, scope);
       }
+      // Resolve explicit type arguments (e.g., size_of<T>()).
+      for (const auto* ta : call.type_args) {
+        resolve_type(*ta, scope);
+      }
       break;
     }
     case NodeKind::IndexExpr: {

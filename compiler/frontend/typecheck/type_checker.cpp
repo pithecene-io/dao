@@ -1858,6 +1858,41 @@ auto TypeChecker::lookup_method(const Type* obj_type,
     return it->second.fn_type;
   }
 
+  // For concrete struct instantiations (e.g., Vector<i32>), fall back to
+  // the generic struct type (Vector<T>) which is how class methods are
+  // registered. Build type bindings from the concrete field types to
+  // substitute into the method's return/param types.
+  if (obj_type->kind() == TypeKind::Struct) {
+    const auto* concrete_st = static_cast<const TypeStruct*>(obj_type);
+    // Look up the class declaration's generic struct type.
+    for (const auto& [key, entry] : method_table_) {
+      if (key.name != name || key.type == nullptr ||
+          key.type->kind() != TypeKind::Struct) {
+        continue;
+      }
+      const auto* generic_st = static_cast<const TypeStruct*>(key.type);
+      if (generic_st->decl_id() != concrete_st->decl_id()) {
+        continue;
+      }
+      // Found matching class. Build substitution from generic → concrete
+      // field types.
+      std::unordered_map<uint32_t, const Type*> bindings;
+      for (size_t i = 0; i < generic_st->fields().size() &&
+                          i < concrete_st->fields().size(); ++i) {
+        infer_type_bindings(generic_st->fields()[i].type,
+                            concrete_st->fields()[i].type,
+                            bindings, Span{});
+      }
+      if (resolved_decl != nullptr) {
+        *resolved_decl = entry.method_decl;
+      }
+      if (bindings.empty()) {
+        return entry.fn_type;
+      }
+      return substitute_generics(entry.fn_type, bindings);
+    }
+  }
+
   // Generic type parameter constraint search — this can't be pre-built
   // because it's parameterized on the receiver type variable.
   if (obj_type->kind() == TypeKind::GenericParam) {

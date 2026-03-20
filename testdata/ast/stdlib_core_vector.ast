@@ -260,6 +260,8 @@ File
           Identifier self
   FunctionDecl vec_new<T>
     ReturnType: Vector<T>
+    LetStatement zero: i64
+      IntLiteral 0
     ReturnStatement
       CallExpr
         Callee
@@ -270,5 +272,5 @@ File
               Identifier null_ptr
             TypeArgs
               T
-          IntLiteral 0
-          IntLiteral 0
+          Identifier zero
+          Identifier zero
