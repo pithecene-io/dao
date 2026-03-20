@@ -226,6 +226,9 @@ auto HirBuilder::lower_stmt(const Stmt* stmt) -> HirStmt* {
     return ctx_.alloc<HirStmt>(stmt->span, HirYield{value});
   }
 
+  case NodeKind::BreakStatement:
+    return ctx_.alloc<HirStmt>(stmt->span, HirBreak{});
+
   case NodeKind::ReturnStatement: {
     const auto& ret = stmt->as<ReturnStatement>();
     HirExpr* value = nullptr;

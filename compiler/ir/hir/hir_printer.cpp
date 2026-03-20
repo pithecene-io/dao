@@ -204,6 +204,10 @@ private:
           Scope scope(depth_);
           print_expr(*node.value);
         },
+        [&](const HirBreak&) {
+          indent();
+          out_ << "Break\n";
+        },
         [&](const HirExprStmt& node) {
           indent();
           out_ << "ExprStmt\n";
