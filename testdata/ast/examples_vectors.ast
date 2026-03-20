@@ -122,5 +122,23 @@ File
                 Identifier v
             Args
               IntLiteral 1
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "iterating:"
+    ForStatement x
+      Iterable
+        CallExpr
+          Callee
+            FieldExpr .iter
+              Identifier v
+      ExpressionStatement
+        CallExpr
+          Callee
+            Identifier print
+          Args
+            Identifier x
     ReturnStatement
       IntLiteral 0

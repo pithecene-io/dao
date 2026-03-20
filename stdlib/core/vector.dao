@@ -62,6 +62,13 @@ class Vector<T>:
 
   fn length(self): i64 -> self.len
 
+  fn iter(self): Generator<T>
+    let i: i64 = 0
+    while i < self.len:
+      mode unsafe =>
+        yield *ptr_offset(self.data, i)
+      i = i + 1
+
   fn new(): Vector<T>
     let zero: i64 = 0
     return Vector(null_ptr<T>(), zero, zero)
