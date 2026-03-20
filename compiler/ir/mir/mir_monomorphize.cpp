@@ -417,6 +417,16 @@ void infer_bindings_recursive(const Type* pattern, const Type* concrete,
       }
       infer_bindings_recursive(fp->return_type(), fc->return_type(), subst);
     }
+  } else if (pattern->kind() == TypeKind::Struct &&
+             concrete->kind() == TypeKind::Struct) {
+    const auto* sp = static_cast<const TypeStruct*>(pattern);
+    const auto* sc = static_cast<const TypeStruct*>(concrete);
+    if (sp->fields().size() == sc->fields().size()) {
+      for (size_t i = 0; i < sp->fields().size(); ++i) {
+        infer_bindings_recursive(sp->fields()[i].type,
+                                 sc->fields()[i].type, subst);
+      }
+    }
   }
 }
 

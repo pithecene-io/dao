@@ -368,6 +368,33 @@ void TypeChecker::register_declarations(const FileNode& file) {
           types_.make_struct(sym, st.name, std::move(fields));
       symbol_types_[sym] = struct_type;
       typed_.set_decl_type(decl, struct_type);
+
+      // Register class body methods as function declarations so
+      // they get proper TypeFunction entries in the typed results.
+      for (const auto* method : st.methods) {
+        const auto& fn = method->as<FunctionDecl>();
+        auto mdecl_it = decl_symbols_.find(fn.name_span.offset);
+        if (mdecl_it == decl_symbols_.end()) {
+          continue;
+        }
+        const auto* method_sym = mdecl_it->second;
+        std::vector<const Type*> param_types;
+        for (const auto& param : fn.params) {
+          if (param.name == "self") {
+            param_types.push_back(struct_type);
+          } else {
+            const auto* param_type = resolve_type_node(param.type);
+            param_types.push_back(param_type);
+          }
+        }
+        const auto* ret = fn.return_type != nullptr
+                              ? resolve_type_node(fn.return_type)
+                              : types_.void_type();
+        const auto* fn_type =
+            types_.function_type(std::move(param_types), ret);
+        symbol_types_[method_sym] = fn_type;
+        typed_.set_decl_type(method, fn_type);
+      }
       break;
     }
 
@@ -1607,17 +1634,24 @@ auto TypeChecker::check_construct(const Expr* expr,
     return nullptr;
   }
 
+  std::unordered_map<uint32_t, const Type*> type_bindings;
   for (size_t i = 0; i < fields.size(); ++i) {
     const auto* arg_type = check_expr(call.args[i]);
-    if (arg_type != nullptr && fields[i].type != nullptr &&
-        !is_assignable(arg_type, fields[i].type)) {
-      error(call.args[i]->span,
-            "field '" + std::string(fields[i].name) + "' expects type '" +
-                print_type(fields[i].type) + "', got '" +
-                print_type(arg_type) + "'");
+    if (arg_type != nullptr && fields[i].type != nullptr) {
+      if (!is_assignable(arg_type, fields[i].type)) {
+        error(call.args[i]->span,
+              "field '" + std::string(fields[i].name) + "' expects type '" +
+                  print_type(fields[i].type) + "', got '" +
+                  print_type(arg_type) + "'");
+      }
+      infer_type_bindings(fields[i].type, arg_type, type_bindings,
+                          call.args[i]->span);
     }
   }
 
+  if (!type_bindings.empty()) {
+    return substitute_generics(struct_type, type_bindings);
+  }
   return struct_type;
 }
 

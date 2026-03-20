@@ -427,9 +427,16 @@ private:
       }
     }
 
-    // Resolve direct class methods.
+    // Resolve direct class methods and create Function symbols with
+    // mangled names (e.g. "Vector.push") so HIR method desugaring
+    // can find them — same pattern as extend method symbols.
     for (const auto* method : st.methods) {
       resolve_function(*method, struct_scope);
+      const auto& fn_decl = method->as<FunctionDecl>();
+      auto mangled_name = ctx_.intern(
+          std::string(st.name) + "." + std::string(fn_decl.name));
+      ctx_.make_symbol(SymbolKind::Function, mangled_name,
+                       fn_decl.name_span, method);
     }
 
     // Resolve conformance blocks — concept name + method signatures.
