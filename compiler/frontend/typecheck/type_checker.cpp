@@ -1090,6 +1090,11 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
   case NodeKind::ListLiteral:
     result = check_list_literal(expr);
     break;
+  case NodeKind::QualifiedName:
+    // Static method call: Type::method resolved by the resolver
+    // to a mangled function symbol. Treat like an identifier.
+    result = check_identifier(expr);
+    break;
   case NodeKind::ErrorExpr:
     // Recovery placeholder — skip silently.
     break;
@@ -1110,16 +1115,26 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
 // ---------------------------------------------------------------------------
 
 auto TypeChecker::check_identifier(const Expr* expr) -> const Type* {
-  const auto& id = expr->as<IdentifierExpr>();
+  // Works for both IdentifierExpr and QualifiedName (static method calls).
   auto it = resolve_.uses.find(expr->span.offset);
   if (it == resolve_.uses.end()) {
-    error(expr->span, "unresolved identifier '" + std::string(id.name) + "'");
+    std::string name_str;
+    if (expr->is<IdentifierExpr>()) {
+      name_str = expr->as<IdentifierExpr>().name;
+    } else if (expr->is<QualifiedName>()) {
+      const auto& qn = expr->as<QualifiedName>();
+      for (size_t i = 0; i < qn.segments.size(); ++i) {
+        if (i > 0) name_str += "::";
+        name_str += qn.segments[i];
+      }
+    }
+    error(expr->span, "unresolved identifier '" + name_str + "'");
     return nullptr;
   }
   const auto* result = resolve_symbol_type(it->second);
   if (result == nullptr && it->second->kind == SymbolKind::Param) {
     error(expr->span,
-          "'" + std::string(id.name) + "' has no known type in this context");
+          "'" + std::string(it->second->name) + "' has no known type in this context");
   }
   return result;
 }

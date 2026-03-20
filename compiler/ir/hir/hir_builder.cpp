@@ -305,7 +305,10 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
     return ctx_.alloc<HirExpr>(span, type, HirBoolLiteral{lit.value});
   }
 
-  case NodeKind::Identifier: {
+  case NodeKind::Identifier:
+  case NodeKind::QualifiedName: {
+    // QualifiedName for static method calls (Type::method) is resolved
+    // by the resolver to a function symbol, same as an identifier.
     const auto* sym = find_symbol_at_use(expr->span.offset);
     return ctx_.alloc<HirExpr>(span, type, HirSymbolRef{sym});
   }

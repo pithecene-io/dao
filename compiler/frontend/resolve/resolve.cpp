@@ -718,6 +718,21 @@ private:
         diagnostics_.push_back(Diagnostic::error(
             seg_span,
             "unknown name '" + std::string(first_seg) + "'"));
+      } else if (sym->kind == SymbolKind::Type &&
+                 qn.segments.size() == 2) {
+        // Static method call: Type::method — resolve as the mangled
+        // symbol "Type.method" registered during resolve_class.
+        auto mangled_name = ctx_.intern(
+            std::string(qn.segments[0]) + "." + std::string(qn.segments[1]));
+        auto* method_sym = file_scope_->lookup(mangled_name);
+        if (method_sym != nullptr) {
+          uses_[expr.span.offset] = method_sym;
+        } else {
+          diagnostics_.push_back(Diagnostic::error(
+              expr.span,
+              "'" + std::string(first_seg) + "' has no static method '" +
+                  std::string(qn.segments[1]) + "'"));
+        }
       } else if (sym->kind != SymbolKind::Module) {
         diagnostics_.push_back(Diagnostic::error(
             seg_span,
