@@ -1,0 +1,251 @@
+// dao_lexer.dao -- Bootstrap probe 2: a real Dao-subset tokenizer.
+//
+// Tests: comments, to_string, indirect calls, string ops, file IO.
+// Lexes a subset of Dao: keywords, identifiers, numbers, strings,
+// operators, and punctuation.
+
+// --- Character classification ---
+
+fn is_digit(ch: i32): bool
+  return ch >= 48 and ch <= 57
+
+fn is_alpha(ch: i32): bool
+  if ch >= 65 and ch <= 90:
+    return true
+  if ch >= 97 and ch <= 122:
+    return true
+  return ch == 95
+
+fn is_alnum(ch: i32): bool
+  return is_digit(ch) or is_alpha(ch)
+
+fn is_whitespace(ch: i32): bool
+  return ch == 32 or ch == 9
+
+// --- Generic skip-while using indirect call ---
+
+fn skip_while(source: string, pos: i64, pred: fn(i32): bool): i64
+  let cur: i64 = pos
+  let slen: i64 = length(source)
+  let done: bool = false
+  while cur < slen and done == false:
+    if pred(char_at(source, cur)):
+      cur = cur + 1
+    else:
+      done = true
+  return cur
+
+// --- Keyword detection ---
+
+fn is_keyword(word: string): bool
+  if word == "fn":
+    return true
+  if word == "let":
+    return true
+  if word == "return":
+    return true
+  if word == "if":
+    return true
+  if word == "else":
+    return true
+  if word == "while":
+    return true
+  if word == "for":
+    return true
+  if word == "in":
+    return true
+  if word == "and":
+    return true
+  if word == "or":
+    return true
+  if word == "not":
+    return true
+  if word == "true":
+    return true
+  if word == "false":
+    return true
+  if word == "extern":
+    return true
+  if word == "class":
+    return true
+  if word == "concept":
+    return true
+  if word == "extend":
+    return true
+  if word == "as":
+    return true
+  if word == "yield":
+    return true
+  if word == "mode":
+    return true
+  if word == "resource":
+    return true
+  return false
+
+// --- Lexer core ---
+// Emits one line per token: "KIND OFFSET LENGTH text"
+// Pain point: no collections means we print inline instead of returning
+// a token list. A real lexer would need to accumulate tokens.
+
+fn lex_one(source: string, pos: i64): i64
+  let slen: i64 = length(source)
+  if pos >= slen:
+    return pos
+
+  let ch: i32 = char_at(source, pos)
+
+  // Skip whitespace (not newlines).
+  if is_whitespace(ch):
+    return skip_while(source, pos, is_whitespace)
+
+  // Newlines.
+  if ch == 10:
+    print("NEWLINE " + i64_to_string(pos) + " 1")
+    return pos + 1
+
+  // Skip // comments to end of line.
+  if ch == 47 and pos + 1 < slen and char_at(source, pos + 1) == 47:
+    let end: i64 = pos + 2
+    let comment_done: bool = false
+    while end < slen and comment_done == false:
+      if char_at(source, end) == 10:
+        comment_done = true
+      else:
+        end = end + 1
+    return end
+
+  // Identifiers and keywords.
+  if is_alpha(ch):
+    let end: i64 = skip_while(source, pos, is_alnum)
+    let word: string = substring(source, pos, end - pos)
+    if is_keyword(word):
+      print("KW " + i64_to_string(pos) + " " + i64_to_string(end - pos) + " " + word)
+    else:
+      print("IDENT " + i64_to_string(pos) + " " + i64_to_string(end - pos) + " " + word)
+    return end
+
+  // Numbers.
+  if is_digit(ch):
+    let end: i64 = skip_while(source, pos, is_digit)
+    let num: string = substring(source, pos, end - pos)
+    print("INT " + i64_to_string(pos) + " " + i64_to_string(end - pos) + " " + num)
+    return end
+
+  // Two-character operators.
+  if pos + 1 < slen:
+    let next: i32 = char_at(source, pos + 1)
+    if ch == 61 and next == 61:
+      print("OP " + i64_to_string(pos) + " 2 ==")
+      return pos + 2
+    if ch == 33 and next == 61:
+      print("OP " + i64_to_string(pos) + " 2 !=")
+      return pos + 2
+    if ch == 60 and next == 61:
+      print("OP " + i64_to_string(pos) + " 2 <=")
+      return pos + 2
+    if ch == 62 and next == 61:
+      print("OP " + i64_to_string(pos) + " 2 >=")
+      return pos + 2
+    if ch == 45 and next == 62:
+      print("OP " + i64_to_string(pos) + " 2 ->")
+      return pos + 2
+    if ch == 61 and next == 62:
+      print("OP " + i64_to_string(pos) + " 2 =>")
+      return pos + 2
+    if ch == 124 and next == 62:
+      print("OP " + i64_to_string(pos) + " 2 |>")
+      return pos + 2
+    if ch == 58 and next == 58:
+      print("OP " + i64_to_string(pos) + " 2 ::")
+      return pos + 2
+
+  // Single-character tokens.
+  if ch == 43:
+    print("OP " + i64_to_string(pos) + " 1 +")
+    return pos + 1
+  if ch == 45:
+    print("OP " + i64_to_string(pos) + " 1 -")
+    return pos + 1
+  if ch == 42:
+    print("OP " + i64_to_string(pos) + " 1 *")
+    return pos + 1
+  if ch == 47:
+    print("OP " + i64_to_string(pos) + " 1 /")
+    return pos + 1
+  if ch == 61:
+    print("OP " + i64_to_string(pos) + " 1 =")
+    return pos + 1
+  if ch == 60:
+    print("OP " + i64_to_string(pos) + " 1 <")
+    return pos + 1
+  if ch == 62:
+    print("OP " + i64_to_string(pos) + " 1 >")
+    return pos + 1
+  if ch == 58:
+    print("COLON " + i64_to_string(pos) + " 1")
+    return pos + 1
+  if ch == 40:
+    print("LPAREN " + i64_to_string(pos) + " 1")
+    return pos + 1
+  if ch == 41:
+    print("RPAREN " + i64_to_string(pos) + " 1")
+    return pos + 1
+  if ch == 44:
+    print("COMMA " + i64_to_string(pos) + " 1")
+    return pos + 1
+  if ch == 46:
+    print("DOT " + i64_to_string(pos) + " 1")
+    return pos + 1
+  if ch == 124:
+    print("PIPE " + i64_to_string(pos) + " 1")
+    return pos + 1
+
+  // String literals.
+  if ch == 34:
+    let end: i64 = pos + 1
+    let str_done: bool = false
+    while end < slen and str_done == false:
+      if char_at(source, end) == 34:
+        str_done = true
+      else:
+        end = end + 1
+    if str_done:
+      let text: string = substring(source, pos, end + 1 - pos)
+      print("STRING " + i64_to_string(pos) + " " + i64_to_string(end + 1 - pos) + " " + text)
+      return end + 1
+    else:
+      print("ERROR " + i64_to_string(pos) + " unterminated string")
+      return slen
+
+  print("ERROR " + i64_to_string(pos) + " unexpected char")
+  return pos + 1
+
+fn lex_all(source: string): i32
+  let pos: i64 = 0
+  let slen: i64 = length(source)
+  let token_count: i32 = 0
+  while pos < slen:
+    let old_pos: i64 = pos
+    pos = lex_one(source, pos)
+    if pos > old_pos and pos <= slen:
+      token_count = token_count + 1
+    else:
+      // Safety: if lex_one didn't advance, force skip to avoid infinite loop.
+      if pos == old_pos:
+        pos = pos + 1
+  return token_count
+
+fn main(): i32
+  // Lex this file itself.
+  let self_path: string = "examples/bootstrap_probe/dao_lexer.dao"
+  if file_exists(self_path):
+    print("")
+    print("=== self-lex ===")
+    let source: string = read_file(self_path)
+    let self_count: i32 = lex_all(source)
+    print("tokens: " + i32_to_string(self_count))
+    print("bytes: " + i64_to_string(length(source)))
+  else:
+    eprint("file not found: " + self_path)
+
+  return 0
