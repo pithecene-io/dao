@@ -1,0 +1,61 @@
+// match.dao — Match statements and else-if chains.
+//
+// Demonstrates match over enum variants and else-if as
+// flat alternatives to deeply nested if/else.
+
+enum Season:
+  Spring
+  Summer
+  Autumn
+  Winter
+
+fn season_name(s: Season): string
+  match s:
+    Season.Spring:
+      return "Spring"
+    Season.Summer:
+      return "Summer"
+    Season.Autumn:
+      return "Autumn"
+    Season.Winter:
+      return "Winter"
+  return "?"
+
+fn is_warm(s: Season): bool
+  match s:
+    Season.Summer:
+      return true
+    Season.Spring:
+      return true
+  return false
+
+fn classify(x: i32): string
+  if x < 0:
+    return "negative"
+  else if x == 0:
+    return "zero"
+  else if x < 10:
+    return "small"
+  else if x < 100:
+    return "medium"
+  else:
+    return "large"
+
+fn main(): i32
+  // Match over enum.
+  print(season_name(Season.Spring))
+  print(season_name(Season.Winter))
+
+  if is_warm(Season.Summer):
+    print("summer is warm")
+  if is_warm(Season.Winter) == false:
+    print("winter is not warm")
+
+  // Else-if chains.
+  print(classify(-5))
+  print(classify(0))
+  print(classify(7))
+  print(classify(42))
+  print(classify(999))
+
+  return 0

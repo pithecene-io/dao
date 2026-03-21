@@ -75,6 +75,8 @@ auto lexical_category(TokenKind kind) -> std::string_view {
     return "keyword.yield";
   case TokenKind::KwBreak:
     return "keyword.break";
+  case TokenKind::KwMatch:
+    return "keyword.match";
 
   // Keywords — execution / resource constructs
   case TokenKind::KwMode:

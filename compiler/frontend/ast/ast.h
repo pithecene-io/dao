@@ -63,6 +63,7 @@ enum class NodeKind : std::uint8_t {
   ForStatement,
   YieldStatement,
   BreakStatement,
+  MatchStatement,
   ModeBlock,
   ResourceBlock,
   ReturnStatement,
@@ -324,6 +325,16 @@ struct YieldStatement {
 
 struct BreakStmtNode {};
 
+struct MatchArm {
+  Expr* pattern;             // constant or qualified enum variant
+  std::vector<Stmt*> body;
+};
+
+struct MatchStmt {
+  Expr* scrutinee;
+  std::vector<MatchArm> arms;
+};
+
 struct ReturnStatement {
   Expr* value; // nullable for bare return
 };
@@ -334,8 +345,8 @@ struct ExpressionStatement {
 
 using StmtPayload = std::variant<
     LetStatement, Assignment, IfStatement, WhileStatement, ForStatement,
-    YieldStatement, BreakStmtNode, ModeBlock, ResourceBlock, ReturnStatement,
-    ExpressionStatement, ErrorStmtNode>;
+    YieldStatement, BreakStmtNode, MatchStmt, ModeBlock, ResourceBlock,
+    ReturnStatement, ExpressionStatement, ErrorStmtNode>;
 
 // ---------------------------------------------------------------------------
 // Expression payloads

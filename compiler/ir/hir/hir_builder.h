@@ -57,6 +57,7 @@ private:
 
   auto lower_stmt(const Stmt* stmt) -> HirStmt*;
   auto lower_body(const std::vector<Stmt*>& body) -> std::vector<HirStmt*>;
+  void lower_match_into(const Stmt* stmt, std::vector<HirStmt*>& out);
 
   // --- Expression lowering ---
 

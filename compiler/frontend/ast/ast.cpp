@@ -27,6 +27,7 @@ auto Stmt::kind() const -> NodeKind {
       [](const ForStatement&) { return NodeKind::ForStatement; },
       [](const YieldStatement&) { return NodeKind::YieldStatement; },
       [](const BreakStmtNode&) { return NodeKind::BreakStatement; },
+      [](const MatchStmt&) { return NodeKind::MatchStatement; },
       [](const ModeBlock&) { return NodeKind::ModeBlock; },
       [](const ResourceBlock&) { return NodeKind::ResourceBlock; },
       [](const ReturnStatement&) { return NodeKind::ReturnStatement; },
@@ -102,6 +103,8 @@ auto node_kind_name(NodeKind kind) -> const char* {
     return "YieldStatement";
   case NodeKind::BreakStatement:
     return "BreakStatement";
+  case NodeKind::MatchStatement:
+    return "MatchStatement";
   case NodeKind::ModeBlock:
     return "ModeBlock";
   case NodeKind::ResourceBlock:

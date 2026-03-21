@@ -332,6 +332,35 @@ private:
           indent();
           out_ << "BreakStatement\n";
         },
+        [&](const MatchStmt& node) {
+          indent();
+          out_ << "MatchStatement\n";
+          {
+            Scope scope(depth_);
+            indent();
+            out_ << "Scrutinee\n";
+            {
+              Scope inner(depth_);
+              print_expr(*node.scrutinee);
+            }
+            for (const auto& arm : node.arms) {
+              indent();
+              out_ << "Arm\n";
+              {
+                Scope arm_scope(depth_);
+                indent();
+                out_ << "Pattern\n";
+                {
+                  Scope pat(depth_);
+                  print_expr(*arm.pattern);
+                }
+                for (const auto* s : arm.body) {
+                  print_stmt(*s);
+                }
+              }
+            }
+          }
+        },
         [&](const ReturnStatement& node) {
           indent();
           out_ << "ReturnStatement\n";

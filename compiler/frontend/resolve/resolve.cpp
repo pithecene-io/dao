@@ -686,6 +686,18 @@ private:
       }
       break;
     }
+    case NodeKind::MatchStatement: {
+      const auto& match = stmt.as<MatchStmt>();
+      resolve_expr(*match.scrutinee, scope);
+      for (const auto& arm : match.arms) {
+        resolve_expr(*arm.pattern, scope);
+        auto* arm_scope = ctx_.make_scope(ScopeKind::Block, scope);
+        for (const auto* body_stmt : arm.body) {
+          resolve_stmt(*body_stmt, arm_scope);
+        }
+      }
+      break;
+    }
     case NodeKind::ExpressionStatement: {
       const auto& expr_stmt = stmt.as<ExpressionStatement>();
       resolve_expr(*expr_stmt.expr, scope);

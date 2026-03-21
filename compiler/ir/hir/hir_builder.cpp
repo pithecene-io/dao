@@ -165,9 +165,13 @@ auto HirBuilder::lower_body(const std::vector<Stmt*>& body)
     -> std::vector<HirStmt*> {
   std::vector<HirStmt*> result;
   for (const auto* stmt : body) {
-    auto* hir = lower_stmt(stmt);
-    if (hir != nullptr) {
-      result.push_back(hir);
+    if (stmt->kind() == NodeKind::MatchStatement) {
+      lower_match_into(stmt, result);
+    } else {
+      auto* hir = lower_stmt(stmt);
+      if (hir != nullptr) {
+        result.push_back(hir);
+      }
     }
   }
   return result;
@@ -244,6 +248,17 @@ auto HirBuilder::lower_stmt(const Stmt* stmt) -> HirStmt* {
     return ctx_.alloc<HirStmt>(stmt->span, HirYield{value});
   }
 
+  case NodeKind::MatchStatement: {
+    // Match is lowered by lower_match_into() which emits multiple
+    // statements (let binding + if/else chain). When reached here
+    // from a context that expects a single statement (e.g. match
+    // inside if-else), wrap in a single-element body.
+    std::vector<HirStmt*> stmts;
+    lower_match_into(stmt, stmts);
+    // Return the last statement (the if/else chain).
+    return stmts.empty() ? nullptr : stmts.back();
+  }
+
   case NodeKind::BreakStatement:
     return ctx_.alloc<HirStmt>(stmt->span, HirBreak{});
 
@@ -270,6 +285,54 @@ auto HirBuilder::lower_stmt(const Stmt* stmt) -> HirStmt* {
 // ---------------------------------------------------------------------------
 // Expression lowering
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Match lowering — emits a let binding for the scrutinee followed by
+// a chain of if/else comparisons referencing the bound variable.
+// ---------------------------------------------------------------------------
+
+void HirBuilder::lower_match_into(const Stmt* stmt,
+                                  std::vector<HirStmt*>& out) {
+  const auto& match = stmt->as<MatchStmt>();
+  auto* scrutinee_expr = lower_expr(match.scrutinee);
+  const auto* scrutinee_type = expr_type(match.scrutinee);
+
+  // Create a synthetic symbol for the scrutinee temporary.
+  auto* scrutinee_sym = ctx_.alloc<Symbol>(Symbol{
+      .kind = SymbolKind::Local,
+      .name = "__match_scrutinee",
+      .decl_span = stmt->span,
+      .decl = nullptr});
+
+  // Emit: let __match_scrutinee = <scrutinee>
+  out.push_back(ctx_.alloc<HirStmt>(
+      stmt->span,
+      HirLet{scrutinee_sym, scrutinee_type, scrutinee_expr}));
+
+  // Build a reference expression for the bound scrutinee.
+  auto* scrutinee_ref = ctx_.alloc<HirExpr>(
+      stmt->span, scrutinee_type, HirSymbolRef{scrutinee_sym});
+
+  // Build the if/else chain from last arm to first.
+  HirStmt* chain = nullptr;
+  for (auto it = match.arms.rbegin(); it != match.arms.rend(); ++it) {
+    auto* pattern = lower_expr(it->pattern);
+    auto arm_body = lower_body(it->body);
+    auto* cond = ctx_.alloc<HirExpr>(
+        stmt->span, nullptr,
+        HirBinary{BinaryOp::EqEq, scrutinee_ref, pattern});
+    std::vector<HirStmt*> else_body;
+    if (chain != nullptr) {
+      else_body.push_back(chain);
+    }
+    chain = ctx_.alloc<HirStmt>(
+        stmt->span,
+        HirIf{cond, std::move(arm_body), std::move(else_body)});
+  }
+  if (chain != nullptr) {
+    out.push_back(chain);
+  }
+}
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
