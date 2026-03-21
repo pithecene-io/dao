@@ -1,0 +1,115 @@
+File
+  EnumDecl Token
+    Variant Int
+    Variant Plus
+    Variant Minus
+    Variant Eof
+  FunctionDecl describe_token
+    Param t: Token
+    ReturnType: i32
+    MatchStatement
+      Scrutinee
+        Identifier t
+      Arm
+        Pattern
+          FieldExpr .Int
+            Identifier Token
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "Int: "
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              Identifier value
+        ReturnStatement
+          IntLiteral 0
+      Arm
+        Pattern
+          FieldExpr .Plus
+            Identifier Token
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "Plus"
+        ReturnStatement
+          IntLiteral 0
+      Arm
+        Pattern
+          FieldExpr .Minus
+            Identifier Token
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "Minus"
+        ReturnStatement
+          IntLiteral 0
+      Arm
+        Pattern
+          FieldExpr .Eof
+            Identifier Token
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "Eof"
+        ReturnStatement
+          IntLiteral 0
+    ReturnStatement
+      IntLiteral 0
+  FunctionDecl main
+    ReturnType: i32
+    LetStatement t1: Token
+      CallExpr
+        Callee
+          FieldExpr .Int
+            Identifier Token
+        Args
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 42
+    LetStatement t2: Token
+      FieldExpr .Plus
+        Identifier Token
+    LetStatement t3: Token
+      CallExpr
+        Callee
+          FieldExpr .Int
+            Identifier Token
+        Args
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 99
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier describe_token
+        Args
+          Identifier t1
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier describe_token
+        Args
+          Identifier t2
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier describe_token
+        Args
+          Identifier t3
+    ReturnStatement
+      IntLiteral 0

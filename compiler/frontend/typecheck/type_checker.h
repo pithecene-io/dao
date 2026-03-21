@@ -70,6 +70,16 @@ private:
   std::vector<Diagnostic> diagnostics_;
   CheckContext ctx_;
 
+  // Payload-bearing variant accesses that require constructor call syntax.
+  // check_field inserts; check_call removes when it handles the construction.
+  // Any remaining entries after expression processing are errors.
+  std::unordered_set<const Expr*> pending_payload_constructions_;
+
+  // Suppresses the "needs constructor syntax" check in check_expr when
+  // processing match arm patterns (arity is checked separately) or when
+  // the expression is the callee of a call (check_call validates after).
+  bool suppress_payload_check_ = false;
+
   // Symbol -> semantic type cache (populated in pass 1).
   std::unordered_map<const Symbol*, const Type*> symbol_types_;
 

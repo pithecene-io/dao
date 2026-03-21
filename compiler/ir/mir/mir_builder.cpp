@@ -424,6 +424,23 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
         }
         return emit_value(expr, MirConstruct{ctor.struct_type, field_vals});
       },
+      [&](const HirEnumConstruct& ctor) -> MirValueId {
+        auto* payload_vals = ctx_.alloc<std::vector<MirValueId>>();
+        for (const auto* arg : ctor.payload_args) {
+          payload_vals->push_back(lower_expr_value(*arg));
+        }
+        return emit_value(expr, MirEnumConstruct{
+            ctor.enum_type, ctor.variant_index, payload_vals});
+      },
+      [&](const HirEnumDiscriminant& disc) -> MirValueId {
+        auto val = lower_expr_value(*disc.enum_value);
+        return emit_value(expr, MirEnumDiscriminant{val});
+      },
+      [&](const HirEnumPayload& pay) -> MirValueId {
+        auto val = lower_expr_value(*pay.enum_value);
+        return emit_value(expr, MirEnumPayload{
+            val, pay.variant_index, pay.field_index});
+      },
       [&](const HirPipe& pipe) -> MirValueId {
         auto left_val = lower_expr_value(*pipe.left);
         auto callee_val = lower_expr_value(*pipe.right);

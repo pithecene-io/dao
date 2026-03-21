@@ -63,6 +63,10 @@ auto LlvmBackend::lower(const MirModule& mir_module, uint32_t prelude_bytes)
     }
   }
 
+  // Provide the module to the type lowering layer so it can use DataLayout
+  // for enum payload sizing.
+  types_.set_module(*module_);
+
   // Declare runtime hooks with canonical signatures before processing
   // MIR functions. This makes LlvmRuntimeHooks the authoritative source.
   LlvmRuntimeHooks hooks(*module_, types_);
@@ -470,8 +474,11 @@ auto LlvmBackend::lower_inst(const MirInst& inst,
       [&](const MirLoad& p)        { return lower_load(p, inst, state); },
       [&](const MirFnRef& p)       { return lower_fn_ref(p, inst, state); },
       [&](const MirCall& p)        { return lower_call(p, inst, state); },
-      [&](const MirConstruct& p)   { return lower_construct(p, inst, state); },
-      [&](const MirReturn& p)      { return lower_return(p, inst, state); },
+      [&](const MirConstruct& p)         { return lower_construct(p, inst, state); },
+      [&](const MirEnumConstruct& p)    { return lower_enum_construct(p, inst, state); },
+      [&](const MirEnumDiscriminant& p) { return lower_enum_discriminant(p, inst, state); },
+      [&](const MirEnumPayload& p)      { return lower_enum_payload(p, inst, state); },
+      [&](const MirReturn& p)           { return lower_return(p, inst, state); },
       [&](const MirBr& p)          { return lower_br(p, inst, state); },
       [&](const MirCondBr& p)      { return lower_cond_br(p, inst, state); },
       [&](const MirFieldAccess& p) { return lower_field_access(p, inst, state); },
@@ -630,6 +637,11 @@ auto LlvmBackend::lower_const_int(const MirConstInt& p, const MirInst& inst,
   if (type == nullptr) {
     emit_diagnostic(inst.span, "cannot lower const int type: " + types_.error());
     return false;
+  }
+  // Enum discriminant constants: the semantic type is the enum type, but
+  // the LLVM value is the i32 tag. Use i32 for the constant.
+  if (inst.type != nullptr && inst.type->kind() == TypeKind::Enum) {
+    type = llvm::Type::getInt32Ty(ctx_);
   }
   auto* val = llvm::ConstantInt::get(type, static_cast<uint64_t>(p.value),
                                      /*isSigned=*/!LlvmTypeLowering::is_unsigned(inst.type));
@@ -1494,6 +1506,153 @@ auto LlvmBackend::lower_construct(const MirConstruct& p, const MirInst& inst,
   }
 
   state.values[inst.result.id] = agg;
+  state.value_types[inst.result.id] = inst.type;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Enum operations
+// ---------------------------------------------------------------------------
+
+auto LlvmBackend::lower_enum_construct(const MirEnumConstruct& p,
+                                       const MirInst& inst,
+                                       FunctionState& state) -> bool {
+  if (p.enum_type == nullptr) {
+    emit_diagnostic(inst.span, "enum construct with null type");
+    return false;
+  }
+
+  auto* llvm_type = types_.lower(p.enum_type);
+  if (llvm_type == nullptr) {
+    emit_diagnostic(inst.span,
+                    "cannot lower enum type: " + types_.error());
+    return false;
+  }
+
+  // Build the payload struct type for this variant.
+  const auto& variant = p.enum_type->variants()[p.variant_index];
+  std::vector<llvm::Type*> field_types;
+  for (const auto* pt : variant.payload_types) {
+    auto* lt = types_.lower(pt);
+    if (lt == nullptr) {
+      emit_diagnostic(inst.span,
+                      "cannot lower payload field type: " + types_.error());
+      return false;
+    }
+    field_types.push_back(lt);
+  }
+  auto* payload_struct_type =
+      llvm::StructType::get(ctx_, field_types, /*isPacked=*/false);
+
+  // Allocate the enum struct on the stack.
+  auto* alloca = state.builder->CreateAlloca(llvm_type, nullptr, "enum.tmp");
+
+  // Store discriminant (field 0).
+  auto* tag_ptr = state.builder->CreateStructGEP(llvm_type, alloca, 0, "enum.tag");
+  state.builder->CreateStore(
+      llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx_), p.variant_index),
+      tag_ptr);
+
+  // Bitcast payload region (field 1) to the variant's struct type, store fields.
+  auto* payload_ptr = state.builder->CreateStructGEP(llvm_type, alloca, 1, "enum.payload");
+  auto* typed_payload = state.builder->CreateBitCast(
+      payload_ptr, payload_struct_type->getPointerTo(), "enum.payload.typed");
+
+  if (p.payload_values != nullptr) {
+    for (unsigned i = 0; i < p.payload_values->size(); ++i) {
+      auto* val = get_value((*p.payload_values)[i], state);
+      if (val == nullptr) {
+        emit_diagnostic(inst.span, "enum payload value not found");
+        return false;
+      }
+      auto* field_ptr = state.builder->CreateStructGEP(
+          payload_struct_type, typed_payload, i, "enum.field." + std::to_string(i));
+      state.builder->CreateStore(val, field_ptr);
+    }
+  }
+
+  // Load the complete enum value.
+  auto* result = state.builder->CreateLoad(llvm_type, alloca, "enum.val");
+  state.values[inst.result.id] = result;
+  state.value_types[inst.result.id] = inst.type;
+  return true;
+}
+
+auto LlvmBackend::lower_enum_discriminant(const MirEnumDiscriminant& p,
+                                          const MirInst& inst,
+                                          FunctionState& state) -> bool {
+  auto* enum_val = get_value(p.enum_value, state);
+  if (enum_val == nullptr) {
+    emit_diagnostic(inst.span, "enum discriminant: value not found");
+    return false;
+  }
+
+  // For payload-free enums, the value IS the i32 discriminant.
+  if (enum_val->getType()->isIntegerTy(32)) {
+    state.values[inst.result.id] = enum_val;
+    state.value_types[inst.result.id] = inst.type;
+    return true;
+  }
+
+  // For payload-bearing enums, extract field 0 (the tag).
+  auto* tag = state.builder->CreateExtractValue(enum_val, 0, "enum.tag");
+  state.values[inst.result.id] = tag;
+  state.value_types[inst.result.id] = inst.type;
+  return true;
+}
+
+auto LlvmBackend::lower_enum_payload(const MirEnumPayload& p,
+                                     const MirInst& inst,
+                                     FunctionState& state) -> bool {
+  auto* enum_val = get_value(p.enum_value, state);
+  if (enum_val == nullptr) {
+    emit_diagnostic(inst.span, "enum payload: value not found");
+    return false;
+  }
+
+  // Look up the semantic enum type from the value.
+  auto type_it = state.value_types.find(p.enum_value.id);
+  if (type_it == state.value_types.end() ||
+      type_it->second->kind() != TypeKind::Enum) {
+    emit_diagnostic(inst.span, "enum payload: cannot find enum type");
+    return false;
+  }
+  const auto* enum_type = static_cast<const TypeEnum*>(type_it->second);
+  const auto& variant = enum_type->variants()[p.variant_index];
+
+  // Build the payload struct type for this variant.
+  std::vector<llvm::Type*> field_types;
+  for (const auto* pt : variant.payload_types) {
+    auto* lt = types_.lower(pt);
+    if (lt == nullptr) {
+      return false;
+    }
+    field_types.push_back(lt);
+  }
+  auto* payload_struct_type =
+      llvm::StructType::get(ctx_, field_types, /*isPacked=*/false);
+
+  // Get the LLVM type of the whole enum.
+  auto* llvm_enum_type = types_.lower(enum_type);
+  if (llvm_enum_type == nullptr) {
+    return false;
+  }
+
+  // Alloca the enum value, then GEP into the payload region, bitcast,
+  // and load the requested field.
+  auto* alloca = state.builder->CreateAlloca(llvm_enum_type, nullptr, "enum.ext");
+  state.builder->CreateStore(enum_val, alloca);
+
+  auto* payload_ptr = state.builder->CreateStructGEP(
+      llvm_enum_type, alloca, 1, "enum.payload");
+  auto* typed_payload = state.builder->CreateBitCast(
+      payload_ptr, payload_struct_type->getPointerTo(), "enum.payload.typed");
+  auto* field_ptr = state.builder->CreateStructGEP(
+      payload_struct_type, typed_payload, p.field_index, "enum.field");
+  auto* result = state.builder->CreateLoad(
+      field_types[p.field_index], field_ptr, "enum.field.val");
+
+  state.values[inst.result.id] = result;
   state.value_types[inst.result.id] = inst.type;
   return true;
 }

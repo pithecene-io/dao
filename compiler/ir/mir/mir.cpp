@@ -23,8 +23,11 @@ auto MirInst::kind() const -> MirInstKind {
       [](const MirIndexAccess&)   { return MirInstKind::IndexAccess; },
       [](const MirFnRef&)         { return MirInstKind::FnRef; },
       [](const MirCall&)          { return MirInstKind::Call; },
-      [](const MirConstruct&)     { return MirInstKind::Construct; },
-      [](const MirIterInit&)      { return MirInstKind::IterInit; },
+      [](const MirConstruct&)         { return MirInstKind::Construct; },
+      [](const MirEnumConstruct&)    { return MirInstKind::EnumConstruct; },
+      [](const MirEnumDiscriminant&) { return MirInstKind::EnumDiscriminant; },
+      [](const MirEnumPayload&)      { return MirInstKind::EnumPayload; },
+      [](const MirIterInit&)         { return MirInstKind::IterInit; },
       [](const MirIterHasNext&)   { return MirInstKind::IterHasNext; },
       [](const MirIterNext&)      { return MirInstKind::IterNext; },
       [](const MirIterDestroy&)   { return MirInstKind::IterDestroy; },
@@ -59,8 +62,11 @@ auto mir_inst_kind_name(MirInstKind kind) -> const char* {
   case MirInstKind::IndexAccess:    return "index";
   case MirInstKind::FnRef:          return "fn_ref";
   case MirInstKind::Call:           return "call";
-  case MirInstKind::Construct:     return "construct";
-  case MirInstKind::IterInit:       return "iter_init";
+  case MirInstKind::Construct:         return "construct";
+  case MirInstKind::EnumConstruct:    return "enum_construct";
+  case MirInstKind::EnumDiscriminant: return "enum_discriminant";
+  case MirInstKind::EnumPayload:      return "enum_payload";
+  case MirInstKind::IterInit:         return "iter_init";
   case MirInstKind::IterHasNext:    return "iter_has_next";
   case MirInstKind::IterNext:       return "iter_next";
   case MirInstKind::IterDestroy:   return "iter_destroy";

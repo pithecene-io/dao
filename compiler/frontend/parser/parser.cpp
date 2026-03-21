@@ -430,7 +430,21 @@ private:
         continue;
       }
       const auto& variant_tok = consume(TokenKind::Identifier);
-      variants.push_back({.name = variant_tok.text, .name_span = variant_tok.span});
+      std::vector<TypeNode*> payload_types;
+      if (peek_kind() == TokenKind::LParen) {
+        advance(); // consume '('
+        if (peek_kind() != TokenKind::RParen) {
+          payload_types.push_back(parse_type());
+          while (peek_kind() == TokenKind::Comma) {
+            advance(); // consume ','
+            payload_types.push_back(parse_type());
+          }
+        }
+        consume(TokenKind::RParen);
+      }
+      variants.push_back({.name = variant_tok.text,
+                           .name_span = variant_tok.span,
+                           .payload_types = std::move(payload_types)});
       if (peek_kind() == TokenKind::Newline) {
         advance();
       }
@@ -782,10 +796,39 @@ private:
         break;
       }
       // Parse arm pattern (expression — constant, enum variant, etc.).
+      // The expression parser will parse `Enum.Variant(a, b)` as a CallExpr.
+      // If the callee is a FieldExpr and all args are simple identifiers,
+      // treat it as destructuring: extract the callee as the pattern and
+      // the identifier args as bindings.
       auto* pattern = parse_expression();
+      std::vector<std::string_view> bindings;
+      std::vector<Span> binding_spans;
+      if (pattern->is<CallExpr>()) {
+        const auto& call = pattern->as<CallExpr>();
+        if (call.callee->is<FieldExpr>()) {
+          bool all_idents = true;
+          for (const auto* arg : call.args) {
+            if (!arg->is<IdentifierExpr>()) {
+              all_idents = false;
+              break;
+            }
+          }
+          if (all_idents && !call.args.empty()) {
+            for (const auto* arg : call.args) {
+              const auto& ident = arg->as<IdentifierExpr>();
+              bindings.push_back(ident.name);
+              binding_spans.push_back(arg->span);
+            }
+            pattern = call.callee;
+          }
+        }
+      }
       consume(TokenKind::Colon);
       auto body = parse_suite();
-      arms.push_back({.pattern = pattern, .body = std::move(body)});
+      arms.push_back({.pattern = pattern,
+                       .bindings = std::move(bindings),
+                       .binding_spans = std::move(binding_spans),
+                       .body = std::move(body)});
     }
     consume(TokenKind::Dedent);
     if (arms.empty()) {

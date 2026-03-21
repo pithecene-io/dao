@@ -313,14 +313,86 @@ void HirBuilder::lower_match_into(const Stmt* stmt,
   auto* scrutinee_ref = ctx_.alloc<HirExpr>(
       stmt->span, scrutinee_type, HirSymbolRef{scrutinee_sym});
 
+  // Determine if the enum has any payload variants — if so, compare
+  // against the discriminant rather than the whole value.
+  bool has_payload_variants = false;
+  const TypeEnum* enum_type = nullptr;
+  if (scrutinee_type != nullptr &&
+      scrutinee_type->kind() == TypeKind::Enum) {
+    enum_type = static_cast<const TypeEnum*>(scrutinee_type);
+    for (const auto& variant : enum_type->variants()) {
+      if (!variant.payload_types.empty()) {
+        has_payload_variants = true;
+        break;
+      }
+    }
+  }
+
+  // For payload-bearing enums, compare against extracted discriminant.
+  HirExpr* compare_value = scrutinee_ref;
+  if (has_payload_variants) {
+    compare_value = ctx_.alloc<HirExpr>(
+        stmt->span, nullptr, HirEnumDiscriminant{scrutinee_ref});
+  }
+
   // Build the if/else chain from last arm to first.
   HirStmt* chain = nullptr;
   for (auto it = match.arms.rbegin(); it != match.arms.rend(); ++it) {
     auto* pattern = lower_expr(it->pattern);
+
+    // For payload-bearing enums, the pattern is already an integer
+    // (variant index) from lower_expr on the FieldExpr.
     auto arm_body = lower_body(it->body);
+
+    // Prepend payload extraction let-bindings for arms with bindings.
+    if (!it->bindings.empty() && enum_type != nullptr &&
+        it->pattern->is<FieldExpr>()) {
+      const auto& field = it->pattern->as<FieldExpr>();
+      for (size_t vi = 0; vi < enum_type->variants().size(); ++vi) {
+        if (enum_type->variants()[vi].name != field.field) {
+          continue;
+        }
+        const auto& variant = enum_type->variants()[vi];
+        // Insert payload extraction lets at the front of the arm body.
+        std::vector<HirStmt*> bindings_and_body;
+        for (size_t fi = 0; fi < it->bindings.size(); ++fi) {
+          // Find the symbol registered by the resolver for this binding.
+          const Symbol* binding_sym = nullptr;
+          for (const auto& sym_ptr : resolve_.context.symbols()) {
+            if (sym_ptr->name == it->bindings[fi] &&
+                sym_ptr->decl_span.offset ==
+                    it->binding_spans[fi].offset) {
+              binding_sym = sym_ptr.get();
+              break;
+            }
+          }
+          if (binding_sym == nullptr) {
+            continue;
+          }
+          const Type* field_type =
+              fi < variant.payload_types.size()
+                  ? variant.payload_types[fi]
+                  : nullptr;
+          auto* extract_expr = ctx_.alloc<HirExpr>(
+              stmt->span, field_type,
+              HirEnumPayload{scrutinee_ref,
+                             static_cast<uint32_t>(vi),
+                             static_cast<uint32_t>(fi)});
+          bindings_and_body.push_back(ctx_.alloc<HirStmt>(
+              stmt->span,
+              HirLet{binding_sym, field_type, extract_expr}));
+        }
+        for (auto* s : arm_body) {
+          bindings_and_body.push_back(s);
+        }
+        arm_body = std::move(bindings_and_body);
+        break;
+      }
+    }
+
     auto* cond = ctx_.alloc<HirExpr>(
         stmt->span, nullptr,
-        HirBinary{BinaryOp::EqEq, scrutinee_ref, pattern});
+        HirBinary{BinaryOp::EqEq, compare_value, pattern});
     std::vector<HirStmt*> else_body;
     if (chain != nullptr) {
       else_body.push_back(chain);
@@ -408,6 +480,26 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
         }
         return ctx_.alloc<HirExpr>(
             span, type, HirConstruct{struct_type, std::move(args)});
+      }
+    }
+
+    // Enum variant construction: Token.Int(42) → HirEnumConstruct
+    if (callee_type != nullptr && callee_type->kind() == TypeKind::Enum &&
+        call.callee->is<FieldExpr>()) {
+      const auto& field = call.callee->as<FieldExpr>();
+      const auto* enum_type = static_cast<const TypeEnum*>(callee_type);
+      for (size_t i = 0; i < enum_type->variants().size(); ++i) {
+        if (enum_type->variants()[i].name == field.field &&
+            !enum_type->variants()[i].payload_types.empty()) {
+          std::vector<HirExpr*> payload_args;
+          for (const auto* arg : call.args) {
+            payload_args.push_back(lower_expr(arg));
+          }
+          return ctx_.alloc<HirExpr>(
+              span, type,
+              HirEnumConstruct{enum_type, static_cast<uint32_t>(i),
+                               std::move(payload_args)});
+        }
       }
     }
 

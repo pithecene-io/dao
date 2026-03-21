@@ -154,6 +154,31 @@ private:
           }
           out_ << ")";
         },
+        [&](const MirEnumConstruct& p) {
+          out_ << "enum_construct ";
+          if (p.enum_type != nullptr) {
+            out_ << p.enum_type->name() << "."
+                 << p.enum_type->variants()[p.variant_index].name;
+          }
+          out_ << "(";
+          if (p.payload_values != nullptr) {
+            for (size_t i = 0; i < p.payload_values->size(); ++i) {
+              if (i > 0) {
+                out_ << ", ";
+              }
+              out_ << "%" << (*p.payload_values)[i].id;
+            }
+          }
+          out_ << ")";
+        },
+        [&](const MirEnumDiscriminant& p) {
+          out_ << "enum_discriminant %" << p.enum_value.id;
+        },
+        [&](const MirEnumPayload& p) {
+          out_ << "enum_payload %" << p.enum_value.id
+               << " variant=" << p.variant_index
+               << " field=" << p.field_index;
+        },
         [&](const MirIterInit& p) {
           out_ << "iter_init %" << p.iter_operand.id;
         },

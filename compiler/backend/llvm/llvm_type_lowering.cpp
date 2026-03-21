@@ -6,7 +6,8 @@
 
 namespace dao {
 
-LlvmTypeLowering::LlvmTypeLowering(llvm::LLVMContext& ctx) : ctx_(ctx) {}
+LlvmTypeLowering::LlvmTypeLowering(llvm::LLVMContext& ctx)
+    : ctx_(ctx) {}
 
 auto LlvmTypeLowering::lower(const Type* type) -> llvm::Type* {
   if (type == nullptr) {
@@ -72,9 +73,62 @@ auto LlvmTypeLowering::lower(const Type* type) -> llvm::Type* {
     return nullptr;
   }
 
-  case TypeKind::Enum:
-    // Payload-free enums lower to i32 discriminant tag.
-    return llvm::Type::getInt32Ty(ctx_);
+  case TypeKind::Enum: {
+    const auto* enum_type = static_cast<const TypeEnum*>(type);
+    // Check if any variant has a payload.
+    bool has_payload = false;
+    for (const auto& variant : enum_type->variants()) {
+      if (!variant.payload_types.empty()) {
+        has_payload = true;
+        break;
+      }
+    }
+    if (!has_payload) {
+      // Payload-free enums lower to i32 discriminant tag.
+      return llvm::Type::getInt32Ty(ctx_);
+    }
+    // Payload-bearing enums: { i32 tag, [N x <align_type>] payload }.
+    // Use DataLayout to compute variant payload sizes and alignments.
+    const auto& dl = module_->getDataLayout();
+    uint64_t max_payload_size = 0;
+    uint64_t max_payload_align = 4; // at least i32 tag alignment
+    for (const auto& variant : enum_type->variants()) {
+      if (variant.payload_types.empty()) {
+        continue;
+      }
+      std::vector<llvm::Type*> field_types;
+      for (const auto* pt : variant.payload_types) {
+        auto* lt = lower(pt);
+        if (lt == nullptr) {
+          return nullptr;
+        }
+        field_types.push_back(lt);
+      }
+      auto* payload_struct =
+          llvm::StructType::get(ctx_, field_types, /*isPacked=*/false);
+      auto size = dl.getTypeAllocSize(payload_struct);
+      auto align = dl.getABITypeAlign(payload_struct).value();
+      if (size > max_payload_size) {
+        max_payload_size = size;
+      }
+      if (align > max_payload_align) {
+        max_payload_align = align;
+      }
+    }
+    // Use an array of the maximally-aligned integer type.
+    uint64_t array_count =
+        (max_payload_size + max_payload_align - 1) / max_payload_align;
+    if (array_count == 0) {
+      array_count = 1;
+    }
+    llvm::Type* align_type =
+        llvm::IntegerType::get(ctx_, max_payload_align * 8);
+    auto* payload_array =
+        llvm::ArrayType::get(align_type, array_count);
+    return llvm::StructType::get(
+        ctx_, {llvm::Type::getInt32Ty(ctx_), payload_array},
+        /*isPacked=*/false);
+  }
 
   case TypeKind::Generator:
     // Generator<T> is a fat pair: { ptr frame, ptr resume_fn }.

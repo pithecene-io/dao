@@ -34,6 +34,11 @@ enum class MirInstKind : std::uint8_t {
   // Construction
   Construct,
 
+  // Enum operations
+  EnumConstruct,
+  EnumDiscriminant,
+  EnumPayload,
+
   // Iteration (narrow model)
   IterInit,
   IterHasNext,

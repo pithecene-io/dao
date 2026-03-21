@@ -5,6 +5,7 @@
 
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
 
 #include <string>
@@ -22,6 +23,9 @@ namespace dao {
 class LlvmTypeLowering {
 public:
   explicit LlvmTypeLowering(llvm::LLVMContext& ctx);
+
+  // Set the module reference (must be called before lowering enum types).
+  void set_module(llvm::Module& module) { module_ = &module; }
 
   // Lower a Dao semantic type to an LLVM type.
   // Returns nullptr and sets error if the type cannot be lowered.
@@ -44,6 +48,7 @@ public:
 
 private:
   llvm::LLVMContext& ctx_;
+  llvm::Module* module_ = nullptr;
   llvm::StructType* string_type_ = nullptr;
   llvm::StructType* generator_type_ = nullptr;
   std::string error_;

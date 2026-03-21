@@ -95,6 +95,11 @@ struct MirCall  { MirValueId callee; std::vector<MirValueId>* args;
                   std::vector<const Type*>* explicit_type_args = nullptr; };
 struct MirConstruct { const TypeStruct* struct_type; std::vector<MirValueId>* field_values; };
 
+struct MirEnumConstruct { const TypeEnum* enum_type; uint32_t variant_index;
+                          std::vector<MirValueId>* payload_values; };
+struct MirEnumDiscriminant { MirValueId enum_value; };
+struct MirEnumPayload { MirValueId enum_value; uint32_t variant_index; uint32_t field_index; };
+
 struct MirIterInit    { MirValueId iter_operand; };
 struct MirIterHasNext { MirValueId iter_operand; };
 struct MirIterNext    { MirValueId iter_operand; };
@@ -124,6 +129,7 @@ using MirPayload = std::variant<
     MirStore, MirLoad, MirAddrOf,
     MirFieldAccess, MirIndexAccess,
     MirFnRef, MirCall, MirConstruct,
+    MirEnumConstruct, MirEnumDiscriminant, MirEnumPayload,
     MirIterInit, MirIterHasNext, MirIterNext, MirIterDestroy,
     MirYieldInst,
     MirModeEnter, MirModeExit, MirResourceEnter, MirResourceExit,
