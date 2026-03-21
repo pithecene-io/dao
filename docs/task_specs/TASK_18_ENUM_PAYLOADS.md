@@ -210,58 +210,90 @@ The discriminant comparison in match lowering already works via
 
 **Type lowering:**
 
-A payload-bearing enum lowers to an LLVM struct:
+A payload-bearing enum lowers to an LLVM struct that preserves
+the maximum alignment of any variant's payload fields. The layout
+must ensure that payload access never produces misaligned loads
+or stores.
+
+Compute:
+- `max_payload_align` = max alignment of any payload field across
+  all variants (e.g. 8 for f64, pointer; 4 for i32, f32).
+- `max_payload_size` = max total size of any single variant's
+  payload struct, including internal padding.
+
+The LLVM struct is:
 
 ```
-{ i32, [max_payload_size x i8] }
+{ i32, [padding x i8], [max_payload_size x i8] }
 ```
 
-Where:
-- Field 0 is the i32 discriminant tag.
-- Field 1 is a byte array sized to the largest variant payload.
+Where padding is inserted between the discriminant and the payload
+region so that the payload region starts at an offset aligned to
+`max_payload_align`. For example, if `max_payload_align` is 8, the
+discriminant (4 bytes) needs 4 bytes of padding so the payload
+starts at offset 8.
+
+**Preferred alternative:** use LLVM's own alignment support instead
+of manual padding. Define the payload region as an LLVM array of
+the maximally-aligned primitive type:
+
+```
+{ i32, [N x <max_align_type>] }
+```
+
+For example, if the largest alignment is 8 (f64 or pointer), use
+`[N x i64]` where `N = ceil(max_payload_size / 8)`. LLVM will
+naturally align field 1 to 8 bytes and insert the required padding
+after the i32 discriminant. This avoids manual padding arithmetic.
+
+Either approach is acceptable. The invariant is:
+
+- The payload region's starting offset within the struct must be
+  a multiple of `max_payload_align`.
+- Construction bitcasts the payload region pointer to the variant's
+  payload struct type and stores each field.
+- Extraction bitcasts the payload region pointer to the variant's
+  payload struct type and loads the requested field.
+- These bitcasts are safe because the payload region is correctly
+  aligned for every variant's payload struct.
 
 Payload-free enums continue to lower to bare `i32`.
 
-**Alternative:** use an LLVM struct with the discriminant and a
-union-like nested struct for each variant. The byte-array approach
-is simpler and avoids LLVM union complexities. The choice is an
-implementation detail — either is acceptable as long as:
-- Construction stores the discriminant and bitcasts payload fields
-  into the payload region.
-- Extraction reads the discriminant and bitcasts the payload region
-  back to the expected types.
-- Alignment of the payload region respects the maximum alignment
-  of any variant's payload types.
-
 **Construction codegen:**
 1. Allocate or produce a value of the enum struct type.
-2. Store the discriminant index into field 0.
+2. Store the discriminant index into the tag field.
 3. Bitcast the payload region pointer to the variant's payload
    struct type and store each field.
 
 **Extraction codegen:**
-1. Load the discriminant from field 0 (for match dispatch).
+1. Load the discriminant from the tag field (for match dispatch).
 2. Bitcast the payload region pointer to the variant's payload
    struct type and load the requested field.
 
 **Size and alignment:**
-- The payload region size is `max(size_of(variant_payload))` across
-  all variants.
-- The payload region alignment is `max(align_of(variant_field))`
-  across all variants and fields.
-- `size_of<E>()` and `align_of<E>()` must return correct values
-  for payload-bearing enums after this change.
+- `align_of<E>()` = `max(4, max_payload_align)` — the struct's
+  natural alignment is the maximum of the tag alignment (4) and
+  the payload region alignment.
+- `size_of<E>()` = the LLVM `DataLayout::getTypeAllocSize()` of
+  the struct, which includes trailing padding for array placement.
+- These must return correct values for payload-bearing enums.
 
 ### 9. Runtime — equality and printing
 
 **Equality (`==`, `!=`):**
 - Payload-free enum equality remains as-is (i32 comparison).
-- For payload-bearing enums: first compare discriminants. If equal,
-  compare payload fields. This is analogous to struct equality but
-  variant-aware.
-- First cut: payload-bearing enum equality is **deferred**. Only
-  discriminant comparison is required (sufficient for match).
-  Full structural equality can follow when needed.
+- Payload-bearing enums: `==` and `!=` are **type errors** in
+  this task. The type checker must reject equality comparison on
+  any enum type that has at least one payload-bearing variant.
+- Rationale: discriminant-only comparison would make
+  `Token.Int(1) == Token.Int(2)` evaluate `true`, which is
+  unsound. Full structural equality (compare discriminant, then
+  compare payload fields if equal) requires recursive field
+  comparison and Equatable dispatch per CONTRACT_TYPE_SYSTEM_
+  FOUNDATIONS.md §13.1. That is a follow-up task.
+- Match dispatch does not use `==` — it compares the extracted
+  i32 discriminant directly, so match is unaffected by this
+  restriction.
 
 **Printing:**
 - First cut: printing a payload-bearing enum can show the variant
@@ -337,7 +369,7 @@ demonstrating the feature.
 - Guard clauses (`Expr.Binary(op, l, r) if op == TK.Plus:`)
 - Exhaustiveness checking
 - Generic payload enums (`enum Option<T>: Some(T) | None`)
-- Payload-bearing enum equality beyond discriminant comparison
+- Payload-bearing enum equality (`==`/`!=` is a type error until structural equality lands)
 - `match` as an expression (returns a value)
 - Irrefutable let-destructuring (`let Token.Int(v) = tok`)
 
@@ -351,7 +383,7 @@ demonstrating the feature.
 | Wildcard / catch-all arms | Simple addition once the core works; can follow quickly |
 | Match expressions | Requires expression-position match; separate task |
 | Nested patterns | Full pattern language is a separate design surface |
-| Payload equality | Needs recursive structural comparison; follow-up task |
+| Payload equality (`==`/`!=`) | Requires recursive structural comparison + Equatable dispatch; type error until implemented |
 
 ## Exit criteria
 
