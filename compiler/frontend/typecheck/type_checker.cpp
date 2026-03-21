@@ -1074,7 +1074,10 @@ void TypeChecker::check_match(const Stmt* stmt) {
   const auto* scrutinee_type = check_expr(match.scrutinee);
 
   for (const auto& arm : match.arms) {
+    suppress_payload_check_ = true;
     const auto* pattern_type = check_expr(arm.pattern);
+    suppress_payload_check_ = false;
+    pending_payload_constructions_.erase(arm.pattern);
     if (scrutinee_type != nullptr && pattern_type != nullptr) {
       if (!is_assignable(pattern_type, scrutinee_type)) {
         error(arm.pattern->span,
@@ -1084,8 +1087,10 @@ void TypeChecker::check_match(const Stmt* stmt) {
       }
     }
 
-    // Type-check destructuring bindings on payload-bearing variants.
-    if (!arm.bindings.empty() && scrutinee_type != nullptr &&
+    // Validate destructuring bindings against variant payload arity.
+    // This runs for ALL enum variant match arms, not just those with
+    // bindings — a payload-bearing variant without bindings is an error.
+    if (scrutinee_type != nullptr &&
         scrutinee_type->kind() == TypeKind::Enum &&
         arm.pattern->is<FieldExpr>()) {
       const auto& field = arm.pattern->as<FieldExpr>();
@@ -1099,7 +1104,8 @@ void TypeChecker::check_match(const Stmt* stmt) {
         }
       }
       if (matched_variant != nullptr) {
-        if (matched_variant->payload_types.empty()) {
+        if (!arm.bindings.empty() &&
+            matched_variant->payload_types.empty()) {
           error(arm.binding_spans.empty() ? arm.pattern->span
                                           : arm.binding_spans[0],
                 "variant '" + std::string(matched_variant->name) +
@@ -1108,11 +1114,10 @@ void TypeChecker::check_match(const Stmt* stmt) {
                    matched_variant->payload_types.size()) {
           error(arm.pattern->span,
                 "variant '" + std::string(matched_variant->name) +
-                    "' has " +
+                    "' expects " +
                     std::to_string(matched_variant->payload_types.size()) +
-                    " payload field(s), but " +
-                    std::to_string(arm.bindings.size()) +
-                    " binding(s) provided");
+                    " binding(s), got " +
+                    std::to_string(arm.bindings.size()));
         } else {
           // Register binding types via the declaration symbol table.
           for (size_t i = 0; i < arm.bindings.size(); ++i) {
@@ -1252,6 +1257,26 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
 
   if (result != nullptr) {
     typed_.set_expr_type(expr, result);
+  }
+
+  // Check for payload-bearing variant accessed without constructor syntax.
+  // check_field inserts; check_call removes. If still present here, the
+  // variant was used bare (e.g. `Token.Int` instead of `Token.Int(42)`).
+  // Suppressed in match patterns — arity is checked by check_match.
+  if (expr->kind() == NodeKind::FieldExpr && !suppress_payload_check_ &&
+      pending_payload_constructions_.count(expr) > 0) {
+    pending_payload_constructions_.erase(expr);
+    const auto& field = expr->as<FieldExpr>();
+    if (result != nullptr && result->kind() == TypeKind::Enum) {
+      const auto* en = static_cast<const TypeEnum*>(result);
+      error(expr->span,
+            "enum variant '" + std::string(en->name()) + "." +
+                std::string(field.field) +
+                "' has a payload; use constructor syntax: " +
+                std::string(en->name()) + "." + std::string(field.field) +
+                "(...)");
+      return nullptr;
+    }
   }
 
   return result;
@@ -1686,7 +1711,10 @@ void TypeChecker::verify_concept_constraints(
 
 auto TypeChecker::check_call(const Expr* expr) -> const Type* {
   const auto& call = expr->as<CallExpr>();
+  // Suppress payload-check on the callee — check_call validates after.
+  suppress_payload_check_ = true;
   const auto* callee_type = check_expr(call.callee);
+  suppress_payload_check_ = false;
   if (callee_type == nullptr) {
     return nullptr;
   }
@@ -1725,6 +1753,8 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
                       print_type(variant.payload_types[i]) + "'");
           }
         }
+        // Clear the "needs-construction" mark set by check_field.
+        pending_payload_constructions_.erase(call.callee);
         return callee_type;
       }
     }
@@ -1979,6 +2009,11 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
     const auto* en = static_cast<const TypeEnum*>(obj_type);
     for (const auto& variant : en->variants()) {
       if (variant.name == field.field) {
+        // Mark payload-bearing variants as needing constructor syntax.
+        // check_call will clear the mark when it handles the construction.
+        if (!variant.payload_types.empty()) {
+          pending_payload_constructions_.insert(expr);
+        }
         return obj_type;
       }
     }
