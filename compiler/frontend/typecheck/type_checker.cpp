@@ -461,10 +461,17 @@ void TypeChecker::register_declarations(const FileNode& file) {
       }
       const auto* sym = decl_it->second;
 
-      // Build enum type from variant specifiers.
+      // Build enum type from variant specifiers, resolving payload types.
       std::vector<EnumVariant> variants;
       for (const auto& variant : en.variants) {
-        variants.push_back({variant.name, {}});
+        std::vector<const Type*> payload_types;
+        for (const auto* type_node : variant.payload_types) {
+          const auto* resolved = resolve_type_node(type_node);
+          if (resolved != nullptr) {
+            payload_types.push_back(resolved);
+          }
+        }
+        variants.push_back({variant.name, std::move(payload_types)});
       }
       const auto* enum_type =
           types_.make_enum(sym, en.name, std::move(variants));
@@ -1076,6 +1083,50 @@ void TypeChecker::check_match(const Stmt* stmt) {
                   print_type(scrutinee_type) + "'");
       }
     }
+
+    // Type-check destructuring bindings on payload-bearing variants.
+    if (!arm.bindings.empty() && scrutinee_type != nullptr &&
+        scrutinee_type->kind() == TypeKind::Enum &&
+        arm.pattern->is<FieldExpr>()) {
+      const auto& field = arm.pattern->as<FieldExpr>();
+      const auto* enum_type =
+          static_cast<const TypeEnum*>(scrutinee_type);
+      const EnumVariant* matched_variant = nullptr;
+      for (const auto& variant : enum_type->variants()) {
+        if (variant.name == field.field) {
+          matched_variant = &variant;
+          break;
+        }
+      }
+      if (matched_variant != nullptr) {
+        if (matched_variant->payload_types.empty()) {
+          error(arm.binding_spans.empty() ? arm.pattern->span
+                                          : arm.binding_spans[0],
+                "variant '" + std::string(matched_variant->name) +
+                    "' has no payload to destructure");
+        } else if (arm.bindings.size() !=
+                   matched_variant->payload_types.size()) {
+          error(arm.pattern->span,
+                "variant '" + std::string(matched_variant->name) +
+                    "' has " +
+                    std::to_string(matched_variant->payload_types.size()) +
+                    " payload field(s), but " +
+                    std::to_string(arm.bindings.size()) +
+                    " binding(s) provided");
+        } else {
+          // Register binding types via the declaration symbol table.
+          for (size_t i = 0; i < arm.bindings.size(); ++i) {
+            auto sym_it =
+                decl_symbols_.find(arm.binding_spans[i].offset);
+            if (sym_it != decl_symbols_.end()) {
+              symbol_types_[sym_it->second] =
+                  matched_variant->payload_types[i];
+            }
+          }
+        }
+      }
+    }
+
     check_body(arm.body);
   }
 }
@@ -1359,6 +1410,21 @@ auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
                 "' and '" + print_type(rhs) + "'");
       return nullptr;
     }
+    // Reject == / != on payload-bearing enums (unsound without full
+    // structural equality — CONTRACT_TYPE_SYSTEM_FOUNDATIONS §13.1).
+    if (lhs != nullptr && lhs->kind() == TypeKind::Enum) {
+      const auto* enum_type = static_cast<const TypeEnum*>(lhs);
+      for (const auto& variant : enum_type->variants()) {
+        if (!variant.payload_types.empty()) {
+          error(expr->span,
+                "equality comparison is not yet supported for payload-bearing "
+                "enum '" +
+                    std::string(enum_type->name()) +
+                    "'; use match to inspect variants");
+          return nullptr;
+        }
+      }
+    }
     return types_.bool_type();
   }
 
@@ -1623,6 +1689,47 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
   const auto* callee_type = check_expr(call.callee);
   if (callee_type == nullptr) {
     return nullptr;
+  }
+
+  // Enum variant constructor: Token.Int(42) — callee is a FieldExpr
+  // whose type is an enum type.
+  if (callee_type->kind() == TypeKind::Enum &&
+      call.callee->is<FieldExpr>()) {
+    const auto& field = call.callee->as<FieldExpr>();
+    const auto* enum_type = static_cast<const TypeEnum*>(callee_type);
+    for (const auto& variant : enum_type->variants()) {
+      if (variant.name == field.field) {
+        if (variant.payload_types.empty()) {
+          error(expr->span,
+                "enum variant '" + std::string(enum_type->name()) + "." +
+                    std::string(variant.name) +
+                    "' has no payload; use without parentheses");
+          return callee_type;
+        }
+        if (call.args.size() != variant.payload_types.size()) {
+          error(expr->span,
+                "enum variant '" + std::string(enum_type->name()) + "." +
+                    std::string(variant.name) + "' expects " +
+                    std::to_string(variant.payload_types.size()) +
+                    " payload field(s), got " +
+                    std::to_string(call.args.size()));
+          return callee_type;
+        }
+        for (size_t i = 0; i < call.args.size(); ++i) {
+          const auto* arg_type = check_expr(call.args[i]);
+          if (arg_type != nullptr &&
+              !is_assignable(arg_type, variant.payload_types[i])) {
+            error(call.args[i]->span,
+                  "payload field type '" + print_type(arg_type) +
+                      "' is not assignable to '" +
+                      print_type(variant.payload_types[i]) + "'");
+          }
+        }
+        return callee_type;
+      }
+    }
+    // Variant not found — already diagnosed in check_field.
+    return callee_type;
   }
 
   // Constructor call: callee must be an identifier that resolves to a

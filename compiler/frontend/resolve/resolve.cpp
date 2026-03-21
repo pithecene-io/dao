@@ -692,6 +692,13 @@ private:
       for (const auto& arm : match.arms) {
         resolve_expr(*arm.pattern, scope);
         auto* arm_scope = ctx_.make_scope(ScopeKind::Block, scope);
+        // Register destructuring bindings as locals in the arm scope.
+        for (size_t i = 0; i < arm.bindings.size(); ++i) {
+          auto* sym = ctx_.make_symbol(
+              SymbolKind::Local, arm.bindings[i], arm.binding_spans[i],
+              nullptr);
+          arm_scope->declare(arm.bindings[i], sym);
+        }
         for (const auto* body_stmt : arm.body) {
           resolve_stmt(*body_stmt, arm_scope);
         }

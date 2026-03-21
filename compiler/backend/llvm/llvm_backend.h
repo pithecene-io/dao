@@ -144,6 +144,12 @@ private:
                   FunctionState& state) -> bool;
   auto lower_construct(const MirConstruct& p, const MirInst& inst,
                        FunctionState& state) -> bool;
+  auto lower_enum_construct(const MirEnumConstruct& p, const MirInst& inst,
+                            FunctionState& state) -> bool;
+  auto lower_enum_discriminant(const MirEnumDiscriminant& p, const MirInst& inst,
+                               FunctionState& state) -> bool;
+  auto lower_enum_payload(const MirEnumPayload& p, const MirInst& inst,
+                          FunctionState& state) -> bool;
   auto lower_return(const MirReturn& p, const MirInst& inst,
                     FunctionState& state) -> bool;
   auto lower_br(const MirBr& p, const MirInst& inst,

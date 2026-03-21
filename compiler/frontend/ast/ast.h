@@ -228,6 +228,7 @@ struct ClassDecl {
 struct EnumVariantSpec {
   std::string_view name;
   Span name_span;
+  std::vector<TypeNode*> payload_types; // empty for payload-free variants
 };
 
 struct EnumDeclNode {
@@ -326,7 +327,9 @@ struct YieldStatement {
 struct BreakStmtNode {};
 
 struct MatchArm {
-  Expr* pattern;             // constant or qualified enum variant
+  Expr* pattern;                           // constant or qualified enum variant
+  std::vector<std::string_view> bindings;  // destructuring bindings (empty for payload-free)
+  std::vector<Span> binding_spans;         // spans for diagnostics / semantic tokens
   std::vector<Stmt*> body;
 };
 

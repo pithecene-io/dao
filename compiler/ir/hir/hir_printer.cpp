@@ -355,6 +355,42 @@ private:
             }
           }
         },
+        [&](const HirEnumConstruct& node) {
+          indent();
+          out_ << "EnumConstruct ";
+          if (node.enum_type != nullptr) {
+            out_ << node.enum_type->name() << "."
+                 << node.enum_type->variants()[node.variant_index].name;
+          }
+          print_type_annotation(expr.type);
+          out_ << "\n";
+          if (!node.payload_args.empty()) {
+            Scope scope(depth_);
+            indent();
+            out_ << "Payload\n";
+            Scope args_scope(depth_);
+            for (const auto* arg : node.payload_args) {
+              print_expr(*arg);
+            }
+          }
+        },
+        [&](const HirEnumDiscriminant& node) {
+          indent();
+          out_ << "EnumDiscriminant";
+          print_type_annotation(expr.type);
+          out_ << "\n";
+          Scope scope(depth_);
+          print_expr(*node.enum_value);
+        },
+        [&](const HirEnumPayload& node) {
+          indent();
+          out_ << "EnumPayload variant=" << node.variant_index
+               << " field=" << node.field_index;
+          print_type_annotation(expr.type);
+          out_ << "\n";
+          Scope scope(depth_);
+          print_expr(*node.enum_value);
+        },
         [&](const HirField& node) {
           indent();
           out_ << "Field ." << node.field_name;

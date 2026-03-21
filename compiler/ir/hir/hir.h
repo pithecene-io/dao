@@ -153,6 +153,22 @@ struct HirConstruct {
   std::vector<HirExpr*> args;
 };
 
+struct HirEnumConstruct {
+  const TypeEnum* enum_type;
+  uint32_t variant_index;
+  std::vector<HirExpr*> payload_args;
+};
+
+struct HirEnumDiscriminant {
+  HirExpr* enum_value;
+};
+
+struct HirEnumPayload {
+  HirExpr* enum_value;
+  uint32_t variant_index;
+  uint32_t field_index;
+};
+
 struct HirField {
   HirExpr* object;
   std::string_view field_name;
@@ -176,6 +192,7 @@ struct HirLambda {
 using HirExprPayload = std::variant<
     HirIntLiteral, HirFloatLiteral, HirStringLiteral, HirBoolLiteral,
     HirSymbolRef, HirUnary, HirBinary, HirCall, HirConstruct,
+    HirEnumConstruct, HirEnumDiscriminant, HirEnumPayload,
     HirField, HirIndex, HirPipe, HirLambda>;
 
 // ---------------------------------------------------------------------------
