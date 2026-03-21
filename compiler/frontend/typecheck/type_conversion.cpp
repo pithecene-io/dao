@@ -97,10 +97,36 @@ auto is_assignable(const Type* source, const Type* target) -> bool {
       return true;
     }
     case TypeKind::Enum: {
-      // Same enum type: match by decl_id.
       const auto* se = static_cast<const TypeEnum*>(source);
       const auto* te = static_cast<const TypeEnum*>(target);
-      return se->decl_id() == te->decl_id();
+      // Same enum: match by decl_id.
+      if (se->decl_id() != te->decl_id() || se->name() != te->name()) {
+        return false;
+      }
+      // Check variant payload types.
+      if (se->variants().size() != te->variants().size()) {
+        return false;
+      }
+      for (size_t i = 0; i < se->variants().size(); ++i) {
+        const auto& sv = se->variants()[i];
+        const auto& tv = te->variants()[i];
+        if (sv.payload_types.size() != tv.payload_types.size()) {
+          return false;
+        }
+        for (size_t j = 0; j < sv.payload_types.size(); ++j) {
+          const auto* sp = sv.payload_types[j];
+          const auto* tp = tv.payload_types[j];
+          if (sp == tp) {
+            continue;
+          }
+          if (sp->kind() == TypeKind::GenericParam ||
+              tp->kind() == TypeKind::GenericParam) {
+            continue;
+          }
+          return false;
+        }
+      }
+      return true;
     }
     default:
       break;

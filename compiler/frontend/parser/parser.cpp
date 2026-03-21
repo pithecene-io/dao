@@ -415,6 +415,7 @@ private:
   auto parse_enum_decl() -> Decl* {
     const auto& kw = consume(TokenKind::KwEnum);
     const auto& name_tok = consume(TokenKind::Identifier);
+    auto type_params = parse_type_params();
     consume(TokenKind::Colon);
     consume(TokenKind::Newline);
     consume(TokenKind::Indent);
@@ -456,6 +457,7 @@ private:
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
         span, EnumDeclNode{.name = name_tok.text, .name_span = name_tok.span,
+                           .type_params = std::move(type_params),
                            .variants = std::move(variants)});
   }
 

@@ -484,10 +484,15 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
     }
 
     // Enum variant construction: Token.Int(42) → HirEnumConstruct
+    // Use the CallExpr's type (which may be instantiated for generic enums)
+    // rather than the callee's type (which may be the uninstantiated generic).
     if (callee_type != nullptr && callee_type->kind() == TypeKind::Enum &&
         call.callee->is<FieldExpr>()) {
       const auto& field = call.callee->as<FieldExpr>();
-      const auto* enum_type = static_cast<const TypeEnum*>(callee_type);
+      const auto* enum_type =
+          (type != nullptr && type->kind() == TypeKind::Enum)
+              ? static_cast<const TypeEnum*>(type)
+              : static_cast<const TypeEnum*>(callee_type);
       for (size_t i = 0; i < enum_type->variants().size(); ++i) {
         if (enum_type->variants()[i].name == field.field &&
             !enum_type->variants()[i].payload_types.empty()) {

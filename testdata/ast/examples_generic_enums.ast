@@ -1,0 +1,372 @@
+File
+  EnumDecl Option
+    Variant Some
+    Variant None
+  FunctionDecl unwrap_i64_or
+    Param opt: Option<i64>
+    Param default_val: i64
+    ReturnType: i64
+    MatchStatement
+      Scrutinee
+        Identifier opt
+      Arm
+        Pattern
+          FieldExpr .Some
+            Identifier Option
+        ReturnStatement
+          Identifier value
+      Arm
+        Pattern
+          FieldExpr .None
+            Identifier Option
+        ReturnStatement
+          Identifier default_val
+  EnumDecl Result
+    Variant Ok
+    Variant Err
+  FunctionDecl safe_divide
+    Param a: i64
+    Param b: i64
+    ReturnType: Result<i64, string>
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier b
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+      Then
+        ReturnStatement
+          CallExpr
+            Callee
+              FieldExpr .Err
+                Identifier Result
+            Args
+              StringLiteral "division by zero"
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Ok
+            Identifier Result
+        Args
+          BinaryExpr /
+            Identifier a
+            Identifier b
+  FunctionDecl find_first_positive
+    Param a: i64
+    Param b: i64
+    Param c: i64
+    ReturnType: Option<i64>
+    IfStatement
+      Condition
+        BinaryExpr >
+          Identifier a
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+      Then
+        ReturnStatement
+          CallExpr
+            Callee
+              FieldExpr .Some
+                Identifier Option
+            Args
+              Identifier a
+    IfStatement
+      Condition
+        BinaryExpr >
+          Identifier b
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+      Then
+        ReturnStatement
+          CallExpr
+            Callee
+              FieldExpr .Some
+                Identifier Option
+            Args
+              Identifier b
+    IfStatement
+      Condition
+        BinaryExpr >
+          Identifier c
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+      Then
+        ReturnStatement
+          CallExpr
+            Callee
+              FieldExpr .Some
+                Identifier Option
+            Args
+              Identifier c
+    ReturnStatement
+      FieldExpr .None
+        Identifier Option
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "=== Option<T> ==="
+    LetStatement some_val: Option<i64>
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 42
+    LetStatement none_val: Option<i64>
+      FieldExpr .None
+        Identifier Option
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "unwrap Some(42): "
+            CallExpr
+              Callee
+                Identifier i64_to_string
+              Args
+                CallExpr
+                  Callee
+                    Identifier unwrap_i64_or
+                  Args
+                    Identifier some_val
+                    CallExpr
+                      Callee
+                        Identifier to_i64
+                      Args
+                        IntLiteral 0
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "unwrap None:     "
+            CallExpr
+              Callee
+                Identifier i64_to_string
+              Args
+                CallExpr
+                  Callee
+                    Identifier unwrap_i64_or
+                  Args
+                    Identifier none_val
+                    CallExpr
+                      Callee
+                        Identifier to_i64
+                      Args
+                        UnaryExpr -
+                          IntLiteral 1
+    LetStatement found: Option<i64>
+      CallExpr
+        Callee
+          Identifier find_first_positive
+        Args
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 1
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 7
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 3
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "first positive:  "
+            CallExpr
+              Callee
+                Identifier i64_to_string
+              Args
+                CallExpr
+                  Callee
+                    Identifier unwrap_i64_or
+                  Args
+                    Identifier found
+                    CallExpr
+                      Callee
+                        Identifier to_i64
+                      Args
+                        IntLiteral 0
+    LetStatement not_found: Option<i64>
+      CallExpr
+        Callee
+          Identifier find_first_positive
+        Args
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 1
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 2
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 3
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "none found:      "
+            CallExpr
+              Callee
+                Identifier i64_to_string
+              Args
+                CallExpr
+                  Callee
+                    Identifier unwrap_i64_or
+                  Args
+                    Identifier not_found
+                    CallExpr
+                      Callee
+                        Identifier to_i64
+                      Args
+                        IntLiteral 0
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral ""
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "=== Result<T, E> ==="
+    LetStatement ok_result: Result<i64, string>
+      CallExpr
+        Callee
+          Identifier safe_divide
+        Args
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 20
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 4
+    LetStatement err_result: Result<i64, string>
+      CallExpr
+        Callee
+          Identifier safe_divide
+        Args
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 10
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+    MatchStatement
+      Scrutinee
+        Identifier ok_result
+      Arm
+        Pattern
+          FieldExpr .Ok
+            Identifier Result
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "20 / 4 = "
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    Identifier value
+      Arm
+        Pattern
+          FieldExpr .Err
+            Identifier Result
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "error: "
+                Identifier msg
+    MatchStatement
+      Scrutinee
+        Identifier err_result
+      Arm
+        Pattern
+          FieldExpr .Ok
+            Identifier Result
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "10 / 0 = "
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    Identifier value
+      Arm
+        Pattern
+          FieldExpr .Err
+            Identifier Result
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "error: "
+                Identifier msg
+    ReturnStatement
+      IntLiteral 0

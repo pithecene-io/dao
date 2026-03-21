@@ -171,6 +171,55 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
         }
       }
 
+      // Generic enum instantiation: Option<i32>, Result<i64, string>, etc.
+      if (base_type != nullptr && base_type->kind() == TypeKind::Enum) {
+        const auto* decl_node = sym->decl_as_decl();
+        const std::vector<GenericParam>* type_params = nullptr;
+        if (decl_node->is<EnumDeclNode>()) {
+          type_params = &decl_node->as<EnumDeclNode>().type_params;
+        }
+
+        if (type_params != nullptr && !type_params->empty()) {
+          if (named.type_args.empty()) {
+            error(node->span,
+                  "generic type '" + std::string(name) + "' requires " +
+                      std::to_string(type_params->size()) +
+                      " type argument(s)");
+            return nullptr;
+          }
+          if (named.type_args.size() != type_params->size()) {
+            error(node->span,
+                  "'" + std::string(name) + "' expects " +
+                      std::to_string(type_params->size()) +
+                      " type argument(s), got " +
+                      std::to_string(named.type_args.size()));
+            return nullptr;
+          }
+          std::unordered_map<uint32_t, const Type*> bindings;
+          bool valid = true;
+          for (size_t i = 0; i < named.type_args.size(); ++i) {
+            const auto* arg_type = resolve_type_node(named.type_args[i]);
+            if (arg_type == nullptr) {
+              valid = false;
+            } else {
+              bindings[static_cast<uint32_t>(i)] = arg_type;
+            }
+          }
+          if (valid) {
+            return substitute_generics(base_type, bindings);
+          }
+          return nullptr;
+        }
+
+        if (type_params != nullptr && type_params->empty() &&
+            !named.type_args.empty()) {
+          error(node->span,
+                "'" + std::string(name) +
+                    "' is not generic but was given type arguments");
+          return nullptr;
+        }
+      }
+
       return base_type;
     }
 
@@ -1101,7 +1150,7 @@ void TypeChecker::check_match(const Stmt* stmt) {
 
   for (const auto& arm : match.arms) {
     suppress_payload_check_ = true;
-    const auto* pattern_type = check_expr(arm.pattern);
+    const auto* pattern_type = check_expr(arm.pattern, scrutinee_type);
     suppress_payload_check_ = false;
     pending_payload_constructions_.erase(arm.pattern);
     if (scrutinee_type != nullptr && pattern_type != nullptr) {
@@ -1280,6 +1329,61 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
     error(expr->span, "unsupported expression in type checker");
     break;
   }
+
+  // Coerce uninstantiated generic enum types to the expected instantiated
+  // type when the expected type is an enum with the same decl_id. This
+  // handles cases like `let x: Option<i64> = Option.None` where the
+  // variant expression has the uninstantiated generic type.
+  //
+  // Only fires when the result still contains unresolved generic params.
+  // If the result is already a concrete instantiation (e.g. Option<string>
+  // inferred from Option.Some("oops")), it is NOT overwritten — the normal
+  // is_assignable check catches mismatches.
+  if (result != nullptr && expected != nullptr &&
+      result->kind() == TypeKind::Enum &&
+      expected->kind() == TypeKind::Enum) {
+    const auto* result_enum = static_cast<const TypeEnum*>(result);
+    const auto* expected_enum = static_cast<const TypeEnum*>(expected);
+    if (result_enum->decl_id() == expected_enum->decl_id() &&
+        result_enum != expected_enum) {
+      // Check if the result enum has any unresolved generic params.
+      bool has_generic = false;
+      for (const auto& variant : result_enum->variants()) {
+        for (const auto* pt : variant.payload_types) {
+          if (pt != nullptr && pt->kind() == TypeKind::GenericParam) {
+            has_generic = true;
+          }
+        }
+      }
+      if (has_generic) {
+        result = expected;
+      }
+    }
+  }
+
+  // Reject generic enum values that still have unresolved type params
+  // and no expected type to coerce to. Only check value-producing
+  // expressions (FieldExpr for variant access, CallExpr for construction),
+  // not type-name identifiers.
+  if (result != nullptr && result->kind() == TypeKind::Enum &&
+      !suppress_payload_check_ &&
+      (expr->kind() == NodeKind::FieldExpr ||
+       expr->kind() == NodeKind::CallExpr)) {
+    const auto* re = static_cast<const TypeEnum*>(result);
+    for (const auto& variant : re->variants()) {
+      for (const auto* pt : variant.payload_types) {
+        if (pt != nullptr && pt->kind() == TypeKind::GenericParam) {
+          error(expr->span,
+                "cannot infer type argument(s) for generic enum '" +
+                    std::string(re->name()) +
+                    "'; provide an explicit type annotation");
+          result = nullptr;
+          goto done_generic_check; // NOLINT
+        }
+      }
+    }
+  }
+  done_generic_check:
 
   if (result != nullptr) {
     typed_.set_expr_type(expr, result);
@@ -1678,6 +1782,26 @@ auto TypeChecker::substitute_generics(
                                     std::move(new_fields))
                : type;
   }
+  case TypeKind::Enum: {
+    const auto* en = static_cast<const TypeEnum*>(type);
+    bool changed = false;
+    std::vector<EnumVariant> new_variants;
+    new_variants.reserve(en->variants().size());
+    for (const auto& variant : en->variants()) {
+      std::vector<const Type*> new_payload;
+      new_payload.reserve(variant.payload_types.size());
+      for (const auto* pt : variant.payload_types) {
+        const auto* sub = substitute_generics(pt, bindings);
+        if (sub != pt) changed = true;
+        new_payload.push_back(sub);
+      }
+      new_variants.push_back({variant.name, std::move(new_payload)});
+    }
+    return changed
+               ? types_.make_enum(en->decl_id(), en->name(),
+                                  std::move(new_variants))
+               : type;
+  }
   default:
     return type;
   }
@@ -1769,18 +1893,29 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
                     std::to_string(call.args.size()));
           return callee_type;
         }
+        // Infer generic bindings from arguments and return the
+        // instantiated enum type.
+        std::unordered_map<uint32_t, const Type*> type_bindings;
         for (size_t i = 0; i < call.args.size(); ++i) {
           const auto* arg_type = check_expr(call.args[i]);
-          if (arg_type != nullptr && variant.payload_types[i] != nullptr &&
-              !is_assignable(arg_type, variant.payload_types[i])) {
-            error(call.args[i]->span,
-                  "payload field type '" + print_type(arg_type) +
-                      "' is not assignable to '" +
-                      print_type(variant.payload_types[i]) + "'");
+          if (arg_type != nullptr && variant.payload_types[i] != nullptr) {
+            if (!is_assignable(arg_type, variant.payload_types[i])) {
+              error(call.args[i]->span,
+                    "payload field type '" + print_type(arg_type) +
+                        "' is not assignable to '" +
+                        print_type(variant.payload_types[i]) + "'");
+            }
+            // Infer generic param bindings from concrete arg types.
+            infer_type_bindings(variant.payload_types[i], arg_type,
+                                type_bindings, call.args[i]->span);
           }
         }
         // Clear the "needs-construction" mark set by check_field.
         pending_payload_constructions_.erase(call.callee);
+        // If generic bindings were inferred, return instantiated type.
+        if (!type_bindings.empty()) {
+          return substitute_generics(callee_type, type_bindings);
+        }
         return callee_type;
       }
     }
@@ -2448,6 +2583,8 @@ auto TypeChecker::find_generic_param_index(const Symbol* sym) -> uint32_t {
     type_params = &decl->as<FunctionDecl>().type_params;
   } else if (decl->is<ClassDecl>()) {
     type_params = &decl->as<ClassDecl>().type_params;
+  } else if (decl->is<EnumDeclNode>()) {
+    type_params = &decl->as<EnumDeclNode>().type_params;
   }
 
   if (type_params != nullptr) {

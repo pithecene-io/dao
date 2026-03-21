@@ -94,6 +94,30 @@ auto substitute_type(const Type* type, const TypeSubst& subst,
                              std::move(new_fields));
   }
 
+  case TypeKind::Enum: {
+    const auto* en = static_cast<const TypeEnum*>(type);
+    bool changed = false;
+    std::vector<EnumVariant> new_variants;
+    new_variants.reserve(en->variants().size());
+    for (const auto& variant : en->variants()) {
+      std::vector<const Type*> new_payload;
+      new_payload.reserve(variant.payload_types.size());
+      for (const auto* pt : variant.payload_types) {
+        auto* sub = substitute_type(pt, subst, types);
+        if (sub != pt) {
+          changed = true;
+        }
+        new_payload.push_back(sub);
+      }
+      new_variants.push_back({variant.name, std::move(new_payload)});
+    }
+    if (!changed) {
+      return type;
+    }
+    return types.make_enum(en->decl_id(), en->name(),
+                           std::move(new_variants));
+  }
+
   default:
     return type;
   }
@@ -131,6 +155,17 @@ auto type_has_generic(const Type* type) -> bool {
     for (const auto& field : st->fields()) {
       if (type_has_generic(field.type)) {
         return true;
+      }
+    }
+    return false;
+  }
+  case TypeKind::Enum: {
+    const auto* en = static_cast<const TypeEnum*>(type);
+    for (const auto& variant : en->variants()) {
+      for (const auto* pt : variant.payload_types) {
+        if (type_has_generic(pt)) {
+          return true;
+        }
       }
     }
     return false;
@@ -429,6 +464,22 @@ void infer_bindings_recursive(const Type* pattern, const Type* concrete,
       for (size_t i = 0; i < sp->fields().size(); ++i) {
         infer_bindings_recursive(sp->fields()[i].type,
                                  sc->fields()[i].type, subst);
+      }
+    }
+  } else if (pattern->kind() == TypeKind::Enum &&
+             concrete->kind() == TypeKind::Enum) {
+    const auto* ep = static_cast<const TypeEnum*>(pattern);
+    const auto* ec = static_cast<const TypeEnum*>(concrete);
+    if (ep->variants().size() == ec->variants().size()) {
+      for (size_t vi = 0; vi < ep->variants().size(); ++vi) {
+        const auto& vp = ep->variants()[vi];
+        const auto& vc = ec->variants()[vi];
+        if (vp.payload_types.size() == vc.payload_types.size()) {
+          for (size_t pi = 0; pi < vp.payload_types.size(); ++pi) {
+            infer_bindings_recursive(vp.payload_types[pi],
+                                     vc.payload_types[pi], subst);
+          }
+        }
       }
     }
   }

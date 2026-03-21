@@ -335,10 +335,17 @@ private:
       break;
     case NodeKind::EnumDecl: {
       // Resolve payload type nodes in variant declarations.
+      // Create a scope for generic type parameters if present.
       const auto& en = decl.as<EnumDeclNode>();
+      auto* enum_scope = scope;
+      if (!en.type_params.empty()) {
+        enum_scope = ctx_.make_scope(ScopeKind::Struct, scope);
+        enum_scope->set_range(decl.span);
+        declare_type_params(en.type_params, enum_scope, decl);
+      }
       for (const auto& variant : en.variants) {
         for (const auto* type_node : variant.payload_types) {
-          resolve_type(*type_node, scope);
+          resolve_type(*type_node, enum_scope);
         }
       }
       break;
