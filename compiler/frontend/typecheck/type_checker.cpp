@@ -462,13 +462,35 @@ void TypeChecker::register_declarations(const FileNode& file) {
       const auto* sym = decl_it->second;
 
       // Build enum type from variant specifiers, resolving payload types.
+      // Unresolved types are kept as nullptr to preserve arity — the
+      // primary diagnostic comes from resolve_type_node; dropping the
+      // slot would silently mutate the variant shape and produce
+      // misleading secondary errors.
       std::vector<EnumVariant> variants;
+      bool has_bad_payload = false;
       for (const auto& variant : en.variants) {
         std::vector<const Type*> payload_types;
-        for (const auto* type_node : variant.payload_types) {
-          const auto* resolved = resolve_type_node(type_node);
-          if (resolved != nullptr) {
-            payload_types.push_back(resolved);
+        for (size_t i = 0; i < variant.payload_types.size(); ++i) {
+          const auto* resolved = resolve_type_node(variant.payload_types[i]);
+          payload_types.push_back(resolved);
+          if (resolved == nullptr) {
+            has_bad_payload = true;
+            // Check for self-referential by-value payload: the type
+            // name matches the enum being defined, which hasn't been
+            // registered yet. Emit a specific diagnostic.
+            if (variant.payload_types[i]->is<NamedType>()) {
+              const auto& named =
+                  variant.payload_types[i]->as<NamedType>();
+              if (named.name.segments.size() == 1 &&
+                  named.name.segments[0] == en.name) {
+                error(variant.payload_types[i]->span,
+                      "enum '" + std::string(en.name) +
+                          "' cannot contain itself by value in variant '" +
+                          std::string(variant.name) +
+                          "'; use a pointer (*" + std::string(en.name) +
+                          ") for recursive types");
+              }
+            }
           }
         }
         variants.push_back({variant.name, std::move(payload_types)});
@@ -477,6 +499,10 @@ void TypeChecker::register_declarations(const FileNode& file) {
           types_.make_enum(sym, en.name, std::move(variants));
       symbol_types_[sym] = enum_type;
       typed_.set_decl_type(decl, enum_type);
+      if (has_bad_payload) {
+        // Don't proceed to codegen with broken payload types.
+        break;
+      }
       break;
     }
 
@@ -1745,7 +1771,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
         }
         for (size_t i = 0; i < call.args.size(); ++i) {
           const auto* arg_type = check_expr(call.args[i]);
-          if (arg_type != nullptr &&
+          if (arg_type != nullptr && variant.payload_types[i] != nullptr &&
               !is_assignable(arg_type, variant.payload_types[i])) {
             error(call.args[i]->span,
                   "payload field type '" + print_type(arg_type) +

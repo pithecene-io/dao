@@ -333,10 +333,16 @@ private:
     case NodeKind::ClassDecl:
       resolve_class(decl, scope);
       break;
-    case NodeKind::EnumDecl:
-      // Enum variants are resolved through qualified access (Enum.Variant),
-      // not through body resolution. Nothing to resolve here.
+    case NodeKind::EnumDecl: {
+      // Resolve payload type nodes in variant declarations.
+      const auto& en = decl.as<EnumDeclNode>();
+      for (const auto& variant : en.variants) {
+        for (const auto* type_node : variant.payload_types) {
+          resolve_type(*type_node, scope);
+        }
+      }
       break;
+    }
     case NodeKind::AliasDecl:
       resolve_alias(decl, scope);
       break;

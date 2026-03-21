@@ -1,17 +1,20 @@
 // expr_parser.dao — Bootstrap probe 4: recursive-descent expression parser.
 //
 // Consumes Vector<Token> from a simple arithmetic lexer, produces a
-// flat Vector<ExprNode> arena with index-based references, then
-// evaluates the tree by walking the arena.
+// flat Vector<Expr> arena with index-based references, then evaluates
+// the tree by walking the arena.
 //
-// Tests: enum-based kind tagging, match dispatch, else-if chains,
-// parser-shaped control flow over collected token data, arena-indexed
+// Tests: payload-bearing enums with match destructuring, arena-indexed
 // structured output, recursive descent with precedence, multi-phase
-// pipeline (lex → parse → eval), and composite return types
-// containing Vector<T> fields.
+// pipeline (lex → parse → eval), and composite return types containing
+// Vector<T> fields.
 //
 // Scope: integer literals, + - * /, unary minus, parentheses,
 // precedence and associativity. Nothing more.
+//
+// Revision: rewritten to use payload enums for AST nodes, eliminating
+// the parallel-field ExprNode class. Tokens remain as a class because
+// all variants share the same (offset, len) shape.
 
 // ---------------------------------------------------------------
 // Token representation
@@ -89,41 +92,25 @@ fn lex(source: string): Vector<Token>
   return tokens
 
 // ---------------------------------------------------------------
-// AST arena node
+// AST node — payload enum, arena-indexed
 // ---------------------------------------------------------------
 
-enum NK:
-  IntLit
-  Binary
-  Unary
-
-class ExprNode:
-  kind: NK
-  op: TK       // operator kind for binary/unary; TK.Eof for literals
-  value: i64   // integer literal value; unused for binary/unary
-  left: i64    // arena index (-1 = none)
-  right: i64   // arena index (-1 = none)
-
-fn int_node(val: i64): ExprNode
-  return ExprNode(NK.IntLit, TK.Eof, val, to_i64(-1), to_i64(-1))
-
-fn binary_node(op: TK, left: i64, right: i64): ExprNode
-  return ExprNode(NK.Binary, op, to_i64(0), left, right)
-
-fn unary_node(op: TK, operand: i64): ExprNode
-  return ExprNode(NK.Unary, op, to_i64(0), operand, to_i64(-1))
+enum Expr:
+  IntLit(i64)
+  Binary(TK, i64, i64)
+  Unary(TK, i64)
 
 // ---------------------------------------------------------------
 // Parse result — bundles arena + node index + cursor position
 // ---------------------------------------------------------------
 
 class ParseResult:
-  arena: Vector<ExprNode>
+  arena: Vector<Expr>
   node: i64
   pos: i64
 
 // Error sentinel: node index -1 signals parse failure.
-fn parse_error(arena: Vector<ExprNode>, pos: i64): ParseResult
+fn parse_error(arena: Vector<Expr>, pos: i64): ParseResult
   return ParseResult(arena, to_i64(-1), pos)
 
 fn is_parse_ok(r: ParseResult): bool
@@ -159,7 +146,7 @@ fn token_text_to_i64(source: string, tok: Token): i64
 //   primary  → INT | '(' expr ')'
 // ---------------------------------------------------------------
 
-fn parse_primary(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>, pos: i64): ParseResult
+fn parse_primary(tokens: Vector<Token>, source: string, arena: Vector<Expr>, pos: i64): ParseResult
   let kind: TK = peek(tokens, pos)
 
   // Integer literal.
@@ -167,7 +154,7 @@ fn parse_primary(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>,
     let tok: Token = tokens.get(pos)
     let val: i64 = token_text_to_i64(source, tok)
     let idx: i64 = arena.length()
-    let new_arena: Vector<ExprNode> = arena.push(int_node(val))
+    let new_arena: Vector<Expr> = arena.push(Expr.IntLit(val))
     return ParseResult(new_arena, idx, pos + 1)
 
   // Parenthesized expression.
@@ -183,19 +170,19 @@ fn parse_primary(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>,
   print("error: expected integer or '('")
   return parse_error(arena, pos)
 
-fn parse_unary(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>, pos: i64): ParseResult
+fn parse_unary(tokens: Vector<Token>, source: string, arena: Vector<Expr>, pos: i64): ParseResult
   if peek(tokens, pos) == TK.Minus:
     let operand: ParseResult = parse_unary(tokens, source, arena, pos + 1)
     if is_parse_ok(operand) == false:
       return operand
     let idx: i64 = operand.arena.length()
-    let new_arena: Vector<ExprNode> = operand.arena.push(
-      unary_node(TK.Minus, operand.node))
+    let new_arena: Vector<Expr> = operand.arena.push(
+      Expr.Unary(TK.Minus, operand.node))
     return ParseResult(new_arena, idx, operand.pos)
 
   return parse_primary(tokens, source, arena, pos)
 
-fn parse_multiplicative(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>, pos: i64): ParseResult
+fn parse_multiplicative(tokens: Vector<Token>, source: string, arena: Vector<Expr>, pos: i64): ParseResult
   let left: ParseResult = parse_unary(tokens, source, arena, pos)
   if is_parse_ok(left) == false:
     return left
@@ -208,14 +195,14 @@ fn parse_multiplicative(tokens: Vector<Token>, source: string, arena: Vector<Exp
       if is_parse_ok(right) == false:
         return right
       let idx: i64 = right.arena.length()
-      let new_arena: Vector<ExprNode> = right.arena.push(
-        binary_node(op, result.node, right.node))
+      let new_arena: Vector<Expr> = right.arena.push(
+        Expr.Binary(op, result.node, right.node))
       result = ParseResult(new_arena, idx, right.pos)
     else:
       done = true
   return result
 
-fn parse_additive(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>, pos: i64): ParseResult
+fn parse_additive(tokens: Vector<Token>, source: string, arena: Vector<Expr>, pos: i64): ParseResult
   let left: ParseResult = parse_multiplicative(tokens, source, arena, pos)
   if is_parse_ok(left) == false:
     return left
@@ -228,18 +215,18 @@ fn parse_additive(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>
       if is_parse_ok(right) == false:
         return right
       let idx: i64 = right.arena.length()
-      let new_arena: Vector<ExprNode> = right.arena.push(
-        binary_node(op, result.node, right.node))
+      let new_arena: Vector<Expr> = right.arena.push(
+        Expr.Binary(op, result.node, right.node))
       result = ParseResult(new_arena, idx, right.pos)
     else:
       done = true
   return result
 
-fn parse_expr(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>, pos: i64): ParseResult
+fn parse_expr(tokens: Vector<Token>, source: string, arena: Vector<Expr>, pos: i64): ParseResult
   return parse_additive(tokens, source, arena, pos)
 
 fn parse(tokens: Vector<Token>, source: string): ParseResult
-  let arena = Vector<ExprNode>::new()
+  let arena = Vector<Expr>::new()
   let result: ParseResult = parse_expr(tokens, source, arena, to_i64(0))
   if is_parse_ok(result):
     if peek(tokens, result.pos) != TK.Eof:
@@ -248,21 +235,21 @@ fn parse(tokens: Vector<Token>, source: string): ParseResult
   return result
 
 // ---------------------------------------------------------------
-// Evaluator — walks the arena by index
+// Evaluator — walks the arena by index, destructuring via match
 // ---------------------------------------------------------------
 
-fn eval_node(arena: Vector<ExprNode>, idx: i64): i64
-  let node: ExprNode = arena.get(idx)
-  match node.kind:
-    NK.IntLit:
-      return node.value
-    NK.Unary:
-      let operand: i64 = eval_node(arena, node.left)
+fn eval_node(arena: Vector<Expr>, idx: i64): i64
+  let node: Expr = arena.get(idx)
+  match node:
+    Expr.IntLit(value):
+      return value
+    Expr.Unary(op, operand_idx):
+      let operand: i64 = eval_node(arena, operand_idx)
       return to_i64(0) - operand
-    NK.Binary:
-      let lval: i64 = eval_node(arena, node.left)
-      let rval: i64 = eval_node(arena, node.right)
-      match node.op:
+    Expr.Binary(op, left_idx, right_idx):
+      let lval: i64 = eval_node(arena, left_idx)
+      let rval: i64 = eval_node(arena, right_idx)
+      match op:
         TK.Plus:
           return lval + rval
         TK.Minus:
@@ -293,23 +280,23 @@ fn op_name(op: TK): string
       return "/"
   return "?"
 
-fn print_node(arena: Vector<ExprNode>, idx: i64, depth: i32): i32
-  let node: ExprNode = arena.get(idx)
+fn print_node(arena: Vector<Expr>, idx: i64, depth: i32): i32
+  let node: Expr = arena.get(idx)
   let indent: string = ""
   let d: i32 = 0
   while d < depth:
     indent = indent + "  "
     d = d + 1
-  match node.kind:
-    NK.IntLit:
-      print(indent + "INT " + i64_to_string(node.value))
-    NK.Unary:
+  match node:
+    Expr.IntLit(value):
+      print(indent + "INT " + i64_to_string(value))
+    Expr.Unary(op, operand_idx):
       print(indent + "NEG")
-      let unused: i32 = print_node(arena, node.left, depth + 1)
-    NK.Binary:
-      print(indent + "BIN " + op_name(node.op))
-      let unused1: i32 = print_node(arena, node.left, depth + 1)
-      let unused2: i32 = print_node(arena, node.right, depth + 1)
+      let unused: i32 = print_node(arena, operand_idx, depth + 1)
+    Expr.Binary(op, left_idx, right_idx):
+      print(indent + "BIN " + op_name(op))
+      let unused1: i32 = print_node(arena, left_idx, depth + 1)
+      let unused2: i32 = print_node(arena, right_idx, depth + 1)
   return 0
 
 // ---------------------------------------------------------------

@@ -426,91 +426,16 @@ File
                     IntLiteral 0
     ReturnStatement
       Identifier tokens
-  EnumDecl NK
+  EnumDecl Expr
     Variant IntLit
     Variant Binary
     Variant Unary
-  ClassDecl ExprNode
-    Field kind: NK
-    Field op: TK
-    Field value: i64
-    Field left: i64
-    Field right: i64
-  FunctionDecl int_node
-    Param val: i64
-    ReturnType: ExprNode
-    ReturnStatement
-      CallExpr
-        Callee
-          Identifier ExprNode
-        Args
-          FieldExpr .IntLit
-            Identifier NK
-          FieldExpr .Eof
-            Identifier TK
-          Identifier val
-          CallExpr
-            Callee
-              Identifier to_i64
-            Args
-              UnaryExpr -
-                IntLiteral 1
-          CallExpr
-            Callee
-              Identifier to_i64
-            Args
-              UnaryExpr -
-                IntLiteral 1
-  FunctionDecl binary_node
-    Param op: TK
-    Param left: i64
-    Param right: i64
-    ReturnType: ExprNode
-    ReturnStatement
-      CallExpr
-        Callee
-          Identifier ExprNode
-        Args
-          FieldExpr .Binary
-            Identifier NK
-          Identifier op
-          CallExpr
-            Callee
-              Identifier to_i64
-            Args
-              IntLiteral 0
-          Identifier left
-          Identifier right
-  FunctionDecl unary_node
-    Param op: TK
-    Param operand: i64
-    ReturnType: ExprNode
-    ReturnStatement
-      CallExpr
-        Callee
-          Identifier ExprNode
-        Args
-          FieldExpr .Unary
-            Identifier NK
-          Identifier op
-          CallExpr
-            Callee
-              Identifier to_i64
-            Args
-              IntLiteral 0
-          Identifier operand
-          CallExpr
-            Callee
-              Identifier to_i64
-            Args
-              UnaryExpr -
-                IntLiteral 1
   ClassDecl ParseResult
-    Field arena: Vector<ExprNode>
+    Field arena: Vector<Expr>
     Field node: i64
     Field pos: i64
   FunctionDecl parse_error
-    Param arena: Vector<ExprNode>
+    Param arena: Vector<Expr>
     Param pos: i64
     ReturnType: ParseResult
     ReturnStatement
@@ -619,7 +544,7 @@ File
   FunctionDecl parse_primary
     Param tokens: Vector<Token>
     Param source: string
-    Param arena: Vector<ExprNode>
+    Param arena: Vector<Expr>
     Param pos: i64
     ReturnType: ParseResult
     LetStatement kind: TK
@@ -655,7 +580,7 @@ File
             Callee
               FieldExpr .length
                 Identifier arena
-        LetStatement new_arena: Vector<ExprNode>
+        LetStatement new_arena: Vector<Expr>
           CallExpr
             Callee
               FieldExpr .push
@@ -663,7 +588,8 @@ File
             Args
               CallExpr
                 Callee
-                  Identifier int_node
+                  FieldExpr .IntLit
+                    Identifier Expr
                 Args
                   Identifier val
         ReturnStatement
@@ -763,7 +689,7 @@ File
   FunctionDecl parse_unary
     Param tokens: Vector<Token>
     Param source: string
-    Param arena: Vector<ExprNode>
+    Param arena: Vector<Expr>
     Param pos: i64
     ReturnType: ParseResult
     IfStatement
@@ -807,7 +733,7 @@ File
               FieldExpr .length
                 FieldExpr .arena
                   Identifier operand
-        LetStatement new_arena: Vector<ExprNode>
+        LetStatement new_arena: Vector<Expr>
           CallExpr
             Callee
               FieldExpr .push
@@ -816,7 +742,8 @@ File
             Args
               CallExpr
                 Callee
-                  Identifier unary_node
+                  FieldExpr .Unary
+                    Identifier Expr
                 Args
                   FieldExpr .Minus
                     Identifier TK
@@ -843,7 +770,7 @@ File
   FunctionDecl parse_multiplicative
     Param tokens: Vector<Token>
     Param source: string
-    Param arena: Vector<ExprNode>
+    Param arena: Vector<Expr>
     Param pos: i64
     ReturnType: ParseResult
     LetStatement left: ParseResult
@@ -927,7 +854,7 @@ File
                 FieldExpr .length
                   FieldExpr .arena
                     Identifier right
-          LetStatement new_arena: Vector<ExprNode>
+          LetStatement new_arena: Vector<Expr>
             CallExpr
               Callee
                 FieldExpr .push
@@ -936,7 +863,8 @@ File
               Args
                 CallExpr
                   Callee
-                    Identifier binary_node
+                    FieldExpr .Binary
+                      Identifier Expr
                   Args
                     Identifier op
                     FieldExpr .node
@@ -966,7 +894,7 @@ File
   FunctionDecl parse_additive
     Param tokens: Vector<Token>
     Param source: string
-    Param arena: Vector<ExprNode>
+    Param arena: Vector<Expr>
     Param pos: i64
     ReturnType: ParseResult
     LetStatement left: ParseResult
@@ -1050,7 +978,7 @@ File
                 FieldExpr .length
                   FieldExpr .arena
                     Identifier right
-          LetStatement new_arena: Vector<ExprNode>
+          LetStatement new_arena: Vector<Expr>
             CallExpr
               Callee
                 FieldExpr .push
@@ -1059,7 +987,8 @@ File
               Args
                 CallExpr
                   Callee
-                    Identifier binary_node
+                    FieldExpr .Binary
+                      Identifier Expr
                   Args
                     Identifier op
                     FieldExpr .node
@@ -1089,7 +1018,7 @@ File
   FunctionDecl parse_expr
     Param tokens: Vector<Token>
     Param source: string
-    Param arena: Vector<ExprNode>
+    Param arena: Vector<Expr>
     Param pos: i64
     ReturnType: ParseResult
     ReturnStatement
@@ -1110,7 +1039,7 @@ File
         Callee
           Identifier Vector.new
         TypeArgs
-          ExprNode
+          Expr
     LetStatement result: ParseResult
       CallExpr
         Callee
@@ -1163,10 +1092,10 @@ File
     ReturnStatement
       Identifier result
   FunctionDecl eval_node
-    Param arena: Vector<ExprNode>
+    Param arena: Vector<Expr>
     Param idx: i64
     ReturnType: i64
-    LetStatement node: ExprNode
+    LetStatement node: Expr
       CallExpr
         Callee
           FieldExpr .get
@@ -1175,27 +1104,24 @@ File
           Identifier idx
     MatchStatement
       Scrutinee
-        FieldExpr .kind
-          Identifier node
+        Identifier node
       Arm
         Pattern
           FieldExpr .IntLit
-            Identifier NK
+            Identifier Expr
         ReturnStatement
-          FieldExpr .value
-            Identifier node
+          Identifier value
       Arm
         Pattern
           FieldExpr .Unary
-            Identifier NK
+            Identifier Expr
         LetStatement operand: i64
           CallExpr
             Callee
               Identifier eval_node
             Args
               Identifier arena
-              FieldExpr .left
-                Identifier node
+              Identifier operand_idx
         ReturnStatement
           BinaryExpr -
             CallExpr
@@ -1207,27 +1133,24 @@ File
       Arm
         Pattern
           FieldExpr .Binary
-            Identifier NK
+            Identifier Expr
         LetStatement lval: i64
           CallExpr
             Callee
               Identifier eval_node
             Args
               Identifier arena
-              FieldExpr .left
-                Identifier node
+              Identifier left_idx
         LetStatement rval: i64
           CallExpr
             Callee
               Identifier eval_node
             Args
               Identifier arena
-              FieldExpr .right
-                Identifier node
+              Identifier right_idx
         MatchStatement
           Scrutinee
-            FieldExpr .op
-              Identifier node
+            Identifier op
           Arm
             Pattern
               FieldExpr .Plus
@@ -1327,11 +1250,11 @@ File
     ReturnStatement
       StringLiteral "?"
   FunctionDecl print_node
-    Param arena: Vector<ExprNode>
+    Param arena: Vector<Expr>
     Param idx: i64
     Param depth: i32
     ReturnType: i32
-    LetStatement node: ExprNode
+    LetStatement node: Expr
       CallExpr
         Callee
           FieldExpr .get
@@ -1363,12 +1286,11 @@ File
             IntLiteral 1
     MatchStatement
       Scrutinee
-        FieldExpr .kind
-          Identifier node
+        Identifier node
       Arm
         Pattern
           FieldExpr .IntLit
-            Identifier NK
+            Identifier Expr
         ExpressionStatement
           CallExpr
             Callee
@@ -1382,12 +1304,11 @@ File
                   Callee
                     Identifier i64_to_string
                   Args
-                    FieldExpr .value
-                      Identifier node
+                    Identifier value
       Arm
         Pattern
           FieldExpr .Unary
-            Identifier NK
+            Identifier Expr
         ExpressionStatement
           CallExpr
             Callee
@@ -1402,15 +1323,14 @@ File
               Identifier print_node
             Args
               Identifier arena
-              FieldExpr .left
-                Identifier node
+              Identifier operand_idx
               BinaryExpr +
                 Identifier depth
                 IntLiteral 1
       Arm
         Pattern
           FieldExpr .Binary
-            Identifier NK
+            Identifier Expr
         ExpressionStatement
           CallExpr
             Callee
@@ -1424,16 +1344,14 @@ File
                   Callee
                     Identifier op_name
                   Args
-                    FieldExpr .op
-                      Identifier node
+                    Identifier op
         LetStatement unused1: i32
           CallExpr
             Callee
               Identifier print_node
             Args
               Identifier arena
-              FieldExpr .left
-                Identifier node
+              Identifier left_idx
               BinaryExpr +
                 Identifier depth
                 IntLiteral 1
@@ -1443,8 +1361,7 @@ File
               Identifier print_node
             Args
               Identifier arena
-              FieldExpr .right
-                Identifier node
+              Identifier right_idx
               BinaryExpr +
                 Identifier depth
                 IntLiteral 1
