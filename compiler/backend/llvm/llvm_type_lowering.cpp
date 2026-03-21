@@ -72,11 +72,9 @@ auto LlvmTypeLowering::lower(const Type* type) -> llvm::Type* {
     return nullptr;
   }
 
-  case TypeKind::Enum: {
-    const auto* e = static_cast<const TypeEnum*>(type);
-    error_ = "enum lowering not yet implemented: " + std::string(e->name());
-    return nullptr;
-  }
+  case TypeKind::Enum:
+    // Payload-free enums lower to i32 discriminant tag.
+    return llvm::Type::getInt32Ty(ctx_);
 
   case TypeKind::Generator:
     // Generator<T> is a fat pair: { ptr frame, ptr resume_fn }.

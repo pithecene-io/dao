@@ -53,6 +53,8 @@ auto lexical_category(TokenKind kind) -> std::string_view {
     return "keyword.fn";
   case TokenKind::KwClass:
     return "keyword.type";
+  case TokenKind::KwEnum:
+    return "keyword.type";
   case TokenKind::KwType:
     return "keyword.type";
   case TokenKind::KwLet:
@@ -249,6 +251,9 @@ private:
     case NodeKind::ClassDecl:
       visit_class(decl);
       break;
+    case NodeKind::EnumDecl:
+      visit_enum(decl);
+      break;
     case NodeKind::AliasDecl:
       visit_alias(decl);
       break;
@@ -292,6 +297,14 @@ private:
       if (field->type != nullptr) {
         visit_type(*field->type);
       }
+    }
+  }
+
+  void visit_enum(const Decl& decl) {
+    const auto& en = decl.as<EnumDeclNode>();
+    classify(en.name_span, "decl.type");
+    for (const auto& variant : en.variants) {
+      classify(variant.name_span, "decl.field");
     }
   }
 

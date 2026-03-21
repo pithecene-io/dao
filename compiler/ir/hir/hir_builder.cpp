@@ -404,6 +404,16 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
 
   case NodeKind::FieldExpr: {
     const auto& field = expr->as<FieldExpr>();
+    // Enum variant access: lower to integer constant with enum type.
+    if (type != nullptr && type->kind() == TypeKind::Enum) {
+      const auto* enum_type = static_cast<const TypeEnum*>(type);
+      for (size_t i = 0; i < enum_type->variants().size(); ++i) {
+        if (enum_type->variants()[i].name == field.field) {
+          return ctx_.alloc<HirExpr>(span, type,
+                                      HirIntLiteral{static_cast<int64_t>(i)});
+        }
+      }
+    }
     auto* object = lower_expr(field.object);
     return ctx_.alloc<HirExpr>(span, type,
                                 HirField{object, field.field});

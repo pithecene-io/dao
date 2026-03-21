@@ -10,6 +10,7 @@ auto Decl::kind() const -> NodeKind {
   return std::visit(overloaded{
       [](const FunctionDecl&) { return NodeKind::FunctionDecl; },
       [](const ClassDecl&) { return NodeKind::ClassDecl; },
+      [](const EnumDeclNode&) { return NodeKind::EnumDecl; },
       [](const AliasDecl&) { return NodeKind::AliasDecl; },
       [](const ConceptDecl&) { return NodeKind::ConceptDecl; },
       [](const ExtendDecl&) { return NodeKind::ExtendDecl; },
@@ -77,6 +78,8 @@ auto node_kind_name(NodeKind kind) -> const char* {
     return "FunctionDecl";
   case NodeKind::ClassDecl:
     return "ClassDecl";
+  case NodeKind::EnumDecl:
+    return "EnumDecl";
   case NodeKind::AliasDecl:
     return "AliasDecl";
   case NodeKind::ConceptDecl:
