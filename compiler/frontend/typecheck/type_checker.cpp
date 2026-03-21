@@ -462,14 +462,15 @@ void TypeChecker::register_declarations(const FileNode& file) {
       const auto* sym = decl_it->second;
 
       // Build enum type from variant specifiers, resolving payload types.
+      // Unresolved types are kept as nullptr to preserve arity — the
+      // primary diagnostic comes from resolve_type_node; dropping the
+      // slot would silently mutate the variant shape and produce
+      // misleading secondary errors.
       std::vector<EnumVariant> variants;
       for (const auto& variant : en.variants) {
         std::vector<const Type*> payload_types;
         for (const auto* type_node : variant.payload_types) {
-          const auto* resolved = resolve_type_node(type_node);
-          if (resolved != nullptr) {
-            payload_types.push_back(resolved);
-          }
+          payload_types.push_back(resolve_type_node(type_node));
         }
         variants.push_back({variant.name, std::move(payload_types)});
       }
