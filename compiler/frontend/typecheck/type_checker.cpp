@@ -1330,10 +1330,15 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
     break;
   }
 
-  // Coerce generic enum types to the expected instantiated type when
-  // the expected type is an enum with the same decl_id. This handles
-  // cases like `let x: Option<i64> = Option.None` where the variant
-  // expression has the uninstantiated generic type.
+  // Coerce uninstantiated generic enum types to the expected instantiated
+  // type when the expected type is an enum with the same decl_id. This
+  // handles cases like `let x: Option<i64> = Option.None` where the
+  // variant expression has the uninstantiated generic type.
+  //
+  // Only fires when the result still contains unresolved generic params.
+  // If the result is already a concrete instantiation (e.g. Option<string>
+  // inferred from Option.Some("oops")), it is NOT overwritten — the normal
+  // is_assignable check catches mismatches.
   if (result != nullptr && expected != nullptr &&
       result->kind() == TypeKind::Enum &&
       expected->kind() == TypeKind::Enum) {
@@ -1341,9 +1346,44 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
     const auto* expected_enum = static_cast<const TypeEnum*>(expected);
     if (result_enum->decl_id() == expected_enum->decl_id() &&
         result_enum != expected_enum) {
-      result = expected;
+      // Check if the result enum has any unresolved generic params.
+      bool has_generic = false;
+      for (const auto& variant : result_enum->variants()) {
+        for (const auto* pt : variant.payload_types) {
+          if (pt != nullptr && pt->kind() == TypeKind::GenericParam) {
+            has_generic = true;
+          }
+        }
+      }
+      if (has_generic) {
+        result = expected;
+      }
     }
   }
+
+  // Reject generic enum values that still have unresolved type params
+  // and no expected type to coerce to. Only check value-producing
+  // expressions (FieldExpr for variant access, CallExpr for construction),
+  // not type-name identifiers.
+  if (result != nullptr && result->kind() == TypeKind::Enum &&
+      !suppress_payload_check_ &&
+      (expr->kind() == NodeKind::FieldExpr ||
+       expr->kind() == NodeKind::CallExpr)) {
+    const auto* re = static_cast<const TypeEnum*>(result);
+    for (const auto& variant : re->variants()) {
+      for (const auto* pt : variant.payload_types) {
+        if (pt != nullptr && pt->kind() == TypeKind::GenericParam) {
+          error(expr->span,
+                "cannot infer type argument(s) for generic enum '" +
+                    std::string(re->name()) +
+                    "'; provide an explicit type annotation");
+          result = nullptr;
+          goto done_generic_check; // NOLINT
+        }
+      }
+    }
+  }
+  done_generic_check:
 
   if (result != nullptr) {
     typed_.set_expr_type(expr, result);
