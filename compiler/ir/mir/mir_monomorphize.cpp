@@ -598,7 +598,7 @@ auto monomorphize(MirModule& module, MirContext& ctx,
   // Phase 1: identify generic functions by symbol.
   std::unordered_map<const Symbol*, MirFunction*> generic_fns;
   for (auto* fn : module.functions) {
-    if (is_generic_function(fn)) {
+    if (fn->symbol != nullptr && is_generic_function(fn)) {
       generic_fns[fn->symbol] = fn;
     }
   }
@@ -611,13 +611,17 @@ auto monomorphize(MirModule& module, MirContext& ctx,
   std::unordered_map<SpecKey, MirFunction*, SpecKeyHash> spec_cache;
 
   // Phase 2+3+4: iterate until no new specializations are produced.
+  // Use index-based iteration because specialize_call_site() may
+  // push_back new functions, invalidating range-for iterators.
   bool changed = true;
   while (changed) {
     changed = false;
 
-    for (auto* fn : module.functions) {
+    const size_t fn_count = module.functions.size();
+    for (size_t fn_idx = 0; fn_idx < fn_count; ++fn_idx) {
+      auto* fn = module.functions[fn_idx];
       // Skip generic functions themselves — they'll be removed later.
-      if (generic_fns.count(fn->symbol) != 0) {
+      if (fn->symbol != nullptr && generic_fns.count(fn->symbol) != 0) {
         continue;
       }
 
@@ -645,7 +649,7 @@ auto monomorphize(MirModule& module, MirContext& ctx,
 
   // Phase 5: remove generic originals.
   std::erase_if(module.functions, [&](const MirFunction* fn) {
-    return generic_fns.count(fn->symbol) != 0;
+    return fn->symbol != nullptr && generic_fns.count(fn->symbol) != 0;
   });
 
   return result;
