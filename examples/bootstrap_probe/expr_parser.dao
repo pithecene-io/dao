@@ -4,35 +4,36 @@
 // flat Vector<ExprNode> arena with index-based references, then
 // evaluates the tree by walking the arena.
 //
-// Tests: parser-shaped control flow over collected token data,
-// arena-indexed structured output, recursive descent with
-// precedence, peek/advance/expect helpers, multi-phase pipeline
-// (lex → parse → eval), and composite return types containing
-// Vector<T> fields.
+// Tests: enum-based kind tagging, match dispatch, else-if chains,
+// parser-shaped control flow over collected token data, arena-indexed
+// structured output, recursive descent with precedence, multi-phase
+// pipeline (lex → parse → eval), and composite return types
+// containing Vector<T> fields.
 //
 // Scope: integer literals, + - * /, unary minus, parentheses,
 // precedence and associativity. Nothing more.
 
 // ---------------------------------------------------------------
-// Token representation (minimal arithmetic subset)
+// Token representation
 // ---------------------------------------------------------------
 
-fn TK_INT(): i32    -> 1
-fn TK_PLUS(): i32   -> 2
-fn TK_MINUS(): i32  -> 3
-fn TK_STAR(): i32   -> 4
-fn TK_SLASH(): i32  -> 5
-fn TK_LPAREN(): i32 -> 6
-fn TK_RPAREN(): i32 -> 7
-fn TK_EOF(): i32    -> 8
-fn TK_ERROR(): i32  -> 9
+enum TK:
+  Int
+  Plus
+  Minus
+  Star
+  Slash
+  LParen
+  RParen
+  Eof
+  Error
 
 class Token:
-  kind: i32
+  kind: TK
   offset: i64
   len: i64
 
-fn make_token(k: i32, off: i64, l: i64): Token
+fn make_token(k: TK, off: i64, l: i64): Token
   return Token(k, off, l)
 
 // ---------------------------------------------------------------
@@ -53,65 +54,64 @@ fn lex(source: string): Vector<Token>
     let ch: i32 = char_at(source, pos)
     if is_whitespace(ch):
       pos = pos + 1
-    else:
-      if is_digit(ch):
-        let end: i64 = pos + 1
-        while end < slen:
-          if is_digit(char_at(source, end)):
-            end = end + 1
-          else:
-            break
-        tokens = tokens.push(make_token(TK_INT(), pos, end - pos))
-        pos = end
-      else:
-        if ch == 43:
-          tokens = tokens.push(make_token(TK_PLUS(), pos, to_i64(1)))
-          pos = pos + 1
+    else if is_digit(ch):
+      let end: i64 = pos + 1
+      while end < slen:
+        if is_digit(char_at(source, end)):
+          end = end + 1
         else:
-          if ch == 45:
-            tokens = tokens.push(make_token(TK_MINUS(), pos, to_i64(1)))
-            pos = pos + 1
-          else:
-            if ch == 42:
-              tokens = tokens.push(make_token(TK_STAR(), pos, to_i64(1)))
-              pos = pos + 1
-            else:
-              if ch == 47:
-                tokens = tokens.push(make_token(TK_SLASH(), pos, to_i64(1)))
-                pos = pos + 1
-              else:
-                if ch == 40:
-                  tokens = tokens.push(make_token(TK_LPAREN(), pos, to_i64(1)))
-                  pos = pos + 1
-                else:
-                  if ch == 41:
-                    tokens = tokens.push(make_token(TK_RPAREN(), pos, to_i64(1)))
-                    pos = pos + 1
-                  else:
-                    tokens = tokens.push(make_token(TK_ERROR(), pos, to_i64(1)))
-                    pos = pos + 1
+          break
+      tokens = tokens.push(make_token(TK.Int, pos, end - pos))
+      pos = end
+    else if ch == 43:
+      tokens = tokens.push(make_token(TK.Plus, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 45:
+      tokens = tokens.push(make_token(TK.Minus, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 42:
+      tokens = tokens.push(make_token(TK.Star, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 47:
+      tokens = tokens.push(make_token(TK.Slash, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 40:
+      tokens = tokens.push(make_token(TK.LParen, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 41:
+      tokens = tokens.push(make_token(TK.RParen, pos, to_i64(1)))
+      pos = pos + 1
+    else:
+      tokens = tokens.push(make_token(TK.Error, pos, to_i64(1)))
+      pos = pos + 1
   // Append EOF sentinel.
-  tokens = tokens.push(make_token(TK_EOF(), slen, to_i64(0)))
+  tokens = tokens.push(make_token(TK.Eof, slen, to_i64(0)))
   return tokens
 
 // ---------------------------------------------------------------
 // AST arena node
 // ---------------------------------------------------------------
 
-fn NK_INT_LIT(): i32  -> 1
-fn NK_BINARY(): i32   -> 2
-fn NK_UNARY(): i32    -> 3
+enum NK:
+  IntLit
+  Binary
+  Unary
 
 class ExprNode:
-  kind: i32
-  value: i64     // int literal value, or operator token kind
-  left: i64      // arena index (-1 = none)
-  right: i64     // arena index (-1 = none)
+  kind: NK
+  op: TK       // operator kind for binary/unary; TK.Eof for literals
+  value: i64   // integer literal value; unused for binary/unary
+  left: i64    // arena index (-1 = none)
+  right: i64   // arena index (-1 = none)
 
-fn make_node(k: i32, v: i64, l: i64, r: i64): ExprNode
-  return ExprNode(k, v, l, r)
+fn int_node(val: i64): ExprNode
+  return ExprNode(NK.IntLit, TK.Eof, val, to_i64(-1), to_i64(-1))
 
-fn no_child(): i64 -> to_i64(-1)
+fn binary_node(op: TK, left: i64, right: i64): ExprNode
+  return ExprNode(NK.Binary, op, to_i64(0), left, right)
+
+fn unary_node(op: TK, operand: i64): ExprNode
+  return ExprNode(NK.Unary, op, to_i64(0), operand, to_i64(-1))
 
 // ---------------------------------------------------------------
 // Parse result — bundles arena + node index + cursor position
@@ -133,14 +133,13 @@ fn is_parse_ok(r: ParseResult): bool
 // Parser helpers
 // ---------------------------------------------------------------
 
-fn peek(tokens: Vector<Token>, pos: i64): i32
+fn peek(tokens: Vector<Token>, pos: i64): TK
   if pos >= tokens.length():
-    return TK_EOF()
+    return TK.Eof
   let tok: Token = tokens.get(pos)
   return tok.kind
 
 fn token_text_to_i64(source: string, tok: Token): i64
-  // Parse integer literal from source span.
   let result: i64 = 0
   let i: i64 = 0
   while i < tok.len:
@@ -161,23 +160,22 @@ fn token_text_to_i64(source: string, tok: Token): i64
 // ---------------------------------------------------------------
 
 fn parse_primary(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>, pos: i64): ParseResult
-  let kind: i32 = peek(tokens, pos)
+  let kind: TK = peek(tokens, pos)
 
   // Integer literal.
-  if kind == TK_INT():
+  if kind == TK.Int:
     let tok: Token = tokens.get(pos)
     let val: i64 = token_text_to_i64(source, tok)
     let idx: i64 = arena.length()
-    let new_arena: Vector<ExprNode> = arena.push(make_node(NK_INT_LIT(), val, no_child(), no_child()))
+    let new_arena: Vector<ExprNode> = arena.push(int_node(val))
     return ParseResult(new_arena, idx, pos + 1)
 
   // Parenthesized expression.
-  if kind == TK_LPAREN():
+  if kind == TK.LParen:
     let inner: ParseResult = parse_expr(tokens, source, arena, pos + 1)
     if is_parse_ok(inner) == false:
       return inner
-    // Expect closing paren.
-    if peek(tokens, inner.pos) != TK_RPAREN():
+    if peek(tokens, inner.pos) != TK.RParen:
       print("error: expected ')'")
       return parse_error(inner.arena, inner.pos)
     return ParseResult(inner.arena, inner.node, inner.pos + 1)
@@ -186,14 +184,13 @@ fn parse_primary(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>,
   return parse_error(arena, pos)
 
 fn parse_unary(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>, pos: i64): ParseResult
-  // Unary minus.
-  if peek(tokens, pos) == TK_MINUS():
+  if peek(tokens, pos) == TK.Minus:
     let operand: ParseResult = parse_unary(tokens, source, arena, pos + 1)
     if is_parse_ok(operand) == false:
       return operand
     let idx: i64 = operand.arena.length()
     let new_arena: Vector<ExprNode> = operand.arena.push(
-      make_node(NK_UNARY(), to_i64(TK_MINUS()), operand.node, no_child()))
+      unary_node(TK.Minus, operand.node))
     return ParseResult(new_arena, idx, operand.pos)
 
   return parse_primary(tokens, source, arena, pos)
@@ -205,14 +202,14 @@ fn parse_multiplicative(tokens: Vector<Token>, source: string, arena: Vector<Exp
   let result: ParseResult = left
   let done: bool = false
   while done == false:
-    let op: i32 = peek(tokens, result.pos)
-    if op == TK_STAR() or op == TK_SLASH():
+    let op: TK = peek(tokens, result.pos)
+    if op == TK.Star or op == TK.Slash:
       let right: ParseResult = parse_unary(tokens, source, result.arena, result.pos + 1)
       if is_parse_ok(right) == false:
         return right
       let idx: i64 = right.arena.length()
       let new_arena: Vector<ExprNode> = right.arena.push(
-        make_node(NK_BINARY(), to_i64(op), result.node, right.node))
+        binary_node(op, result.node, right.node))
       result = ParseResult(new_arena, idx, right.pos)
     else:
       done = true
@@ -225,14 +222,14 @@ fn parse_additive(tokens: Vector<Token>, source: string, arena: Vector<ExprNode>
   let result: ParseResult = left
   let done: bool = false
   while done == false:
-    let op: i32 = peek(tokens, result.pos)
-    if op == TK_PLUS() or op == TK_MINUS():
+    let op: TK = peek(tokens, result.pos)
+    if op == TK.Plus or op == TK.Minus:
       let right: ParseResult = parse_multiplicative(tokens, source, result.arena, result.pos + 1)
       if is_parse_ok(right) == false:
         return right
       let idx: i64 = right.arena.length()
       let new_arena: Vector<ExprNode> = right.arena.push(
-        make_node(NK_BINARY(), to_i64(op), result.node, right.node))
+        binary_node(op, result.node, right.node))
       result = ParseResult(new_arena, idx, right.pos)
     else:
       done = true
@@ -245,8 +242,7 @@ fn parse(tokens: Vector<Token>, source: string): ParseResult
   let arena = Vector<ExprNode>::new()
   let result: ParseResult = parse_expr(tokens, source, arena, to_i64(0))
   if is_parse_ok(result):
-    // Verify we consumed all tokens (except EOF).
-    if peek(tokens, result.pos) != TK_EOF():
+    if peek(tokens, result.pos) != TK.Eof:
       print("error: unexpected token after expression")
       return parse_error(result.arena, result.pos)
   return result
@@ -257,26 +253,27 @@ fn parse(tokens: Vector<Token>, source: string): ParseResult
 
 fn eval_node(arena: Vector<ExprNode>, idx: i64): i64
   let node: ExprNode = arena.get(idx)
-  if node.kind == NK_INT_LIT():
-    return node.value
-  if node.kind == NK_UNARY():
-    let operand: i64 = eval_node(arena, node.left)
-    return to_i64(0) - operand
-  if node.kind == NK_BINARY():
-    let lval: i64 = eval_node(arena, node.left)
-    let rval: i64 = eval_node(arena, node.right)
-    let op: i32 = i64_to_i32(node.value)
-    if op == TK_PLUS():
-      return lval + rval
-    if op == TK_MINUS():
-      return lval - rval
-    if op == TK_STAR():
-      return lval * rval
-    if op == TK_SLASH():
-      if rval != to_i64(0):
-        return lval / rval
-      print("error: division by zero")
-      return to_i64(0)
+  match node.kind:
+    NK.IntLit:
+      return node.value
+    NK.Unary:
+      let operand: i64 = eval_node(arena, node.left)
+      return to_i64(0) - operand
+    NK.Binary:
+      let lval: i64 = eval_node(arena, node.left)
+      let rval: i64 = eval_node(arena, node.right)
+      match node.op:
+        TK.Plus:
+          return lval + rval
+        TK.Minus:
+          return lval - rval
+        TK.Star:
+          return lval * rval
+        TK.Slash:
+          if rval != to_i64(0):
+            return lval / rval
+          print("error: division by zero")
+          return to_i64(0)
   print("error: unknown node kind")
   return to_i64(0)
 
@@ -284,15 +281,16 @@ fn eval_node(arena: Vector<ExprNode>, idx: i64): i64
 // Arena printer — dump structure for debugging
 // ---------------------------------------------------------------
 
-fn op_name(op: i32): string
-  if op == TK_PLUS():
-    return "+"
-  if op == TK_MINUS():
-    return "-"
-  if op == TK_STAR():
-    return "*"
-  if op == TK_SLASH():
-    return "/"
+fn op_name(op: TK): string
+  match op:
+    TK.Plus:
+      return "+"
+    TK.Minus:
+      return "-"
+    TK.Star:
+      return "*"
+    TK.Slash:
+      return "/"
   return "?"
 
 fn print_node(arena: Vector<ExprNode>, idx: i64, depth: i32): i32
@@ -302,15 +300,16 @@ fn print_node(arena: Vector<ExprNode>, idx: i64, depth: i32): i32
   while d < depth:
     indent = indent + "  "
     d = d + 1
-  if node.kind == NK_INT_LIT():
-    print(indent + "INT " + i64_to_string(node.value))
-  if node.kind == NK_UNARY():
-    print(indent + "NEG")
-    let unused: i32 = print_node(arena, node.left, depth + 1)
-  if node.kind == NK_BINARY():
-    print(indent + "BIN " + op_name(i64_to_i32(node.value)))
-    let unused1: i32 = print_node(arena, node.left, depth + 1)
-    let unused2: i32 = print_node(arena, node.right, depth + 1)
+  match node.kind:
+    NK.IntLit:
+      print(indent + "INT " + i64_to_string(node.value))
+    NK.Unary:
+      print(indent + "NEG")
+      let unused: i32 = print_node(arena, node.left, depth + 1)
+    NK.Binary:
+      print(indent + "BIN " + op_name(node.op))
+      let unused1: i32 = print_node(arena, node.left, depth + 1)
+      let unused2: i32 = print_node(arena, node.right, depth + 1)
   return 0
 
 // ---------------------------------------------------------------
@@ -339,9 +338,9 @@ fn main(): i32
   print("=== expr_parser: lex -> parse -> eval ===")
   print("")
 
-  // --- Basic cases ---
   let pass_count: i32 = 0
 
+  // --- Basic cases ---
   if test_expr("literal", "42", to_i64(42)):
     pass_count = pass_count + 1
   if test_expr("add", "1 + 2", to_i64(3)):
