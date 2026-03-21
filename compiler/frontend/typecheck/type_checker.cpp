@@ -453,6 +453,26 @@ void TypeChecker::register_declarations(const FileNode& file) {
       break;
     }
 
+    case NodeKind::EnumDecl: {
+      const auto& en = decl->as<EnumDeclNode>();
+      auto decl_it = decl_symbols_.find(en.name_span.offset);
+      if (decl_it == decl_symbols_.end()) {
+        break;
+      }
+      const auto* sym = decl_it->second;
+
+      // Build enum type from variant specifiers.
+      std::vector<EnumVariant> variants;
+      for (const auto& variant : en.variants) {
+        variants.push_back({variant.name, {}});
+      }
+      const auto* enum_type =
+          types_.make_enum(sym, en.name, std::move(variants));
+      symbol_types_[sym] = enum_type;
+      typed_.set_decl_type(decl, enum_type);
+      break;
+    }
+
     case NodeKind::ExtendDecl: {
       // Register extend methods as typed functions so HIR lowering
       // can find their type info via decl_type().
@@ -1824,6 +1844,20 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
         return f.type;
       }
     }
+  }
+
+  // Enum variant access: EnumName.VariantName → the enum type.
+  if (obj_type->kind() == TypeKind::Enum) {
+    const auto* en = static_cast<const TypeEnum*>(obj_type);
+    for (const auto& variant : en->variants()) {
+      if (variant.name == field.field) {
+        return obj_type;
+      }
+    }
+    error(field.field_span,
+          "'" + std::string(field.field) + "' is not a variant of '" +
+              std::string(en->name()) + "'");
+    return nullptr;
   }
 
   // Try method lookup on any type (struct conformances + extend decls).

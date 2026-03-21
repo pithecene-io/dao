@@ -17,6 +17,7 @@ enum class TokenKind : std::uint8_t {
   KwExtern,
   KwFn,
   KwClass,
+  KwEnum,
   KwType,
   KwLet,
   KwIf,

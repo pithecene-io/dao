@@ -68,6 +68,7 @@ private:
     std::visit(overloaded{
         [&](const FunctionDecl& fn) { print_function_decl(fn); },
         [&](const ClassDecl& cls) { print_class_decl(cls); },
+        [&](const EnumDeclNode& en) { print_enum_decl(en); },
         [&](const AliasDecl& alias) { print_alias_decl(alias); },
         [&](const ConceptDecl& concept_) { print_concept_decl(concept_); },
         [&](const ExtendDecl& ext) { print_extend_decl(ext); },
@@ -167,6 +168,16 @@ private:
     for (const auto& deny : node.denials) {
       indent();
       out_ << "Deny " << deny.concept_name << "\n";
+    }
+  }
+
+  void print_enum_decl(const EnumDeclNode& node) {
+    indent();
+    out_ << "EnumDecl " << node.name << "\n";
+    Scope scope(depth_);
+    for (const auto& variant : node.variants) {
+      indent();
+      out_ << "Variant " << variant.name << "\n";
     }
   }
 

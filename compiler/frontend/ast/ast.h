@@ -47,6 +47,7 @@ enum class NodeKind : std::uint8_t {
   // Declarations
   FunctionDecl,
   ClassDecl,
+  EnumDecl,
   AliasDecl,
   ConceptDecl,
   ExtendDecl,
@@ -223,6 +224,17 @@ struct ClassDecl {
   std::vector<DenySpec> denials;
 };
 
+struct EnumVariantSpec {
+  std::string_view name;
+  Span name_span;
+};
+
+struct EnumDeclNode {
+  std::string_view name;
+  Span name_span;
+  std::vector<EnumVariantSpec> variants;
+};
+
 struct AliasDecl {
   std::string_view name;
   Span name_span;
@@ -251,8 +263,8 @@ struct ErrorStmtNode {};
 struct ErrorExprNode {};
 
 using DeclPayload =
-    std::variant<FunctionDecl, ClassDecl, AliasDecl, ConceptDecl, ExtendDecl,
-                 ErrorDeclNode>;
+    std::variant<FunctionDecl, ClassDecl, EnumDeclNode, AliasDecl, ConceptDecl,
+                 ExtendDecl, ErrorDeclNode>;
 
 // ---------------------------------------------------------------------------
 // Statement payloads

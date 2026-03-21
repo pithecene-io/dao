@@ -172,6 +172,13 @@ private:
       kind = SymbolKind::Type;
       break;
     }
+    case NodeKind::EnumDecl: {
+      const auto& en = decl.as<EnumDeclNode>();
+      name = en.name;
+      name_span = en.name_span;
+      kind = SymbolKind::Type;
+      break;
+    }
     case NodeKind::AliasDecl: {
       const auto& alias = decl.as<AliasDecl>();
       name = alias.name;
@@ -325,6 +332,10 @@ private:
       break;
     case NodeKind::ClassDecl:
       resolve_class(decl, scope);
+      break;
+    case NodeKind::EnumDecl:
+      // Enum variants are resolved through qualified access (Enum.Variant),
+      // not through body resolution. Nothing to resolve here.
       break;
     case NodeKind::AliasDecl:
       resolve_alias(decl, scope);

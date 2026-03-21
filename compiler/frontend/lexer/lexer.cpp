@@ -14,6 +14,8 @@ auto token_kind_name(TokenKind kind) -> const char* {
     return "KwFn";
   case TokenKind::KwClass:
     return "KwClass";
+  case TokenKind::KwEnum:
+    return "KwEnum";
   case TokenKind::KwType:
     return "KwType";
   case TokenKind::KwLet:
@@ -532,6 +534,9 @@ private:
     }
     if (word == "class") {
       return TokenKind::KwClass;
+    }
+    if (word == "enum") {
+      return TokenKind::KwEnum;
     }
     if (word == "type") {
       return TokenKind::KwType;

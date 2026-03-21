@@ -208,6 +208,8 @@ private:
       return parse_function_decl(/*is_extern=*/false);
     case TokenKind::KwClass:
       return parse_class_decl();
+    case TokenKind::KwEnum:
+      return parse_enum_decl();
     case TokenKind::KwType:
       return parse_alias_decl();
     case TokenKind::KwConcept:
@@ -231,7 +233,7 @@ private:
                             .type_params = {}, .fields = std::move(fields),
                             .conformances = {}, .denials = {}});
       }
-      error("expected declaration (fn, extern, class, concept, extend, or type)");
+      error("expected declaration (fn, extern, class, enum, concept, extend, or type)");
       advance(); // skip problematic token
       return nullptr;
     }
@@ -408,6 +410,39 @@ private:
       error("class body must contain at least one field");
     }
     return body;
+  }
+
+  auto parse_enum_decl() -> Decl* {
+    const auto& kw = consume(TokenKind::KwEnum);
+    const auto& name_tok = consume(TokenKind::Identifier);
+    consume(TokenKind::Colon);
+    consume(TokenKind::Newline);
+    consume(TokenKind::Indent);
+    std::vector<EnumVariantSpec> variants;
+    while (peek_kind() != TokenKind::Dedent && peek_kind() != TokenKind::Eof) {
+      skip_newlines();
+      if (peek_kind() == TokenKind::Dedent || peek_kind() == TokenKind::Eof) {
+        break;
+      }
+      if (peek_kind() != TokenKind::Identifier) {
+        error("expected variant name in enum body");
+        advance();
+        continue;
+      }
+      const auto& variant_tok = consume(TokenKind::Identifier);
+      variants.push_back({.name = variant_tok.text, .name_span = variant_tok.span});
+      if (peek_kind() == TokenKind::Newline) {
+        advance();
+      }
+    }
+    consume(TokenKind::Dedent);
+    if (variants.empty()) {
+      error("enum must contain at least one variant");
+    }
+    Span span = span_from(kw.span);
+    return ctx_.alloc<Decl>(
+        span, EnumDeclNode{.name = name_tok.text, .name_span = name_tok.span,
+                           .variants = std::move(variants)});
   }
 
   auto parse_conformance_block() -> ConformanceBlock {

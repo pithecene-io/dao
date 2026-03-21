@@ -96,6 +96,12 @@ auto is_assignable(const Type* source, const Type* target) -> bool {
       }
       return true;
     }
+    case TypeKind::Enum: {
+      // Same enum type: match by decl_id.
+      const auto* se = static_cast<const TypeEnum*>(source);
+      const auto* te = static_cast<const TypeEnum*>(target);
+      return se->decl_id() == te->decl_id();
+    }
     default:
       break;
     }
