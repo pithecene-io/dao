@@ -1,0 +1,85 @@
+// generic_enums.dao — generic payload-bearing enums.
+//
+// Demonstrates Option<T> and Result<T, E> as user-defined generic enums.
+
+// ---------------------------------------------------------------
+// Option<T> — presence or absence of a value
+// ---------------------------------------------------------------
+
+enum Option<T>:
+  Some(T)
+  None
+
+fn unwrap_i64_or(opt: Option<i64>, default_val: i64): i64
+  match opt:
+    Option.Some(value):
+      return value
+    Option.None:
+      return default_val
+
+// ---------------------------------------------------------------
+// Result<T, E> — success or failure
+// ---------------------------------------------------------------
+
+enum Result<T, E>:
+  Ok(T)
+  Err(E)
+
+// ---------------------------------------------------------------
+// Test functions
+// ---------------------------------------------------------------
+
+fn safe_divide(a: i64, b: i64): Result<i64, string>
+  if b == to_i64(0):
+    return Result.Err("division by zero")
+  return Result.Ok(a / b)
+
+fn find_first_positive(a: i64, b: i64, c: i64): Option<i64>
+  if a > to_i64(0):
+    return Option.Some(a)
+  if b > to_i64(0):
+    return Option.Some(b)
+  if c > to_i64(0):
+    return Option.Some(c)
+  return Option.None
+
+fn main(): i32
+  // --- Option<i64> ---
+  print("=== Option<T> ===")
+
+  let some_val: Option<i64> = Option.Some(to_i64(42))
+  let none_val: Option<i64> = Option.None
+
+  print("unwrap Some(42): " + i64_to_string(unwrap_i64_or(some_val, to_i64(0))))
+  print("unwrap None:     " + i64_to_string(unwrap_i64_or(none_val, to_i64(-1))))
+
+  let found: Option<i64> = find_first_positive(to_i64(-1), to_i64(7), to_i64(3))
+  print("first positive:  " + i64_to_string(unwrap_i64_or(found, to_i64(0))))
+
+  let not_found: Option<i64> = find_first_positive(to_i64(-1), to_i64(-2), to_i64(-3))
+  print("none found:      " + i64_to_string(unwrap_i64_or(not_found, to_i64(0))))
+
+  // --- Result<i64, string> ---
+  print("")
+  print("=== Result<T, E> ===")
+
+  let ok_result: Result<i64, string> = safe_divide(to_i64(20), to_i64(4))
+  let err_result: Result<i64, string> = safe_divide(to_i64(10), to_i64(0))
+
+  match ok_result:
+    Result.Ok(value):
+      print("20 / 4 = " + i64_to_string(value))
+    Result.Err(msg):
+      print("error: " + msg)
+
+  match err_result:
+    Result.Ok(value):
+      print("10 / 0 = " + i64_to_string(value))
+    Result.Err(msg):
+      print("error: " + msg)
+
+  // Note: generic functions taking generic enum params (e.g.
+  // is_ok<T, E>(r: Result<T, E>)) are deferred pending
+  // monomorphization support for generic enum function parameters.
+
+  return 0

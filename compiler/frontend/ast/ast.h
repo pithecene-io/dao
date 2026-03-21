@@ -234,6 +234,7 @@ struct EnumVariantSpec {
 struct EnumDeclNode {
   std::string_view name;
   Span name_span;
+  std::vector<GenericParam> type_params;
   std::vector<EnumVariantSpec> variants;
 };
 
