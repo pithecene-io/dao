@@ -149,6 +149,7 @@ private:
   void check_while(const Stmt* stmt);
   void check_for(const Stmt* stmt);
   void check_yield(const Stmt* stmt);
+  void check_match(const Stmt* stmt);
   void check_mode_block(const Stmt* stmt);
   void check_resource_block(const Stmt* stmt);
   void check_return(const Stmt* stmt);

@@ -641,6 +641,8 @@ private:
       return parse_while_statement();
     case TokenKind::KwFor:
       return parse_for_statement();
+    case TokenKind::KwMatch:
+      return parse_match_statement();
     case TokenKind::KwMode:
       return parse_mode_block();
     case TokenKind::KwResource:
@@ -746,8 +748,13 @@ private:
     std::vector<Stmt*> else_body;
     if (peek_kind() == TokenKind::KwElse) {
       advance(); // else
-      consume(TokenKind::Colon);
-      else_body = parse_suite();
+      if (peek_kind() == TokenKind::KwIf) {
+        // else if — parse as a nested if-statement in the else body.
+        else_body.push_back(parse_if_statement());
+      } else {
+        consume(TokenKind::Colon);
+        else_body = parse_suite();
+      }
     }
 
     Span span = span_from(kw.span);
@@ -755,6 +762,39 @@ private:
         span, IfStatement{.condition = condition,
                           .then_body = std::move(then_body),
                           .else_body = std::move(else_body)});
+  }
+
+  auto parse_match_statement() -> Stmt* {
+    const auto& kw = consume(TokenKind::KwMatch);
+    auto* scrutinee = parse_expression();
+    if (is_error_expr(scrutinee)) {
+      synchronize_to_statement();
+      return make_error_stmt(span_from(kw.span));
+    }
+    consume(TokenKind::Colon);
+    consume(TokenKind::Newline);
+    consume(TokenKind::Indent);
+
+    std::vector<MatchArm> arms;
+    while (peek_kind() != TokenKind::Dedent && peek_kind() != TokenKind::Eof) {
+      skip_newlines();
+      if (peek_kind() == TokenKind::Dedent || peek_kind() == TokenKind::Eof) {
+        break;
+      }
+      // Parse arm pattern (expression — constant, enum variant, etc.).
+      auto* pattern = parse_expression();
+      consume(TokenKind::Colon);
+      auto body = parse_suite();
+      arms.push_back({.pattern = pattern, .body = std::move(body)});
+    }
+    consume(TokenKind::Dedent);
+    if (arms.empty()) {
+      error("match must contain at least one arm");
+    }
+    Span span = span_from(kw.span);
+    return ctx_.alloc<Stmt>(
+        span, MatchStmt{.scrutinee = scrutinee,
+                        .arms = std::move(arms)});
   }
 
   auto parse_while_statement() -> Stmt* {

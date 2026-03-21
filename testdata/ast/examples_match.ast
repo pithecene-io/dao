@@ -1,0 +1,208 @@
+File
+  EnumDecl Season
+    Variant Spring
+    Variant Summer
+    Variant Autumn
+    Variant Winter
+  FunctionDecl season_name
+    Param s: Season
+    ReturnType: string
+    MatchStatement
+      Scrutinee
+        Identifier s
+      Arm
+        Pattern
+          FieldExpr .Spring
+            Identifier Season
+        ReturnStatement
+          StringLiteral "Spring"
+      Arm
+        Pattern
+          FieldExpr .Summer
+            Identifier Season
+        ReturnStatement
+          StringLiteral "Summer"
+      Arm
+        Pattern
+          FieldExpr .Autumn
+            Identifier Season
+        ReturnStatement
+          StringLiteral "Autumn"
+      Arm
+        Pattern
+          FieldExpr .Winter
+            Identifier Season
+        ReturnStatement
+          StringLiteral "Winter"
+    ReturnStatement
+      StringLiteral "?"
+  FunctionDecl is_warm
+    Param s: Season
+    ReturnType: bool
+    MatchStatement
+      Scrutinee
+        Identifier s
+      Arm
+        Pattern
+          FieldExpr .Summer
+            Identifier Season
+        ReturnStatement
+          BoolLiteral true
+      Arm
+        Pattern
+          FieldExpr .Spring
+            Identifier Season
+        ReturnStatement
+          BoolLiteral true
+    ReturnStatement
+      BoolLiteral false
+  FunctionDecl classify
+    Param x: i32
+    ReturnType: string
+    IfStatement
+      Condition
+        BinaryExpr <
+          Identifier x
+          IntLiteral 0
+      Then
+        ReturnStatement
+          StringLiteral "negative"
+      Else
+        IfStatement
+          Condition
+            BinaryExpr ==
+              Identifier x
+              IntLiteral 0
+          Then
+            ReturnStatement
+              StringLiteral "zero"
+          Else
+            IfStatement
+              Condition
+                BinaryExpr <
+                  Identifier x
+                  IntLiteral 10
+              Then
+                ReturnStatement
+                  StringLiteral "small"
+              Else
+                IfStatement
+                  Condition
+                    BinaryExpr <
+                      Identifier x
+                      IntLiteral 100
+                  Then
+                    ReturnStatement
+                      StringLiteral "medium"
+                  Else
+                    ReturnStatement
+                      StringLiteral "large"
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier season_name
+            Args
+              FieldExpr .Spring
+                Identifier Season
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier season_name
+            Args
+              FieldExpr .Winter
+                Identifier Season
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier is_warm
+          Args
+            FieldExpr .Summer
+              Identifier Season
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "summer is warm"
+    IfStatement
+      Condition
+        BinaryExpr ==
+          CallExpr
+            Callee
+              Identifier is_warm
+            Args
+              FieldExpr .Winter
+                Identifier Season
+          BoolLiteral false
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "winter is not warm"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier classify
+            Args
+              UnaryExpr -
+                IntLiteral 5
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier classify
+            Args
+              IntLiteral 0
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier classify
+            Args
+              IntLiteral 7
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier classify
+            Args
+              IntLiteral 42
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          CallExpr
+            Callee
+              Identifier classify
+            Args
+              IntLiteral 999
+    ReturnStatement
+      IntLiteral 0

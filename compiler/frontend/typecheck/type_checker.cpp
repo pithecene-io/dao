@@ -902,6 +902,9 @@ void TypeChecker::check_statement(const Stmt* stmt) {
       error(stmt->span, "'break' is only allowed inside a loop");
     }
     break;
+  case NodeKind::MatchStatement:
+    check_match(stmt);
+    break;
   case NodeKind::ModeBlock:
     check_mode_block(stmt);
     break;
@@ -1057,6 +1060,24 @@ void TypeChecker::check_yield(const Stmt* stmt) {
   }
 
   typed_.set_local_type(stmt, value_type);
+}
+
+void TypeChecker::check_match(const Stmt* stmt) {
+  const auto& match = stmt->as<MatchStmt>();
+  const auto* scrutinee_type = check_expr(match.scrutinee);
+
+  for (const auto& arm : match.arms) {
+    const auto* pattern_type = check_expr(arm.pattern);
+    if (scrutinee_type != nullptr && pattern_type != nullptr) {
+      if (!is_assignable(pattern_type, scrutinee_type)) {
+        error(arm.pattern->span,
+              "match arm type '" + print_type(pattern_type) +
+                  "' does not match scrutinee type '" +
+                  print_type(scrutinee_type) + "'");
+      }
+    }
+    check_body(arm.body);
+  }
 }
 
 void TypeChecker::check_mode_block(const Stmt* stmt) {

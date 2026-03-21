@@ -244,6 +244,31 @@ auto HirBuilder::lower_stmt(const Stmt* stmt) -> HirStmt* {
     return ctx_.alloc<HirStmt>(stmt->span, HirYield{value});
   }
 
+  case NodeKind::MatchStatement: {
+    // Lower match to a chain of if/else comparisons.
+    const auto& match = stmt->as<MatchStmt>();
+    auto* scrutinee = lower_expr(match.scrutinee);
+
+    // Build the chain from last arm to first (innermost else first).
+    HirStmt* result = nullptr;
+    for (auto it = match.arms.rbegin(); it != match.arms.rend(); ++it) {
+      auto* pattern = lower_expr(it->pattern);
+      auto arm_body = lower_body(it->body);
+      // scrutinee == pattern
+      auto* cond = ctx_.alloc<HirExpr>(
+          stmt->span, nullptr,
+          HirBinary{BinaryOp::EqEq, scrutinee, pattern});
+      std::vector<HirStmt*> else_body;
+      if (result != nullptr) {
+        else_body.push_back(result);
+      }
+      result = ctx_.alloc<HirStmt>(
+          stmt->span,
+          HirIf{cond, std::move(arm_body), std::move(else_body)});
+    }
+    return result;
+  }
+
   case NodeKind::BreakStatement:
     return ctx_.alloc<HirStmt>(stmt->span, HirBreak{});
 
