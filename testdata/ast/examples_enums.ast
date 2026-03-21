@@ -1,0 +1,144 @@
+File
+  EnumDecl Direction
+    Variant North
+    Variant South
+    Variant East
+    Variant West
+  FunctionDecl opposite
+    Param d: Direction
+    ReturnType: Direction
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier d
+          FieldExpr .North
+            Identifier Direction
+      Then
+        ReturnStatement
+          FieldExpr .South
+            Identifier Direction
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier d
+          FieldExpr .South
+            Identifier Direction
+      Then
+        ReturnStatement
+          FieldExpr .North
+            Identifier Direction
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier d
+          FieldExpr .East
+            Identifier Direction
+      Then
+        ReturnStatement
+          FieldExpr .West
+            Identifier Direction
+    ReturnStatement
+      FieldExpr .East
+        Identifier Direction
+  FunctionDecl direction_name
+    Param d: Direction
+    ReturnType: string
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier d
+          FieldExpr .North
+            Identifier Direction
+      Then
+        ReturnStatement
+          StringLiteral "North"
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier d
+          FieldExpr .South
+            Identifier Direction
+      Then
+        ReturnStatement
+          StringLiteral "South"
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier d
+          FieldExpr .East
+            Identifier Direction
+      Then
+        ReturnStatement
+          StringLiteral "East"
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier d
+          FieldExpr .West
+            Identifier Direction
+      Then
+        ReturnStatement
+          StringLiteral "West"
+    ReturnStatement
+      StringLiteral "?"
+  FunctionDecl main
+    ReturnType: i32
+    LetStatement d: Direction
+      FieldExpr .East
+        Identifier Direction
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "direction: "
+            CallExpr
+              Callee
+                Identifier direction_name
+              Args
+                Identifier d
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "opposite:  "
+            CallExpr
+              Callee
+                Identifier direction_name
+              Args
+                CallExpr
+                  Callee
+                    Identifier opposite
+                  Args
+                    Identifier d
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier d
+          FieldExpr .East
+            Identifier Direction
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "heading east"
+    IfStatement
+      Condition
+        BinaryExpr !=
+          Identifier d
+          FieldExpr .North
+            Identifier Direction
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "not heading north"
+    ReturnStatement
+      IntLiteral 0
