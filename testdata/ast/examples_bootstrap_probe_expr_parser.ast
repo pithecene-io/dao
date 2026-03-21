@@ -1,0 +1,2069 @@
+File
+  EnumDecl TK
+    Variant Int
+    Variant Plus
+    Variant Minus
+    Variant Star
+    Variant Slash
+    Variant LParen
+    Variant RParen
+    Variant Eof
+    Variant Error
+  ClassDecl Token
+    Field kind: TK
+    Field offset: i64
+    Field len: i64
+  FunctionDecl make_token
+    Param k: TK
+    Param off: i64
+    Param l: i64
+    ReturnType: Token
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier Token
+        Args
+          Identifier k
+          Identifier off
+          Identifier l
+  FunctionDecl is_digit
+    Param ch: i32
+    ReturnType: bool
+    ReturnStatement
+      BinaryExpr and
+        BinaryExpr >=
+          Identifier ch
+          IntLiteral 48
+        BinaryExpr <=
+          Identifier ch
+          IntLiteral 57
+  FunctionDecl is_whitespace
+    Param ch: i32
+    ReturnType: bool
+    ReturnStatement
+      BinaryExpr or
+        BinaryExpr or
+          BinaryExpr or
+            BinaryExpr ==
+              Identifier ch
+              IntLiteral 32
+            BinaryExpr ==
+              Identifier ch
+              IntLiteral 9
+          BinaryExpr ==
+            Identifier ch
+            IntLiteral 10
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 13
+  FunctionDecl lex
+    Param source: string
+    ReturnType: Vector<Token>
+    LetStatement tokens
+      CallExpr
+        Callee
+          Identifier Vector.new
+        TypeArgs
+          Token
+    LetStatement pos: i64
+      IntLiteral 0
+    LetStatement slen: i64
+      CallExpr
+        Callee
+          Identifier length
+        Args
+          Identifier source
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier pos
+          Identifier slen
+      LetStatement ch: i32
+        CallExpr
+          Callee
+            Identifier char_at
+          Args
+            Identifier source
+            Identifier pos
+      IfStatement
+        Condition
+          CallExpr
+            Callee
+              Identifier is_whitespace
+            Args
+              Identifier ch
+        Then
+          Assignment
+            Target
+              Identifier pos
+            Value
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 1
+        Else
+          IfStatement
+            Condition
+              CallExpr
+                Callee
+                  Identifier is_digit
+                Args
+                  Identifier ch
+            Then
+              LetStatement end: i64
+                BinaryExpr +
+                  Identifier pos
+                  IntLiteral 1
+              WhileStatement
+                Condition
+                  BinaryExpr <
+                    Identifier end
+                    Identifier slen
+                IfStatement
+                  Condition
+                    CallExpr
+                      Callee
+                        Identifier is_digit
+                      Args
+                        CallExpr
+                          Callee
+                            Identifier char_at
+                          Args
+                            Identifier source
+                            Identifier end
+                  Then
+                    Assignment
+                      Target
+                        Identifier end
+                      Value
+                        BinaryExpr +
+                          Identifier end
+                          IntLiteral 1
+                  Else
+                    BreakStatement
+              Assignment
+                Target
+                  Identifier tokens
+                Value
+                  CallExpr
+                    Callee
+                      FieldExpr .push
+                        Identifier tokens
+                    Args
+                      CallExpr
+                        Callee
+                          Identifier make_token
+                        Args
+                          FieldExpr .Int
+                            Identifier TK
+                          Identifier pos
+                          BinaryExpr -
+                            Identifier end
+                            Identifier pos
+              Assignment
+                Target
+                  Identifier pos
+                Value
+                  Identifier end
+            Else
+              IfStatement
+                Condition
+                  BinaryExpr ==
+                    Identifier ch
+                    IntLiteral 43
+                Then
+                  Assignment
+                    Target
+                      Identifier tokens
+                    Value
+                      CallExpr
+                        Callee
+                          FieldExpr .push
+                            Identifier tokens
+                        Args
+                          CallExpr
+                            Callee
+                              Identifier make_token
+                            Args
+                              FieldExpr .Plus
+                                Identifier TK
+                              Identifier pos
+                              CallExpr
+                                Callee
+                                  Identifier to_i64
+                                Args
+                                  IntLiteral 1
+                  Assignment
+                    Target
+                      Identifier pos
+                    Value
+                      BinaryExpr +
+                        Identifier pos
+                        IntLiteral 1
+                Else
+                  IfStatement
+                    Condition
+                      BinaryExpr ==
+                        Identifier ch
+                        IntLiteral 45
+                    Then
+                      Assignment
+                        Target
+                          Identifier tokens
+                        Value
+                          CallExpr
+                            Callee
+                              FieldExpr .push
+                                Identifier tokens
+                            Args
+                              CallExpr
+                                Callee
+                                  Identifier make_token
+                                Args
+                                  FieldExpr .Minus
+                                    Identifier TK
+                                  Identifier pos
+                                  CallExpr
+                                    Callee
+                                      Identifier to_i64
+                                    Args
+                                      IntLiteral 1
+                      Assignment
+                        Target
+                          Identifier pos
+                        Value
+                          BinaryExpr +
+                            Identifier pos
+                            IntLiteral 1
+                    Else
+                      IfStatement
+                        Condition
+                          BinaryExpr ==
+                            Identifier ch
+                            IntLiteral 42
+                        Then
+                          Assignment
+                            Target
+                              Identifier tokens
+                            Value
+                              CallExpr
+                                Callee
+                                  FieldExpr .push
+                                    Identifier tokens
+                                Args
+                                  CallExpr
+                                    Callee
+                                      Identifier make_token
+                                    Args
+                                      FieldExpr .Star
+                                        Identifier TK
+                                      Identifier pos
+                                      CallExpr
+                                        Callee
+                                          Identifier to_i64
+                                        Args
+                                          IntLiteral 1
+                          Assignment
+                            Target
+                              Identifier pos
+                            Value
+                              BinaryExpr +
+                                Identifier pos
+                                IntLiteral 1
+                        Else
+                          IfStatement
+                            Condition
+                              BinaryExpr ==
+                                Identifier ch
+                                IntLiteral 47
+                            Then
+                              Assignment
+                                Target
+                                  Identifier tokens
+                                Value
+                                  CallExpr
+                                    Callee
+                                      FieldExpr .push
+                                        Identifier tokens
+                                    Args
+                                      CallExpr
+                                        Callee
+                                          Identifier make_token
+                                        Args
+                                          FieldExpr .Slash
+                                            Identifier TK
+                                          Identifier pos
+                                          CallExpr
+                                            Callee
+                                              Identifier to_i64
+                                            Args
+                                              IntLiteral 1
+                              Assignment
+                                Target
+                                  Identifier pos
+                                Value
+                                  BinaryExpr +
+                                    Identifier pos
+                                    IntLiteral 1
+                            Else
+                              IfStatement
+                                Condition
+                                  BinaryExpr ==
+                                    Identifier ch
+                                    IntLiteral 40
+                                Then
+                                  Assignment
+                                    Target
+                                      Identifier tokens
+                                    Value
+                                      CallExpr
+                                        Callee
+                                          FieldExpr .push
+                                            Identifier tokens
+                                        Args
+                                          CallExpr
+                                            Callee
+                                              Identifier make_token
+                                            Args
+                                              FieldExpr .LParen
+                                                Identifier TK
+                                              Identifier pos
+                                              CallExpr
+                                                Callee
+                                                  Identifier to_i64
+                                                Args
+                                                  IntLiteral 1
+                                  Assignment
+                                    Target
+                                      Identifier pos
+                                    Value
+                                      BinaryExpr +
+                                        Identifier pos
+                                        IntLiteral 1
+                                Else
+                                  IfStatement
+                                    Condition
+                                      BinaryExpr ==
+                                        Identifier ch
+                                        IntLiteral 41
+                                    Then
+                                      Assignment
+                                        Target
+                                          Identifier tokens
+                                        Value
+                                          CallExpr
+                                            Callee
+                                              FieldExpr .push
+                                                Identifier tokens
+                                            Args
+                                              CallExpr
+                                                Callee
+                                                  Identifier make_token
+                                                Args
+                                                  FieldExpr .RParen
+                                                    Identifier TK
+                                                  Identifier pos
+                                                  CallExpr
+                                                    Callee
+                                                      Identifier to_i64
+                                                    Args
+                                                      IntLiteral 1
+                                      Assignment
+                                        Target
+                                          Identifier pos
+                                        Value
+                                          BinaryExpr +
+                                            Identifier pos
+                                            IntLiteral 1
+                                    Else
+                                      Assignment
+                                        Target
+                                          Identifier tokens
+                                        Value
+                                          CallExpr
+                                            Callee
+                                              FieldExpr .push
+                                                Identifier tokens
+                                            Args
+                                              CallExpr
+                                                Callee
+                                                  Identifier make_token
+                                                Args
+                                                  FieldExpr .Error
+                                                    Identifier TK
+                                                  Identifier pos
+                                                  CallExpr
+                                                    Callee
+                                                      Identifier to_i64
+                                                    Args
+                                                      IntLiteral 1
+                                      Assignment
+                                        Target
+                                          Identifier pos
+                                        Value
+                                          BinaryExpr +
+                                            Identifier pos
+                                            IntLiteral 1
+    Assignment
+      Target
+        Identifier tokens
+      Value
+        CallExpr
+          Callee
+            FieldExpr .push
+              Identifier tokens
+          Args
+            CallExpr
+              Callee
+                Identifier make_token
+              Args
+                FieldExpr .Eof
+                  Identifier TK
+                Identifier slen
+                CallExpr
+                  Callee
+                    Identifier to_i64
+                  Args
+                    IntLiteral 0
+    ReturnStatement
+      Identifier tokens
+  EnumDecl NK
+    Variant IntLit
+    Variant Binary
+    Variant Unary
+  ClassDecl ExprNode
+    Field kind: NK
+    Field op: TK
+    Field value: i64
+    Field left: i64
+    Field right: i64
+  FunctionDecl int_node
+    Param val: i64
+    ReturnType: ExprNode
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier ExprNode
+        Args
+          FieldExpr .IntLit
+            Identifier NK
+          FieldExpr .Eof
+            Identifier TK
+          Identifier val
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 1
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 1
+  FunctionDecl binary_node
+    Param op: TK
+    Param left: i64
+    Param right: i64
+    ReturnType: ExprNode
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier ExprNode
+        Args
+          FieldExpr .Binary
+            Identifier NK
+          Identifier op
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+          Identifier left
+          Identifier right
+  FunctionDecl unary_node
+    Param op: TK
+    Param operand: i64
+    ReturnType: ExprNode
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier ExprNode
+        Args
+          FieldExpr .Unary
+            Identifier NK
+          Identifier op
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+          Identifier operand
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 1
+  ClassDecl ParseResult
+    Field arena: Vector<ExprNode>
+    Field node: i64
+    Field pos: i64
+  FunctionDecl parse_error
+    Param arena: Vector<ExprNode>
+    Param pos: i64
+    ReturnType: ParseResult
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier ParseResult
+        Args
+          Identifier arena
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 1
+          Identifier pos
+  FunctionDecl is_parse_ok
+    Param r: ParseResult
+    ReturnType: bool
+    ReturnStatement
+      BinaryExpr >=
+        FieldExpr .node
+          Identifier r
+        CallExpr
+          Callee
+            Identifier to_i64
+          Args
+            IntLiteral 0
+  FunctionDecl peek
+    Param tokens: Vector<Token>
+    Param pos: i64
+    ReturnType: TK
+    IfStatement
+      Condition
+        BinaryExpr >=
+          Identifier pos
+          CallExpr
+            Callee
+              FieldExpr .length
+                Identifier tokens
+      Then
+        ReturnStatement
+          FieldExpr .Eof
+            Identifier TK
+    LetStatement tok: Token
+      CallExpr
+        Callee
+          FieldExpr .get
+            Identifier tokens
+        Args
+          Identifier pos
+    ReturnStatement
+      FieldExpr .kind
+        Identifier tok
+  FunctionDecl token_text_to_i64
+    Param source: string
+    Param tok: Token
+    ReturnType: i64
+    LetStatement result: i64
+      IntLiteral 0
+    LetStatement i: i64
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          FieldExpr .len
+            Identifier tok
+      LetStatement ch: i32
+        CallExpr
+          Callee
+            Identifier char_at
+          Args
+            Identifier source
+            BinaryExpr +
+              FieldExpr .offset
+                Identifier tok
+              Identifier i
+      Assignment
+        Target
+          Identifier result
+        Value
+          BinaryExpr +
+            BinaryExpr *
+              Identifier result
+              CallExpr
+                Callee
+                  Identifier to_i64
+                Args
+                  IntLiteral 10
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                BinaryExpr -
+                  Identifier ch
+                  IntLiteral 48
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+    ReturnStatement
+      Identifier result
+  FunctionDecl parse_primary
+    Param tokens: Vector<Token>
+    Param source: string
+    Param arena: Vector<ExprNode>
+    Param pos: i64
+    ReturnType: ParseResult
+    LetStatement kind: TK
+      CallExpr
+        Callee
+          Identifier peek
+        Args
+          Identifier tokens
+          Identifier pos
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier kind
+          FieldExpr .Int
+            Identifier TK
+      Then
+        LetStatement tok: Token
+          CallExpr
+            Callee
+              FieldExpr .get
+                Identifier tokens
+            Args
+              Identifier pos
+        LetStatement val: i64
+          CallExpr
+            Callee
+              Identifier token_text_to_i64
+            Args
+              Identifier source
+              Identifier tok
+        LetStatement idx: i64
+          CallExpr
+            Callee
+              FieldExpr .length
+                Identifier arena
+        LetStatement new_arena: Vector<ExprNode>
+          CallExpr
+            Callee
+              FieldExpr .push
+                Identifier arena
+            Args
+              CallExpr
+                Callee
+                  Identifier int_node
+                Args
+                  Identifier val
+        ReturnStatement
+          CallExpr
+            Callee
+              Identifier ParseResult
+            Args
+              Identifier new_arena
+              Identifier idx
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier kind
+          FieldExpr .LParen
+            Identifier TK
+      Then
+        LetStatement inner: ParseResult
+          CallExpr
+            Callee
+              Identifier parse_expr
+            Args
+              Identifier tokens
+              Identifier source
+              Identifier arena
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 1
+        IfStatement
+          Condition
+            BinaryExpr ==
+              CallExpr
+                Callee
+                  Identifier is_parse_ok
+                Args
+                  Identifier inner
+              BoolLiteral false
+          Then
+            ReturnStatement
+              Identifier inner
+        IfStatement
+          Condition
+            BinaryExpr !=
+              CallExpr
+                Callee
+                  Identifier peek
+                Args
+                  Identifier tokens
+                  FieldExpr .pos
+                    Identifier inner
+              FieldExpr .RParen
+                Identifier TK
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  StringLiteral "error: expected ')'"
+            ReturnStatement
+              CallExpr
+                Callee
+                  Identifier parse_error
+                Args
+                  FieldExpr .arena
+                    Identifier inner
+                  FieldExpr .pos
+                    Identifier inner
+        ReturnStatement
+          CallExpr
+            Callee
+              Identifier ParseResult
+            Args
+              FieldExpr .arena
+                Identifier inner
+              FieldExpr .node
+                Identifier inner
+              BinaryExpr +
+                FieldExpr .pos
+                  Identifier inner
+                IntLiteral 1
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "error: expected integer or '('"
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier parse_error
+        Args
+          Identifier arena
+          Identifier pos
+  FunctionDecl parse_unary
+    Param tokens: Vector<Token>
+    Param source: string
+    Param arena: Vector<ExprNode>
+    Param pos: i64
+    ReturnType: ParseResult
+    IfStatement
+      Condition
+        BinaryExpr ==
+          CallExpr
+            Callee
+              Identifier peek
+            Args
+              Identifier tokens
+              Identifier pos
+          FieldExpr .Minus
+            Identifier TK
+      Then
+        LetStatement operand: ParseResult
+          CallExpr
+            Callee
+              Identifier parse_unary
+            Args
+              Identifier tokens
+              Identifier source
+              Identifier arena
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 1
+        IfStatement
+          Condition
+            BinaryExpr ==
+              CallExpr
+                Callee
+                  Identifier is_parse_ok
+                Args
+                  Identifier operand
+              BoolLiteral false
+          Then
+            ReturnStatement
+              Identifier operand
+        LetStatement idx: i64
+          CallExpr
+            Callee
+              FieldExpr .length
+                FieldExpr .arena
+                  Identifier operand
+        LetStatement new_arena: Vector<ExprNode>
+          CallExpr
+            Callee
+              FieldExpr .push
+                FieldExpr .arena
+                  Identifier operand
+            Args
+              CallExpr
+                Callee
+                  Identifier unary_node
+                Args
+                  FieldExpr .Minus
+                    Identifier TK
+                  FieldExpr .node
+                    Identifier operand
+        ReturnStatement
+          CallExpr
+            Callee
+              Identifier ParseResult
+            Args
+              Identifier new_arena
+              Identifier idx
+              FieldExpr .pos
+                Identifier operand
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier parse_primary
+        Args
+          Identifier tokens
+          Identifier source
+          Identifier arena
+          Identifier pos
+  FunctionDecl parse_multiplicative
+    Param tokens: Vector<Token>
+    Param source: string
+    Param arena: Vector<ExprNode>
+    Param pos: i64
+    ReturnType: ParseResult
+    LetStatement left: ParseResult
+      CallExpr
+        Callee
+          Identifier parse_unary
+        Args
+          Identifier tokens
+          Identifier source
+          Identifier arena
+          Identifier pos
+    IfStatement
+      Condition
+        BinaryExpr ==
+          CallExpr
+            Callee
+              Identifier is_parse_ok
+            Args
+              Identifier left
+          BoolLiteral false
+      Then
+        ReturnStatement
+          Identifier left
+    LetStatement result: ParseResult
+      Identifier left
+    LetStatement done: bool
+      BoolLiteral false
+    WhileStatement
+      Condition
+        BinaryExpr ==
+          Identifier done
+          BoolLiteral false
+      LetStatement op: TK
+        CallExpr
+          Callee
+            Identifier peek
+          Args
+            Identifier tokens
+            FieldExpr .pos
+              Identifier result
+      IfStatement
+        Condition
+          BinaryExpr or
+            BinaryExpr ==
+              Identifier op
+              FieldExpr .Star
+                Identifier TK
+            BinaryExpr ==
+              Identifier op
+              FieldExpr .Slash
+                Identifier TK
+        Then
+          LetStatement right: ParseResult
+            CallExpr
+              Callee
+                Identifier parse_unary
+              Args
+                Identifier tokens
+                Identifier source
+                FieldExpr .arena
+                  Identifier result
+                BinaryExpr +
+                  FieldExpr .pos
+                    Identifier result
+                  IntLiteral 1
+          IfStatement
+            Condition
+              BinaryExpr ==
+                CallExpr
+                  Callee
+                    Identifier is_parse_ok
+                  Args
+                    Identifier right
+                BoolLiteral false
+            Then
+              ReturnStatement
+                Identifier right
+          LetStatement idx: i64
+            CallExpr
+              Callee
+                FieldExpr .length
+                  FieldExpr .arena
+                    Identifier right
+          LetStatement new_arena: Vector<ExprNode>
+            CallExpr
+              Callee
+                FieldExpr .push
+                  FieldExpr .arena
+                    Identifier right
+              Args
+                CallExpr
+                  Callee
+                    Identifier binary_node
+                  Args
+                    Identifier op
+                    FieldExpr .node
+                      Identifier result
+                    FieldExpr .node
+                      Identifier right
+          Assignment
+            Target
+              Identifier result
+            Value
+              CallExpr
+                Callee
+                  Identifier ParseResult
+                Args
+                  Identifier new_arena
+                  Identifier idx
+                  FieldExpr .pos
+                    Identifier right
+        Else
+          Assignment
+            Target
+              Identifier done
+            Value
+              BoolLiteral true
+    ReturnStatement
+      Identifier result
+  FunctionDecl parse_additive
+    Param tokens: Vector<Token>
+    Param source: string
+    Param arena: Vector<ExprNode>
+    Param pos: i64
+    ReturnType: ParseResult
+    LetStatement left: ParseResult
+      CallExpr
+        Callee
+          Identifier parse_multiplicative
+        Args
+          Identifier tokens
+          Identifier source
+          Identifier arena
+          Identifier pos
+    IfStatement
+      Condition
+        BinaryExpr ==
+          CallExpr
+            Callee
+              Identifier is_parse_ok
+            Args
+              Identifier left
+          BoolLiteral false
+      Then
+        ReturnStatement
+          Identifier left
+    LetStatement result: ParseResult
+      Identifier left
+    LetStatement done: bool
+      BoolLiteral false
+    WhileStatement
+      Condition
+        BinaryExpr ==
+          Identifier done
+          BoolLiteral false
+      LetStatement op: TK
+        CallExpr
+          Callee
+            Identifier peek
+          Args
+            Identifier tokens
+            FieldExpr .pos
+              Identifier result
+      IfStatement
+        Condition
+          BinaryExpr or
+            BinaryExpr ==
+              Identifier op
+              FieldExpr .Plus
+                Identifier TK
+            BinaryExpr ==
+              Identifier op
+              FieldExpr .Minus
+                Identifier TK
+        Then
+          LetStatement right: ParseResult
+            CallExpr
+              Callee
+                Identifier parse_multiplicative
+              Args
+                Identifier tokens
+                Identifier source
+                FieldExpr .arena
+                  Identifier result
+                BinaryExpr +
+                  FieldExpr .pos
+                    Identifier result
+                  IntLiteral 1
+          IfStatement
+            Condition
+              BinaryExpr ==
+                CallExpr
+                  Callee
+                    Identifier is_parse_ok
+                  Args
+                    Identifier right
+                BoolLiteral false
+            Then
+              ReturnStatement
+                Identifier right
+          LetStatement idx: i64
+            CallExpr
+              Callee
+                FieldExpr .length
+                  FieldExpr .arena
+                    Identifier right
+          LetStatement new_arena: Vector<ExprNode>
+            CallExpr
+              Callee
+                FieldExpr .push
+                  FieldExpr .arena
+                    Identifier right
+              Args
+                CallExpr
+                  Callee
+                    Identifier binary_node
+                  Args
+                    Identifier op
+                    FieldExpr .node
+                      Identifier result
+                    FieldExpr .node
+                      Identifier right
+          Assignment
+            Target
+              Identifier result
+            Value
+              CallExpr
+                Callee
+                  Identifier ParseResult
+                Args
+                  Identifier new_arena
+                  Identifier idx
+                  FieldExpr .pos
+                    Identifier right
+        Else
+          Assignment
+            Target
+              Identifier done
+            Value
+              BoolLiteral true
+    ReturnStatement
+      Identifier result
+  FunctionDecl parse_expr
+    Param tokens: Vector<Token>
+    Param source: string
+    Param arena: Vector<ExprNode>
+    Param pos: i64
+    ReturnType: ParseResult
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier parse_additive
+        Args
+          Identifier tokens
+          Identifier source
+          Identifier arena
+          Identifier pos
+  FunctionDecl parse
+    Param tokens: Vector<Token>
+    Param source: string
+    ReturnType: ParseResult
+    LetStatement arena
+      CallExpr
+        Callee
+          Identifier Vector.new
+        TypeArgs
+          ExprNode
+    LetStatement result: ParseResult
+      CallExpr
+        Callee
+          Identifier parse_expr
+        Args
+          Identifier tokens
+          Identifier source
+          Identifier arena
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier is_parse_ok
+          Args
+            Identifier result
+      Then
+        IfStatement
+          Condition
+            BinaryExpr !=
+              CallExpr
+                Callee
+                  Identifier peek
+                Args
+                  Identifier tokens
+                  FieldExpr .pos
+                    Identifier result
+              FieldExpr .Eof
+                Identifier TK
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  StringLiteral "error: unexpected token after expression"
+            ReturnStatement
+              CallExpr
+                Callee
+                  Identifier parse_error
+                Args
+                  FieldExpr .arena
+                    Identifier result
+                  FieldExpr .pos
+                    Identifier result
+    ReturnStatement
+      Identifier result
+  FunctionDecl eval_node
+    Param arena: Vector<ExprNode>
+    Param idx: i64
+    ReturnType: i64
+    LetStatement node: ExprNode
+      CallExpr
+        Callee
+          FieldExpr .get
+            Identifier arena
+        Args
+          Identifier idx
+    MatchStatement
+      Scrutinee
+        FieldExpr .kind
+          Identifier node
+      Arm
+        Pattern
+          FieldExpr .IntLit
+            Identifier NK
+        ReturnStatement
+          FieldExpr .value
+            Identifier node
+      Arm
+        Pattern
+          FieldExpr .Unary
+            Identifier NK
+        LetStatement operand: i64
+          CallExpr
+            Callee
+              Identifier eval_node
+            Args
+              Identifier arena
+              FieldExpr .left
+                Identifier node
+        ReturnStatement
+          BinaryExpr -
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 0
+            Identifier operand
+      Arm
+        Pattern
+          FieldExpr .Binary
+            Identifier NK
+        LetStatement lval: i64
+          CallExpr
+            Callee
+              Identifier eval_node
+            Args
+              Identifier arena
+              FieldExpr .left
+                Identifier node
+        LetStatement rval: i64
+          CallExpr
+            Callee
+              Identifier eval_node
+            Args
+              Identifier arena
+              FieldExpr .right
+                Identifier node
+        MatchStatement
+          Scrutinee
+            FieldExpr .op
+              Identifier node
+          Arm
+            Pattern
+              FieldExpr .Plus
+                Identifier TK
+            ReturnStatement
+              BinaryExpr +
+                Identifier lval
+                Identifier rval
+          Arm
+            Pattern
+              FieldExpr .Minus
+                Identifier TK
+            ReturnStatement
+              BinaryExpr -
+                Identifier lval
+                Identifier rval
+          Arm
+            Pattern
+              FieldExpr .Star
+                Identifier TK
+            ReturnStatement
+              BinaryExpr *
+                Identifier lval
+                Identifier rval
+          Arm
+            Pattern
+              FieldExpr .Slash
+                Identifier TK
+            IfStatement
+              Condition
+                BinaryExpr !=
+                  Identifier rval
+                  CallExpr
+                    Callee
+                      Identifier to_i64
+                    Args
+                      IntLiteral 0
+              Then
+                ReturnStatement
+                  BinaryExpr /
+                    Identifier lval
+                    Identifier rval
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  StringLiteral "error: division by zero"
+            ReturnStatement
+              CallExpr
+                Callee
+                  Identifier to_i64
+                Args
+                  IntLiteral 0
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "error: unknown node kind"
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier to_i64
+        Args
+          IntLiteral 0
+  FunctionDecl op_name
+    Param op: TK
+    ReturnType: string
+    MatchStatement
+      Scrutinee
+        Identifier op
+      Arm
+        Pattern
+          FieldExpr .Plus
+            Identifier TK
+        ReturnStatement
+          StringLiteral "+"
+      Arm
+        Pattern
+          FieldExpr .Minus
+            Identifier TK
+        ReturnStatement
+          StringLiteral "-"
+      Arm
+        Pattern
+          FieldExpr .Star
+            Identifier TK
+        ReturnStatement
+          StringLiteral "*"
+      Arm
+        Pattern
+          FieldExpr .Slash
+            Identifier TK
+        ReturnStatement
+          StringLiteral "/"
+    ReturnStatement
+      StringLiteral "?"
+  FunctionDecl print_node
+    Param arena: Vector<ExprNode>
+    Param idx: i64
+    Param depth: i32
+    ReturnType: i32
+    LetStatement node: ExprNode
+      CallExpr
+        Callee
+          FieldExpr .get
+            Identifier arena
+        Args
+          Identifier idx
+    LetStatement indent: string
+      StringLiteral ""
+    LetStatement d: i32
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier d
+          Identifier depth
+      Assignment
+        Target
+          Identifier indent
+        Value
+          BinaryExpr +
+            Identifier indent
+            StringLiteral "  "
+      Assignment
+        Target
+          Identifier d
+        Value
+          BinaryExpr +
+            Identifier d
+            IntLiteral 1
+    MatchStatement
+      Scrutinee
+        FieldExpr .kind
+          Identifier node
+      Arm
+        Pattern
+          FieldExpr .IntLit
+            Identifier NK
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  Identifier indent
+                  StringLiteral "INT "
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    FieldExpr .value
+                      Identifier node
+      Arm
+        Pattern
+          FieldExpr .Unary
+            Identifier NK
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                Identifier indent
+                StringLiteral "NEG"
+        LetStatement unused: i32
+          CallExpr
+            Callee
+              Identifier print_node
+            Args
+              Identifier arena
+              FieldExpr .left
+                Identifier node
+              BinaryExpr +
+                Identifier depth
+                IntLiteral 1
+      Arm
+        Pattern
+          FieldExpr .Binary
+            Identifier NK
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  Identifier indent
+                  StringLiteral "BIN "
+                CallExpr
+                  Callee
+                    Identifier op_name
+                  Args
+                    FieldExpr .op
+                      Identifier node
+        LetStatement unused1: i32
+          CallExpr
+            Callee
+              Identifier print_node
+            Args
+              Identifier arena
+              FieldExpr .left
+                Identifier node
+              BinaryExpr +
+                Identifier depth
+                IntLiteral 1
+        LetStatement unused2: i32
+          CallExpr
+            Callee
+              Identifier print_node
+            Args
+              Identifier arena
+              FieldExpr .right
+                Identifier node
+              BinaryExpr +
+                Identifier depth
+                IntLiteral 1
+    ReturnStatement
+      IntLiteral 0
+  FunctionDecl test_expr
+    Param label: string
+    Param source: string
+    Param expected: i64
+    ReturnType: bool
+    LetStatement tokens: Vector<Token>
+      CallExpr
+        Callee
+          Identifier lex
+        Args
+          Identifier source
+    LetStatement result: ParseResult
+      CallExpr
+        Callee
+          Identifier parse
+        Args
+          Identifier tokens
+          Identifier source
+    IfStatement
+      Condition
+        BinaryExpr ==
+          CallExpr
+            Callee
+              Identifier is_parse_ok
+            Args
+              Identifier result
+          BoolLiteral false
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "FAIL "
+                  Identifier label
+                StringLiteral ": parse error"
+        ReturnStatement
+          BoolLiteral false
+    LetStatement actual: i64
+      CallExpr
+        Callee
+          Identifier eval_node
+        Args
+          FieldExpr .arena
+            Identifier result
+          FieldExpr .node
+            Identifier result
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier actual
+          Identifier expected
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  BinaryExpr +
+                    StringLiteral "PASS "
+                    Identifier label
+                  StringLiteral " = "
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    Identifier actual
+        ReturnStatement
+          BoolLiteral true
+      Else
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  BinaryExpr +
+                    BinaryExpr +
+                      BinaryExpr +
+                        StringLiteral "FAIL "
+                        Identifier label
+                      StringLiteral ": expected "
+                    CallExpr
+                      Callee
+                        Identifier i64_to_string
+                      Args
+                        Identifier expected
+                  StringLiteral ", got "
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    Identifier actual
+        ReturnStatement
+          BoolLiteral false
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "=== expr_parser: lex -> parse -> eval ==="
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral ""
+    LetStatement pass_count: i32
+      IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "literal"
+            StringLiteral "42"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 42
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "add"
+            StringLiteral "1 + 2"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 3
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "sub"
+            StringLiteral "10 - 3"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 7
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "mul"
+            StringLiteral "4 * 5"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 20
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "div"
+            StringLiteral "20 / 4"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 5
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "prec1"
+            StringLiteral "2 + 3 * 4"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 14
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "prec2"
+            StringLiteral "2 * 3 + 4"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 10
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "prec3"
+            StringLiteral "10 - 2 * 3"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 4
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "assoc_sub"
+            StringLiteral "10 - 3 - 2"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 5
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "assoc_div"
+            StringLiteral "24 / 4 / 2"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 3
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "parens1"
+            StringLiteral "(2 + 3) * 4"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 20
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "parens2"
+            StringLiteral "2 * (3 + 4)"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 14
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "nested_parens"
+            StringLiteral "((2 + 3))"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 5
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "neg"
+            StringLiteral "-5"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                UnaryExpr -
+                  IntLiteral 5
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "neg_expr"
+            StringLiteral "-(3 + 4)"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                UnaryExpr -
+                  IntLiteral 7
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "double_neg"
+            StringLiteral "--5"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 5
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "complex1"
+            StringLiteral "2 + 3 * 4 - 1"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 13
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "complex2"
+            StringLiteral "(1 + 2) * (3 + 4)"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 21
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_expr
+          Args
+            StringLiteral "complex3"
+            StringLiteral "-2 * (3 + -4) * -5"
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                UnaryExpr -
+                  IntLiteral 10
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement total: i32
+      IntLiteral 19
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral ""
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "--- results ---"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            BinaryExpr +
+              BinaryExpr +
+                CallExpr
+                  Callee
+                    Identifier i32_to_string
+                  Args
+                    Identifier pass_count
+                StringLiteral " / "
+              CallExpr
+                Callee
+                  Identifier i32_to_string
+                Args
+                  Identifier total
+            StringLiteral " passed"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral ""
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "--- arena dump: (2 + 3) * 4 ---"
+    LetStatement demo_source: string
+      StringLiteral "(2 + 3) * 4"
+    LetStatement demo_tokens: Vector<Token>
+      CallExpr
+        Callee
+          Identifier lex
+        Args
+          Identifier demo_source
+    LetStatement demo_result: ParseResult
+      CallExpr
+        Callee
+          Identifier parse
+        Args
+          Identifier demo_tokens
+          Identifier demo_source
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier is_parse_ok
+          Args
+            Identifier demo_result
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "arena size: "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      CallExpr
+                        Callee
+                          FieldExpr .length
+                            FieldExpr .arena
+                              Identifier demo_result
+                StringLiteral " nodes"
+        LetStatement unused: i32
+          CallExpr
+            Callee
+              Identifier print_node
+            Args
+              FieldExpr .arena
+                Identifier demo_result
+              FieldExpr .node
+                Identifier demo_result
+              IntLiteral 0
+    ReturnStatement
+      IntLiteral 0
