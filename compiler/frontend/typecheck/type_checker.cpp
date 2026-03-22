@@ -418,19 +418,86 @@ void TypeChecker::register_declarations(const FileNode& file) {
     }
   }
 
-  // Pass 1b: register functions and structs, which may reference aliases.
+  // Pass 1b: register type shells (enums and class structs) so that
+  // function signatures processed in pass 1c can reference them
+  // regardless of source order.
+  for (const auto* decl : file.declarations) {
+    if (decl->kind() == NodeKind::ClassDecl) {
+      const auto& st = decl->as<ClassDecl>();
+      auto decl_it = decl_symbols_.find(st.name_span.offset);
+      if (decl_it == decl_symbols_.end()) {
+        continue;
+      }
+      const auto* sym = decl_it->second;
+
+      std::vector<StructField> fields;
+      for (const auto* field : st.fields) {
+        const auto* field_type = resolve_type_node(field->type);
+        if (field_type != nullptr) {
+          fields.push_back({field->name, field_type});
+        }
+      }
+      const auto* struct_type =
+          types_.make_struct(sym, st.name, std::move(fields));
+      symbol_types_[sym] = struct_type;
+      typed_.set_decl_type(decl, struct_type);
+    } else if (decl->kind() == NodeKind::EnumDecl) {
+      const auto& en = decl->as<EnumDeclNode>();
+      auto decl_it = decl_symbols_.find(en.name_span.offset);
+      if (decl_it == decl_symbols_.end()) {
+        continue;
+      }
+      const auto* sym = decl_it->second;
+
+      // Build enum type from variant specifiers, resolving payload types.
+      // Unresolved types are kept as nullptr to preserve arity — the
+      // primary diagnostic comes from resolve_type_node; dropping the
+      // slot would silently mutate the variant shape and produce
+      // misleading secondary errors.
+      std::vector<EnumVariant> variants;
+      for (const auto& variant : en.variants) {
+        std::vector<const Type*> payload_types;
+        for (size_t i = 0; i < variant.payload_types.size(); ++i) {
+          const auto* resolved = resolve_type_node(variant.payload_types[i]);
+          payload_types.push_back(resolved);
+          if (resolved == nullptr) {
+            if (variant.payload_types[i]->is<NamedType>()) {
+              const auto& named =
+                  variant.payload_types[i]->as<NamedType>();
+              if (named.name.segments.size() == 1 &&
+                  named.name.segments[0] == en.name) {
+                error(variant.payload_types[i]->span,
+                      "enum '" + std::string(en.name) +
+                          "' cannot contain itself by value in variant '" +
+                          std::string(variant.name) +
+                          "'; use a pointer (*" + std::string(en.name) +
+                          ") for recursive types");
+              }
+            }
+          }
+        }
+        variants.push_back({variant.name, std::move(payload_types)});
+      }
+      const auto* enum_type =
+          types_.make_enum(sym, en.name, std::move(variants));
+      symbol_types_[sym] = enum_type;
+      typed_.set_decl_type(decl, enum_type);
+    }
+  }
+
+  // Pass 1c: register function signatures, class method signatures,
+  // and extend method signatures. All type shells from pass 1b are
+  // available, so return types like Option<V> resolve correctly.
   for (const auto* decl : file.declarations) {
     switch (decl->kind()) {
     case NodeKind::FunctionDecl: {
       const auto& fn = decl->as<FunctionDecl>();
-      // Find the symbol for this function via declaration map.
       auto decl_it = decl_symbols_.find(fn.name_span.offset);
       if (decl_it == decl_symbols_.end()) {
         break;
       }
       const auto* sym = decl_it->second;
 
-      // Build function type.
       std::vector<const Type*> param_types;
       bool valid = true;
       for (const auto& param : fn.params) {
@@ -453,28 +520,14 @@ void TypeChecker::register_declarations(const FileNode& file) {
 
     case NodeKind::ClassDecl: {
       const auto& st = decl->as<ClassDecl>();
-      // Find symbol via declaration map.
       auto decl_it = decl_symbols_.find(st.name_span.offset);
       if (decl_it == decl_symbols_.end()) {
         break;
       }
-      const auto* sym = decl_it->second;
+      const auto* struct_type = static_cast<const TypeStruct*>(
+          symbol_types_[decl_it->second]);
 
-      // Build struct type from field specifiers.
-      std::vector<StructField> fields;
-      for (const auto* field : st.fields) {
-        const auto* field_type = resolve_type_node(field->type);
-        if (field_type != nullptr) {
-          fields.push_back({field->name, field_type});
-        }
-      }
-      const auto* struct_type =
-          types_.make_struct(sym, st.name, std::move(fields));
-      symbol_types_[sym] = struct_type;
-      typed_.set_decl_type(decl, struct_type);
-
-      // Register class body methods as function declarations so
-      // they get proper TypeFunction entries in the typed results.
+      // Register class body methods.
       for (const auto* method : st.methods) {
         const auto& fn = method->as<FunctionDecl>();
         auto mdecl_it = decl_symbols_.find(fn.name_span.offset);
@@ -502,62 +555,7 @@ void TypeChecker::register_declarations(const FileNode& file) {
       break;
     }
 
-    case NodeKind::EnumDecl: {
-      const auto& en = decl->as<EnumDeclNode>();
-      auto decl_it = decl_symbols_.find(en.name_span.offset);
-      if (decl_it == decl_symbols_.end()) {
-        break;
-      }
-      const auto* sym = decl_it->second;
-
-      // Build enum type from variant specifiers, resolving payload types.
-      // Unresolved types are kept as nullptr to preserve arity — the
-      // primary diagnostic comes from resolve_type_node; dropping the
-      // slot would silently mutate the variant shape and produce
-      // misleading secondary errors.
-      std::vector<EnumVariant> variants;
-      bool has_bad_payload = false;
-      for (const auto& variant : en.variants) {
-        std::vector<const Type*> payload_types;
-        for (size_t i = 0; i < variant.payload_types.size(); ++i) {
-          const auto* resolved = resolve_type_node(variant.payload_types[i]);
-          payload_types.push_back(resolved);
-          if (resolved == nullptr) {
-            has_bad_payload = true;
-            // Check for self-referential by-value payload: the type
-            // name matches the enum being defined, which hasn't been
-            // registered yet. Emit a specific diagnostic.
-            if (variant.payload_types[i]->is<NamedType>()) {
-              const auto& named =
-                  variant.payload_types[i]->as<NamedType>();
-              if (named.name.segments.size() == 1 &&
-                  named.name.segments[0] == en.name) {
-                error(variant.payload_types[i]->span,
-                      "enum '" + std::string(en.name) +
-                          "' cannot contain itself by value in variant '" +
-                          std::string(variant.name) +
-                          "'; use a pointer (*" + std::string(en.name) +
-                          ") for recursive types");
-              }
-            }
-          }
-        }
-        variants.push_back({variant.name, std::move(payload_types)});
-      }
-      const auto* enum_type =
-          types_.make_enum(sym, en.name, std::move(variants));
-      symbol_types_[sym] = enum_type;
-      typed_.set_decl_type(decl, enum_type);
-      if (has_bad_payload) {
-        // Don't proceed to codegen with broken payload types.
-        break;
-      }
-      break;
-    }
-
     case NodeKind::ExtendDecl: {
-      // Register extend methods as typed functions so HIR lowering
-      // can find their type info via decl_type().
       const auto& ext = decl->as<ExtendDecl>();
       const auto* target_type = resolve_type_node(ext.target_type);
       for (const auto* method : ext.methods) {
@@ -566,7 +564,6 @@ void TypeChecker::register_declarations(const FileNode& file) {
         bool valid = true;
         for (const auto& param : method_fn.params) {
           if (param.name == "self" && param.type == nullptr) {
-            // Bare self — use the extend target type.
             if (target_type != nullptr) {
               param_types.push_back(target_type);
             } else {
@@ -587,9 +584,9 @@ void TypeChecker::register_declarations(const FileNode& file) {
         if (valid && ret != nullptr) {
           const auto* fn_type =
               types_.function_type(std::move(param_types), ret);
-          auto decl_it = decl_symbols_.find(method_fn.name_span.offset);
-          if (decl_it != decl_symbols_.end()) {
-            symbol_types_[decl_it->second] = fn_type;
+          auto fn_decl_it = decl_symbols_.find(method_fn.name_span.offset);
+          if (fn_decl_it != decl_symbols_.end()) {
+            symbol_types_[fn_decl_it->second] = fn_type;
           }
           typed_.set_decl_type(method, fn_type);
         }

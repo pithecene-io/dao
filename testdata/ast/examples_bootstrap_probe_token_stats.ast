@@ -1,0 +1,421 @@
+File
+  FunctionDecl is_digit
+    Param ch: i32
+    ReturnType: bool
+    ReturnStatement
+      BinaryExpr and
+        BinaryExpr >=
+          Identifier ch
+          IntLiteral 48
+        BinaryExpr <=
+          Identifier ch
+          IntLiteral 57
+  FunctionDecl is_alpha
+    Param ch: i32
+    ReturnType: bool
+    IfStatement
+      Condition
+        BinaryExpr and
+          BinaryExpr >=
+            Identifier ch
+            IntLiteral 65
+          BinaryExpr <=
+            Identifier ch
+            IntLiteral 90
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr and
+          BinaryExpr >=
+            Identifier ch
+            IntLiteral 97
+          BinaryExpr <=
+            Identifier ch
+            IntLiteral 122
+      Then
+        ReturnStatement
+          BoolLiteral true
+    ReturnStatement
+      BinaryExpr ==
+        Identifier ch
+        IntLiteral 95
+  FunctionDecl is_alnum
+    Param ch: i32
+    ReturnType: bool
+    ReturnStatement
+      BinaryExpr or
+        CallExpr
+          Callee
+            Identifier is_digit
+          Args
+            Identifier ch
+        CallExpr
+          Callee
+            Identifier is_alpha
+          Args
+            Identifier ch
+  FunctionDecl is_whitespace
+    Param ch: i32
+    ReturnType: bool
+    ReturnStatement
+      BinaryExpr or
+        BinaryExpr or
+          BinaryExpr or
+            BinaryExpr ==
+              Identifier ch
+              IntLiteral 32
+            BinaryExpr ==
+              Identifier ch
+              IntLiteral 10
+          BinaryExpr ==
+            Identifier ch
+            IntLiteral 13
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 9
+  FunctionDecl skip_word
+    Param source: string
+    Param pos: i64
+    ReturnType: i64
+    LetStatement cur: i64
+      Identifier pos
+    LetStatement slen: i64
+      CallExpr
+        Callee
+          Identifier length
+        Args
+          Identifier source
+    LetStatement done: bool
+      BoolLiteral false
+    WhileStatement
+      Condition
+        BinaryExpr and
+          BinaryExpr <
+            Identifier cur
+            Identifier slen
+          BinaryExpr ==
+            Identifier done
+            BoolLiteral false
+      IfStatement
+        Condition
+          CallExpr
+            Callee
+              Identifier is_alnum
+            Args
+              CallExpr
+                Callee
+                  Identifier char_at
+                Args
+                  Identifier source
+                  Identifier cur
+        Then
+          Assignment
+            Target
+              Identifier cur
+            Value
+              BinaryExpr +
+                Identifier cur
+                IntLiteral 1
+        Else
+          Assignment
+            Target
+              Identifier done
+            Value
+              BoolLiteral true
+    ReturnStatement
+      Identifier cur
+  FunctionDecl skip_number
+    Param source: string
+    Param pos: i64
+    ReturnType: i64
+    LetStatement cur: i64
+      Identifier pos
+    LetStatement slen: i64
+      CallExpr
+        Callee
+          Identifier length
+        Args
+          Identifier source
+    LetStatement done: bool
+      BoolLiteral false
+    WhileStatement
+      Condition
+        BinaryExpr and
+          BinaryExpr <
+            Identifier cur
+            Identifier slen
+          BinaryExpr ==
+            Identifier done
+            BoolLiteral false
+      IfStatement
+        Condition
+          CallExpr
+            Callee
+              Identifier is_digit
+            Args
+              CallExpr
+                Callee
+                  Identifier char_at
+                Args
+                  Identifier source
+                  Identifier cur
+        Then
+          Assignment
+            Target
+              Identifier cur
+            Value
+              BinaryExpr +
+                Identifier cur
+                IntLiteral 1
+        Else
+          Assignment
+            Target
+              Identifier done
+            Value
+              BoolLiteral true
+    ReturnStatement
+      Identifier cur
+  FunctionDecl count_tokens
+    Param source: string
+    ReturnType: i32
+    LetStatement pos: i64
+      IntLiteral 0
+    LetStatement slen: i64
+      CallExpr
+        Callee
+          Identifier length
+        Args
+          Identifier source
+    LetStatement num_idents: i32
+      IntLiteral 0
+    LetStatement num_numbers: i32
+      IntLiteral 0
+    LetStatement num_ops: i32
+      IntLiteral 0
+    LetStatement num_other: i32
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier pos
+          Identifier slen
+      LetStatement ch: i32
+        CallExpr
+          Callee
+            Identifier char_at
+          Args
+            Identifier source
+            Identifier pos
+      IfStatement
+        Condition
+          CallExpr
+            Callee
+              Identifier is_whitespace
+            Args
+              Identifier ch
+        Then
+          Assignment
+            Target
+              Identifier pos
+            Value
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 1
+        Else
+          IfStatement
+            Condition
+              CallExpr
+                Callee
+                  Identifier is_alpha
+                Args
+                  Identifier ch
+            Then
+              Assignment
+                Target
+                  Identifier pos
+                Value
+                  CallExpr
+                    Callee
+                      Identifier skip_word
+                    Args
+                      Identifier source
+                      Identifier pos
+              Assignment
+                Target
+                  Identifier num_idents
+                Value
+                  BinaryExpr +
+                    Identifier num_idents
+                    IntLiteral 1
+            Else
+              IfStatement
+                Condition
+                  CallExpr
+                    Callee
+                      Identifier is_digit
+                    Args
+                      Identifier ch
+                Then
+                  Assignment
+                    Target
+                      Identifier pos
+                    Value
+                      CallExpr
+                        Callee
+                          Identifier skip_number
+                        Args
+                          Identifier source
+                          Identifier pos
+                  Assignment
+                    Target
+                      Identifier num_numbers
+                    Value
+                      BinaryExpr +
+                        Identifier num_numbers
+                        IntLiteral 1
+                Else
+                  IfStatement
+                    Condition
+                      BinaryExpr or
+                        BinaryExpr or
+                          BinaryExpr or
+                            BinaryExpr or
+                              BinaryExpr ==
+                                Identifier ch
+                                IntLiteral 43
+                              BinaryExpr ==
+                                Identifier ch
+                                IntLiteral 45
+                            BinaryExpr ==
+                              Identifier ch
+                              IntLiteral 42
+                          BinaryExpr ==
+                            Identifier ch
+                            IntLiteral 47
+                        BinaryExpr ==
+                          Identifier ch
+                          IntLiteral 61
+                    Then
+                      Assignment
+                        Target
+                          Identifier num_ops
+                        Value
+                          BinaryExpr +
+                            Identifier num_ops
+                            IntLiteral 1
+                      Assignment
+                        Target
+                          Identifier pos
+                        Value
+                          BinaryExpr +
+                            Identifier pos
+                            IntLiteral 1
+                    Else
+                      Assignment
+                        Target
+                          Identifier num_other
+                        Value
+                          BinaryExpr +
+                            Identifier num_other
+                            IntLiteral 1
+                      Assignment
+                        Target
+                          Identifier pos
+                        Value
+                          BinaryExpr +
+                            Identifier pos
+                            IntLiteral 1
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "identifiers:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier num_idents
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "numbers:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier num_numbers
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "operators:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier num_ops
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "other:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier num_other
+    ReturnStatement
+      BinaryExpr +
+        BinaryExpr +
+          BinaryExpr +
+            Identifier num_idents
+            Identifier num_numbers
+          Identifier num_ops
+        Identifier num_other
+  FunctionDecl main
+    ReturnType: i32
+    LetStatement source: string
+      StringLiteral "fn add(a: i32, b: i32): i32 = a + b"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "source:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier source
+    LetStatement total: i32
+      CallExpr
+        Callee
+          Identifier count_tokens
+        Args
+          Identifier source
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "total tokens:"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          Identifier total
+    ReturnStatement
+      IntLiteral 0

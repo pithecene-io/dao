@@ -4,6 +4,14 @@ class Entry:
   name: string
   value: i32
 
+fn show_entry(label: string, result: Option<Entry>): i32
+  match result:
+    Option.Some(e):
+      print(label + " = " + i32_to_string(e.value))
+    Option.None:
+      print(label + " not found")
+  return 0
+
 fn main(): i32
   print("=== HashMap<V> ===")
 
@@ -14,26 +22,14 @@ fn main(): i32
 
   print("length: " + i64_to_string(m.length()))
 
-  // Two-phase lookup: contains + get.
-  if m.contains("x"):
-    let e: Entry = m.get("x")
-    print("x = " + i32_to_string(e.value))
-
-  if m.contains("y"):
-    let e: Entry = m.get("y")
-    print("y = " + i32_to_string(e.value))
+  // Option-based lookup.
+  let unused1: i32 = show_entry("x", m.get("x"))
+  let unused2: i32 = show_entry("y", m.get("y"))
+  let unused3: i32 = show_entry("w", m.get("w"))
 
   // Update existing key.
   m = m.set("x", Entry("x", 99))
-  if m.contains("x"):
-    let e: Entry = m.get("x")
-    print("x (updated) = " + i32_to_string(e.value))
-
-  // Missing key.
-  if m.contains("w"):
-    print("w found (unexpected)")
-  else:
-    print("w not found (correct)")
+  let unused4: i32 = show_entry("x (updated)", m.get("x"))
 
   // Many inserts to trigger resize.
   let big = HashMap<i32>::new()
@@ -49,22 +45,26 @@ fn main(): i32
   big = big.set("j", 10)
   print("big length: " + i64_to_string(big.length()))
 
-  if big.contains("j"):
-    print("j = " + i32_to_string(big.get("j")))
-  if big.contains("a"):
-    print("a = " + i32_to_string(big.get("a")))
+  let rj: Option<i32> = big.get("j")
+  match rj:
+    Option.Some(v):
+      print("j = " + i32_to_string(v))
+    Option.None:
+      print("j not found")
 
-  // Verify all keys survived resize.
-  let all_ok: bool = true
-  if big.contains("a") == false:
-    all_ok = false
-  if big.contains("e") == false:
-    all_ok = false
-  if big.contains("j") == false:
-    all_ok = false
-  if big.contains("missing"):
-    all_ok = false
-  if all_ok:
-    print("all keys correct after resize")
+  let ra: Option<i32> = big.get("a")
+  match ra:
+    Option.Some(v):
+      print("a = " + i32_to_string(v))
+    Option.None:
+      print("a not found")
+
+  // Missing key returns None.
+  let rm: Option<i32> = big.get("missing")
+  match rm:
+    Option.Some(v):
+      print("missing found (unexpected)")
+    Option.None:
+      print("missing = None (correct)")
 
   return 0

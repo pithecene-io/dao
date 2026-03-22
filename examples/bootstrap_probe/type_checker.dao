@@ -4,9 +4,10 @@
 // booleans, comparisons, and logical operators, then adds a combined
 // resolve + typecheck pass over the arena.
 //
-// Tests: HashMap<V> for O(1) symbol lookup, Result<T, E> for
-// error-bearing analysis, multi-pass compiler architecture
-// (lex → parse → analyze), and match destructuring for control flow.
+// Tests: HashMap<V> for O(1) symbol lookup, Option<V> for fallible
+// map get, Result<T, E> for error-bearing analysis, multi-pass
+// compiler architecture (lex → parse → analyze), and match
+// destructuring for control flow.
 //
 // Language surface:
 //   let x = 5; let y = x + 3; y > 0
@@ -486,10 +487,12 @@ fn check_expr(arena: Vector<Node>, idx: i64, table: HashMap<Symbol>, source: str
 
     Node.VarRef(off, len):
       let name: string = substring(source, off, len)
-      if table.contains(name):
-        let sym: Symbol = table.get(name)
-        return Result.Ok(sym.ty)
-      return Result.Err("undefined variable '" + name + "'")
+      let found: Option<Symbol> = table.get(name)
+      match found:
+        Option.Some(sym):
+          return Result.Ok(sym.ty)
+        Option.None:
+          return Result.Err("undefined variable '" + name + "'")
 
     Node.Binary(op, left, right):
       let lt: Result<i32, string> = check_expr(arena, left, table, source)
