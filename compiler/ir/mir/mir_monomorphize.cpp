@@ -111,6 +111,7 @@ auto substitute_type(const Type* type, const TypeSubst& subst,
       }
       new_variants.push_back({variant.name, std::move(new_payload)});
     }
+    // END DEBUG
     if (!changed) {
       return type;
     }
@@ -280,10 +281,31 @@ auto clone_function(const MirFunction* src, const TypeSubst& subst,
           call->explicit_type_args = new_ta;
         }
       } else if (auto* ctor = std::get_if<MirConstruct>(&dst_inst->payload)) {
+        if (ctor->struct_type != nullptr) {
+          const auto* sub_st =
+              substitute_type(ctor->struct_type, subst, types);
+          if (sub_st != nullptr && sub_st->kind() == TypeKind::Struct) {
+            ctor->struct_type = static_cast<const TypeStruct*>(sub_st);
+          }
+        }
         if (ctor->field_values != nullptr) {
           auto* new_fv =
               ctx.alloc<std::vector<MirValueId>>(*ctor->field_values);
           ctor->field_values = new_fv;
+        }
+      } else if (auto* econ =
+                     std::get_if<MirEnumConstruct>(&dst_inst->payload)) {
+        if (econ->enum_type != nullptr) {
+          const auto* sub_et =
+              substitute_type(econ->enum_type, subst, types);
+          if (sub_et != nullptr && sub_et->kind() == TypeKind::Enum) {
+            econ->enum_type = static_cast<const TypeEnum*>(sub_et);
+          }
+        }
+        if (econ->payload_values != nullptr) {
+          auto* new_pv =
+              ctx.alloc<std::vector<MirValueId>>(*econ->payload_values);
+          econ->payload_values = new_pv;
         }
       } else if (auto* store = std::get_if<MirStore>(&dst_inst->payload)) {
         if (store->place != nullptr) {

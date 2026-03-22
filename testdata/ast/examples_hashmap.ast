@@ -2,6 +2,46 @@ File
   ClassDecl Entry
     Field name: string
     Field value: i32
+  FunctionDecl show_entry
+    Param label: string
+    Param result: Option<Entry>
+    ReturnType: i32
+    MatchStatement
+      Scrutinee
+        Identifier result
+      Arm
+        Pattern
+          FieldExpr .Some
+            Identifier Option
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  Identifier label
+                  StringLiteral " = "
+                CallExpr
+                  Callee
+                    Identifier i32_to_string
+                  Args
+                    FieldExpr .value
+                      Identifier e
+      Arm
+        Pattern
+          FieldExpr .None
+            Identifier Option
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                Identifier label
+                StringLiteral " not found"
+    ReturnStatement
+      IntLiteral 0
   FunctionDecl main
     ReturnType: i32
     ExpressionStatement
@@ -79,64 +119,42 @@ File
                   Callee
                     FieldExpr .length
                       Identifier m
-    IfStatement
-      Condition
-        CallExpr
-          Callee
-            FieldExpr .contains
-              Identifier m
-          Args
-            StringLiteral "x"
-      Then
-        LetStatement e: Entry
+    LetStatement unused1: i32
+      CallExpr
+        Callee
+          Identifier show_entry
+        Args
+          StringLiteral "x"
           CallExpr
             Callee
               FieldExpr .get
                 Identifier m
             Args
               StringLiteral "x"
-        ExpressionStatement
-          CallExpr
-            Callee
-              Identifier print
-            Args
-              BinaryExpr +
-                StringLiteral "x = "
-                CallExpr
-                  Callee
-                    Identifier i32_to_string
-                  Args
-                    FieldExpr .value
-                      Identifier e
-    IfStatement
-      Condition
-        CallExpr
-          Callee
-            FieldExpr .contains
-              Identifier m
-          Args
-            StringLiteral "y"
-      Then
-        LetStatement e: Entry
+    LetStatement unused2: i32
+      CallExpr
+        Callee
+          Identifier show_entry
+        Args
+          StringLiteral "y"
           CallExpr
             Callee
               FieldExpr .get
                 Identifier m
             Args
               StringLiteral "y"
-        ExpressionStatement
+    LetStatement unused3: i32
+      CallExpr
+        Callee
+          Identifier show_entry
+        Args
+          StringLiteral "w"
           CallExpr
             Callee
-              Identifier print
+              FieldExpr .get
+                Identifier m
             Args
-              BinaryExpr +
-                StringLiteral "y = "
-                CallExpr
-                  Callee
-                    Identifier i32_to_string
-                  Args
-                    FieldExpr .value
-                      Identifier e
+              StringLiteral "w"
     Assignment
       Target
         Identifier m
@@ -153,57 +171,18 @@ File
               Args
                 StringLiteral "x"
                 IntLiteral 99
-    IfStatement
-      Condition
-        CallExpr
-          Callee
-            FieldExpr .contains
-              Identifier m
-          Args
-            StringLiteral "x"
-      Then
-        LetStatement e: Entry
+    LetStatement unused4: i32
+      CallExpr
+        Callee
+          Identifier show_entry
+        Args
+          StringLiteral "x (updated)"
           CallExpr
             Callee
               FieldExpr .get
                 Identifier m
             Args
               StringLiteral "x"
-        ExpressionStatement
-          CallExpr
-            Callee
-              Identifier print
-            Args
-              BinaryExpr +
-                StringLiteral "x (updated) = "
-                CallExpr
-                  Callee
-                    Identifier i32_to_string
-                  Args
-                    FieldExpr .value
-                      Identifier e
-    IfStatement
-      Condition
-        CallExpr
-          Callee
-            FieldExpr .contains
-              Identifier m
-          Args
-            StringLiteral "w"
-      Then
-        ExpressionStatement
-          CallExpr
-            Callee
-              Identifier print
-            Args
-              StringLiteral "w found (unexpected)"
-      Else
-        ExpressionStatement
-          CallExpr
-            Callee
-              Identifier print
-            Args
-              StringLiteral "w not found (correct)"
     LetStatement big
       CallExpr
         Callee
@@ -335,15 +314,20 @@ File
                   Callee
                     FieldExpr .length
                       Identifier big
-    IfStatement
-      Condition
-        CallExpr
-          Callee
-            FieldExpr .contains
-              Identifier big
-          Args
-            StringLiteral "j"
-      Then
+    LetStatement rj: Option<i32>
+      CallExpr
+        Callee
+          FieldExpr .get
+            Identifier big
+        Args
+          StringLiteral "j"
+    MatchStatement
+      Scrutinee
+        Identifier rj
+      Arm
+        Pattern
+          FieldExpr .Some
+            Identifier Option
         ExpressionStatement
           CallExpr
             Callee
@@ -355,21 +339,31 @@ File
                   Callee
                     Identifier i32_to_string
                   Args
-                    CallExpr
-                      Callee
-                        FieldExpr .get
-                          Identifier big
-                      Args
-                        StringLiteral "j"
-    IfStatement
-      Condition
-        CallExpr
-          Callee
-            FieldExpr .contains
-              Identifier big
-          Args
-            StringLiteral "a"
-      Then
+                    Identifier v
+      Arm
+        Pattern
+          FieldExpr .None
+            Identifier Option
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "j not found"
+    LetStatement ra: Option<i32>
+      CallExpr
+        Callee
+          FieldExpr .get
+            Identifier big
+        Args
+          StringLiteral "a"
+    MatchStatement
+      Scrutinee
+        Identifier ra
+      Arm
+        Pattern
+          FieldExpr .Some
+            Identifier Option
         ExpressionStatement
           CallExpr
             Callee
@@ -381,85 +375,46 @@ File
                   Callee
                     Identifier i32_to_string
                   Args
-                    CallExpr
-                      Callee
-                        FieldExpr .get
-                          Identifier big
-                      Args
-                        StringLiteral "a"
-    LetStatement all_ok: bool
-      BoolLiteral true
-    IfStatement
-      Condition
-        BinaryExpr ==
-          CallExpr
-            Callee
-              FieldExpr .contains
-                Identifier big
-            Args
-              StringLiteral "a"
-          BoolLiteral false
-      Then
-        Assignment
-          Target
-            Identifier all_ok
-          Value
-            BoolLiteral false
-    IfStatement
-      Condition
-        BinaryExpr ==
-          CallExpr
-            Callee
-              FieldExpr .contains
-                Identifier big
-            Args
-              StringLiteral "e"
-          BoolLiteral false
-      Then
-        Assignment
-          Target
-            Identifier all_ok
-          Value
-            BoolLiteral false
-    IfStatement
-      Condition
-        BinaryExpr ==
-          CallExpr
-            Callee
-              FieldExpr .contains
-                Identifier big
-            Args
-              StringLiteral "j"
-          BoolLiteral false
-      Then
-        Assignment
-          Target
-            Identifier all_ok
-          Value
-            BoolLiteral false
-    IfStatement
-      Condition
-        CallExpr
-          Callee
-            FieldExpr .contains
-              Identifier big
-          Args
-            StringLiteral "missing"
-      Then
-        Assignment
-          Target
-            Identifier all_ok
-          Value
-            BoolLiteral false
-    IfStatement
-      Condition
-        Identifier all_ok
-      Then
+                    Identifier v
+      Arm
+        Pattern
+          FieldExpr .None
+            Identifier Option
         ExpressionStatement
           CallExpr
             Callee
               Identifier print
             Args
-              StringLiteral "all keys correct after resize"
+              StringLiteral "a not found"
+    LetStatement rm: Option<i32>
+      CallExpr
+        Callee
+          FieldExpr .get
+            Identifier big
+        Args
+          StringLiteral "missing"
+    MatchStatement
+      Scrutinee
+        Identifier rm
+      Arm
+        Pattern
+          FieldExpr .Some
+            Identifier Option
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "missing found (unexpected)"
+      Arm
+        Pattern
+          FieldExpr .None
+            Identifier Option
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "missing = None (correct)"
     ReturnStatement
       IntLiteral 0

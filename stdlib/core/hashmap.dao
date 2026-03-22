@@ -10,10 +10,6 @@
 //
 // Hash function: FNV-1a via __dao_str_hash runtime hook.
 //
-// Known limitation: get() returns V (panics on missing) instead of
-// Option<V> due to a compiler bug where class methods returning
-// generic enum types lose type args during HIR→MIR lowering.
-// Use contains() + get() as a two-phase lookup pattern.
 
 extern fn __dao_str_hash(s: string): i64
 
@@ -40,31 +36,25 @@ class HashMap<V>:
 
   fn length(self): i64 -> self.count
 
-  // get returns the value for key, or panics if not found.
-  // Use contains() first to check existence.
-  //
-  // Note: returning Option<V> from a class method is blocked by a
-  // compiler bug (generic enum return types lose type args during
-  // HIR→MIR lowering). This will be changed to Option<V> once fixed.
-  fn get(self, key: string): V
+  fn get(self, key: string): Option<V>
     if self.cap == to_i64(0):
-      panic("HashMap.get: key not found")
+      return Option.None
     let idx: i64 = hash_index(hash_string(key), self.cap)
     mode unsafe =>
       let probes: i64 = 0
       while probes < self.cap:
         let st: i32 = *ptr_offset(self.state_data, idx)
         if st == 0:
-          panic("HashMap.get: key not found")
+          return Option.None
         if st == 1:
           if *ptr_offset(self.key_data, idx) == key:
-            return *ptr_offset(self.val_data, idx)
+            return Option.Some(*ptr_offset(self.val_data, idx))
         // st == 2 (tombstone) or different key — continue probing.
         idx = idx + 1
         if idx >= self.cap:
           idx = to_i64(0)
         probes = probes + 1
-    panic("HashMap.get: key not found")
+    return Option.None
 
   fn contains(self, key: string): bool
     if self.cap == to_i64(0):

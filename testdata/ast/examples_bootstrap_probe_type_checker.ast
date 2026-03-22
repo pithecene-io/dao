@@ -2571,22 +2571,20 @@ File
               Identifier source
               Identifier off
               Identifier len
-        IfStatement
-          Condition
-            CallExpr
-              Callee
-                FieldExpr .contains
-                  Identifier table
-              Args
-                Identifier name
-          Then
-            LetStatement sym: Symbol
-              CallExpr
-                Callee
-                  FieldExpr .get
-                    Identifier table
-                Args
-                  Identifier name
+        LetStatement found: Option<Symbol>
+          CallExpr
+            Callee
+              FieldExpr .get
+                Identifier table
+            Args
+              Identifier name
+        MatchStatement
+          Scrutinee
+            Identifier found
+          Arm
+            Pattern
+              FieldExpr .Some
+                Identifier Option
             ReturnStatement
               CallExpr
                 Callee
@@ -2595,17 +2593,21 @@ File
                 Args
                   FieldExpr .ty
                     Identifier sym
-        ReturnStatement
-          CallExpr
-            Callee
-              FieldExpr .Err
-                Identifier Result
-            Args
-              BinaryExpr +
-                BinaryExpr +
-                  StringLiteral "undefined variable '"
-                  Identifier name
-                StringLiteral "'"
+          Arm
+            Pattern
+              FieldExpr .None
+                Identifier Option
+            ReturnStatement
+              CallExpr
+                Callee
+                  FieldExpr .Err
+                    Identifier Result
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "undefined variable '"
+                      Identifier name
+                    StringLiteral "'"
       Arm
         Pattern
           FieldExpr .Binary

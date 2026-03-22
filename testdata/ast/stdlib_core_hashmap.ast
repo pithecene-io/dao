@@ -82,7 +82,7 @@ File
     FunctionDecl get
       Param self
       Param key: string
-      ReturnType: V
+      ReturnType: Option<V>
       IfStatement
         Condition
           BinaryExpr ==
@@ -94,12 +94,9 @@ File
               Args
                 IntLiteral 0
         Then
-          ExpressionStatement
-            CallExpr
-              Callee
-                Identifier panic
-              Args
-                StringLiteral "HashMap.get: key not found"
+          ReturnStatement
+            FieldExpr .None
+              Identifier Option
       LetStatement idx: i64
         CallExpr
           Callee
@@ -136,12 +133,9 @@ File
                 Identifier st
                 IntLiteral 0
             Then
-              ExpressionStatement
-                CallExpr
-                  Callee
-                    Identifier panic
-                  Args
-                    StringLiteral "HashMap.get: key not found"
+              ReturnStatement
+                FieldExpr .None
+                  Identifier Option
           IfStatement
             Condition
               BinaryExpr ==
@@ -162,14 +156,19 @@ File
                     Identifier key
                 Then
                   ReturnStatement
-                    UnaryExpr *
-                      CallExpr
-                        Callee
-                          Identifier ptr_offset
-                        Args
-                          FieldExpr .val_data
-                            Identifier self
-                          Identifier idx
+                    CallExpr
+                      Callee
+                        FieldExpr .Some
+                          Identifier Option
+                      Args
+                        UnaryExpr *
+                          CallExpr
+                            Callee
+                              Identifier ptr_offset
+                            Args
+                              FieldExpr .val_data
+                                Identifier self
+                              Identifier idx
           Assignment
             Target
               Identifier idx
@@ -200,12 +199,9 @@ File
               BinaryExpr +
                 Identifier probes
                 IntLiteral 1
-      ExpressionStatement
-        CallExpr
-          Callee
-            Identifier panic
-          Args
-            StringLiteral "HashMap.get: key not found"
+      ReturnStatement
+        FieldExpr .None
+          Identifier Option
     FunctionDecl contains
       Param self
       Param key: string

@@ -1,0 +1,1385 @@
+File
+  FunctionDecl is_digit
+    Param ch: i32
+    ReturnType: bool
+    ReturnStatement
+      BinaryExpr and
+        BinaryExpr >=
+          Identifier ch
+          IntLiteral 48
+        BinaryExpr <=
+          Identifier ch
+          IntLiteral 57
+  FunctionDecl is_alpha
+    Param ch: i32
+    ReturnType: bool
+    IfStatement
+      Condition
+        BinaryExpr and
+          BinaryExpr >=
+            Identifier ch
+            IntLiteral 65
+          BinaryExpr <=
+            Identifier ch
+            IntLiteral 90
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr and
+          BinaryExpr >=
+            Identifier ch
+            IntLiteral 97
+          BinaryExpr <=
+            Identifier ch
+            IntLiteral 122
+      Then
+        ReturnStatement
+          BoolLiteral true
+    ReturnStatement
+      BinaryExpr ==
+        Identifier ch
+        IntLiteral 95
+  FunctionDecl is_alnum
+    Param ch: i32
+    ReturnType: bool
+    ReturnStatement
+      BinaryExpr or
+        CallExpr
+          Callee
+            Identifier is_digit
+          Args
+            Identifier ch
+        CallExpr
+          Callee
+            Identifier is_alpha
+          Args
+            Identifier ch
+  FunctionDecl is_whitespace
+    Param ch: i32
+    ReturnType: bool
+    ReturnStatement
+      BinaryExpr or
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 32
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 9
+  FunctionDecl skip_while
+    Param source: string
+    Param pos: i64
+    Param pred: fn(i32): bool
+    ReturnType: i64
+    LetStatement cur: i64
+      Identifier pos
+    LetStatement slen: i64
+      CallExpr
+        Callee
+          Identifier length
+        Args
+          Identifier source
+    LetStatement done: bool
+      BoolLiteral false
+    WhileStatement
+      Condition
+        BinaryExpr and
+          BinaryExpr <
+            Identifier cur
+            Identifier slen
+          BinaryExpr ==
+            Identifier done
+            BoolLiteral false
+      IfStatement
+        Condition
+          CallExpr
+            Callee
+              Identifier pred
+            Args
+              CallExpr
+                Callee
+                  Identifier char_at
+                Args
+                  Identifier source
+                  Identifier cur
+        Then
+          Assignment
+            Target
+              Identifier cur
+            Value
+              BinaryExpr +
+                Identifier cur
+                IntLiteral 1
+        Else
+          Assignment
+            Target
+              Identifier done
+            Value
+              BoolLiteral true
+    ReturnStatement
+      Identifier cur
+  FunctionDecl is_keyword
+    Param word: string
+    ReturnType: bool
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "fn"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "let"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "return"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "if"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "else"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "while"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "for"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "in"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "and"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "or"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "not"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "true"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "false"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "extern"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "class"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "concept"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "extend"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "as"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "yield"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "mode"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier word
+          StringLiteral "resource"
+      Then
+        ReturnStatement
+          BoolLiteral true
+    ReturnStatement
+      BoolLiteral false
+  FunctionDecl lex_one
+    Param source: string
+    Param pos: i64
+    ReturnType: i64
+    LetStatement slen: i64
+      CallExpr
+        Callee
+          Identifier length
+        Args
+          Identifier source
+    IfStatement
+      Condition
+        BinaryExpr >=
+          Identifier pos
+          Identifier slen
+      Then
+        ReturnStatement
+          Identifier pos
+    LetStatement ch: i32
+      CallExpr
+        Callee
+          Identifier char_at
+        Args
+          Identifier source
+          Identifier pos
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier is_whitespace
+          Args
+            Identifier ch
+      Then
+        ReturnStatement
+          CallExpr
+            Callee
+              Identifier skip_while
+            Args
+              Identifier source
+              Identifier pos
+              Identifier is_whitespace
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 10
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "NEWLINE "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr and
+          BinaryExpr and
+            BinaryExpr ==
+              Identifier ch
+              IntLiteral 47
+            BinaryExpr <
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 1
+              Identifier slen
+          BinaryExpr ==
+            CallExpr
+              Callee
+                Identifier char_at
+              Args
+                Identifier source
+                BinaryExpr +
+                  Identifier pos
+                  IntLiteral 1
+            IntLiteral 47
+      Then
+        LetStatement end: i64
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 2
+        LetStatement comment_done: bool
+          BoolLiteral false
+        WhileStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr <
+                Identifier end
+                Identifier slen
+              BinaryExpr ==
+                Identifier comment_done
+                BoolLiteral false
+          IfStatement
+            Condition
+              BinaryExpr ==
+                CallExpr
+                  Callee
+                    Identifier char_at
+                  Args
+                    Identifier source
+                    Identifier end
+                IntLiteral 10
+            Then
+              Assignment
+                Target
+                  Identifier comment_done
+                Value
+                  BoolLiteral true
+            Else
+              Assignment
+                Target
+                  Identifier end
+                Value
+                  BinaryExpr +
+                    Identifier end
+                    IntLiteral 1
+        ReturnStatement
+          Identifier end
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier is_alpha
+          Args
+            Identifier ch
+      Then
+        LetStatement end: i64
+          CallExpr
+            Callee
+              Identifier skip_while
+            Args
+              Identifier source
+              Identifier pos
+              Identifier is_alnum
+        LetStatement word: string
+          CallExpr
+            Callee
+              Identifier substring
+            Args
+              Identifier source
+              Identifier pos
+              BinaryExpr -
+                Identifier end
+                Identifier pos
+        IfStatement
+          Condition
+            CallExpr
+              Callee
+                Identifier is_keyword
+              Args
+                Identifier word
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      BinaryExpr +
+                        BinaryExpr +
+                          BinaryExpr +
+                            StringLiteral "KW "
+                            CallExpr
+                              Callee
+                                Identifier i64_to_string
+                              Args
+                                Identifier pos
+                          StringLiteral " "
+                        CallExpr
+                          Callee
+                            Identifier i64_to_string
+                          Args
+                            BinaryExpr -
+                              Identifier end
+                              Identifier pos
+                      StringLiteral " "
+                    Identifier word
+          Else
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      BinaryExpr +
+                        BinaryExpr +
+                          BinaryExpr +
+                            StringLiteral "IDENT "
+                            CallExpr
+                              Callee
+                                Identifier i64_to_string
+                              Args
+                                Identifier pos
+                          StringLiteral " "
+                        CallExpr
+                          Callee
+                            Identifier i64_to_string
+                          Args
+                            BinaryExpr -
+                              Identifier end
+                              Identifier pos
+                      StringLiteral " "
+                    Identifier word
+        ReturnStatement
+          Identifier end
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier is_digit
+          Args
+            Identifier ch
+      Then
+        LetStatement end: i64
+          CallExpr
+            Callee
+              Identifier skip_while
+            Args
+              Identifier source
+              Identifier pos
+              Identifier is_digit
+        LetStatement num: string
+          CallExpr
+            Callee
+              Identifier substring
+            Args
+              Identifier source
+              Identifier pos
+              BinaryExpr -
+                Identifier end
+                Identifier pos
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  BinaryExpr +
+                    BinaryExpr +
+                      BinaryExpr +
+                        StringLiteral "INT "
+                        CallExpr
+                          Callee
+                            Identifier i64_to_string
+                          Args
+                            Identifier pos
+                      StringLiteral " "
+                    CallExpr
+                      Callee
+                        Identifier i64_to_string
+                      Args
+                        BinaryExpr -
+                          Identifier end
+                          Identifier pos
+                  StringLiteral " "
+                Identifier num
+        ReturnStatement
+          Identifier end
+    IfStatement
+      Condition
+        BinaryExpr <
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+          Identifier slen
+      Then
+        LetStatement next: i32
+          CallExpr
+            Callee
+              Identifier char_at
+            Args
+              Identifier source
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 1
+        IfStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr ==
+                Identifier ch
+                IntLiteral 61
+              BinaryExpr ==
+                Identifier next
+                IntLiteral 61
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "OP "
+                      CallExpr
+                        Callee
+                          Identifier i64_to_string
+                        Args
+                          Identifier pos
+                    StringLiteral " 2 =="
+            ReturnStatement
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 2
+        IfStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr ==
+                Identifier ch
+                IntLiteral 33
+              BinaryExpr ==
+                Identifier next
+                IntLiteral 61
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "OP "
+                      CallExpr
+                        Callee
+                          Identifier i64_to_string
+                        Args
+                          Identifier pos
+                    StringLiteral " 2 !="
+            ReturnStatement
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 2
+        IfStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr ==
+                Identifier ch
+                IntLiteral 60
+              BinaryExpr ==
+                Identifier next
+                IntLiteral 61
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "OP "
+                      CallExpr
+                        Callee
+                          Identifier i64_to_string
+                        Args
+                          Identifier pos
+                    StringLiteral " 2 <="
+            ReturnStatement
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 2
+        IfStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr ==
+                Identifier ch
+                IntLiteral 62
+              BinaryExpr ==
+                Identifier next
+                IntLiteral 61
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "OP "
+                      CallExpr
+                        Callee
+                          Identifier i64_to_string
+                        Args
+                          Identifier pos
+                    StringLiteral " 2 >="
+            ReturnStatement
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 2
+        IfStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr ==
+                Identifier ch
+                IntLiteral 45
+              BinaryExpr ==
+                Identifier next
+                IntLiteral 62
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "OP "
+                      CallExpr
+                        Callee
+                          Identifier i64_to_string
+                        Args
+                          Identifier pos
+                    StringLiteral " 2 ->"
+            ReturnStatement
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 2
+        IfStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr ==
+                Identifier ch
+                IntLiteral 61
+              BinaryExpr ==
+                Identifier next
+                IntLiteral 62
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "OP "
+                      CallExpr
+                        Callee
+                          Identifier i64_to_string
+                        Args
+                          Identifier pos
+                    StringLiteral " 2 =>"
+            ReturnStatement
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 2
+        IfStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr ==
+                Identifier ch
+                IntLiteral 124
+              BinaryExpr ==
+                Identifier next
+                IntLiteral 62
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "OP "
+                      CallExpr
+                        Callee
+                          Identifier i64_to_string
+                        Args
+                          Identifier pos
+                    StringLiteral " 2 |>"
+            ReturnStatement
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 2
+        IfStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr ==
+                Identifier ch
+                IntLiteral 58
+              BinaryExpr ==
+                Identifier next
+                IntLiteral 58
+          Then
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "OP "
+                      CallExpr
+                        Callee
+                          Identifier i64_to_string
+                        Args
+                          Identifier pos
+                    StringLiteral " 2 ::"
+            ReturnStatement
+              BinaryExpr +
+                Identifier pos
+                IntLiteral 2
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 43
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "OP "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1 +"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 45
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "OP "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1 -"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 42
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "OP "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1 *"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 47
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "OP "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1 /"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 61
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "OP "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1 ="
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 60
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "OP "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1 <"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 62
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "OP "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1 >"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 58
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "COLON "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 40
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "LPAREN "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 41
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "RPAREN "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 44
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "COMMA "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 46
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "DOT "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 124
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "PIPE "
+                  CallExpr
+                    Callee
+                      Identifier i64_to_string
+                    Args
+                      Identifier pos
+                StringLiteral " 1"
+        ReturnStatement
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier ch
+          IntLiteral 34
+      Then
+        LetStatement end: i64
+          BinaryExpr +
+            Identifier pos
+            IntLiteral 1
+        LetStatement str_done: bool
+          BoolLiteral false
+        WhileStatement
+          Condition
+            BinaryExpr and
+              BinaryExpr <
+                Identifier end
+                Identifier slen
+              BinaryExpr ==
+                Identifier str_done
+                BoolLiteral false
+          IfStatement
+            Condition
+              BinaryExpr ==
+                CallExpr
+                  Callee
+                    Identifier char_at
+                  Args
+                    Identifier source
+                    Identifier end
+                IntLiteral 34
+            Then
+              Assignment
+                Target
+                  Identifier str_done
+                Value
+                  BoolLiteral true
+            Else
+              Assignment
+                Target
+                  Identifier end
+                Value
+                  BinaryExpr +
+                    Identifier end
+                    IntLiteral 1
+        IfStatement
+          Condition
+            Identifier str_done
+          Then
+            LetStatement text: string
+              CallExpr
+                Callee
+                  Identifier substring
+                Args
+                  Identifier source
+                  Identifier pos
+                  BinaryExpr -
+                    BinaryExpr +
+                      Identifier end
+                      IntLiteral 1
+                    Identifier pos
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      BinaryExpr +
+                        BinaryExpr +
+                          BinaryExpr +
+                            StringLiteral "STRING "
+                            CallExpr
+                              Callee
+                                Identifier i64_to_string
+                              Args
+                                Identifier pos
+                          StringLiteral " "
+                        CallExpr
+                          Callee
+                            Identifier i64_to_string
+                          Args
+                            BinaryExpr -
+                              BinaryExpr +
+                                Identifier end
+                                IntLiteral 1
+                              Identifier pos
+                      StringLiteral " "
+                    Identifier text
+            ReturnStatement
+              BinaryExpr +
+                Identifier end
+                IntLiteral 1
+          Else
+            ExpressionStatement
+              CallExpr
+                Callee
+                  Identifier print
+                Args
+                  BinaryExpr +
+                    BinaryExpr +
+                      StringLiteral "ERROR "
+                      CallExpr
+                        Callee
+                          Identifier i64_to_string
+                        Args
+                          Identifier pos
+                    StringLiteral " unterminated string"
+            ReturnStatement
+              Identifier slen
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            BinaryExpr +
+              StringLiteral "ERROR "
+              CallExpr
+                Callee
+                  Identifier i64_to_string
+                Args
+                  Identifier pos
+            StringLiteral " unexpected char"
+    ReturnStatement
+      BinaryExpr +
+        Identifier pos
+        IntLiteral 1
+  FunctionDecl lex_all
+    Param source: string
+    ReturnType: i32
+    LetStatement pos: i64
+      IntLiteral 0
+    LetStatement slen: i64
+      CallExpr
+        Callee
+          Identifier length
+        Args
+          Identifier source
+    LetStatement token_count: i32
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier pos
+          Identifier slen
+      LetStatement old_pos: i64
+        Identifier pos
+      Assignment
+        Target
+          Identifier pos
+        Value
+          CallExpr
+            Callee
+              Identifier lex_one
+            Args
+              Identifier source
+              Identifier pos
+      IfStatement
+        Condition
+          BinaryExpr and
+            BinaryExpr >
+              Identifier pos
+              Identifier old_pos
+            BinaryExpr <=
+              Identifier pos
+              Identifier slen
+        Then
+          Assignment
+            Target
+              Identifier token_count
+            Value
+              BinaryExpr +
+                Identifier token_count
+                IntLiteral 1
+        Else
+          IfStatement
+            Condition
+              BinaryExpr ==
+                Identifier pos
+                Identifier old_pos
+            Then
+              Assignment
+                Target
+                  Identifier pos
+                Value
+                  BinaryExpr +
+                    Identifier pos
+                    IntLiteral 1
+    ReturnStatement
+      Identifier token_count
+  FunctionDecl main
+    ReturnType: i32
+    LetStatement self_path: string
+      StringLiteral "examples/bootstrap_probe/dao_lexer.dao"
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier file_exists
+          Args
+            Identifier self_path
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral ""
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "=== self-lex ==="
+        LetStatement source: string
+          CallExpr
+            Callee
+              Identifier read_file
+            Args
+              Identifier self_path
+        LetStatement self_count: i32
+          CallExpr
+            Callee
+              Identifier lex_all
+            Args
+              Identifier source
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "tokens: "
+                CallExpr
+                  Callee
+                    Identifier i32_to_string
+                  Args
+                    Identifier self_count
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "bytes: "
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    CallExpr
+                      Callee
+                        Identifier length
+                      Args
+                        Identifier source
+      Else
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier eprint
+            Args
+              BinaryExpr +
+                StringLiteral "file not found: "
+                Identifier self_path
+    ReturnStatement
+      IntLiteral 0
