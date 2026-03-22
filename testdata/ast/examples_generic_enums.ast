@@ -1,7 +1,4 @@
 File
-  EnumDecl Option
-    Variant Some
-    Variant None
   FunctionDecl unwrap_i64_or
     Param opt: Option<i64>
     Param default_val: i64
@@ -21,9 +18,6 @@ File
             Identifier Option
         ReturnStatement
           Identifier default_val
-  EnumDecl Result
-    Variant Ok
-    Variant Err
   FunctionDecl safe_divide
     Param a: i64
     Param b: i64

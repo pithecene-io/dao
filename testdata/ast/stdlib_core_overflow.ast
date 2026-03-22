@@ -359,3 +359,612 @@ File
         Args
           Identifier a
           Identifier b
+  FunctionDecl checked_add_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: Option<i8>
+    LetStatement r: i32
+      BinaryExpr +
+        CallExpr
+          Callee
+            Identifier i8_to_i32
+          Args
+            Identifier a
+        CallExpr
+          Callee
+            Identifier i8_to_i32
+          Args
+            Identifier b
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr >
+            Identifier r
+            IntLiteral 127
+          BinaryExpr <
+            Identifier r
+            UnaryExpr -
+              IntLiteral 128
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier i32_to_i8
+            Args
+              Identifier r
+  FunctionDecl checked_sub_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: Option<i8>
+    LetStatement r: i32
+      BinaryExpr -
+        CallExpr
+          Callee
+            Identifier i8_to_i32
+          Args
+            Identifier a
+        CallExpr
+          Callee
+            Identifier i8_to_i32
+          Args
+            Identifier b
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr >
+            Identifier r
+            IntLiteral 127
+          BinaryExpr <
+            Identifier r
+            UnaryExpr -
+              IntLiteral 128
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier i32_to_i8
+            Args
+              Identifier r
+  FunctionDecl checked_mul_i8
+    Param a: i8
+    Param b: i8
+    ReturnType: Option<i8>
+    LetStatement r: i32
+      BinaryExpr *
+        CallExpr
+          Callee
+            Identifier i8_to_i32
+          Args
+            Identifier a
+        CallExpr
+          Callee
+            Identifier i8_to_i32
+          Args
+            Identifier b
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr >
+            Identifier r
+            IntLiteral 127
+          BinaryExpr <
+            Identifier r
+            UnaryExpr -
+              IntLiteral 128
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier i32_to_i8
+            Args
+              Identifier r
+  FunctionDecl checked_add_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: Option<i16>
+    LetStatement r: i32
+      BinaryExpr +
+        CallExpr
+          Callee
+            Identifier i16_to_i32
+          Args
+            Identifier a
+        CallExpr
+          Callee
+            Identifier i16_to_i32
+          Args
+            Identifier b
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr >
+            Identifier r
+            IntLiteral 32767
+          BinaryExpr <
+            Identifier r
+            UnaryExpr -
+              IntLiteral 32768
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier i32_to_i16
+            Args
+              Identifier r
+  FunctionDecl checked_sub_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: Option<i16>
+    LetStatement r: i32
+      BinaryExpr -
+        CallExpr
+          Callee
+            Identifier i16_to_i32
+          Args
+            Identifier a
+        CallExpr
+          Callee
+            Identifier i16_to_i32
+          Args
+            Identifier b
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr >
+            Identifier r
+            IntLiteral 32767
+          BinaryExpr <
+            Identifier r
+            UnaryExpr -
+              IntLiteral 32768
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier i32_to_i16
+            Args
+              Identifier r
+  FunctionDecl checked_mul_i16
+    Param a: i16
+    Param b: i16
+    ReturnType: Option<i16>
+    LetStatement r: i32
+      BinaryExpr *
+        CallExpr
+          Callee
+            Identifier i16_to_i32
+          Args
+            Identifier a
+        CallExpr
+          Callee
+            Identifier i16_to_i32
+          Args
+            Identifier b
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr >
+            Identifier r
+            IntLiteral 32767
+          BinaryExpr <
+            Identifier r
+            UnaryExpr -
+              IntLiteral 32768
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier i32_to_i16
+            Args
+              Identifier r
+  FunctionDecl checked_add
+    Param a: i32
+    Param b: i32
+    ReturnType: Option<i32>
+    LetStatement r: i64
+      BinaryExpr +
+        CallExpr
+          Callee
+            Identifier to_i64
+          Args
+            Identifier a
+        CallExpr
+          Callee
+            Identifier to_i64
+          Args
+            Identifier b
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr >
+            Identifier r
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 2147483647
+          BinaryExpr <
+            Identifier r
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                UnaryExpr -
+                  IntLiteral 2147483648
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier i64_to_i32
+            Args
+              Identifier r
+  FunctionDecl checked_sub
+    Param a: i32
+    Param b: i32
+    ReturnType: Option<i32>
+    LetStatement r: i64
+      BinaryExpr -
+        CallExpr
+          Callee
+            Identifier to_i64
+          Args
+            Identifier a
+        CallExpr
+          Callee
+            Identifier to_i64
+          Args
+            Identifier b
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr >
+            Identifier r
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 2147483647
+          BinaryExpr <
+            Identifier r
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                UnaryExpr -
+                  IntLiteral 2147483648
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier i64_to_i32
+            Args
+              Identifier r
+  FunctionDecl checked_mul
+    Param a: i32
+    Param b: i32
+    ReturnType: Option<i32>
+    LetStatement r: i64
+      BinaryExpr *
+        CallExpr
+          Callee
+            Identifier to_i64
+          Args
+            Identifier a
+        CallExpr
+          Callee
+            Identifier to_i64
+          Args
+            Identifier b
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr >
+            Identifier r
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 2147483647
+          BinaryExpr <
+            Identifier r
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                UnaryExpr -
+                  IntLiteral 2147483648
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          CallExpr
+            Callee
+              Identifier i64_to_i32
+            Args
+              Identifier r
+  FunctionDecl checked_add_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: Option<i64>
+    LetStatement r: i64
+      CallExpr
+        Callee
+          Identifier wrapping_add_i64
+        Args
+          Identifier a
+          Identifier b
+    IfStatement
+      Condition
+        BinaryExpr >=
+          Identifier b
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+      Then
+        IfStatement
+          Condition
+            BinaryExpr <
+              Identifier r
+              Identifier a
+          Then
+            ReturnStatement
+              FieldExpr .None
+                Identifier Option
+      Else
+        IfStatement
+          Condition
+            BinaryExpr >
+              Identifier r
+              Identifier a
+          Then
+            ReturnStatement
+              FieldExpr .None
+                Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          Identifier r
+  FunctionDecl checked_sub_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: Option<i64>
+    LetStatement r: i64
+      CallExpr
+        Callee
+          Identifier wrapping_sub_i64
+        Args
+          Identifier a
+          Identifier b
+    IfStatement
+      Condition
+        BinaryExpr >
+          Identifier b
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              IntLiteral 0
+      Then
+        IfStatement
+          Condition
+            BinaryExpr >
+              Identifier r
+              Identifier a
+          Then
+            ReturnStatement
+              FieldExpr .None
+                Identifier Option
+      Else
+        IfStatement
+          Condition
+            BinaryExpr <
+              Identifier b
+              CallExpr
+                Callee
+                  Identifier to_i64
+                Args
+                  IntLiteral 0
+          Then
+            IfStatement
+              Condition
+                BinaryExpr <
+                  Identifier r
+                  Identifier a
+              Then
+                ReturnStatement
+                  FieldExpr .None
+                    Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          Identifier r
+  FunctionDecl checked_mul_i64
+    Param a: i64
+    Param b: i64
+    ReturnType: Option<i64>
+    IfStatement
+      Condition
+        BinaryExpr or
+          BinaryExpr ==
+            Identifier a
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 0
+          BinaryExpr ==
+            Identifier b
+            CallExpr
+              Callee
+                Identifier to_i64
+              Args
+                IntLiteral 0
+      Then
+        ReturnStatement
+          CallExpr
+            Callee
+              FieldExpr .Some
+                Identifier Option
+            Args
+              CallExpr
+                Callee
+                  Identifier to_i64
+                Args
+                  IntLiteral 0
+    LetStatement r: i64
+      CallExpr
+        Callee
+          Identifier wrapping_mul_i64
+        Args
+          Identifier a
+          Identifier b
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier a
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 1
+      Then
+        IfStatement
+          Condition
+            BinaryExpr ==
+              Identifier r
+              Identifier b
+          Then
+            ReturnStatement
+              FieldExpr .None
+                Identifier Option
+        ReturnStatement
+          CallExpr
+            Callee
+              FieldExpr .Some
+                Identifier Option
+            Args
+              Identifier r
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier b
+          CallExpr
+            Callee
+              Identifier to_i64
+            Args
+              UnaryExpr -
+                IntLiteral 1
+      Then
+        IfStatement
+          Condition
+            BinaryExpr ==
+              Identifier r
+              Identifier a
+          Then
+            ReturnStatement
+              FieldExpr .None
+                Identifier Option
+        ReturnStatement
+          CallExpr
+            Callee
+              FieldExpr .Some
+                Identifier Option
+            Args
+              Identifier r
+    IfStatement
+      Condition
+        BinaryExpr !=
+          BinaryExpr /
+            Identifier r
+            Identifier a
+          Identifier b
+      Then
+        ReturnStatement
+          FieldExpr .None
+            Identifier Option
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .Some
+            Identifier Option
+        Args
+          Identifier r

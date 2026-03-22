@@ -117,8 +117,11 @@ Explicit overflow operations:
 - `saturating_add`, `saturating_sub`, `saturating_mul` — clamp to
   min/max representable value — **implemented** for all signed types
   (i8–i64)
-- `checked_add`, `checked_sub`, `checked_mul` — return an error
-  value or status on overflow — **deferred** until Result type exists
+- `checked_add`, `checked_sub`, `checked_mul` — return
+  `Option.None` on overflow, `Option.Some(result)` otherwise —
+  **implemented** for all signed types (i8–i64); pure Dao
+  implementations using widening (i8/i16/i32) or wrapping +
+  overflow detection (i64)
 
 If Dao later wants relaxed arithmetic for high-performance numerics,
 it must be introduced as an explicit mode, operator family, or
@@ -126,8 +129,8 @@ intrinsic family — not by overloading `unsafe` or by making
 semantics build-configuration-dependent.
 
 Status: **Specified, implemented** — default signed arithmetic traps
-on overflow for all signed types (i8–i64); explicit wrapping and
-saturating operations available for all signed types
+on overflow for all signed types (i8–i64); explicit wrapping,
+saturating, and checked operations available for all signed types
 
 ### 4.3 Division and remainder
 

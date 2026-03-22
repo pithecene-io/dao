@@ -1,14 +1,11 @@
 // generic_enums.dao — generic payload-bearing enums.
 //
-// Demonstrates Option<T> and Result<T, E> as user-defined generic enums.
+// Demonstrates Option<T> and Result<T, E> from the prelude.
 
 // ---------------------------------------------------------------
-// Option<T> — presence or absence of a value
+// Option<T> and Result<T, E> are provided by the prelude
+// (stdlib/core/option.dao and stdlib/core/result.dao).
 // ---------------------------------------------------------------
-
-enum Option<T>:
-  Some(T)
-  None
 
 fn unwrap_i64_or(opt: Option<i64>, default_val: i64): i64
   match opt:
@@ -16,14 +13,6 @@ fn unwrap_i64_or(opt: Option<i64>, default_val: i64): i64
       return value
     Option.None:
       return default_val
-
-// ---------------------------------------------------------------
-// Result<T, E> — success or failure
-// ---------------------------------------------------------------
-
-enum Result<T, E>:
-  Ok(T)
-  Err(E)
 
 // ---------------------------------------------------------------
 // Test functions
