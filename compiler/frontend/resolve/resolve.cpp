@@ -850,6 +850,11 @@ private:
       }
       break;
     }
+    case NodeKind::TryExpr: {
+      const auto& try_expr = expr.as<TryExpr>();
+      resolve_expr(*try_expr.operand, scope);
+      break;
+    }
     case NodeKind::Lambda: {
       const auto& lam = expr.as<LambdaExpr>();
 

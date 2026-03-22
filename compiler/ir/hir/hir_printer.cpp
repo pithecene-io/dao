@@ -424,6 +424,14 @@ private:
           print_expr(*node.left);
           print_expr(*node.right);
         },
+        [&](const HirTry& node) {
+          indent();
+          out_ << "Try";
+          print_type_annotation(expr.type);
+          out_ << "\n";
+          Scope scope(depth_);
+          print_expr(*node.operand);
+        },
         [&](const HirLambda& node) {
           indent();
           out_ << "Lambda";

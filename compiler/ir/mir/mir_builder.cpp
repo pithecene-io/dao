@@ -441,6 +441,69 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
         return emit_value(expr, MirEnumPayload{
             val, pay.variant_index, pay.field_index});
       },
+      [&](const HirTry& try_node) -> MirValueId {
+        // Lower operand (the Result/Option value).
+        auto operand_val = lower_expr_value(*try_node.operand);
+        const auto* enum_type = try_node.enum_type;
+        bool is_result = enum_type != nullptr && enum_type->name() == "Result";
+
+        // Extract discriminant (i32 — matches LLVM enum layout).
+        auto discr = emit_value(types_.builtin(BuiltinKind::I32), expr.span,
+                                MirEnumDiscriminant{operand_val});
+
+        // Compare discriminant to 0 (the success variant: Ok/Some).
+        auto zero = emit_value(types_.builtin(BuiltinKind::I32), expr.span,
+                               MirConstInt{0});
+        auto cmp = emit_value(types_.bool_type(), expr.span,
+                              MirBinary{BinaryOp::EqEq, discr, zero});
+
+        // Create basic blocks.
+        auto* ok_bb = fresh_block();
+        auto* err_bb = fresh_block();
+        auto* merge_bb = fresh_block();
+
+        emit_terminator(expr.span, MirCondBr{cmp, ok_bb->id, err_bb->id});
+
+        // Error/None block: propagate the error or None.
+        switch_to_block(err_bb);
+        if (is_result) {
+          // Extract Err payload from variant 1, field 0.
+          auto err_payload = emit_value(
+              enum_type->variants()[1].payload_types[0], expr.span,
+              MirEnumPayload{operand_val, 1, 0});
+          // Construct Result.Err(err_payload) with the function's return type.
+          const auto* ret_enum_type = static_cast<const TypeEnum*>(
+              current_fn_->return_type);
+          auto* err_args = ctx_.alloc<std::vector<MirValueId>>();
+          err_args->push_back(err_payload);
+          auto err_result = emit_value(
+              current_fn_->return_type, expr.span,
+              MirEnumConstruct{ret_enum_type, 1, err_args});
+          emit_region_exits(expr.span);
+          emit_terminator(expr.span, MirReturn{err_result, true});
+        } else {
+          // Option: construct Option.None (variant 1, no payload).
+          const auto* ret_enum_type = static_cast<const TypeEnum*>(
+              current_fn_->return_type);
+          auto* empty_args = ctx_.alloc<std::vector<MirValueId>>();
+          auto none_result = emit_value(
+              current_fn_->return_type, expr.span,
+              MirEnumConstruct{ret_enum_type, 1, empty_args});
+          emit_region_exits(expr.span);
+          emit_terminator(expr.span, MirReturn{none_result, true});
+        }
+
+        // Ok/Some block: extract the success payload.
+        switch_to_block(ok_bb);
+        auto ok_payload = emit_value(
+            expr.type, expr.span,
+            MirEnumPayload{operand_val, 0, 0});
+        emit_terminator(expr.span, MirBr{merge_bb->id});
+
+        // Merge block: the value produced by ? is the ok payload.
+        switch_to_block(merge_bb);
+        return ok_payload;
+      },
       [&](const HirPipe& pipe) -> MirValueId {
         auto left_val = lower_expr_value(*pipe.left);
         auto callee_val = lower_expr_value(*pipe.right);

@@ -76,6 +76,7 @@ inline auto token_category(TokenKind kind) -> std::string_view {
   case TokenKind::Comma:
   case TokenKind::Pipe:
   case TokenKind::PipeGt:
+  case TokenKind::Question:
     return "operator";
 
   // Delimiters

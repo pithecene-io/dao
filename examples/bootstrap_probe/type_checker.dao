@@ -5,9 +5,9 @@
 // resolve + typecheck pass over the arena.
 //
 // Tests: HashMap<V> for O(1) symbol lookup, Option<V> for fallible
-// map get, Result<T, E> for error-bearing analysis, multi-pass
-// compiler architecture (lex → parse → analyze), and match
-// destructuring for control flow.
+// map get, Result<T, E> with ? operator for error propagation,
+// multi-pass compiler architecture (lex → parse → analyze), and
+// match destructuring for control flow.
 //
 // Language surface:
 //   let x = 5; let y = x + 3; y > 0
@@ -495,33 +495,21 @@ fn check_expr(arena: Vector<Node>, idx: i64, table: HashMap<Symbol>, source: str
           return Result.Err("undefined variable '" + name + "'")
 
     Node.Binary(op, left, right):
-      let lt: Result<i32, string> = check_expr(arena, left, table, source)
-      match lt:
-        Result.Err(msg):
-          return Result.Err(msg)
-        Result.Ok(left_ty):
-          let rt: Result<i32, string> = check_expr(arena, right, table, source)
-          match rt:
-            Result.Err(msg):
-              return Result.Err(msg)
-            Result.Ok(right_ty):
-              return check_binary_op(op, left_ty, right_ty)
+      let left_ty: i32 = check_expr(arena, left, table, source)?
+      let right_ty: i32 = check_expr(arena, right, table, source)?
+      return check_binary_op(op, left_ty, right_ty)
 
     Node.Unary(op, operand):
-      let ot: Result<i32, string> = check_expr(arena, operand, table, source)
-      match ot:
-        Result.Err(msg):
-          return Result.Err(msg)
-        Result.Ok(operand_ty):
-          if op == TK.Minus:
-            if operand_ty == TY_INT():
-              return Result.Ok(TY_INT())
-            return Result.Err("unary '-' requires Int, got " + type_name(operand_ty))
-          if op == TK.KwNot:
-            if operand_ty == TY_BOOL():
-              return Result.Ok(TY_BOOL())
-            return Result.Err("'not' requires Bool, got " + type_name(operand_ty))
-          return Result.Err("unknown unary operator")
+      let operand_ty: i32 = check_expr(arena, operand, table, source)?
+      if op == TK.Minus:
+        if operand_ty == TY_INT():
+          return Result.Ok(TY_INT())
+        return Result.Err("unary '-' requires Int, got " + type_name(operand_ty))
+      if op == TK.KwNot:
+        if operand_ty == TY_BOOL():
+          return Result.Ok(TY_BOOL())
+        return Result.Err("'not' requires Bool, got " + type_name(operand_ty))
+      return Result.Err("unknown unary operator")
 
   return Result.Err("unknown node kind")
 
@@ -535,21 +523,12 @@ fn analyze(arena: Vector<Node>, stmts: Vector<Stmt>, source: string): Result<i32
     let stmt: Stmt = stmts.get(i)
     match stmt:
       Stmt.Let(name_off, name_len, expr_idx):
-        let result: Result<i32, string> = check_expr(arena, expr_idx, table, source)
-        match result:
-          Result.Ok(ty):
-            let name: string = substring(source, name_off, name_len)
-            table = table.set(name, Symbol(name, ty))
-            last_ty = ty
-          Result.Err(msg):
-            return Result.Err(msg)
+        let ty: i32 = check_expr(arena, expr_idx, table, source)?
+        let name: string = substring(source, name_off, name_len)
+        table = table.set(name, Symbol(name, ty))
+        last_ty = ty
       Stmt.Expr(expr_idx):
-        let result: Result<i32, string> = check_expr(arena, expr_idx, table, source)
-        match result:
-          Result.Ok(ty):
-            last_ty = ty
-          Result.Err(msg):
-            return Result.Err(msg)
+        last_ty = check_expr(arena, expr_idx, table, source)?
     i = i + 1
   return Result.Ok(last_ty)
 

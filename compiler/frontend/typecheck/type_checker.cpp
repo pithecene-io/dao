@@ -1302,6 +1302,9 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
   case NodeKind::PipeExpr:
     result = check_pipe(expr);
     break;
+  case NodeKind::TryExpr:
+    result = check_try(expr);
+    break;
   case NodeKind::FieldExpr:
     result = check_field(expr);
     break;
@@ -2148,6 +2151,106 @@ auto TypeChecker::check_pipe(const Expr* expr) -> const Type* {
 
   // Substitute generic params in the return type.
   return substitute_generics(fn_type->return_type(), type_bindings);
+}
+
+// ---------------------------------------------------------------------------
+// Try/propagate expressions
+// ---------------------------------------------------------------------------
+
+auto TypeChecker::check_try(const Expr* expr) -> const Type* {
+  const auto& try_expr = expr->as<TryExpr>();
+  const auto* operand_type = check_expr(try_expr.operand);
+  if (operand_type == nullptr) {
+    return nullptr;
+  }
+
+  if (operand_type->kind() != TypeKind::Enum) {
+    error(expr->span,
+          "'?' operator requires an Option or Result type, got '" +
+              print_type(operand_type) + "'");
+    return nullptr;
+  }
+
+  const auto* enum_type = static_cast<const TypeEnum*>(operand_type);
+  auto name = enum_type->name();
+
+  if (name != "Option" && name != "Result") {
+    error(expr->span,
+          "'?' operator requires an Option or Result type, got '" +
+              print_type(operand_type) + "'");
+    return nullptr;
+  }
+
+  // Validate enclosing function return type compatibility.
+  if (ctx_.return_type == nullptr) {
+    error(expr->span,
+          "'?' operator can only be used inside a function with a return type");
+    return nullptr;
+  }
+
+  const auto& variants = enum_type->variants();
+
+  if (name == "Result") {
+    // Result<T, E>: Ok(T) at variant 0, Err(E) at variant 1.
+    // The expression type is T. The enclosing function must return Result<_, E>.
+    if (variants.size() < 2 || variants[0].payload_types.empty() ||
+        variants[1].payload_types.empty()) {
+      error(expr->span, "Result type has unexpected variant structure");
+      return nullptr;
+    }
+    const auto* ok_type = variants[0].payload_types[0];
+    const auto* err_type = variants[1].payload_types[0];
+
+    // Check that the enclosing function returns Result<_, E>.
+    if (ctx_.return_type->kind() != TypeKind::Enum) {
+      error(expr->span,
+            "enclosing function must return Result to use '?' on Result, "
+            "but returns '" + print_type(ctx_.return_type) + "'");
+      return nullptr;
+    }
+    const auto* ret_enum = static_cast<const TypeEnum*>(ctx_.return_type);
+    if (ret_enum->name() != "Result") {
+      error(expr->span,
+            "enclosing function must return Result to use '?' on Result, "
+            "but returns '" + print_type(ctx_.return_type) + "'");
+      return nullptr;
+    }
+    // Check that the error types match.
+    if (ret_enum->variants().size() >= 2 &&
+        !ret_enum->variants()[1].payload_types.empty()) {
+      const auto* fn_err_type = ret_enum->variants()[1].payload_types[0];
+      if (!is_assignable(err_type, fn_err_type)) {
+        error(expr->span,
+              "error type '" + print_type(err_type) +
+                  "' is not assignable to function return error type '" +
+                  print_type(fn_err_type) + "'");
+      }
+    }
+    return ok_type;
+  }
+
+  // Option<T>: Some(T) at variant 0, None at variant 1.
+  // The expression type is T. The enclosing function must return Option<_>.
+  if (variants.empty() || variants[0].payload_types.empty()) {
+    error(expr->span, "Option type has unexpected variant structure");
+    return nullptr;
+  }
+  const auto* some_type = variants[0].payload_types[0];
+
+  if (ctx_.return_type->kind() != TypeKind::Enum) {
+    error(expr->span,
+          "enclosing function must return Option to use '?' on Option, "
+          "but returns '" + print_type(ctx_.return_type) + "'");
+    return nullptr;
+  }
+  const auto* ret_enum = static_cast<const TypeEnum*>(ctx_.return_type);
+  if (ret_enum->name() != "Option") {
+    error(expr->span,
+          "enclosing function must return Option to use '?' on Option, "
+          "but returns '" + print_type(ctx_.return_type) + "'");
+    return nullptr;
+  }
+  return some_type;
 }
 
 // ---------------------------------------------------------------------------

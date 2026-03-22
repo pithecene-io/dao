@@ -146,6 +146,7 @@ auto lexical_category(TokenKind kind) -> std::string_view {
   case TokenKind::Bang:
   case TokenKind::Dot:
   case TokenKind::Pipe:
+  case TokenKind::Question:
     return ""; // General operators — no frozen taxonomy category.
 
   // Punctuation
@@ -455,6 +456,11 @@ private:
       const auto& pipe = expr.as<PipeExpr>();
       visit_expr(*pipe.left);
       visit_expr(*pipe.right);
+      break;
+    }
+    case NodeKind::TryExpr: {
+      const auto& try_expr = expr.as<TryExpr>();
+      visit_expr(*try_expr.operand);
       break;
     }
     case NodeKind::Lambda: {

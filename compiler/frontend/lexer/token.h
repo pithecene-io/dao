@@ -74,6 +74,7 @@ enum class TokenKind : std::uint8_t {
   Comma,      // ,
   Pipe,       // |
   PipeGt,     // |>
+  Question,   // ?
 
   // Delimiters
   LParen,   // (
