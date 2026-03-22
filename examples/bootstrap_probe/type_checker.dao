@@ -1,0 +1,688 @@
+// type_checker.dao — Bootstrap probe 6: resolver and type checker.
+//
+// Extends the expression parser probe with variable declarations,
+// booleans, comparisons, and logical operators, then adds a combined
+// resolve + typecheck pass over the arena.
+//
+// Tests: Option<T> for fallible symbol lookup, Result<T, E> for
+// error-bearing analysis, Vector<T> as a linear symbol table,
+// multi-pass compiler architecture (lex → parse → analyze), and
+// match destructuring for control flow.
+//
+// Language surface:
+//   let x = 5; let y = x + 3; y > 0
+//
+// Types: Int, Bool. Operators: + - * / (Int→Int), < > == (Int→Bool),
+// and or not (Bool→Bool). Unary: - (Int), not (Bool).
+
+// ---------------------------------------------------------------
+// Token representation
+// ---------------------------------------------------------------
+
+enum TK:
+  Int
+  True
+  False
+  Ident
+  KwLet
+  KwAnd
+  KwOr
+  KwNot
+  Plus
+  Minus
+  Star
+  Slash
+  EqEq
+  Lt
+  Gt
+  Assign
+  LParen
+  RParen
+  Semi
+  Eof
+  Error
+
+class Token:
+  kind: TK
+  offset: i64
+  len: i64
+
+fn make_token(k: TK, off: i64, l: i64): Token
+  return Token(k, off, l)
+
+// ---------------------------------------------------------------
+// Lexer
+// ---------------------------------------------------------------
+
+fn is_digit(ch: i32): bool
+  return ch >= 48 and ch <= 57
+
+fn is_alpha(ch: i32): bool
+  if ch >= 65 and ch <= 90:
+    return true
+  if ch >= 97 and ch <= 122:
+    return true
+  return ch == 95
+
+fn is_alnum(ch: i32): bool
+  return is_digit(ch) or is_alpha(ch)
+
+fn is_whitespace(ch: i32): bool
+  return ch == 32 or ch == 9 or ch == 10 or ch == 13
+
+fn classify_keyword(source: string, offset: i64, len: i64): TK
+  let word: string = substring(source, offset, len)
+  if word == "let":
+    return TK.KwLet
+  if word == "true":
+    return TK.True
+  if word == "false":
+    return TK.False
+  if word == "and":
+    return TK.KwAnd
+  if word == "or":
+    return TK.KwOr
+  if word == "not":
+    return TK.KwNot
+  return TK.Ident
+
+fn lex(source: string): Vector<Token>
+  let tokens = Vector<Token>::new()
+  let pos: i64 = 0
+  let slen: i64 = length(source)
+  while pos < slen:
+    let ch: i32 = char_at(source, pos)
+    if is_whitespace(ch):
+      pos = pos + 1
+    else if is_digit(ch):
+      let end: i64 = pos + 1
+      while end < slen:
+        if is_digit(char_at(source, end)):
+          end = end + 1
+        else:
+          break
+      tokens = tokens.push(make_token(TK.Int, pos, end - pos))
+      pos = end
+    else if is_alpha(ch):
+      let end: i64 = pos + 1
+      while end < slen:
+        if is_alnum(char_at(source, end)):
+          end = end + 1
+        else:
+          break
+      let kind: TK = classify_keyword(source, pos, end - pos)
+      tokens = tokens.push(make_token(kind, pos, end - pos))
+      pos = end
+    else if ch == 43:
+      tokens = tokens.push(make_token(TK.Plus, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 45:
+      tokens = tokens.push(make_token(TK.Minus, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 42:
+      tokens = tokens.push(make_token(TK.Star, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 47:
+      tokens = tokens.push(make_token(TK.Slash, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 60:
+      tokens = tokens.push(make_token(TK.Lt, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 62:
+      tokens = tokens.push(make_token(TK.Gt, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 61:
+      // '=' or '=='
+      if pos + 1 < slen:
+        if char_at(source, pos + 1) == 61:
+          tokens = tokens.push(make_token(TK.EqEq, pos, to_i64(2)))
+          pos = pos + 2
+        else:
+          tokens = tokens.push(make_token(TK.Assign, pos, to_i64(1)))
+          pos = pos + 1
+      else:
+        tokens = tokens.push(make_token(TK.Assign, pos, to_i64(1)))
+        pos = pos + 1
+    else if ch == 40:
+      tokens = tokens.push(make_token(TK.LParen, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 41:
+      tokens = tokens.push(make_token(TK.RParen, pos, to_i64(1)))
+      pos = pos + 1
+    else if ch == 59:
+      tokens = tokens.push(make_token(TK.Semi, pos, to_i64(1)))
+      pos = pos + 1
+    else:
+      tokens = tokens.push(make_token(TK.Error, pos, to_i64(1)))
+      pos = pos + 1
+  tokens = tokens.push(make_token(TK.Eof, slen, to_i64(0)))
+  return tokens
+
+// ---------------------------------------------------------------
+// AST nodes
+// ---------------------------------------------------------------
+
+enum Node:
+  IntLit(i64)
+  BoolLit(i64)
+  VarRef(i64, i64)
+  Binary(TK, i64, i64)
+  Unary(TK, i64)
+
+enum Stmt:
+  Let(i64, i64, i64)
+  Expr(i64)
+
+// ---------------------------------------------------------------
+// Parse state and helpers
+// ---------------------------------------------------------------
+
+class ExprResult:
+  arena: Vector<Node>
+  node: i64
+  pos: i64
+
+fn expr_error(arena: Vector<Node>, pos: i64): ExprResult
+  return ExprResult(arena, to_i64(-1), pos)
+
+fn is_expr_ok(r: ExprResult): bool
+  return r.node >= to_i64(0)
+
+class ParseState:
+  arena: Vector<Node>
+  stmts: Vector<Stmt>
+  pos: i64
+  ok: bool
+
+fn peek(tokens: Vector<Token>, pos: i64): TK
+  if pos >= tokens.length():
+    return TK.Eof
+  let tok: Token = tokens.get(pos)
+  return tok.kind
+
+fn token_text_to_i64(source: string, tok: Token): i64
+  let result: i64 = 0
+  let i: i64 = 0
+  while i < tok.len:
+    let ch: i32 = char_at(source, tok.offset + i)
+    result = result * to_i64(10) + to_i64(ch - 48)
+    i = i + 1
+  return result
+
+// ---------------------------------------------------------------
+// Parser — recursive descent
+//
+// Grammar:
+//   program  → stmt* EOF
+//   stmt     → let_stmt | expr_stmt
+//   let_stmt → 'let' IDENT '=' expr ';'?
+//   expr_stmt→ expr ';'?
+//   expr     → or_expr
+//   or_expr  → and_expr ('or' and_expr)*
+//   and_expr → cmp_expr ('and' cmp_expr)*
+//   cmp_expr → add_expr (('==' | '<' | '>') add_expr)?
+//   add_expr → mul_expr (('+' | '-') mul_expr)*
+//   mul_expr → unary (('*' | '/') unary)*
+//   unary    → '-' unary | 'not' unary | primary
+//   primary  → INT | 'true' | 'false' | IDENT | '(' expr ')'
+// ---------------------------------------------------------------
+
+fn parse_primary(tokens: Vector<Token>, source: string, arena: Vector<Node>, pos: i64): ExprResult
+  let kind: TK = peek(tokens, pos)
+
+  if kind == TK.Int:
+    let tok: Token = tokens.get(pos)
+    let val: i64 = token_text_to_i64(source, tok)
+    let idx: i64 = arena.length()
+    let new_arena: Vector<Node> = arena.push(Node.IntLit(val))
+    return ExprResult(new_arena, idx, pos + 1)
+
+  if kind == TK.True:
+    let idx: i64 = arena.length()
+    let new_arena: Vector<Node> = arena.push(Node.BoolLit(to_i64(1)))
+    return ExprResult(new_arena, idx, pos + 1)
+
+  if kind == TK.False:
+    let idx: i64 = arena.length()
+    let new_arena: Vector<Node> = arena.push(Node.BoolLit(to_i64(0)))
+    return ExprResult(new_arena, idx, pos + 1)
+
+  if kind == TK.Ident:
+    let tok: Token = tokens.get(pos)
+    let idx: i64 = arena.length()
+    let new_arena: Vector<Node> = arena.push(Node.VarRef(tok.offset, tok.len))
+    return ExprResult(new_arena, idx, pos + 1)
+
+  if kind == TK.LParen:
+    let inner: ExprResult = parse_expr(tokens, source, arena, pos + 1)
+    if is_expr_ok(inner) == false:
+      return inner
+    if peek(tokens, inner.pos) != TK.RParen:
+      return expr_error(inner.arena, inner.pos)
+    return ExprResult(inner.arena, inner.node, inner.pos + 1)
+
+  return expr_error(arena, pos)
+
+fn parse_unary(tokens: Vector<Token>, source: string, arena: Vector<Node>, pos: i64): ExprResult
+  let kind: TK = peek(tokens, pos)
+
+  if kind == TK.Minus:
+    let operand: ExprResult = parse_unary(tokens, source, arena, pos + 1)
+    if is_expr_ok(operand) == false:
+      return operand
+    let idx: i64 = operand.arena.length()
+    let new_arena: Vector<Node> = operand.arena.push(
+      Node.Unary(TK.Minus, operand.node))
+    return ExprResult(new_arena, idx, operand.pos)
+
+  if kind == TK.KwNot:
+    let operand: ExprResult = parse_unary(tokens, source, arena, pos + 1)
+    if is_expr_ok(operand) == false:
+      return operand
+    let idx: i64 = operand.arena.length()
+    let new_arena: Vector<Node> = operand.arena.push(
+      Node.Unary(TK.KwNot, operand.node))
+    return ExprResult(new_arena, idx, operand.pos)
+
+  return parse_primary(tokens, source, arena, pos)
+
+fn parse_multiplicative(tokens: Vector<Token>, source: string, arena: Vector<Node>, pos: i64): ExprResult
+  let left: ExprResult = parse_unary(tokens, source, arena, pos)
+  if is_expr_ok(left) == false:
+    return left
+  let result: ExprResult = left
+  let done: bool = false
+  while done == false:
+    let op: TK = peek(tokens, result.pos)
+    if op == TK.Star or op == TK.Slash:
+      let right: ExprResult = parse_unary(tokens, source, result.arena, result.pos + 1)
+      if is_expr_ok(right) == false:
+        return right
+      let idx: i64 = right.arena.length()
+      let new_arena: Vector<Node> = right.arena.push(
+        Node.Binary(op, result.node, right.node))
+      result = ExprResult(new_arena, idx, right.pos)
+    else:
+      done = true
+  return result
+
+fn parse_additive(tokens: Vector<Token>, source: string, arena: Vector<Node>, pos: i64): ExprResult
+  let left: ExprResult = parse_multiplicative(tokens, source, arena, pos)
+  if is_expr_ok(left) == false:
+    return left
+  let result: ExprResult = left
+  let done: bool = false
+  while done == false:
+    let op: TK = peek(tokens, result.pos)
+    if op == TK.Plus or op == TK.Minus:
+      let right: ExprResult = parse_multiplicative(tokens, source, result.arena, result.pos + 1)
+      if is_expr_ok(right) == false:
+        return right
+      let idx: i64 = right.arena.length()
+      let new_arena: Vector<Node> = right.arena.push(
+        Node.Binary(op, result.node, right.node))
+      result = ExprResult(new_arena, idx, right.pos)
+    else:
+      done = true
+  return result
+
+fn parse_compare(tokens: Vector<Token>, source: string, arena: Vector<Node>, pos: i64): ExprResult
+  let left: ExprResult = parse_additive(tokens, source, arena, pos)
+  if is_expr_ok(left) == false:
+    return left
+  let op: TK = peek(tokens, left.pos)
+  if op == TK.EqEq or op == TK.Lt or op == TK.Gt:
+    let right: ExprResult = parse_additive(tokens, source, left.arena, left.pos + 1)
+    if is_expr_ok(right) == false:
+      return right
+    let idx: i64 = right.arena.length()
+    let new_arena: Vector<Node> = right.arena.push(
+      Node.Binary(op, left.node, right.node))
+    return ExprResult(new_arena, idx, right.pos)
+  return left
+
+fn parse_and(tokens: Vector<Token>, source: string, arena: Vector<Node>, pos: i64): ExprResult
+  let left: ExprResult = parse_compare(tokens, source, arena, pos)
+  if is_expr_ok(left) == false:
+    return left
+  let result: ExprResult = left
+  let done: bool = false
+  while done == false:
+    if peek(tokens, result.pos) == TK.KwAnd:
+      let right: ExprResult = parse_compare(tokens, source, result.arena, result.pos + 1)
+      if is_expr_ok(right) == false:
+        return right
+      let idx: i64 = right.arena.length()
+      let new_arena: Vector<Node> = right.arena.push(
+        Node.Binary(TK.KwAnd, result.node, right.node))
+      result = ExprResult(new_arena, idx, right.pos)
+    else:
+      done = true
+  return result
+
+fn parse_or(tokens: Vector<Token>, source: string, arena: Vector<Node>, pos: i64): ExprResult
+  let left: ExprResult = parse_and(tokens, source, arena, pos)
+  if is_expr_ok(left) == false:
+    return left
+  let result: ExprResult = left
+  let done: bool = false
+  while done == false:
+    if peek(tokens, result.pos) == TK.KwOr:
+      let right: ExprResult = parse_and(tokens, source, result.arena, result.pos + 1)
+      if is_expr_ok(right) == false:
+        return right
+      let idx: i64 = right.arena.length()
+      let new_arena: Vector<Node> = right.arena.push(
+        Node.Binary(TK.KwOr, result.node, right.node))
+      result = ExprResult(new_arena, idx, right.pos)
+    else:
+      done = true
+  return result
+
+fn parse_expr(tokens: Vector<Token>, source: string, arena: Vector<Node>, pos: i64): ExprResult
+  return parse_or(tokens, source, arena, pos)
+
+// ---------------------------------------------------------------
+// Statement parsing
+// ---------------------------------------------------------------
+
+fn parse_stmt(tokens: Vector<Token>, source: string, arena: Vector<Node>, stmts: Vector<Stmt>, pos: i64): ParseState
+  let kind: TK = peek(tokens, pos)
+
+  if kind == TK.KwLet:
+    // let IDENT = expr ;?
+    if peek(tokens, pos + 1) != TK.Ident:
+      return ParseState(arena, stmts, pos, false)
+    let ident_tok: Token = tokens.get(pos + 1)
+    if peek(tokens, pos + 2) != TK.Assign:
+      return ParseState(arena, stmts, pos, false)
+    let value: ExprResult = parse_expr(tokens, source, arena, pos + 3)
+    if is_expr_ok(value) == false:
+      return ParseState(value.arena, stmts, value.pos, false)
+    let next_pos: i64 = value.pos
+    if peek(tokens, next_pos) == TK.Semi:
+      next_pos = next_pos + 1
+    let new_stmts: Vector<Stmt> = stmts.push(
+      Stmt.Let(ident_tok.offset, ident_tok.len, value.node))
+    return ParseState(value.arena, new_stmts, next_pos, true)
+
+  // Expression statement.
+  let value: ExprResult = parse_expr(tokens, source, arena, pos)
+  if is_expr_ok(value) == false:
+    return ParseState(value.arena, stmts, value.pos, false)
+  let next_pos: i64 = value.pos
+  if peek(tokens, next_pos) == TK.Semi:
+    next_pos = next_pos + 1
+  let new_stmts: Vector<Stmt> = stmts.push(Stmt.Expr(value.node))
+  return ParseState(value.arena, new_stmts, next_pos, true)
+
+fn parse_program(tokens: Vector<Token>, source: string): ParseState
+  let arena = Vector<Node>::new()
+  let stmts = Vector<Stmt>::new()
+  let pos: i64 = 0
+  let ok: bool = true
+  while peek(tokens, pos) != TK.Eof and ok:
+    let result: ParseState = parse_stmt(tokens, source, arena, stmts, pos)
+    arena = result.arena
+    stmts = result.stmts
+    pos = result.pos
+    ok = result.ok
+  return ParseState(arena, stmts, pos, ok)
+
+// ---------------------------------------------------------------
+// Type system
+// ---------------------------------------------------------------
+
+fn TY_INT(): i32 -> 1
+fn TY_BOOL(): i32 -> 2
+
+fn type_name(ty: i32): string
+  if ty == TY_INT():
+    return "Int"
+  if ty == TY_BOOL():
+    return "Bool"
+  return "???"
+
+// ---------------------------------------------------------------
+// Symbol table — Vector<Symbol> with linear scan
+// ---------------------------------------------------------------
+
+class Symbol:
+  name: string
+  ty: i32
+
+fn find_symbol(table: Vector<Symbol>, name: string): Option<i64>
+  // Scan backwards so later bindings shadow earlier ones.
+  let i: i64 = table.length() - 1
+  while i >= to_i64(0):
+    let sym: Symbol = table.get(i)
+    if sym.name == name:
+      return Option.Some(i)
+    i = i - 1
+  return Option.None
+
+// ---------------------------------------------------------------
+// Type checker — combined resolve + typecheck over the AST arena
+// ---------------------------------------------------------------
+
+fn check_binary_op(op: TK, left_ty: i32, right_ty: i32): Result<i32, string>
+  // Arithmetic: + - * / require Int, produce Int.
+  if op == TK.Plus or op == TK.Minus or op == TK.Star or op == TK.Slash:
+    if left_ty == TY_INT() and right_ty == TY_INT():
+      return Result.Ok(TY_INT())
+    return Result.Err("arithmetic operator requires Int operands, got " + type_name(left_ty) + " and " + type_name(right_ty))
+
+  // Comparison: == < > require Int, produce Bool.
+  if op == TK.EqEq or op == TK.Lt or op == TK.Gt:
+    if left_ty == TY_INT() and right_ty == TY_INT():
+      return Result.Ok(TY_BOOL())
+    return Result.Err("comparison requires Int operands, got " + type_name(left_ty) + " and " + type_name(right_ty))
+
+  // Logical: and or require Bool, produce Bool.
+  if op == TK.KwAnd or op == TK.KwOr:
+    if left_ty == TY_BOOL() and right_ty == TY_BOOL():
+      return Result.Ok(TY_BOOL())
+    return Result.Err("logical operator requires Bool operands, got " + type_name(left_ty) + " and " + type_name(right_ty))
+
+  return Result.Err("unknown binary operator")
+
+fn check_expr(arena: Vector<Node>, idx: i64, table: Vector<Symbol>, source: string): Result<i32, string>
+  let node: Node = arena.get(idx)
+  match node:
+    Node.IntLit(v):
+      return Result.Ok(TY_INT())
+
+    Node.BoolLit(v):
+      return Result.Ok(TY_BOOL())
+
+    Node.VarRef(off, len):
+      let name: string = substring(source, off, len)
+      let found: Option<i64> = find_symbol(table, name)
+      match found:
+        Option.Some(sym_idx):
+          let sym: Symbol = table.get(sym_idx)
+          return Result.Ok(sym.ty)
+        Option.None:
+          return Result.Err("undefined variable '" + name + "'")
+
+    Node.Binary(op, left, right):
+      let lt: Result<i32, string> = check_expr(arena, left, table, source)
+      match lt:
+        Result.Err(msg):
+          return Result.Err(msg)
+        Result.Ok(left_ty):
+          let rt: Result<i32, string> = check_expr(arena, right, table, source)
+          match rt:
+            Result.Err(msg):
+              return Result.Err(msg)
+            Result.Ok(right_ty):
+              return check_binary_op(op, left_ty, right_ty)
+
+    Node.Unary(op, operand):
+      let ot: Result<i32, string> = check_expr(arena, operand, table, source)
+      match ot:
+        Result.Err(msg):
+          return Result.Err(msg)
+        Result.Ok(operand_ty):
+          if op == TK.Minus:
+            if operand_ty == TY_INT():
+              return Result.Ok(TY_INT())
+            return Result.Err("unary '-' requires Int, got " + type_name(operand_ty))
+          if op == TK.KwNot:
+            if operand_ty == TY_BOOL():
+              return Result.Ok(TY_BOOL())
+            return Result.Err("'not' requires Bool, got " + type_name(operand_ty))
+          return Result.Err("unknown unary operator")
+
+  return Result.Err("unknown node kind")
+
+// Analyze a program: walk statements, build symbol table, typecheck.
+// Returns the type of the last statement (Ok) or the first error (Err).
+fn analyze(arena: Vector<Node>, stmts: Vector<Stmt>, source: string): Result<i32, string>
+  let table = Vector<Symbol>::new()
+  let last_ty: i32 = 0
+  let i: i64 = 0
+  while i < stmts.length():
+    let stmt: Stmt = stmts.get(i)
+    match stmt:
+      Stmt.Let(name_off, name_len, expr_idx):
+        let result: Result<i32, string> = check_expr(arena, expr_idx, table, source)
+        match result:
+          Result.Ok(ty):
+            let name: string = substring(source, name_off, name_len)
+            table = table.push(Symbol(name, ty))
+            last_ty = ty
+          Result.Err(msg):
+            return Result.Err(msg)
+      Stmt.Expr(expr_idx):
+        let result: Result<i32, string> = check_expr(arena, expr_idx, table, source)
+        match result:
+          Result.Ok(ty):
+            last_ty = ty
+          Result.Err(msg):
+            return Result.Err(msg)
+    i = i + 1
+  return Result.Ok(last_ty)
+
+// ---------------------------------------------------------------
+// Test harness
+// ---------------------------------------------------------------
+
+fn test(label: string, source: string, expected: string): bool
+  let tokens: Vector<Token> = lex(source)
+  let parsed: ParseState = parse_program(tokens, source)
+  if parsed.ok == false:
+    if expected == "ERROR":
+      print("PASS " + label + " : parse error (expected)")
+      return true
+    print("FAIL " + label + ": parse error")
+    return false
+  let result: Result<i32, string> = analyze(parsed.arena, parsed.stmts, source)
+  match result:
+    Result.Ok(ty):
+      let actual: string = type_name(ty)
+      if actual == expected:
+        print("PASS " + label + " : " + actual)
+        return true
+      else:
+        print("FAIL " + label + ": expected " + expected + ", got " + actual)
+        return false
+    Result.Err(msg):
+      if expected == "ERROR":
+        print("PASS " + label + " : " + msg)
+        return true
+      else:
+        print("FAIL " + label + ": " + msg)
+        return false
+  return false
+
+// ---------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------
+
+fn main(): i32
+  print("=== type_checker: lex -> parse -> resolve -> typecheck ===")
+  print("")
+
+  let pass_count: i32 = 0
+
+  // --- Variable binding and arithmetic ---
+  if test("literal", "42", "Int"):
+    pass_count = pass_count + 1
+  if test("add", "1 + 2", "Int"):
+    pass_count = pass_count + 1
+  if test("let_use", "let x = 5; x + 3", "Int"):
+    pass_count = pass_count + 1
+  if test("let_chain", "let x = 5; let y = x + 3; y", "Int"):
+    pass_count = pass_count + 1
+  if test("let_arith", "let a = 1; let b = 2; let c = a + b; c * 3", "Int"):
+    pass_count = pass_count + 1
+
+  // --- Booleans ---
+  if test("bool_lit", "true", "Bool"):
+    pass_count = pass_count + 1
+  if test("bool_and", "true and false", "Bool"):
+    pass_count = pass_count + 1
+  if test("bool_or", "false or true", "Bool"):
+    pass_count = pass_count + 1
+  if test("bool_not", "not true", "Bool"):
+    pass_count = pass_count + 1
+
+  // --- Comparisons ---
+  if test("cmp_lt", "3 < 5", "Bool"):
+    pass_count = pass_count + 1
+  if test("cmp_gt", "10 > 3", "Bool"):
+    pass_count = pass_count + 1
+  if test("cmp_eq", "5 == 5", "Bool"):
+    pass_count = pass_count + 1
+
+  // --- Mixed: let + compare + logic ---
+  if test("let_cmp", "let x = 5; x > 3", "Bool"):
+    pass_count = pass_count + 1
+  if test("let_logic", "let p = 5 > 3; p and true", "Bool"):
+    pass_count = pass_count + 1
+  if test("complex", "let a = 10; let b = a * 2; b > a and a > 0", "Bool"):
+    pass_count = pass_count + 1
+
+  // --- Unary ---
+  if test("neg", "-5", "Int"):
+    pass_count = pass_count + 1
+  if test("double_neg", "--5", "Int"):
+    pass_count = pass_count + 1
+  if test("not_cmp", "not (3 > 5)", "Bool"):
+    pass_count = pass_count + 1
+
+  // --- Type errors (expected) ---
+  if test("err_add_bool", "5 + true", "ERROR"):
+    pass_count = pass_count + 1
+  if test("err_and_int", "5 and true", "ERROR"):
+    pass_count = pass_count + 1
+  if test("err_neg_bool", "-true", "ERROR"):
+    pass_count = pass_count + 1
+  if test("err_not_int", "not 5", "ERROR"):
+    pass_count = pass_count + 1
+  if test("err_cmp_bool", "true < false", "ERROR"):
+    pass_count = pass_count + 1
+
+  // --- Undefined variable ---
+  if test("err_undef", "x + 1", "ERROR"):
+    pass_count = pass_count + 1
+  if test("err_undef2", "let x = 5; y + x", "ERROR"):
+    pass_count = pass_count + 1
+
+  // --- Wrong type after let ---
+  if test("err_let_type", "let x = true; x + 1", "ERROR"):
+    pass_count = pass_count + 1
+
+  // --- Shadowing ---
+  if test("shadow", "let x = 1; let x = true; x", "Bool"):
+    pass_count = pass_count + 1
+  if test("shadow_use", "let x = 1; let y = x + 2; let x = true; x and y > 0", "Bool"):
+    pass_count = pass_count + 1
+
+  let total: i32 = 28
+  print("")
+  print("--- results ---")
+  print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " passed")
+
+  return 0
