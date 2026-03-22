@@ -44,6 +44,7 @@ auto Expr::kind() const -> NodeKind {
       [](const IndexExpr&) { return NodeKind::IndexExpr; },
       [](const FieldExpr&) { return NodeKind::FieldExpr; },
       [](const PipeExpr&) { return NodeKind::PipeExpr; },
+      [](const TryExpr&) { return NodeKind::TryExpr; },
       [](const LambdaExpr&) { return NodeKind::Lambda; },
       [](const IntLiteral&) { return NodeKind::IntLiteral; },
       [](const FloatLiteral&) { return NodeKind::FloatLiteral; },
@@ -125,6 +126,8 @@ auto node_kind_name(NodeKind kind) -> const char* {
     return "FieldExpr";
   case NodeKind::PipeExpr:
     return "PipeExpr";
+  case NodeKind::TryExpr:
+    return "TryExpr";
   case NodeKind::Lambda:
     return "Lambda";
   case NodeKind::IntLiteral:

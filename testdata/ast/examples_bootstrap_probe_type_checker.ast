@@ -2612,180 +2612,129 @@ File
         Pattern
           FieldExpr .Binary
             Identifier Node
-        LetStatement lt: Result<i32, string>
+        LetStatement left_ty: i32
+          TryExpr
+            CallExpr
+              Callee
+                Identifier check_expr
+              Args
+                Identifier arena
+                Identifier left
+                Identifier table
+                Identifier source
+        LetStatement right_ty: i32
+          TryExpr
+            CallExpr
+              Callee
+                Identifier check_expr
+              Args
+                Identifier arena
+                Identifier right
+                Identifier table
+                Identifier source
+        ReturnStatement
           CallExpr
             Callee
-              Identifier check_expr
+              Identifier check_binary_op
             Args
-              Identifier arena
-              Identifier left
-              Identifier table
-              Identifier source
-        MatchStatement
-          Scrutinee
-            Identifier lt
-          Arm
-            Pattern
-              FieldExpr .Err
-                Identifier Result
-            ReturnStatement
-              CallExpr
-                Callee
-                  FieldExpr .Err
-                    Identifier Result
-                Args
-                  Identifier msg
-          Arm
-            Pattern
-              FieldExpr .Ok
-                Identifier Result
-            LetStatement rt: Result<i32, string>
-              CallExpr
-                Callee
-                  Identifier check_expr
-                Args
-                  Identifier arena
-                  Identifier right
-                  Identifier table
-                  Identifier source
-            MatchStatement
-              Scrutinee
-                Identifier rt
-              Arm
-                Pattern
-                  FieldExpr .Err
-                    Identifier Result
-                ReturnStatement
-                  CallExpr
-                    Callee
-                      FieldExpr .Err
-                        Identifier Result
-                    Args
-                      Identifier msg
-              Arm
-                Pattern
-                  FieldExpr .Ok
-                    Identifier Result
-                ReturnStatement
-                  CallExpr
-                    Callee
-                      Identifier check_binary_op
-                    Args
-                      Identifier op
-                      Identifier left_ty
-                      Identifier right_ty
+              Identifier op
+              Identifier left_ty
+              Identifier right_ty
       Arm
         Pattern
           FieldExpr .Unary
             Identifier Node
-        LetStatement ot: Result<i32, string>
-          CallExpr
-            Callee
-              Identifier check_expr
-            Args
-              Identifier arena
-              Identifier operand
-              Identifier table
-              Identifier source
-        MatchStatement
-          Scrutinee
-            Identifier ot
-          Arm
-            Pattern
-              FieldExpr .Err
-                Identifier Result
-            ReturnStatement
-              CallExpr
-                Callee
-                  FieldExpr .Err
-                    Identifier Result
-                Args
-                  Identifier msg
-          Arm
-            Pattern
-              FieldExpr .Ok
-                Identifier Result
+        LetStatement operand_ty: i32
+          TryExpr
+            CallExpr
+              Callee
+                Identifier check_expr
+              Args
+                Identifier arena
+                Identifier operand
+                Identifier table
+                Identifier source
+        IfStatement
+          Condition
+            BinaryExpr ==
+              Identifier op
+              FieldExpr .Minus
+                Identifier TK
+          Then
             IfStatement
               Condition
                 BinaryExpr ==
-                  Identifier op
-                  FieldExpr .Minus
-                    Identifier TK
+                  Identifier operand_ty
+                  CallExpr
+                    Callee
+                      Identifier TY_INT
               Then
-                IfStatement
-                  Condition
-                    BinaryExpr ==
-                      Identifier operand_ty
+                ReturnStatement
+                  CallExpr
+                    Callee
+                      FieldExpr .Ok
+                        Identifier Result
+                    Args
                       CallExpr
                         Callee
                           Identifier TY_INT
-                  Then
-                    ReturnStatement
-                      CallExpr
-                        Callee
-                          FieldExpr .Ok
-                            Identifier Result
-                        Args
-                          CallExpr
-                            Callee
-                              Identifier TY_INT
-                ReturnStatement
-                  CallExpr
-                    Callee
-                      FieldExpr .Err
-                        Identifier Result
-                    Args
-                      BinaryExpr +
-                        StringLiteral "unary '-' requires Int, got "
-                        CallExpr
-                          Callee
-                            Identifier type_name
-                          Args
-                            Identifier operand_ty
-            IfStatement
-              Condition
-                BinaryExpr ==
-                  Identifier op
-                  FieldExpr .KwNot
-                    Identifier TK
-              Then
-                IfStatement
-                  Condition
-                    BinaryExpr ==
-                      Identifier operand_ty
-                      CallExpr
-                        Callee
-                          Identifier TY_BOOL
-                  Then
-                    ReturnStatement
-                      CallExpr
-                        Callee
-                          FieldExpr .Ok
-                            Identifier Result
-                        Args
-                          CallExpr
-                            Callee
-                              Identifier TY_BOOL
-                ReturnStatement
-                  CallExpr
-                    Callee
-                      FieldExpr .Err
-                        Identifier Result
-                    Args
-                      BinaryExpr +
-                        StringLiteral "'not' requires Bool, got "
-                        CallExpr
-                          Callee
-                            Identifier type_name
-                          Args
-                            Identifier operand_ty
             ReturnStatement
               CallExpr
                 Callee
                   FieldExpr .Err
                     Identifier Result
                 Args
-                  StringLiteral "unknown unary operator"
+                  BinaryExpr +
+                    StringLiteral "unary '-' requires Int, got "
+                    CallExpr
+                      Callee
+                        Identifier type_name
+                      Args
+                        Identifier operand_ty
+        IfStatement
+          Condition
+            BinaryExpr ==
+              Identifier op
+              FieldExpr .KwNot
+                Identifier TK
+          Then
+            IfStatement
+              Condition
+                BinaryExpr ==
+                  Identifier operand_ty
+                  CallExpr
+                    Callee
+                      Identifier TY_BOOL
+              Then
+                ReturnStatement
+                  CallExpr
+                    Callee
+                      FieldExpr .Ok
+                        Identifier Result
+                    Args
+                      CallExpr
+                        Callee
+                          Identifier TY_BOOL
+            ReturnStatement
+              CallExpr
+                Callee
+                  FieldExpr .Err
+                    Identifier Result
+                Args
+                  BinaryExpr +
+                    StringLiteral "'not' requires Bool, got "
+                    CallExpr
+                      Callee
+                        Identifier type_name
+                      Args
+                        Identifier operand_ty
+        ReturnStatement
+          CallExpr
+            Callee
+              FieldExpr .Err
+                Identifier Result
+            Args
+              StringLiteral "unknown unary operator"
     ReturnStatement
       CallExpr
         Callee
@@ -2830,98 +2779,62 @@ File
           Pattern
             FieldExpr .Let
               Identifier Stmt
-          LetStatement result: Result<i32, string>
+          LetStatement ty: i32
+            TryExpr
+              CallExpr
+                Callee
+                  Identifier check_expr
+                Args
+                  Identifier arena
+                  Identifier expr_idx
+                  Identifier table
+                  Identifier source
+          LetStatement name: string
             CallExpr
               Callee
-                Identifier check_expr
+                Identifier substring
               Args
-                Identifier arena
-                Identifier expr_idx
-                Identifier table
                 Identifier source
-          MatchStatement
-            Scrutinee
-              Identifier result
-            Arm
-              Pattern
-                FieldExpr .Ok
-                  Identifier Result
-              LetStatement name: string
-                CallExpr
-                  Callee
-                    Identifier substring
-                  Args
-                    Identifier source
-                    Identifier name_off
-                    Identifier name_len
-              Assignment
-                Target
-                  Identifier table
-                Value
+                Identifier name_off
+                Identifier name_len
+          Assignment
+            Target
+              Identifier table
+            Value
+              CallExpr
+                Callee
+                  FieldExpr .set
+                    Identifier table
+                Args
+                  Identifier name
                   CallExpr
                     Callee
-                      FieldExpr .set
-                        Identifier table
+                      Identifier Symbol
                     Args
                       Identifier name
-                      CallExpr
-                        Callee
-                          Identifier Symbol
-                        Args
-                          Identifier name
-                          Identifier ty
-              Assignment
-                Target
-                  Identifier last_ty
-                Value
-                  Identifier ty
-            Arm
-              Pattern
-                FieldExpr .Err
-                  Identifier Result
-              ReturnStatement
-                CallExpr
-                  Callee
-                    FieldExpr .Err
-                      Identifier Result
-                  Args
-                    Identifier msg
+                      Identifier ty
+          Assignment
+            Target
+              Identifier last_ty
+            Value
+              Identifier ty
         Arm
           Pattern
             FieldExpr .Expr
               Identifier Stmt
-          LetStatement result: Result<i32, string>
-            CallExpr
-              Callee
-                Identifier check_expr
-              Args
-                Identifier arena
-                Identifier expr_idx
-                Identifier table
-                Identifier source
-          MatchStatement
-            Scrutinee
-              Identifier result
-            Arm
-              Pattern
-                FieldExpr .Ok
-                  Identifier Result
-              Assignment
-                Target
-                  Identifier last_ty
-                Value
-                  Identifier ty
-            Arm
-              Pattern
-                FieldExpr .Err
-                  Identifier Result
-              ReturnStatement
+          Assignment
+            Target
+              Identifier last_ty
+            Value
+              TryExpr
                 CallExpr
                   Callee
-                    FieldExpr .Err
-                      Identifier Result
+                    Identifier check_expr
                   Args
-                    Identifier msg
+                    Identifier arena
+                    Identifier expr_idx
+                    Identifier table
+                    Identifier source
       Assignment
         Target
           Identifier i

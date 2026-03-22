@@ -184,6 +184,11 @@ struct HirPipe {
   HirExpr* right;
 };
 
+struct HirTry {
+  HirExpr* operand;
+  const TypeEnum* enum_type; // the Option/Result type of the operand
+};
+
 struct HirLambda {
   std::vector<HirParam> params;
   HirExpr* body;
@@ -193,7 +198,7 @@ using HirExprPayload = std::variant<
     HirIntLiteral, HirFloatLiteral, HirStringLiteral, HirBoolLiteral,
     HirSymbolRef, HirUnary, HirBinary, HirCall, HirConstruct,
     HirEnumConstruct, HirEnumDiscriminant, HirEnumPayload,
-    HirField, HirIndex, HirPipe, HirLambda>;
+    HirField, HirIndex, HirPipe, HirTry, HirLambda>;
 
 // ---------------------------------------------------------------------------
 // Container nodes — arena-allocated.

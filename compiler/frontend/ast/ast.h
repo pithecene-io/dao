@@ -76,6 +76,7 @@ enum class NodeKind : std::uint8_t {
   IndexExpr,
   FieldExpr,
   PipeExpr,
+  TryExpr,
   Lambda,
   IntLiteral,
   FloatLiteral,
@@ -389,6 +390,10 @@ struct PipeExpr {
   Expr* right;
 };
 
+struct TryExpr {
+  Expr* operand;
+};
+
 struct LambdaExpr {
   std::vector<std::pair<std::string_view, Span>> params;
   Expr* body;
@@ -413,8 +418,9 @@ struct QualifiedName {
 
 using ExprPayload = std::variant<
     BinaryExpr, UnaryExpr, CallExpr, IndexExpr, FieldExpr, PipeExpr,
-    LambdaExpr, IntLiteral, FloatLiteral, StringLiteral, BoolLiteral,
-    ListLiteral, IdentifierExpr, QualifiedName, ErrorExprNode>;
+    TryExpr, LambdaExpr, IntLiteral, FloatLiteral, StringLiteral,
+    BoolLiteral, ListLiteral, IdentifierExpr, QualifiedName,
+    ErrorExprNode>;
 
 // ---------------------------------------------------------------------------
 // Type node payloads

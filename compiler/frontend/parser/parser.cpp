@@ -1311,6 +1311,12 @@ private:
         expr = ctx_.alloc<Expr>(span, FieldExpr{.object = expr,
                                                   .field = field_tok.text,
                                                   .field_span = field_tok.span});
+      } else if (peek_kind() == TokenKind::Question) {
+        // Try/propagate: expr?
+        const auto& q_tok = advance(); // ?
+        Span span = {.offset = expr->span.offset,
+                     .length = (q_tok.span.offset + q_tok.span.length) - expr->span.offset};
+        expr = ctx_.alloc<Expr>(span, TryExpr{.operand = expr});
       } else if (peek_kind() == TokenKind::LBracket) {
         // Index or type-parameter application: expr[args]
         advance(); // [

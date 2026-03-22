@@ -108,6 +108,8 @@ auto token_kind_name(TokenKind kind) -> const char* {
     return "Pipe";
   case TokenKind::PipeGt:
     return "PipeGt";
+  case TokenKind::Question:
+    return "Question";
   case TokenKind::LParen:
     return "LParen";
   case TokenKind::RParen:
@@ -345,6 +347,9 @@ private:
       return;
     case ',':
       emit(TokenKind::Comma, start, 1);
+      return;
+    case '?':
+      emit(TokenKind::Question, start, 1);
       return;
 
     case '(':

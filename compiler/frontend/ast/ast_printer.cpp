@@ -532,6 +532,12 @@ private:
           print_expr(*node.left);
           print_expr(*node.right);
         },
+        [&](const TryExpr& node) {
+          indent();
+          out_ << "TryExpr\n";
+          Scope scope(depth_);
+          print_expr(*node.operand);
+        },
         [&](const LambdaExpr& node) {
           indent();
           out_ << "Lambda";

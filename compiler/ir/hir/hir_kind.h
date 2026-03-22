@@ -46,6 +46,7 @@ enum class HirKind : std::uint8_t {
   Field,
   Index,
   Pipe,
+  Try,
   Lambda,
 };
 

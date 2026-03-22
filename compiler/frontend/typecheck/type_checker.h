@@ -192,6 +192,7 @@ private:
   auto check_construct(const Expr* expr, const TypeStruct* struct_type)
       -> const Type*;
   auto check_pipe(const Expr* expr) -> const Type*;
+  auto check_try(const Expr* expr) -> const Type*;
   auto check_field(const Expr* expr) -> const Type*;
   auto lookup_method(const Type* obj_type, std::string_view name,
                      const Decl** resolved_decl = nullptr)
