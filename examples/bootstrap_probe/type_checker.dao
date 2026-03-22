@@ -452,12 +452,13 @@ class Symbol:
   ty: i32
 
 fn find_symbol(table: Vector<Symbol>, name: string): Option<i64>
-  let i: i64 = 0
-  while i < table.length():
+  // Scan backwards so later bindings shadow earlier ones.
+  let i: i64 = table.length() - 1
+  while i >= to_i64(0):
     let sym: Symbol = table.get(i)
     if sym.name == name:
       return Option.Some(i)
-    i = i + 1
+    i = i - 1
   return Option.None
 
 // ---------------------------------------------------------------
@@ -673,7 +674,13 @@ fn main(): i32
   if test("err_let_type", "let x = true; x + 1", "ERROR"):
     pass_count = pass_count + 1
 
-  let total: i32 = 26
+  // --- Shadowing ---
+  if test("shadow", "let x = 1; let x = true; x", "Bool"):
+    pass_count = pass_count + 1
+  if test("shadow_use", "let x = 1; let y = x + 2; let x = true; x and y > 0", "Bool"):
+    pass_count = pass_count + 1
+
+  let total: i32 = 28
   print("")
   print("--- results ---")
   print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " passed")

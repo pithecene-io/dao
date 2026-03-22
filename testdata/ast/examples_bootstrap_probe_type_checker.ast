@@ -2327,15 +2327,21 @@ File
     Param name: string
     ReturnType: Option<i64>
     LetStatement i: i64
-      IntLiteral 0
+      BinaryExpr -
+        CallExpr
+          Callee
+            FieldExpr .length
+              Identifier table
+        IntLiteral 1
     WhileStatement
       Condition
-        BinaryExpr <
+        BinaryExpr >=
           Identifier i
           CallExpr
             Callee
-              FieldExpr .length
-                Identifier table
+              Identifier to_i64
+            Args
+              IntLiteral 0
       LetStatement sym: Symbol
         CallExpr
           Callee
@@ -2361,7 +2367,7 @@ File
         Target
           Identifier i
         Value
-          BinaryExpr +
+          BinaryExpr -
             Identifier i
             IntLiteral 1
     ReturnStatement
@@ -3603,8 +3609,42 @@ File
             BinaryExpr +
               Identifier pass_count
               IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test
+          Args
+            StringLiteral "shadow"
+            StringLiteral "let x = 1; let x = true; x"
+            StringLiteral "Bool"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test
+          Args
+            StringLiteral "shadow_use"
+            StringLiteral "let x = 1; let y = x + 2; let x = true; x and y > 0"
+            StringLiteral "Bool"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
     LetStatement total: i32
-      IntLiteral 26
+      IntLiteral 28
     ExpressionStatement
       CallExpr
         Callee
