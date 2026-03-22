@@ -114,6 +114,21 @@ bool __dao_str_ends_with(const struct dao_string *s,
   return memcmp(s->ptr + offset, suffix->ptr, (size_t)suffix->len) == 0;
 }
 
+// FNV-1a 64-bit hash of a string's bytes. Returns a signed i64 whose
+// bit pattern is the unsigned FNV-1a result.
+int64_t __dao_str_hash(const struct dao_string *s) {
+  uint64_t hash = 14695981039346656037ULL;
+  int64_t len = (s != NULL) ? s->len : 0;
+  const char *ptr = (s != NULL) ? s->ptr : NULL;
+  for (int64_t i = 0; i < len; i++) {
+    hash ^= (uint8_t)ptr[i];
+    hash *= 1099511628211ULL;
+  }
+  int64_t result;
+  memcpy(&result, &hash, sizeof result);
+  return result;
+}
+
 // Lexicographic comparison. Returns -1 if a < b, 0 if equal, 1 if a > b.
 int32_t __dao_str_compare(const struct dao_string *a,
                            const struct dao_string *b) {

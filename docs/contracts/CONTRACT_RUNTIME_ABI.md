@@ -135,6 +135,7 @@ Examples:
 | `__dao_str_starts_with`  | `(s: string, prefix: string): bool`   |
 | `__dao_str_ends_with`    | `(s: string, suffix: string): bool`   |
 | `__dao_str_compare`      | `(a: string, b: string): i32`         |
+| `__dao_str_hash`         | `(s: string): i64`                    |
 | `__dao_wrapping_add_i8`  | `(a: i8, b: i8): i8`                 |
 | `__dao_wrapping_sub_i8`  | `(a: i8, b: i8): i8`                 |
 | `__dao_wrapping_mul_i8`  | `(a: i8, b: i8): i8`                 |

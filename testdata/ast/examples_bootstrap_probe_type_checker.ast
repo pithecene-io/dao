@@ -2322,57 +2322,6 @@ File
   ClassDecl Symbol
     Field name: string
     Field ty: i32
-  FunctionDecl find_symbol
-    Param table: Vector<Symbol>
-    Param name: string
-    ReturnType: Option<i64>
-    LetStatement i: i64
-      BinaryExpr -
-        CallExpr
-          Callee
-            FieldExpr .length
-              Identifier table
-        IntLiteral 1
-    WhileStatement
-      Condition
-        BinaryExpr >=
-          Identifier i
-          CallExpr
-            Callee
-              Identifier to_i64
-            Args
-              IntLiteral 0
-      LetStatement sym: Symbol
-        CallExpr
-          Callee
-            FieldExpr .get
-              Identifier table
-          Args
-            Identifier i
-      IfStatement
-        Condition
-          BinaryExpr ==
-            FieldExpr .name
-              Identifier sym
-            Identifier name
-        Then
-          ReturnStatement
-            CallExpr
-              Callee
-                FieldExpr .Some
-                  Identifier Option
-              Args
-                Identifier i
-      Assignment
-        Target
-          Identifier i
-        Value
-          BinaryExpr -
-            Identifier i
-            IntLiteral 1
-    ReturnStatement
-      FieldExpr .None
-        Identifier Option
   FunctionDecl check_binary_op
     Param op: TK
     Param left_ty: i32
@@ -2571,7 +2520,7 @@ File
   FunctionDecl check_expr
     Param arena: Vector<Node>
     Param idx: i64
-    Param table: Vector<Symbol>
+    Param table: HashMap<Symbol>
     Param source: string
     ReturnType: Result<i32, string>
     LetStatement node: Node
@@ -2622,27 +2571,22 @@ File
               Identifier source
               Identifier off
               Identifier len
-        LetStatement found: Option<i64>
-          CallExpr
-            Callee
-              Identifier find_symbol
-            Args
-              Identifier table
-              Identifier name
-        MatchStatement
-          Scrutinee
-            Identifier found
-          Arm
-            Pattern
-              FieldExpr .Some
-                Identifier Option
+        IfStatement
+          Condition
+            CallExpr
+              Callee
+                FieldExpr .contains
+                  Identifier table
+              Args
+                Identifier name
+          Then
             LetStatement sym: Symbol
               CallExpr
                 Callee
                   FieldExpr .get
                     Identifier table
                 Args
-                  Identifier sym_idx
+                  Identifier name
             ReturnStatement
               CallExpr
                 Callee
@@ -2651,21 +2595,17 @@ File
                 Args
                   FieldExpr .ty
                     Identifier sym
-          Arm
-            Pattern
-              FieldExpr .None
-                Identifier Option
-            ReturnStatement
-              CallExpr
-                Callee
-                  FieldExpr .Err
-                    Identifier Result
-                Args
-                  BinaryExpr +
-                    BinaryExpr +
-                      StringLiteral "undefined variable '"
-                      Identifier name
-                    StringLiteral "'"
+        ReturnStatement
+          CallExpr
+            Callee
+              FieldExpr .Err
+                Identifier Result
+            Args
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "undefined variable '"
+                  Identifier name
+                StringLiteral "'"
       Arm
         Pattern
           FieldExpr .Binary
@@ -2859,7 +2799,7 @@ File
     LetStatement table
       CallExpr
         Callee
-          Identifier Vector.new
+          Identifier HashMap.new
         TypeArgs
           Symbol
     LetStatement last_ty: i32
@@ -2918,9 +2858,10 @@ File
                 Value
                   CallExpr
                     Callee
-                      FieldExpr .push
+                      FieldExpr .set
                         Identifier table
                     Args
+                      Identifier name
                       CallExpr
                         Callee
                           Identifier Symbol

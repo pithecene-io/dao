@@ -1,0 +1,70 @@
+// hashmap.dao — HashMap<V> smoke test.
+
+class Entry:
+  name: string
+  value: i32
+
+fn main(): i32
+  print("=== HashMap<V> ===")
+
+  let m = HashMap<Entry>::new()
+  m = m.set("x", Entry("x", 10))
+  m = m.set("y", Entry("y", 20))
+  m = m.set("z", Entry("z", 30))
+
+  print("length: " + i64_to_string(m.length()))
+
+  // Two-phase lookup: contains + get.
+  if m.contains("x"):
+    let e: Entry = m.get("x")
+    print("x = " + i32_to_string(e.value))
+
+  if m.contains("y"):
+    let e: Entry = m.get("y")
+    print("y = " + i32_to_string(e.value))
+
+  // Update existing key.
+  m = m.set("x", Entry("x", 99))
+  if m.contains("x"):
+    let e: Entry = m.get("x")
+    print("x (updated) = " + i32_to_string(e.value))
+
+  // Missing key.
+  if m.contains("w"):
+    print("w found (unexpected)")
+  else:
+    print("w not found (correct)")
+
+  // Many inserts to trigger resize.
+  let big = HashMap<i32>::new()
+  big = big.set("a", 1)
+  big = big.set("b", 2)
+  big = big.set("c", 3)
+  big = big.set("d", 4)
+  big = big.set("e", 5)
+  big = big.set("f", 6)
+  big = big.set("g", 7)
+  big = big.set("h", 8)
+  big = big.set("i", 9)
+  big = big.set("j", 10)
+  print("big length: " + i64_to_string(big.length()))
+
+  if big.contains("j"):
+    print("j = " + i32_to_string(big.get("j")))
+  if big.contains("a"):
+    print("a = " + i32_to_string(big.get("a")))
+
+  // Verify all keys survived resize.
+  let all_ok: bool = true
+  if big.contains("a") == false:
+    all_ok = false
+  if big.contains("e") == false:
+    all_ok = false
+  if big.contains("j") == false:
+    all_ok = false
+  if big.contains("missing"):
+    all_ok = false
+  if all_ok:
+    print("all keys correct after resize")
+
+  return 0

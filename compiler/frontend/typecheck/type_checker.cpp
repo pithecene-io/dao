@@ -1365,6 +1365,11 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
   // and no expected type to coerce to. Only check value-producing
   // expressions (FieldExpr for variant access, CallExpr for construction),
   // not type-name identifiers.
+  //
+  // Exception: GenericParams whose binder is NOT the enum's own
+  // declaration are bound parameters from an enclosing class or
+  // function and will be resolved at monomorphization. Only reject
+  // GenericParams that belong to the enum itself (truly unresolved).
   if (result != nullptr && result->kind() == TypeKind::Enum &&
       !suppress_payload_check_ &&
       (expr->kind() == NodeKind::FieldExpr ||
@@ -1373,12 +1378,16 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
     for (const auto& variant : re->variants()) {
       for (const auto* pt : variant.payload_types) {
         if (pt != nullptr && pt->kind() == TypeKind::GenericParam) {
-          error(expr->span,
-                "cannot infer type argument(s) for generic enum '" +
-                    std::string(re->name()) +
-                    "'; provide an explicit type annotation");
-          result = nullptr;
-          goto done_generic_check; // NOLINT
+          const auto* gp = static_cast<const TypeGenericParam*>(pt);
+          // Allow params from enclosing scopes (class/function generics).
+          if (gp->binder() == re->decl_id()) {
+            error(expr->span,
+                  "cannot infer type argument(s) for generic enum '" +
+                      std::string(re->name()) +
+                      "'; provide an explicit type annotation");
+            result = nullptr;
+            goto done_generic_check; // NOLINT
+          }
         }
       }
     }
