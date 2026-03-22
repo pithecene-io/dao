@@ -4,10 +4,9 @@
 // booleans, comparisons, and logical operators, then adds a combined
 // resolve + typecheck pass over the arena.
 //
-// Tests: Option<T> for fallible symbol lookup, Result<T, E> for
-// error-bearing analysis, Vector<T> as a linear symbol table,
-// multi-pass compiler architecture (lex → parse → analyze), and
-// match destructuring for control flow.
+// Tests: HashMap<V> for O(1) symbol lookup, Result<T, E> for
+// error-bearing analysis, multi-pass compiler architecture
+// (lex → parse → analyze), and match destructuring for control flow.
 //
 // Language surface:
 //   let x = 5; let y = x + 3; y > 0
@@ -444,22 +443,12 @@ fn type_name(ty: i32): string
   return "???"
 
 // ---------------------------------------------------------------
-// Symbol table — Vector<Symbol> with linear scan
+// Symbol table — HashMap<Symbol> with O(1) lookup
 // ---------------------------------------------------------------
 
 class Symbol:
   name: string
   ty: i32
-
-fn find_symbol(table: Vector<Symbol>, name: string): Option<i64>
-  // Scan backwards so later bindings shadow earlier ones.
-  let i: i64 = table.length() - 1
-  while i >= to_i64(0):
-    let sym: Symbol = table.get(i)
-    if sym.name == name:
-      return Option.Some(i)
-    i = i - 1
-  return Option.None
 
 // ---------------------------------------------------------------
 // Type checker — combined resolve + typecheck over the AST arena
@@ -486,7 +475,7 @@ fn check_binary_op(op: TK, left_ty: i32, right_ty: i32): Result<i32, string>
 
   return Result.Err("unknown binary operator")
 
-fn check_expr(arena: Vector<Node>, idx: i64, table: Vector<Symbol>, source: string): Result<i32, string>
+fn check_expr(arena: Vector<Node>, idx: i64, table: HashMap<Symbol>, source: string): Result<i32, string>
   let node: Node = arena.get(idx)
   match node:
     Node.IntLit(v):
@@ -497,13 +486,10 @@ fn check_expr(arena: Vector<Node>, idx: i64, table: Vector<Symbol>, source: stri
 
     Node.VarRef(off, len):
       let name: string = substring(source, off, len)
-      let found: Option<i64> = find_symbol(table, name)
-      match found:
-        Option.Some(sym_idx):
-          let sym: Symbol = table.get(sym_idx)
-          return Result.Ok(sym.ty)
-        Option.None:
-          return Result.Err("undefined variable '" + name + "'")
+      if table.contains(name):
+        let sym: Symbol = table.get(name)
+        return Result.Ok(sym.ty)
+      return Result.Err("undefined variable '" + name + "'")
 
     Node.Binary(op, left, right):
       let lt: Result<i32, string> = check_expr(arena, left, table, source)
@@ -539,7 +525,7 @@ fn check_expr(arena: Vector<Node>, idx: i64, table: Vector<Symbol>, source: stri
 // Analyze a program: walk statements, build symbol table, typecheck.
 // Returns the type of the last statement (Ok) or the first error (Err).
 fn analyze(arena: Vector<Node>, stmts: Vector<Stmt>, source: string): Result<i32, string>
-  let table = Vector<Symbol>::new()
+  let table = HashMap<Symbol>::new()
   let last_ty: i32 = 0
   let i: i64 = 0
   while i < stmts.length():
@@ -550,7 +536,7 @@ fn analyze(arena: Vector<Node>, stmts: Vector<Stmt>, source: string): Result<i32
         match result:
           Result.Ok(ty):
             let name: string = substring(source, name_off, name_len)
-            table = table.push(Symbol(name, ty))
+            table = table.set(name, Symbol(name, ty))
             last_ty = ty
           Result.Err(msg):
             return Result.Err(msg)

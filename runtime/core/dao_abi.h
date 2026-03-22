@@ -220,6 +220,9 @@ bool __dao_str_ends_with(const struct dao_string *s,
 int32_t __dao_str_compare(const struct dao_string *a,
                            const struct dao_string *b);
 
+// FNV-1a 64-bit hash of a string's bytes.
+int64_t __dao_str_hash(const struct dao_string *s);
+
 // ---------------------------------------------------------------------------
 // Runtime hook declarations — Memory/resource domain
 // ---------------------------------------------------------------------------

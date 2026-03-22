@@ -1,0 +1,465 @@
+File
+  ClassDecl Entry
+    Field name: string
+    Field value: i32
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "=== HashMap<V> ==="
+    LetStatement m
+      CallExpr
+        Callee
+          Identifier HashMap.new
+        TypeArgs
+          Entry
+    Assignment
+      Target
+        Identifier m
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier m
+          Args
+            StringLiteral "x"
+            CallExpr
+              Callee
+                Identifier Entry
+              Args
+                StringLiteral "x"
+                IntLiteral 10
+    Assignment
+      Target
+        Identifier m
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier m
+          Args
+            StringLiteral "y"
+            CallExpr
+              Callee
+                Identifier Entry
+              Args
+                StringLiteral "y"
+                IntLiteral 20
+    Assignment
+      Target
+        Identifier m
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier m
+          Args
+            StringLiteral "z"
+            CallExpr
+              Callee
+                Identifier Entry
+              Args
+                StringLiteral "z"
+                IntLiteral 30
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "length: "
+            CallExpr
+              Callee
+                Identifier i64_to_string
+              Args
+                CallExpr
+                  Callee
+                    FieldExpr .length
+                      Identifier m
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .contains
+              Identifier m
+          Args
+            StringLiteral "x"
+      Then
+        LetStatement e: Entry
+          CallExpr
+            Callee
+              FieldExpr .get
+                Identifier m
+            Args
+              StringLiteral "x"
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "x = "
+                CallExpr
+                  Callee
+                    Identifier i32_to_string
+                  Args
+                    FieldExpr .value
+                      Identifier e
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .contains
+              Identifier m
+          Args
+            StringLiteral "y"
+      Then
+        LetStatement e: Entry
+          CallExpr
+            Callee
+              FieldExpr .get
+                Identifier m
+            Args
+              StringLiteral "y"
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "y = "
+                CallExpr
+                  Callee
+                    Identifier i32_to_string
+                  Args
+                    FieldExpr .value
+                      Identifier e
+    Assignment
+      Target
+        Identifier m
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier m
+          Args
+            StringLiteral "x"
+            CallExpr
+              Callee
+                Identifier Entry
+              Args
+                StringLiteral "x"
+                IntLiteral 99
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .contains
+              Identifier m
+          Args
+            StringLiteral "x"
+      Then
+        LetStatement e: Entry
+          CallExpr
+            Callee
+              FieldExpr .get
+                Identifier m
+            Args
+              StringLiteral "x"
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "x (updated) = "
+                CallExpr
+                  Callee
+                    Identifier i32_to_string
+                  Args
+                    FieldExpr .value
+                      Identifier e
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .contains
+              Identifier m
+          Args
+            StringLiteral "w"
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "w found (unexpected)"
+      Else
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "w not found (correct)"
+    LetStatement big
+      CallExpr
+        Callee
+          Identifier HashMap.new
+        TypeArgs
+          i32
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "a"
+            IntLiteral 1
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "b"
+            IntLiteral 2
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "c"
+            IntLiteral 3
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "d"
+            IntLiteral 4
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "e"
+            IntLiteral 5
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "f"
+            IntLiteral 6
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "g"
+            IntLiteral 7
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "h"
+            IntLiteral 8
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "i"
+            IntLiteral 9
+    Assignment
+      Target
+        Identifier big
+      Value
+        CallExpr
+          Callee
+            FieldExpr .set
+              Identifier big
+          Args
+            StringLiteral "j"
+            IntLiteral 10
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "big length: "
+            CallExpr
+              Callee
+                Identifier i64_to_string
+              Args
+                CallExpr
+                  Callee
+                    FieldExpr .length
+                      Identifier big
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .contains
+              Identifier big
+          Args
+            StringLiteral "j"
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "j = "
+                CallExpr
+                  Callee
+                    Identifier i32_to_string
+                  Args
+                    CallExpr
+                      Callee
+                        FieldExpr .get
+                          Identifier big
+                      Args
+                        StringLiteral "j"
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .contains
+              Identifier big
+          Args
+            StringLiteral "a"
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "a = "
+                CallExpr
+                  Callee
+                    Identifier i32_to_string
+                  Args
+                    CallExpr
+                      Callee
+                        FieldExpr .get
+                          Identifier big
+                      Args
+                        StringLiteral "a"
+    LetStatement all_ok: bool
+      BoolLiteral true
+    IfStatement
+      Condition
+        BinaryExpr ==
+          CallExpr
+            Callee
+              FieldExpr .contains
+                Identifier big
+            Args
+              StringLiteral "a"
+          BoolLiteral false
+      Then
+        Assignment
+          Target
+            Identifier all_ok
+          Value
+            BoolLiteral false
+    IfStatement
+      Condition
+        BinaryExpr ==
+          CallExpr
+            Callee
+              FieldExpr .contains
+                Identifier big
+            Args
+              StringLiteral "e"
+          BoolLiteral false
+      Then
+        Assignment
+          Target
+            Identifier all_ok
+          Value
+            BoolLiteral false
+    IfStatement
+      Condition
+        BinaryExpr ==
+          CallExpr
+            Callee
+              FieldExpr .contains
+                Identifier big
+            Args
+              StringLiteral "j"
+          BoolLiteral false
+      Then
+        Assignment
+          Target
+            Identifier all_ok
+          Value
+            BoolLiteral false
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            FieldExpr .contains
+              Identifier big
+          Args
+            StringLiteral "missing"
+      Then
+        Assignment
+          Target
+            Identifier all_ok
+          Value
+            BoolLiteral false
+    IfStatement
+      Condition
+        Identifier all_ok
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "all keys correct after resize"
+    ReturnStatement
+      IntLiteral 0

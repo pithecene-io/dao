@@ -406,6 +406,10 @@ void LlvmRuntimeHooks::declare_string_hooks() {
   // __dao_str_compare(a: *dao.string, b: *dao.string): i32
   ensure_declared(runtime_hooks::kStrCompare,
                   llvm::FunctionType::get(i32, {str_ptr, str_ptr}, false));
+
+  // __dao_hash_string(s: *dao.string): i64
+  ensure_declared(runtime_hooks::kStrHash,
+                  llvm::FunctionType::get(i64, {str_ptr}, false));
 }
 
 // ---------------------------------------------------------------------------
