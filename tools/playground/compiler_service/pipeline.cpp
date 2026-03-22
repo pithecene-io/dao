@@ -11,12 +11,18 @@ auto load_prelude(const std::filesystem::path& repo_root) -> std::string {
   if (!std::filesystem::exists(stdlib_core)) {
     return prelude;
   }
+  // Collect and sort entries so prelude loading order is stable
+  // and dependency-aware (e.g. option.dao before overflow.dao).
+  std::vector<std::filesystem::path> paths;
   for (const auto& entry :
        std::filesystem::directory_iterator(stdlib_core)) {
-    if (entry.path().extension() != ".dao") {
-      continue;
+    if (entry.path().extension() == ".dao") {
+      paths.push_back(entry.path());
     }
-    std::ifstream file(entry.path());
+  }
+  std::sort(paths.begin(), paths.end());
+  for (const auto& p : paths) {
+    std::ifstream file(p);
     if (!file) {
       continue;
     }

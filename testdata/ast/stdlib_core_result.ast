@@ -1,0 +1,4 @@
+File
+  EnumDecl Result
+    Variant Ok
+    Variant Err

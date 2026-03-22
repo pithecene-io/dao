@@ -1,0 +1,4 @@
+File
+  EnumDecl Option
+    Variant Some
+    Variant None

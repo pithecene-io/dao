@@ -317,18 +317,17 @@ Status: **complete**
 
 #### Tier A+ — Post-baseline (no blocking dependency)
 
-Status: **wrapping and saturating complete; checked deferred**
-
-Priority: **medium** — enriches the numeric surface but does not
-block other tiers.
+Status: **complete**
 
 - ✓ explicit wrapping operations for i32 and i64: `wrapping_add`,
   `wrapping_sub`, `wrapping_mul` (+ `_i64` variants)
 - ✓ explicit saturating operations for i32 and i64: `saturating_add`,
   `saturating_sub`, `saturating_mul` (+ `_i64` variants)
-- ✗ explicit checked operations: `checked_add`, `checked_sub`,
-  `checked_mul` — deferred until Dao has a Result/Option type to
-  express the error-or-value return; default operators already trap
+- ✓ explicit checked operations for all signed types (i8–i64):
+  `checked_add`, `checked_sub`, `checked_mul` — return
+  `Option.None` on overflow, `Option.Some(result)` otherwise;
+  pure Dao implementations (no runtime hooks), enabled by
+  `Option<T>` prelude promotion
 
 #### Tier B — Phase 6 prerequisite
 
