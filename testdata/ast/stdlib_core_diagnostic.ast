@@ -1,0 +1,54 @@
+File
+  ClassDecl Span
+    Field offset: i64
+    Field length: i64
+  ClassDecl LineCol
+    Field line: i64
+    Field col: i64
+  EnumDecl Severity
+    Variant Error
+    Variant Warning
+    Variant Note
+  ClassDecl Diagnostic
+    Field severity: Severity
+    Field span: Span
+    Field message: string
+  FunctionDecl make_error
+    Param span: Span
+    Param message: string
+    ReturnType: Diagnostic
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier Diagnostic
+        Args
+          FieldExpr .Error
+            Identifier Severity
+          Identifier span
+          Identifier message
+  FunctionDecl make_warning
+    Param span: Span
+    Param message: string
+    ReturnType: Diagnostic
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier Diagnostic
+        Args
+          FieldExpr .Warning
+            Identifier Severity
+          Identifier span
+          Identifier message
+  FunctionDecl make_note
+    Param span: Span
+    Param message: string
+    ReturnType: Diagnostic
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier Diagnostic
+        Args
+          FieldExpr .Note
+            Identifier Severity
+          Identifier span
+          Identifier message

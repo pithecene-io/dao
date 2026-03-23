@@ -680,7 +680,24 @@ auto LlvmBackend::lower_const_string(const MirConstString& p, const MirInst& ins
   if (raw.size() >= 2 && raw.front() == '"' && raw.back() == '"') {
     raw = raw.substr(1, raw.size() - 2);
   }
-  auto str = std::string(raw);
+  // Process escape sequences: \n, \t, \\, \", \r, \0.
+  std::string str;
+  str.reserve(raw.size());
+  for (size_t i = 0; i < raw.size(); ++i) {
+    if (raw[i] == '\\' && i + 1 < raw.size()) {
+      switch (raw[i + 1]) {
+        case 'n':  str += '\n'; ++i; break;
+        case 't':  str += '\t'; ++i; break;
+        case 'r':  str += '\r'; ++i; break;
+        case '\\': str += '\\'; ++i; break;
+        case '"':  str += '"';  ++i; break;
+        case '0':  str += '\0'; ++i; break;
+        default:   str += raw[i]; break;
+      }
+    } else {
+      str += raw[i];
+    }
+  }
   auto* str_constant = llvm::ConstantDataArray::getString(ctx_, str, /*AddNull=*/true);
   auto* global = new llvm::GlobalVariable(
       *module_, str_constant->getType(), /*isConstant=*/true,
