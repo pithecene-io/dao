@@ -290,8 +290,11 @@ Exit criteria:
 
 Tasks 6–13 (resolve, types, typecheck, HIR, MIR, LLVM backend,
 generics, coroutines) are complete or substantially complete.
+Task 18 (enum payloads and match destructuring) is complete.
 
-The next implementation tasks are sequenced below.
+The next implementation tasks are sequenced below. Task 19
+(diagnostic formatter) is the Phase 7 entry leaf — see
+`docs/task_specs/TASK_19_DIAGNOSTIC_FORMATTER.md`.
 
 ### Task 14 — Numeric Type Expansion
 
@@ -331,14 +334,16 @@ Status: **complete**
 
 #### Tier B — Phase 6 prerequisite
 
-Priority: **high** — C ABI interop cannot function without 64-bit
-integers.
+Status: **complete**
 
-- `i64` surface exposure: type system, parser literal support,
-  codegen, runtime hooks (`__dao_eq_i64`, `__dao_conv_i64_to_string`)
-- explicit `i32 → f64` and `f64 → i32` conversion functions with
-  the trapping semantics defined in the contract
-- widen `__dao_str_length` from i32 to i64 once i64 is surfaced
+- ✓ `i64` surface exposure: type system (`BuiltinKind::I64`,
+  `type_context.i64()`), parser recognition, LLVM backend lowering
+  (`llvm::Type::getInt64Ty`), runtime hooks (`__dao_eq_i64`,
+  `__dao_conv_i64_to_string`), stdlib extensions (`extend i64 as
+  Numeric`), working example (`examples/i64.dao`)
+- ✓ explicit numeric conversions between i32/i64 and f32/f64 with
+  trapping semantics (27-function conversion matrix)
+- ✓ `__dao_str_length` returns `int64_t`
 
 #### Tier C — Phase 6+ dedicated task
 

@@ -207,6 +207,9 @@ Exit criteria:
 
 ## Phase 7 — Bootstrap Compiler
 
+Status: **entry leaf selected** — diagnostic formatter as first real
+subsystem extraction (Task 19)
+
 Goals:
 - begin implementing non-trivial compiler subsystems in Dao itself
 - establish a bootstrap chain from host implementation → mixed
@@ -214,10 +217,22 @@ Goals:
 - keep test parity between the host compiler and the Dao-implemented
   compiler as the handoff proceeds
 
+Entry decision:
+- six bootstrap probes (mini_lexer through type_checker) proved language
+  viability but are architecturally too simplified to extract from
+  directly (flat scope, integer type constants, string-only diagnostics)
+- the diagnostic formatter is the correct entry leaf because it is a
+  genuine compiler subsystem, is fully isolated, and forces the shared
+  substrate (Span, SourceBuffer, line/col mapping, string formatting)
+  that every subsequent extraction depends on
+- see `docs/task_specs/TASK_19_DIAGNOSTIC_FORMATTER.md` for the full
+  task spec
+
 Recommended bootstrap sequence:
 1. keep the initial compiler in an implementation language suited to
    rapid frontend/backend construction
-2. implement leaf or utility components in Dao first
+2. implement leaf or utility components in Dao first — starting with
+   diagnostic formatting (Task 19)
 3. migrate increasingly central compiler phases only when Dao can
    express them ergonomically and compile them reliably
 4. reach stage-2 self-hosting before claiming the compiler is truly
