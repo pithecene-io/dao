@@ -493,6 +493,9 @@ fn lex(src: string): LexResult
                     pos = pos + 1
             else:
               break
+          // Diagnose unterminated string at EOF (newline case handled above).
+          if str_done == false:
+            diags = diags.push(make_error(Span(str_start, pos - str_start), "unterminated string literal"))
           tokens = tokens.push(Token(TK.StringLiteral, str_start, pos - str_start))
           handled = true
 
@@ -923,6 +926,15 @@ fn main(): i32
   if expect_token("bracket_r", r10, 3, TK.RBracket, src10):
     pass_count = pass_count + 1
 
+  // --- Unterminated string at EOF ---
+
+  let src11: string = "\"hello"
+  let r11: LexResult = lex(src11)
+  if expect_token("unterm_eof_tok", r11, 0, TK.StringLiteral, src11):
+    pass_count = pass_count + 1
+  if expect_error_count("unterm_eof_err", r11, 1):
+    pass_count = pass_count + 1
+
   // --- Empty source ---
 
   let src_empty: string = ""
@@ -932,7 +944,7 @@ fn main(): i32
 
   // --- Summary ---
 
-  let total: i32 = 46
+  let total: i32 = 48
   print("")
   print("--- results ---")
   print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " passed")
