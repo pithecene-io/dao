@@ -157,6 +157,13 @@ public:
     return fields_;
   }
 
+  // Set or replace fields. Used during type-checker initialization to
+  // support forward references: shells are registered with empty fields
+  // first, then fields are resolved once all type shells exist.
+  void set_fields(std::vector<StructField> fields) {
+    fields_ = std::move(fields);
+  }
+
   static auto classof(const Type* t) -> bool {
     return t->kind() == TypeKind::Struct;
   }

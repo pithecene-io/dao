@@ -66,6 +66,12 @@ public:
   auto make_struct(const void* decl_id, std::string_view name,
                    std::vector<StructField> fields) -> const TypeStruct*;
 
+  // Allocate a struct type shell with empty fields. Returns a mutable
+  // pointer so the caller can call set_fields() once all type shells
+  // are registered (enabling forward references between classes).
+  auto make_struct_shell(const void* decl_id,
+                         std::string_view name) -> TypeStruct*;
+
   auto make_enum(const void* decl_id, std::string_view name,
                  std::vector<EnumVariant> variants) -> const TypeEnum*;
 

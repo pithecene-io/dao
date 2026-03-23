@@ -137,6 +137,11 @@ auto TypeContext::make_struct(const void* decl_id, std::string_view name,
   return arena_.alloc<TypeStruct>(decl_id, name, std::move(fields));
 }
 
+auto TypeContext::make_struct_shell(const void* decl_id,
+                                    std::string_view name) -> TypeStruct* {
+  return arena_.alloc<TypeStruct>(decl_id, name, std::vector<StructField>{});
+}
+
 auto TypeContext::make_enum(const void* decl_id, std::string_view name,
                              std::vector<EnumVariant> variants)
     -> const TypeEnum* {
