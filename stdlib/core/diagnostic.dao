@@ -1,0 +1,37 @@
+// diagnostic.dao — Source spans, locations, and diagnostic types.
+//
+// Span represents a byte range in source text (offset + length).
+// LineCol represents a human-readable 1-based line and column.
+// Severity classifies diagnostic importance.
+// Diagnostic pairs a source span with a severity and human-readable message.
+//
+// All offsets and columns are byte-based, matching the C++ SourceBuffer
+// and runtime string primitives. Display-width correctness for multi-byte
+// UTF-8 sequences is explicitly deferred.
+
+class Span:
+  offset: i64
+  length: i64
+
+class LineCol:
+  line: i64
+  col: i64
+
+enum Severity:
+  Error
+  Warning
+  Note
+
+class Diagnostic:
+  severity: Severity
+  span: Span
+  message: string
+
+fn make_error(span: Span, message: string): Diagnostic
+  return Diagnostic(Severity.Error, span, message)
+
+fn make_warning(span: Span, message: string): Diagnostic
+  return Diagnostic(Severity.Warning, span, message)
+
+fn make_note(span: Span, message: string): Diagnostic
+  return Diagnostic(Severity.Note, span, message)
