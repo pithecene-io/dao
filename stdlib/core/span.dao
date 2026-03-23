@@ -1,0 +1,15 @@
+// span.dao — Source span and location types.
+//
+// Span represents a byte range in source text (offset + length).
+// LineCol represents a human-readable 1-based line and column.
+// Both use byte semantics matching the C++ SourceBuffer and runtime
+// string primitives. Display-width correctness for multi-byte UTF-8
+// is explicitly deferred.
+
+class Span:
+  offset: i64
+  length: i64
+
+class LineCol:
+  line: i64
+  col: i64

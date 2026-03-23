@@ -493,13 +493,16 @@ void TypeChecker::register_declarations(const FileNode& file) {
 
   // Sub-pass 1b-ii: resolve class field types now that all type
   // shells (classes and enums) are registered in symbol_types_.
+  // Unresolved types are kept as nullptr to preserve arity — same
+  // rationale as enum variant payloads: dropping the slot silently
+  // mutates the struct shape and produces misleading secondary
+  // constructor-arity errors instead of the real type-resolution
+  // failure.
   for (auto& pending : pending_classes) {
     std::vector<StructField> fields;
     for (const auto* field : pending.class_decl->fields) {
       const auto* field_type = resolve_type_node(field->type);
-      if (field_type != nullptr) {
-        fields.push_back({field->name, field_type});
-      }
+      fields.push_back({field->name, field_type});
     }
     pending.shell->set_fields(std::move(fields));
   }
@@ -772,7 +775,8 @@ void TypeChecker::compute_derived_conformances(const FileNode& file) {
         const auto* stype = static_cast<const TypeStruct*>(entry.struct_type);
         bool all_fields_conform = true;
         for (const auto& field : stype->fields()) {
-          if (!type_conforms_to(field.type, concept_decl)) {
+          if (field.type == nullptr ||
+              !type_conforms_to(field.type, concept_decl)) {
             all_fields_conform = false;
             break;
           }
