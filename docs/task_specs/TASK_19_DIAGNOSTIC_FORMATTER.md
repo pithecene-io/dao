@@ -93,8 +93,13 @@ Constructor helpers:
 
 ### 4. `examples/bootstrap_probe/diagnostic_formatter.dao` — formatter
 
-The formatter consumes a `SourceBuffer` and a `Vector<Diagnostic>` and
-produces formatted output. Target output format:
+The formatter consumes a `SourceBuffer`, a `Vector<Diagnostic>`, and an
+optional prelude line offset (`i64`, defaulting to 0) and produces
+formatted output. The prelude offset adjusts displayed line numbers so
+that diagnostics from user code prepended after a stdlib prelude show
+correct user-facing line numbers (matching the existing C++ driver's
+`line_offset` parameter in `print_error_diagnostics` /
+`print_diagnostics`). Target output format:
 
 ```
 test.dao:3:5: error: undefined variable 'x'
@@ -110,8 +115,8 @@ Required capabilities:
 - render context line with line number gutter
 - render caret/underline marker at the error column
 - handle multiple diagnostics sequentially
-- handle prelude line offset (diagnostics from user code that follows
-  a prepended stdlib prelude)
+- apply prelude line offset to displayed line numbers (subtract offset
+  from raw line, matching the C++ driver convention)
 
 ### 5. Test harness
 
@@ -121,8 +126,12 @@ The probe must include a self-test harness (same pattern as
 - constructs a SourceBuffer from an inline source string
 - creates diagnostics at known offsets
 - formats them and verifies the output contains expected substrings
-- tests edge cases: first line, last line, empty source, multi-byte
-  offsets, multiple diagnostics on the same line
+- tests edge cases: first line, last line, empty source, multiple
+  diagnostics on the same line, prelude line offset adjustment
+- note: all offsets and columns are byte-based, matching the existing
+  C++ `SourceBuffer` and runtime string primitives (`char_at`,
+  `substring`, `index_of` all operate on byte indices). Display-width
+  correctness for multi-byte UTF-8 sequences is explicitly deferred
 
 ## Stdlib dependencies
 
