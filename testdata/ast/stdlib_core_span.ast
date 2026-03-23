@@ -1,0 +1,7 @@
+File
+  ClassDecl Span
+    Field offset: i64
+    Field length: i64
+  ClassDecl LineCol
+    Field line: i64
+    Field col: i64

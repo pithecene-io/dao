@@ -421,6 +421,19 @@ void TypeChecker::register_declarations(const FileNode& file) {
   // Pass 1b: register type shells (enums and class structs) so that
   // function signatures processed in pass 1c can reference them
   // regardless of source order.
+  //
+  // Sub-pass 1b-i: register class struct shells with empty fields.
+  // This ensures all class names are available in symbol_types_
+  // before any field types are resolved, enabling forward references
+  // between classes (e.g. class Diagnostic with a Span field where
+  // Span is defined later in the source).
+  struct PendingClass {
+    const ClassDecl* class_decl;
+    const Decl* decl;
+    TypeStruct* shell;
+  };
+  std::vector<PendingClass> pending_classes;
+
   for (const auto* decl : file.declarations) {
     if (decl->kind() == NodeKind::ClassDecl) {
       const auto& st = decl->as<ClassDecl>();
@@ -430,17 +443,10 @@ void TypeChecker::register_declarations(const FileNode& file) {
       }
       const auto* sym = decl_it->second;
 
-      std::vector<StructField> fields;
-      for (const auto* field : st.fields) {
-        const auto* field_type = resolve_type_node(field->type);
-        if (field_type != nullptr) {
-          fields.push_back({field->name, field_type});
-        }
-      }
-      const auto* struct_type =
-          types_.make_struct(sym, st.name, std::move(fields));
-      symbol_types_[sym] = struct_type;
-      typed_.set_decl_type(decl, struct_type);
+      auto* shell = types_.make_struct_shell(sym, st.name);
+      symbol_types_[sym] = shell;
+      typed_.set_decl_type(decl, shell);
+      pending_classes.push_back({&st, decl, shell});
     } else if (decl->kind() == NodeKind::EnumDecl) {
       const auto& en = decl->as<EnumDeclNode>();
       auto decl_it = decl_symbols_.find(en.name_span.offset);
@@ -483,6 +489,22 @@ void TypeChecker::register_declarations(const FileNode& file) {
       symbol_types_[sym] = enum_type;
       typed_.set_decl_type(decl, enum_type);
     }
+  }
+
+  // Sub-pass 1b-ii: resolve class field types now that all type
+  // shells (classes and enums) are registered in symbol_types_.
+  // Unresolved types are kept as nullptr to preserve arity — same
+  // rationale as enum variant payloads: dropping the slot silently
+  // mutates the struct shape and produces misleading secondary
+  // constructor-arity errors instead of the real type-resolution
+  // failure.
+  for (auto& pending : pending_classes) {
+    std::vector<StructField> fields;
+    for (const auto* field : pending.class_decl->fields) {
+      const auto* field_type = resolve_type_node(field->type);
+      fields.push_back({field->name, field_type});
+    }
+    pending.shell->set_fields(std::move(fields));
   }
 
   // Pass 1c: register function signatures, class method signatures,
@@ -753,7 +775,8 @@ void TypeChecker::compute_derived_conformances(const FileNode& file) {
         const auto* stype = static_cast<const TypeStruct*>(entry.struct_type);
         bool all_fields_conform = true;
         for (const auto& field : stype->fields()) {
-          if (!type_conforms_to(field.type, concept_decl)) {
+          if (field.type == nullptr ||
+              !type_conforms_to(field.type, concept_decl)) {
             all_fields_conform = false;
             break;
           }
