@@ -370,6 +370,7 @@ fn lex(src: string): LexResult
     // --- Handle line-start indentation ---
     if at_line_start:
       handled = true
+      let line_begin: i64 = pos
       let spaces: i64 = 0
       while pos < src_len:
         let lc: i32 = char_at(src, pos)
@@ -379,6 +380,7 @@ fn lex(src: string): LexResult
         else:
           if lc == 9:
             diags = diags.push(make_error(Span(pos, one), "tabs are not allowed in Dao source"))
+            tokens = tokens.push(Token(TK.Error, pos, one))
             spaces = spaces + 1
             pos = pos + 1
           else:
@@ -416,16 +418,17 @@ fn lex(src: string): LexResult
           let current_indent: i64 = indent_stack.get(indent_stack.length() - 1)
           if spaces > current_indent:
             indent_stack = indent_stack.push(spaces)
-            tokens = tokens.push(Token(TK.Indent, pos, zero))
+            tokens = tokens.push(Token(TK.Indent, line_begin, spaces))
           else:
             if spaces < current_indent:
               while indent_stack.length() > 1:
                 if indent_stack.get(indent_stack.length() - 1) <= spaces:
                   break
                 indent_stack = vec_pop(indent_stack)
-                tokens = tokens.push(Token(TK.Dedent, pos, zero))
+                tokens = tokens.push(Token(TK.Dedent, line_begin, zero))
               if indent_stack.get(indent_stack.length() - 1) != spaces:
-                diags = diags.push(make_error(Span(pos, one), "inconsistent indentation"))
+                diags = diags.push(make_error(Span(line_begin, spaces), "inconsistent indentation"))
+                tokens = tokens.push(Token(TK.Error, line_begin, spaces))
         at_line_start = false
       // else: skip_line=true, at_line_start stays true
 
@@ -473,6 +476,7 @@ fn lex(src: string): LexResult
         if ch == 34:
           let str_start: i64 = pos
           pos = pos + 1
+          let str_terminated: bool = false
           let str_done: bool = false
           while pos < src_len:
             if str_done == false:
@@ -480,6 +484,7 @@ fn lex(src: string): LexResult
               if sc == 34:
                 pos = pos + 1
                 str_done = true
+                str_terminated = true
               else:
                 if sc == 92:
                   pos = pos + 1
@@ -496,7 +501,10 @@ fn lex(src: string): LexResult
           // Diagnose unterminated string at EOF (newline case handled above).
           if str_done == false:
             diags = diags.push(make_error(Span(str_start, pos - str_start), "unterminated string literal"))
-          tokens = tokens.push(Token(TK.StringLiteral, str_start, pos - str_start))
+          if str_terminated:
+            tokens = tokens.push(Token(TK.StringLiteral, str_start, pos - str_start))
+          else:
+            tokens = tokens.push(Token(TK.Error, str_start, pos - str_start))
           handled = true
 
       // Numbers.
@@ -754,6 +762,20 @@ fn expect_token_text(label: string, result: LexResult, idx: i64, expected_kind: 
   print("FAIL " + label + ": expected " + tk_name(expected_kind) + ", got " + tk_name(tok.kind))
   return false
 
+fn expect_token_span(label: string, result: LexResult, idx: i64, expected_offset: i64, expected_len: i64): bool
+  if idx >= result.tokens.length():
+    print("FAIL " + label + ": token index out of bounds")
+    return false
+  let tok: Token = result.tokens.get(idx)
+  if tok.offset == expected_offset:
+    if tok.len == expected_len:
+      print("PASS " + label)
+      return true
+    print("FAIL " + label + ": len expected " + i64_to_string(expected_len) + ", got " + i64_to_string(tok.len))
+    return false
+  print("FAIL " + label + ": offset expected " + i64_to_string(expected_offset) + ", got " + i64_to_string(tok.offset))
+  return false
+
 fn expect_no_errors(label: string, result: LexResult): bool
   if result.diagnostics.length() == 0:
     print("PASS " + label)
@@ -852,12 +874,17 @@ fn main(): i32
   // Tokens: fn foo ( ) : NL INDENT let x = 1 NL let y = 2 NL DEDENT let z = 3 NL EOF
   if expect_token("indent_fn", r5, 0, TK.KwFn, src5):
     pass_count = pass_count + 1
-  // After "fn foo():\n" (tokens 0-5), we expect INDENT at index 6.
+  // After "fn foo():\n" (tokens 0-5), INDENT at index 6.
   if expect_token("indent_tok", r5, 6, TK.Indent, src5):
     pass_count = pass_count + 1
-  // Find DEDENT — it should appear before the final "let z".
-  // Tokens: fn(0) foo(1) ((2) )(3) :(4) NL(5) INDENT(6) let(7) x(8) =(9) 1(10) NL(11) let(12) y(13) =(14) 2(15) NL(16) DEDENT(17) let(18) ...
+  // INDENT span: line_begin=10 (start of "  let x"), length=2 (two spaces).
+  if expect_token_span("indent_span", r5, 6, 10, 2):
+    pass_count = pass_count + 1
+  // DEDENT before "let z": fn(0) foo(1) ((2) )(3) :(4) NL(5) INDENT(6) let(7) x(8) =(9) 1(10) NL(11) let(12) y(13) =(14) 2(15) NL(16) DEDENT(17)
   if expect_token("dedent_tok", r5, 17, TK.Dedent, src5):
+    pass_count = pass_count + 1
+  // DEDENT span: line_begin=34 (start of "let z" line), length=0.
+  if expect_token_span("dedent_span", r5, 17, 34, 0):
     pass_count = pass_count + 1
   if expect_no_errors("indent_no_err", r5):
     pass_count = pass_count + 1
@@ -901,6 +928,9 @@ fn main(): i32
 
   let src8: string = "\tx\n"
   let r8: LexResult = lex(src8)
+  // Tab emits TK.Error token (matching C++ emit_error behavior).
+  if expect_token("tab_err_tok", r8, 0, TK.Error, src8):
+    pass_count = pass_count + 1
   if expect_error_count("tab_err", r8, 1):
     pass_count = pass_count + 1
 
@@ -930,7 +960,7 @@ fn main(): i32
 
   let src11: string = "\"hello"
   let r11: LexResult = lex(src11)
-  if expect_token("unterm_eof_tok", r11, 0, TK.StringLiteral, src11):
+  if expect_token("unterm_eof_tok", r11, 0, TK.Error, src11):
     pass_count = pass_count + 1
   if expect_error_count("unterm_eof_err", r11, 1):
     pass_count = pass_count + 1
@@ -944,7 +974,7 @@ fn main(): i32
 
   // --- Summary ---
 
-  let total: i32 = 48
+  let total: i32 = 51
   print("")
   print("--- results ---")
   print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " passed")
