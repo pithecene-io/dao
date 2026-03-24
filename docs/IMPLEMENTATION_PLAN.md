@@ -299,10 +299,13 @@ has been promoted to `bootstrap/lexer/lexer.dao` with verified C++
 parity, 97+ golden tests, and self-lex regression.
 Task 21 (bootstrap parser extraction) is complete — the parser is
 promoted to `bootstrap/parser/parser.dao` with Tier A syntax coverage,
-arena-indexed AST, 30 golden tests, and self-parse of real Dao source.
+arena-indexed AST, 36 golden tests, and self-parse of real Dao source.
+Task 22 (bootstrap resolver) is complete — two-pass name resolution
+at `bootstrap/resolver/resolver.dao` with scope chains, symbol tables,
+uses map, 15 tests, and self-resolve of real Dao source.
 
-The next implementation focus is Tier B parser expansion, bootstrap
-resolver extraction, and Task 17 (low-level memory substrate).
+The next implementation focus is bootstrap type checker extraction,
+Tier B expansion, and Task 17 (low-level memory substrate).
 
 ### Task 14 — Numeric Type Expansion
 
