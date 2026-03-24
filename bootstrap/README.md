@@ -109,6 +109,43 @@ daoc build bootstrap/parser/parser.dao && ./bootstrap/parser/parser
 Tests include golden parse tree assertions, error recovery tests,
 and a self-parse smoke test (lexes and parses a real Dao source file).
 
+### `resolver/`
+
+Two-pass name resolver producing scope chains, symbol tables, and a
+uses map over the bootstrap parser's AST.
+
+**Status**: implemented (Task 22, Phase 7).
+
+**Tier A scope**:
+
+- Two-pass: collect top-level declarations, then resolve bodies
+- Scopes: file, function, block, struct, lambda
+- Forward references at file level
+- `IdentE` lookup with `unknown name` diagnostics
+- `QualNameE` first-segment resolution
+- Type name resolution (no diagnostic on unresolved)
+- Builtin type pre-population (i8–u64, f32, f64, bool, string, void)
+- Duplicate declaration diagnostics
+- `let` / `for` / lambda / param / field declarations
+
+**Tier B deferrals**:
+
+- Imports, overload resolution, method mangling
+- Generic type parameters and where clauses
+- Concept / extend resolution
+- Mode / resource block scoping
+- Match arm destructuring bindings
+
+**Token/parser duplication**: The resolver duplicates the full lexer
+and parser (~2370 lines) due to the single-file constraint.  This is
+temporary debt.
+
+**How to run tests**:
+
+```sh
+daoc build bootstrap/resolver/resolver.dao && ./bootstrap/resolver/resolver
+```
+
 ## Relationship to probes
 
 The `examples/bootstrap_probe/` directory contains earlier experimental
@@ -123,8 +160,8 @@ probe. The probe is retained as a historical artifact.
 
 ## What comes next
 
-- Bootstrap resolver extraction
+- Bootstrap type checker extraction
 - Diagnostic formatting for bootstrap errors
 - Shared source buffer / span / token infrastructure
-- Stronger parity testing (host parser golden comparison)
-- Tier B syntax expansion (concepts, extend, mode/resource)
+- Stronger parity testing (host resolver golden comparison)
+- Tier B expansion (concepts, extend, mode/resource, generics)

@@ -122,6 +122,8 @@ Self-hosting compiler subsystems written in Dao.
   surface; promoted from probe in Task 20 (Phase 7)
 - `parser/` — recursive-descent parser producing arena-indexed AST for
   Tier A Dao syntax; promoted from probe in Task 21 (Phase 7)
+- `resolver/` — two-pass name resolver with scope chains, symbol tables,
+  and uses map; first downstream consumer of the bootstrap AST (Task 22)
 
 ## `examples/`
 

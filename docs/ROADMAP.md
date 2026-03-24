@@ -210,12 +210,12 @@ Exit criteria:
 
 ## Phase 7 — Bootstrap Compiler
 
-Status: **lexer + parser promoted** — Task 19 (diagnostic formatter),
-Task 20 (bootstrap lexer), and Task 21 (bootstrap parser) complete.
-The bootstrap lexer lives at `bootstrap/lexer/lexer.dao` (105 tests,
-self-lex verified).  The bootstrap parser lives at
-`bootstrap/parser/parser.dao` (30 tests, Tier A syntax, arena-indexed
-AST, self-parse of real Dao source).
+Status: **lexer + parser + resolver promoted** — Tasks 19–22 complete.
+The bootstrap lexer (`bootstrap/lexer/lexer.dao`, 105 tests), parser
+(`bootstrap/parser/parser.dao`, 36 tests, Tier A syntax), and resolver
+(`bootstrap/resolver/resolver.dao`, 15 tests, two-pass name resolution
+with scope chains and symbol tables) form the first three-stage
+bootstrap frontend pipeline.
 
 Goals:
 - begin implementing non-trivial compiler subsystems in Dao itself
