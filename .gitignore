@@ -35,10 +35,9 @@ examples/**
 !examples/**/*.c
 !examples/**/*.h
 
-bootstrap/**
-!bootstrap/**/*/
-!bootstrap/**/*.dao
-!bootstrap/**/*.md
+# Bootstrap: ignore assembled outputs and compiled binaries
+bootstrap/**/*.gen.dao
+bootstrap/**/*.gen
 
 # Playground frontend
 tools/playground/frontend/node_modules/

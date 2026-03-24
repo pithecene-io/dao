@@ -1,19 +1,23 @@
 // =========================================================================
-// Bootstrap Parser — Dao compiler self-hosting subsystem
+// Bootstrap Shared Substrate — Dao compiler self-hosting infrastructure
 // =========================================================================
 //
-// Module:  bootstrap/parser
-// Phase:   Phase 7 — Bootstrap Compiler (Task 21)
-// Purpose: Recursive-descent parser for Dao source, producing an
-//          arena-indexed AST from the token stream.
+// Module:  bootstrap/shared
+// Phase:   Phase 7 — Bootstrap Compiler
+// Purpose: Shared token model, lexer, AST, and parser used by all
+//          bootstrap subsystems (lexer tests, parser tests, resolver,
+//          future type checker).
 //
-// This is maintained bootstrap infrastructure, not a probe.
-// See docs/task_specs/TASK_21_BOOTSTRAP_PARSER.md for full spec.
+// This file is the SINGLE SOURCE OF TRUTH for the bootstrap frontend
+// pipeline.  Subsystem-specific code (tests, resolver logic, etc.)
+// lives in .part.dao fragments under each subsystem directory.
 //
-// Single-file constraint: Dao has no multi-file compilation yet.
-// This file contains the token model, lexer, AST, parser, and tests.
+// Assembly: bootstrap/assemble.sh concatenates this base with each
+// subsystem's .part.dao to produce the final compilable .dao files.
 //
-// Stdlib types used: Span, Diagnostic, Severity, Vector<T>.
+// DO NOT duplicate this content into subsystem files manually.
+//
+// Stdlib types used: Span, Diagnostic, Severity, Vector<T>, HashMap<i64>.
 // Stdlib functions used: char_at, substring, length, print,
 //   i32_to_string, i64_to_string, read_file, file_exists.
 //
@@ -25,15 +29,12 @@
 //   For param/field pairs: count = N pairs, 2*N entries before count.
 //   For variant pairs: count = N variants, 2*N entries before count.
 //   For match arm pairs: count = N arms, 2*N entries before count.
-
 // =========================================================================
-// Section 1: Token model (TEMPORARY DEBT — duplicated from bootstrap/lexer)
+// Section 1: Token model
 // =========================================================================
 //
-// Tier A may duplicate token definitions from the bootstrap lexer due
-// to current bootstrap subsystem constraints.  This is follow-up debt
-// and should be centralized once shared bootstrap module boundaries
-// stabilize.
+// Canonical token definitions for the bootstrap pipeline.
+// All subsystems consume these via assembly from this shared base.
 
 enum TK:
   // Keywords — control
@@ -123,8 +124,7 @@ class LexResult:
   diagnostics: Vector<Diagnostic>
 
 // =========================================================================
-// Section 2: Character classification (duplicated from lexer)
-// =========================================================================
+// Section 2: Character classification// =========================================================================
 
 fn is_digit(ch: i32): bool
   if ch >= 48:
@@ -149,8 +149,7 @@ fn is_alnum(ch: i32): bool
   return is_alpha(ch)
 
 // =========================================================================
-// Section 3: Keyword classification (duplicated from lexer)
-// =========================================================================
+// Section 3: Keyword classification// =========================================================================
 
 fn classify_keyword(src: string, start: i64, klen: i64): TK
   let text: string = substring(src, start, klen)
@@ -215,8 +214,7 @@ fn classify_keyword(src: string, start: i64, klen: i64): TK
   return TK.Identifier
 
 // =========================================================================
-// Section 4: Token kind names (duplicated from lexer)
-// =========================================================================
+// Section 4: Token kind names// =========================================================================
 
 fn tk_name(kind: TK): string
   match kind:
@@ -353,8 +351,7 @@ fn tk_name(kind: TK): string
   return "Unknown"
 
 // =========================================================================
-// Section 5: Lexer (duplicated from bootstrap/lexer/lexer.dao)
-// =========================================================================
+// Section 5: Lexer// =========================================================================
 //
 // TEMPORARY DEBT: Full lexer duplication due to single-file constraint.
 // This will be centralized when shared bootstrap module boundaries
@@ -2032,336 +2029,3 @@ fn node_kind_name(n: Node): string
       return "FileN"
   return "Unknown"
 
-// =========================================================================
-// Section 17: Test infrastructure
-// =========================================================================
-
-fn expect_node_kind(label: string, pr: PR, node_idx: i64, expected: string): bool
-  if node_idx < 0:
-    print("FAIL " + label + ": node index is -1 (parse error)")
-    return false
-  if node_idx >= pr.ps.nodes.length():
-    print("FAIL " + label + ": node index " + i64_to_string(node_idx) + " out of bounds")
-    return false
-  let n: Node = pr.ps.nodes.get(node_idx)
-  let actual: string = node_kind_name(n)
-  if actual == expected:
-    print("PASS " + label)
-    return true
-  print("FAIL " + label + ": expected " + expected + ", got " + actual)
-  return false
-
-fn expect_no_parse_errors(label: string, pr: PR): bool
-  if pr.ps.diags.length() == 0:
-    print("PASS " + label)
-    return true
-  print("FAIL " + label + ": expected no errors, got " + i64_to_string(pr.ps.diags.length()))
-  return false
-
-fn expect_parse_errors(label: string, pr: PR, min_errors: i64): bool
-  if pr.ps.diags.length() >= min_errors:
-    print("PASS " + label)
-    return true
-  print("FAIL " + label + ": expected >= " + i64_to_string(min_errors) + " errors, got " + i64_to_string(pr.ps.diags.length()))
-  return false
-
-fn expect_node_count_min(label: string, pr: PR, min_count: i64): bool
-  if pr.ps.nodes.length() >= min_count:
-    print("PASS " + label)
-    return true
-  print("FAIL " + label + ": expected >= " + i64_to_string(min_count) + " nodes, got " + i64_to_string(pr.ps.nodes.length()))
-  return false
-
-// Helper to parse an expression snippet
-fn parse_expr_str(src: string): PR
-  let lr: LexResult = lex(src)
-  let ps: PS = PS(lr.tokens, src, to_i64(0), Vector<Node>::new(), Vector<i64>::new(), lr.diagnostics)
-  return parse_expr(ps)
-
-// =========================================================================
-// Section 18: Golden parse tests
-// =========================================================================
-
-fn main(): i32
-  print("=== bootstrap/parser: Task 21 — Bootstrap Parser ===")
-  print("")
-
-  let pass_count: i32 = 0
-  let total: i32 = 36
-
-  // -----------------------------------------------------------------
-  // Expression tests
-  // -----------------------------------------------------------------
-
-  // Test 1: Simple integer literal
-  let r1: PR = parse_expr_str("42")
-  if expect_node_kind("expr_int_lit", r1, r1.node, "IntLitE"):
-    pass_count = pass_count + 1
-
-  // Test 2: Binary addition
-  let r2: PR = parse_expr_str("1 + 2")
-  if expect_node_kind("expr_binary_add", r2, r2.node, "BinaryE"):
-    pass_count = pass_count + 1
-
-  // Test 3: Precedence — 2 + 3 * 4 should have BinaryE(+) at root
-  let r3: PR = parse_expr_str("2 + 3 * 4")
-  if expect_node_kind("expr_precedence", r3, r3.node, "BinaryE"):
-    pass_count = pass_count + 1
-
-  // Test 4: Unary minus
-  let r4: PR = parse_expr_str("-x")
-  if expect_node_kind("expr_unary_neg", r4, r4.node, "UnaryE"):
-    pass_count = pass_count + 1
-
-  // Test 5: Function call
-  let r5: PR = parse_expr_str("f(x, y)")
-  if expect_node_kind("expr_call", r5, r5.node, "CallE"):
-    pass_count = pass_count + 1
-
-  // Test 6: Field access
-  let r6: PR = parse_expr_str("a.b")
-  if expect_node_kind("expr_field", r6, r6.node, "FieldE"):
-    pass_count = pass_count + 1
-
-  // Test 7: Index
-  let r7: PR = parse_expr_str("a[0]")
-  if expect_node_kind("expr_index", r7, r7.node, "IndexE"):
-    pass_count = pass_count + 1
-
-  // Test 8: Pipe
-  let r8: PR = parse_expr_str("x |> f")
-  if expect_node_kind("expr_pipe", r8, r8.node, "PipeE"):
-    pass_count = pass_count + 1
-
-  // Test 9: Try
-  let r9: PR = parse_expr_str("x?")
-  if expect_node_kind("expr_try", r9, r9.node, "TryE"):
-    pass_count = pass_count + 1
-
-  // Test 10: Qualified name
-  let r10: PR = parse_expr_str("A::B")
-  if expect_node_kind("expr_qual_name", r10, r10.node, "QualNameE"):
-    pass_count = pass_count + 1
-
-  // Test 10a: Nested call — regression for idx interleaving bug.
-  // f(g(1), 2) must produce CallE with 2 args where arg 0 is CallE.
-  let r10a: PR = parse_expr_str("f(g(1), 2)")
-  if expect_node_kind("nested_call_outer", r10a, r10a.node, "CallE"):
-    pass_count = pass_count + 1
-  // Verify the outer call has 2 arguments by reading from the idx list.
-  if r10a.node >= 0:
-    let outer: Node = r10a.ps.nodes.get(r10a.node)
-    let ok_nested: bool = false
-    match outer:
-      Node.CallE(callee, list_pos, arg_count):
-        // Read count from idx list at list_pos
-        let cnt: i64 = r10a.ps.idx.get(list_pos)
-        if cnt == 2:
-          ok_nested = true
-    if ok_nested:
-      print("PASS nested_call_arg_count")
-      pass_count = pass_count + 1
-    else:
-      print("FAIL nested_call_arg_count: outer call should have 2 args")
-
-  // Test 10b: Nested list literal — regression for list idx interleaving.
-  let r10b: PR = parse_expr_str("[f(1), 2]")
-  if expect_node_kind("nested_list_outer", r10b, r10b.node, "ListLitE"):
-    pass_count = pass_count + 1
-
-  // -----------------------------------------------------------------
-  // Declaration tests
-  // -----------------------------------------------------------------
-
-  // Test 11: Simple fn declaration
-  let src11: string = "fn foo(x: i32): i32\n  return x\n"
-  let r11: PR = parse(src11)
-  if expect_node_kind("decl_fn", r11, r11.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 12: Extern fn declaration
-  let src12: string = "extern fn bar(s: string): i32\n"
-  let r12: PR = parse(src12)
-  if expect_node_kind("decl_extern_fn", r12, r12.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 13: Expression-bodied fn
-  let src13: string = "fn add(a: i64, b: i64): i64 -> a + b\n"
-  let r13: PR = parse(src13)
-  if expect_node_kind("decl_expr_fn", r13, r13.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 14: Class with fields
-  let src14: string = "class Point:\n  x: i64\n  y: i64\n"
-  let r14: PR = parse(src14)
-  if expect_node_kind("decl_class", r14, r14.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 15: Enum with variants
-  let src15: string = "enum Color:\n  Red\n  Green\n  Blue\n"
-  let r15: PR = parse(src15)
-  if expect_node_kind("decl_enum", r15, r15.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 16: Enum with payload variants
-  let src16: string = "enum Expr:\n  IntLit(i64)\n  Binary(TK, i64, i64)\n"
-  let r16: PR = parse(src16)
-  if expect_node_kind("decl_enum_payload", r16, r16.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 17: Type alias
-  let src17: string = "type NodeId = i64\n"
-  let r17: PR = parse(src17)
-  if expect_node_kind("decl_type_alias", r17, r17.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // -----------------------------------------------------------------
-  // Statement tests
-  // -----------------------------------------------------------------
-
-  // Test 18: Let statement
-  let src18: string = "fn test(): i32\n  let x: i32 = 42\n  return x\n"
-  let r18: PR = parse(src18)
-  if expect_node_kind("stmt_let", r18, r18.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 19: If/else
-  let src19: string = "fn test(): i32\n  if x > 0:\n    return 1\n  else:\n    return 0\n"
-  let r19: PR = parse(src19)
-  if expect_node_kind("stmt_if_else", r19, r19.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 20: While loop
-  let src20: string = "fn test(): i32\n  while x > 0:\n    x = x - 1\n  return x\n"
-  let r20: PR = parse(src20)
-  if expect_node_kind("stmt_while", r20, r20.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 21: For loop
-  let src21: string = "fn test(): i32\n  for i in items:\n    print(i)\n  return 0\n"
-  let r21: PR = parse(src21)
-  if expect_node_kind("stmt_for", r21, r21.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 22: Return
-  let src22: string = "fn test(): i32\n  return 42\n"
-  let r22: PR = parse(src22)
-  if expect_no_parse_errors("stmt_return_no_err", r22):
-    pass_count = pass_count + 1
-
-  // Test 23: Match statement
-  let src23: string = "fn test(): i32\n  match x:\n    TK.Plus:\n      return 1\n    TK.Minus:\n      return 2\n"
-  let r23: PR = parse(src23)
-  if expect_node_kind("stmt_match", r23, r23.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // Test 24: Full program (enum + class + fn + main)
-  let src24: string = "enum Color:\n  Red\n  Blue\n\nclass Point:\n  x: i64\n  y: i64\n\nfn add(a: i64, b: i64): i64 -> a + b\n\nfn main(): i32\n  let p: Point = Point(1, 2)\n  return 0\n"
-  let r24: PR = parse(src24)
-  let r24_ok: bool = true
-  if expect_node_kind("full_program_file", r24, r24.node, "FileN") == false:
-    r24_ok = false
-  if r24_ok:
-    if expect_node_count_min("full_program_nodes", r24, to_i64(5)):
-      pass_count = pass_count + 1
-
-  // -----------------------------------------------------------------
-  // Error tests
-  // -----------------------------------------------------------------
-
-  // Test 25: Missing closing paren
-  let r25: PR = parse_expr_str("f(x, y")
-  if expect_parse_errors("err_missing_rparen", r25, to_i64(1)):
-    pass_count = pass_count + 1
-
-  // Test 26: Expected expression
-  let r26: PR = parse_expr_str(")")
-  if expect_parse_errors("err_expected_expr", r26, to_i64(1)):
-    pass_count = pass_count + 1
-
-  // Test 27: Missing colon after fn params
-  let src27: string = "fn test(x: i32) i32\n  return x\n"
-  let r27: PR = parse(src27)
-  if expect_node_kind("err_missing_colon", r27, r27.node, "FileN"):
-    pass_count = pass_count + 1
-
-  // -----------------------------------------------------------------
-  // Regression: class with generic field type (idx interleaving)
-  // -----------------------------------------------------------------
-
-  // Test 28: Class with generic field type — verifies field pairs
-  // are contiguous in idx despite nested generic type list entries.
-  let src28: string = "class Foo:\n  items: Vector<Token>\n  count: i64\n"
-  let r28: PR = parse(src28)
-  if expect_no_parse_errors("class_generic_field_no_err", r28):
-    pass_count = pass_count + 1
-
-  // Test 29: extern fn without return type produces diagnostic.
-  let src29: string = "extern fn bad(x: i32)\n"
-  let r29: PR = parse(src29)
-  if expect_parse_errors("extern_fn_no_ret", r29, to_i64(1)):
-    pass_count = pass_count + 1
-
-  // Test 30: Empty class body produces diagnostic.
-  let src30: string = "class Empty:\n  \n"
-  let r30: PR = parse(src30)
-  if expect_parse_errors("empty_class_body", r30, to_i64(1)):
-    pass_count = pass_count + 1
-
-  // -----------------------------------------------------------------
-  // Self-parse smoke test
-  // -----------------------------------------------------------------
-
-  // Test 31-33: Parse a representative bootstrap source file
-  // (uses expr_parser probe as the self-parse target, since this file
-  //  is too large for the immutable-vector bootstrap runtime)
-  let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
-  if file_exists(self_path):
-    let self_src: string = read_file(self_path)
-    let self_r: PR = parse(self_src)
-    if expect_node_kind("self_parse_file", self_r, self_r.node, "FileN"):
-      pass_count = pass_count + 1
-    if expect_node_count_min("self_parse_nodes", self_r, to_i64(20)):
-      pass_count = pass_count + 1
-    let err_count: i64 = self_r.ps.diags.length()
-    print("  [info] self-parse diagnostics: " + i64_to_string(err_count))
-    print("  [info] self-parse node count: " + i64_to_string(self_r.ps.nodes.length()))
-    print("  [info] self-parse idx list size: " + i64_to_string(self_r.ps.idx.length()))
-    if self_r.ps.nodes.length() > 30:
-      print("PASS self_parse_sanity")
-      pass_count = pass_count + 1
-    else:
-      print("FAIL self_parse_sanity: too few nodes (" + i64_to_string(self_r.ps.nodes.length()) + ")")
-  else:
-    print("SKIP self_parse_file: file not found at " + self_path)
-    print("SKIP self_parse_nodes: file not found")
-    print("SKIP self_parse_sanity: file not found")
-
-  // -----------------------------------------------------------------
-  // Summary
-  // -----------------------------------------------------------------
-
-  print("")
-  print("--- results ---")
-  print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " passed")
-  print("")
-
-  // -----------------------------------------------------------------
-  // Tier B deferrals (documented, not silently omitted)
-  // -----------------------------------------------------------------
-  // The following syntax is explicitly deferred to Tier B:
-  //   - concept declarations
-  //   - derived concept declarations
-  //   - extend declarations
-  //   - class methods / conformance blocks (as / deny)
-  //   - mode / resource blocks
-  //   - yield statements
-  //   - function types (fn(T): R as a type)
-  //   - generic parameter bounds / where clauses
-  //   - static method calls requiring <T> disambiguation
-  //   - import declarations
-  //   - pipe continuation across newlines with INDENT/DEDENT
-  //   - self-parse of this file (deferred due to bootstrap runtime
-  //     memory constraints with immutable vectors)
-
-  return 0
