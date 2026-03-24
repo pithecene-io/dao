@@ -185,10 +185,13 @@ Exit criteria:
 
 ## Phase 6 — C ABI Interop and Host Integration
 
-Status: **v2 in progress** — v1 (scalar/pointer C ABI calls, driver
-link passthrough, extern fn type validation, E2E examples) complete.
-v2 adds struct-by-value arguments and returns with repr-C-compatible
-predicate. Callbacks and variadics deferred.
+Status: **v2 complete** — v1 (scalar/pointer C ABI calls, driver link
+passthrough, extern fn type validation, E2E examples) and v2
+(struct-by-value with repr-C predicate, x86-64 SysV eightbyte
+classification, byval/sret for >16 B structs, function pointer types
+at extern boundary with named-function callbacks) both landed.
+Variadics, C unions, and indirect calls through C-supplied function
+pointers with struct params/returns are deferred.
 
 Goals:
 - stable C ABI entry/exit surface for initial foreign function calls
