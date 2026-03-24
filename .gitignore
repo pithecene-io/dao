@@ -37,7 +37,7 @@ examples/**
 
 bootstrap/**
 !bootstrap/**/*/
-!bootstrap/**/*.dao
+!bootstrap/shared/**/*.dao
 !bootstrap/**/*.part.dao
 !bootstrap/**/*.md
 !bootstrap/**/*.sh
