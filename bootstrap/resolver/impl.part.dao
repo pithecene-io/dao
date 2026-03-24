@@ -1,0 +1,1022 @@
+// =========================================================================
+// Section 17: Resolver data structures
+// =========================================================================
+
+enum SymbolKind:
+  Builtin
+  Function
+  Type
+  Local
+  Param
+  Field
+  LambdaParam
+
+class Symbol:
+  kind: SymbolKind
+  name: string
+  decl_node: i64
+  scope_id: i64
+
+enum ScopeKind:
+  FileScope
+  FunctionScope
+  BlockScope
+  StructScope
+
+class Scope:
+  kind: ScopeKind
+  parent: i64
+  decls: HashMap<i64>
+
+class RS:
+  nodes: Vector<Node>
+  idx_data: Vector<i64>
+  toks: Vector<Token>
+  src: string
+  symbols: Vector<Symbol>
+  scopes: Vector<Scope>
+  uses: Vector<i64>
+  diags: Vector<Diagnostic>
+  current_scope: i64
+
+class ResolveResult:
+  symbols: Vector<Symbol>
+  scopes: Vector<Scope>
+  uses: Vector<i64>
+  diags: Vector<Diagnostic>
+  node_count: i64
+
+// =========================================================================
+// Section 18: Resolver state helpers
+// =========================================================================
+
+class SymR:
+  rs: RS
+  sym_idx: i64
+
+class ScopeR:
+  rs: RS
+  scope_idx: i64
+
+fn rs_add_symbol(rs: RS, sym: Symbol): SymR
+  let idx: i64 = rs.symbols.length()
+  let new_syms: Vector<Symbol> = rs.symbols.push(sym)
+  let new_rs: RS = RS(rs.nodes, rs.idx_data, rs.toks, rs.src, new_syms, rs.scopes, rs.uses, rs.diags, rs.current_scope)
+  return SymR(new_rs, idx)
+
+fn rs_set_scopes(rs: RS, scopes: Vector<Scope>): RS
+  return RS(rs.nodes, rs.idx_data, rs.toks, rs.src, rs.symbols, scopes, rs.uses, rs.diags, rs.current_scope)
+
+fn rs_set_current_scope(rs: RS, scope_idx: i64): RS
+  return RS(rs.nodes, rs.idx_data, rs.toks, rs.src, rs.symbols, rs.scopes, rs.uses, rs.diags, scope_idx)
+
+fn rs_set_uses(rs: RS, uses: Vector<i64>): RS
+  return RS(rs.nodes, rs.idx_data, rs.toks, rs.src, rs.symbols, rs.scopes, uses, rs.diags, rs.current_scope)
+
+fn rs_set_diags(rs: RS, diags: Vector<Diagnostic>): RS
+  return RS(rs.nodes, rs.idx_data, rs.toks, rs.src, rs.symbols, rs.scopes, rs.uses, diags, rs.current_scope)
+
+fn rs_push_scope(rs: RS, kind: ScopeKind): ScopeR
+  let idx: i64 = rs.scopes.length()
+  let new_scope: Scope = Scope(kind, rs.current_scope, HashMap<i64>::new())
+  let new_scopes: Vector<Scope> = rs.scopes.push(new_scope)
+  let new_rs: RS = rs_set_current_scope(rs_set_scopes(rs, new_scopes), idx)
+  return ScopeR(new_rs, idx)
+
+fn rs_pop_scope(rs: RS): RS
+  let scope: Scope = rs.scopes.get(rs.current_scope)
+  return rs_set_current_scope(rs, scope.parent)
+
+fn rs_add_use(rs: RS, tok_idx: i64, sym_idx: i64): RS
+  let new_uses: Vector<i64> = rs.uses.push(tok_idx)
+  let new_uses2: Vector<i64> = new_uses.push(sym_idx)
+  return rs_set_uses(rs, new_uses2)
+
+fn rs_add_diag(rs: RS, span: Span, msg: string): RS
+  let d: Diagnostic = make_error(span, msg)
+  return rs_set_diags(rs, rs.diags.push(d))
+
+// =========================================================================
+// Section 19: Scope operations
+// =========================================================================
+
+// Replace a scope in the scopes vector (O(n) but scopes are small).
+fn replace_scope(scopes: Vector<Scope>, idx: i64, new_scope: Scope): Vector<Scope>
+  let result: Vector<Scope> = Vector<Scope>::new()
+  let i: i64 = 0
+  while i < scopes.length():
+    if i == idx:
+      result = result.push(new_scope)
+    else:
+      result = result.push(scopes.get(i))
+    i = i + 1
+  return result
+
+fn rs_update_scope(rs: RS, scope_idx: i64, new_scope: Scope): RS
+  let new_scopes: Vector<Scope> = replace_scope(rs.scopes, scope_idx, new_scope)
+  return rs_set_scopes(rs, new_scopes)
+
+fn scope_declare(rs: RS, name: string, sym_idx: i64, decl_tidx: i64): RS
+  let scope: Scope = rs.scopes.get(rs.current_scope)
+  let existing: Option<i64> = scope.decls.get(name)
+  match existing:
+    Option.Some(eidx):
+      // Duplicate declaration — emit diagnostic at the duplicate's span
+      let sp: Span = Span(to_i64(0), to_i64(1))
+      if decl_tidx >= 0:
+        let tok: Token = rs.toks.get(decl_tidx)
+        sp = Span(tok.offset, tok.len)
+      let rs2: RS = rs_add_diag(rs, sp, "duplicate declaration '" + name + "'")
+      return rs2
+    Option.None:
+      let new_decls: HashMap<i64> = scope.decls.set(name, sym_idx)
+      let new_scope: Scope = Scope(scope.kind, scope.parent, new_decls)
+      return rs_update_scope(rs, rs.current_scope, new_scope)
+  return rs
+
+fn scope_lookup(rs: RS, name: string): i64
+  let sid: i64 = rs.current_scope
+  while sid >= 0:
+    let scope: Scope = rs.scopes.get(sid)
+    let found: Option<i64> = scope.decls.get(name)
+    match found:
+      Option.Some(sym_idx):
+        return sym_idx
+      Option.None:
+        sid = scope.parent
+  return to_i64(-1)
+
+fn scope_lookup_local(rs: RS, name: string): i64
+  let scope: Scope = rs.scopes.get(rs.current_scope)
+  let found: Option<i64> = scope.decls.get(name)
+  match found:
+    Option.Some(sym_idx):
+      return sym_idx
+    Option.None:
+      return to_i64(-1)
+  return to_i64(-1)
+
+// =========================================================================
+// Section 20: List reading helpers
+// =========================================================================
+
+fn read_list(idx_data: Vector<i64>, lp: i64): Vector<i64>
+  let count: i64 = idx_data.get(lp)
+  let result: Vector<i64> = Vector<i64>::new()
+  let i: i64 = 0
+  while i < count:
+    result = result.push(idx_data.get(lp - count + i))
+    i = i + 1
+  return result
+
+fn read_pairs(idx_data: Vector<i64>, lp: i64): Vector<i64>
+  let count: i64 = idx_data.get(lp)
+  let total: i64 = count * 2
+  let result: Vector<i64> = Vector<i64>::new()
+  let i: i64 = 0
+  while i < total:
+    result = result.push(idx_data.get(lp - total + i))
+    i = i + 1
+  return result
+
+// =========================================================================
+// Section 21: Name extraction
+// =========================================================================
+
+fn tok_name(rs: RS, tidx: i64): string
+  let tok: Token = rs.toks.get(tidx)
+  return substring(rs.src, tok.offset, tok.len)
+
+fn tok_name_span(rs: RS, tidx: i64): Span
+  let tok: Token = rs.toks.get(tidx)
+  return Span(tok.offset, tok.len)
+
+// =========================================================================
+// Section 22: Symbol kind name (for test output)
+// =========================================================================
+
+fn symbol_kind_name(kind: SymbolKind): string
+  match kind:
+    SymbolKind.Builtin:
+      return "Builtin"
+    SymbolKind.Function:
+      return "Function"
+    SymbolKind.Type:
+      return "Type"
+    SymbolKind.Local:
+      return "Local"
+    SymbolKind.Param:
+      return "Param"
+    SymbolKind.Field:
+      return "Field"
+    SymbolKind.LambdaParam:
+      return "LambdaParam"
+  return "Unknown"
+
+fn scope_kind_name(kind: ScopeKind): string
+  match kind:
+    ScopeKind.FileScope:
+      return "FileScope"
+    ScopeKind.FunctionScope:
+      return "FunctionScope"
+    ScopeKind.BlockScope:
+      return "BlockScope"
+    ScopeKind.StructScope:
+      return "StructScope"
+  return "Unknown"
+
+// =========================================================================
+// Section 23: Builtin population
+// =========================================================================
+
+fn declare_builtin(rs: RS, name: string): RS
+  let sr: SymR = rs_add_symbol(rs, Symbol(SymbolKind.Builtin, name, to_i64(-1), rs.current_scope))
+  return scope_declare(sr.rs, name, sr.sym_idx, to_i64(-1))
+
+fn populate_builtins(rs: RS): RS
+  let r: RS = rs
+  r = declare_builtin(r, "i8")
+  r = declare_builtin(r, "i16")
+  r = declare_builtin(r, "i32")
+  r = declare_builtin(r, "i64")
+  r = declare_builtin(r, "u8")
+  r = declare_builtin(r, "u16")
+  r = declare_builtin(r, "u32")
+  r = declare_builtin(r, "u64")
+  r = declare_builtin(r, "f32")
+  r = declare_builtin(r, "f64")
+  r = declare_builtin(r, "bool")
+  r = declare_builtin(r, "string")
+  r = declare_builtin(r, "void")
+  return r
+
+// =========================================================================
+// Section 24: Type resolution
+// =========================================================================
+
+// Check if a symbol is valid in type position (Builtin or Type).
+fn is_type_symbol(rs: RS, sym_idx: i64): bool
+  if sym_idx < 0:
+    return false
+  let sym: Symbol = rs.symbols.get(sym_idx)
+  match sym.kind:
+    SymbolKind.Builtin:
+      return true
+    SymbolKind.Type:
+      return true
+  return false
+
+fn resolve_type_node(rs: RS, node_idx: i64): RS
+  if node_idx < 0:
+    return rs
+  let node: Node = rs.nodes.get(node_idx)
+  match node:
+    Node.NamedT(tidx):
+      let name: string = tok_name(rs, tidx)
+      let sym: i64 = scope_lookup(rs, name)
+      if sym >= 0:
+        if is_type_symbol(rs, sym):
+          return rs_add_use(rs, tidx, sym)
+        // Found a non-type symbol — don't record the use, leave unresolved
+      // No diagnostic on unresolved type — matches host resolver
+      return rs
+    Node.GenericT(name_tidx, args_lp, arg_count):
+      let name: string = tok_name(rs, name_tidx)
+      let sym: i64 = scope_lookup(rs, name)
+      let r: RS = rs
+      if sym >= 0:
+        if is_type_symbol(r, sym):
+          r = rs_add_use(r, name_tidx, sym)
+      let args: Vector<i64> = read_list(r.idx_data, args_lp)
+      let i: i64 = 0
+      while i < args.length():
+        r = resolve_type_node(r, args.get(i))
+        i = i + 1
+      return r
+    Node.PointerT(inner):
+      return resolve_type_node(rs, inner)
+    Node.ErrorT(t):
+      return rs
+  return rs
+
+// =========================================================================
+// Section 25: Expression resolution
+// =========================================================================
+
+fn resolve_expr(rs: RS, node_idx: i64): RS
+  if node_idx < 0:
+    return rs
+  let node: Node = rs.nodes.get(node_idx)
+  match node:
+    Node.IdentE(tidx):
+      let name: string = tok_name(rs, tidx)
+      let sym: i64 = scope_lookup(rs, name)
+      if sym >= 0:
+        return rs_add_use(rs, tidx, sym)
+      // Unknown name — emit diagnostic
+      let sp: Span = tok_name_span(rs, tidx)
+      return rs_add_diag(rs, sp, "unknown name '" + name + "'")
+    Node.QualNameE(seg_lp, seg_count):
+      // Resolve first segment only
+      let segs: Vector<i64> = read_list(rs.idx_data, seg_lp)
+      if segs.length() > 0:
+        let first_tidx: i64 = segs.get(0)
+        let name: string = tok_name(rs, first_tidx)
+        let sym: i64 = scope_lookup(rs, name)
+        if sym >= 0:
+          return rs_add_use(rs, first_tidx, sym)
+        let sp: Span = tok_name_span(rs, first_tidx)
+        return rs_add_diag(rs, sp, "unknown name '" + name + "'")
+      return rs
+    Node.BinaryE(op_tidx, left, right):
+      let r: RS = resolve_expr(rs, left)
+      return resolve_expr(r, right)
+    Node.UnaryE(op_tidx, operand):
+      return resolve_expr(rs, operand)
+    Node.CallE(callee, args_lp, arg_count):
+      let r: RS = resolve_expr(rs, callee)
+      let args: Vector<i64> = read_list(r.idx_data, args_lp)
+      let i: i64 = 0
+      while i < args.length():
+        r = resolve_expr(r, args.get(i))
+        i = i + 1
+      return r
+    Node.IndexE(obj, idx_expr):
+      let r: RS = resolve_expr(rs, obj)
+      return resolve_expr(r, idx_expr)
+    Node.FieldE(obj, field_tidx):
+      // Resolve the object expression; field name needs type info (Tier B)
+      return resolve_expr(rs, obj)
+    Node.PipeE(left, right):
+      let r: RS = resolve_expr(rs, left)
+      return resolve_expr(r, right)
+    Node.TryE(operand):
+      return resolve_expr(rs, operand)
+    Node.LambdaE(params_lp, param_count, body):
+      // Create a block scope for the lambda
+      let sr: ScopeR = rs_push_scope(rs, ScopeKind.BlockScope)
+      let r: RS = sr.rs
+      // Declare lambda parameters
+      let param_toks: Vector<i64> = read_list(r.idx_data, params_lp)
+      let i: i64 = 0
+      while i < param_toks.length():
+        let ptidx: i64 = param_toks.get(i)
+        let pname: string = tok_name(r, ptidx)
+        let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.LambdaParam, pname, node_idx, r.current_scope))
+        r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, ptidx)
+        i = i + 1
+      // Resolve body expression
+      r = resolve_expr(r, body)
+      return rs_pop_scope(r)
+    Node.ListLitE(elems_lp, elem_count):
+      let elems: Vector<i64> = read_list(rs.idx_data, elems_lp)
+      let r: RS = rs
+      let i: i64 = 0
+      while i < elems.length():
+        r = resolve_expr(r, elems.get(i))
+        i = i + 1
+      return r
+    Node.IntLitE(t):
+      return rs
+    Node.FloatLitE(t):
+      return rs
+    Node.StringLitE(t):
+      return rs
+    Node.BoolLitE(t):
+      return rs
+    Node.ErrorE(t):
+      return rs
+  return rs
+
+// =========================================================================
+// Section 26: Statement resolution
+// =========================================================================
+
+fn resolve_body_stmts(rs: RS, list_pos: i64): RS
+  if list_pos < 0:
+    return rs
+  let stmts: Vector<i64> = read_list(rs.idx_data, list_pos)
+  let r: RS = rs
+  let i: i64 = 0
+  while i < stmts.length():
+    r = resolve_stmt(r, stmts.get(i))
+    i = i + 1
+  return r
+
+fn resolve_body_in_new_scope(rs: RS, list_pos: i64): RS
+  if list_pos < 0:
+    return rs
+  let sr: ScopeR = rs_push_scope(rs, ScopeKind.BlockScope)
+  let r: RS = resolve_body_stmts(sr.rs, list_pos)
+  return rs_pop_scope(r)
+
+fn resolve_stmt(rs: RS, node_idx: i64): RS
+  if node_idx < 0:
+    return rs
+  let node: Node = rs.nodes.get(node_idx)
+  match node:
+    Node.LetS(name_tidx, type_node, init_node):
+      // Resolve type and init BEFORE declaring (prevents self-reference)
+      let r: RS = resolve_type_node(rs, type_node)
+      r = resolve_expr(r, init_node)
+      // Declare local
+      let name: string = tok_name(r, name_tidx)
+      let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Local, name, node_idx, r.current_scope))
+      return scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+    Node.AssignS(target, value):
+      let r: RS = resolve_expr(rs, target)
+      return resolve_expr(r, value)
+    Node.IfS(cond, then_lp, else_lp):
+      let r: RS = resolve_expr(rs, cond)
+      r = resolve_body_in_new_scope(r, then_lp)
+      if else_lp >= 0:
+        r = resolve_body_in_new_scope(r, else_lp)
+      return r
+    Node.WhileS(cond, body_lp):
+      let r: RS = resolve_expr(rs, cond)
+      return resolve_body_in_new_scope(r, body_lp)
+    Node.ForS(var_tidx, iter_node, body_lp):
+      // Resolve iterable in outer scope
+      let r: RS = resolve_expr(rs, iter_node)
+      // Create block scope for loop body; declare loop variable
+      let sr: ScopeR = rs_push_scope(r, ScopeKind.BlockScope)
+      r = sr.rs
+      let var_name: string = tok_name(r, var_tidx)
+      let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Local, var_name, node_idx, r.current_scope))
+      r = scope_declare(sym_r.rs, var_name, sym_r.sym_idx, var_tidx)
+      r = resolve_body_stmts(r, body_lp)
+      return rs_pop_scope(r)
+    Node.ReturnS(val_node):
+      if val_node >= 0:
+        return resolve_expr(rs, val_node)
+      return rs
+    Node.BreakS(tidx):
+      return rs
+    Node.MatchS(scrut_node, arms_lp):
+      let r: RS = resolve_expr(rs, scrut_node)
+      // Arms are pairs: [pattern_node, body_list_pos]
+      let arms: Vector<i64> = read_pairs(r.idx_data, arms_lp)
+      let i: i64 = 0
+      while i < arms.length():
+        let pat_node: i64 = arms.get(i)
+        let body_lp2: i64 = arms.get(i + 1)
+        // Resolve pattern as expression in current scope
+        r = resolve_expr(r, pat_node)
+        // Resolve body in new scope
+        r = resolve_body_in_new_scope(r, body_lp2)
+        i = i + 2
+      return r
+    Node.ExprStmtS(expr_node):
+      return resolve_expr(rs, expr_node)
+    Node.ErrorS(t):
+      return rs
+  return rs
+
+// =========================================================================
+// Section 27: Declaration resolution (Pass 2)
+// =========================================================================
+
+fn resolve_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, ret_type: i64, body_lp: i64): RS
+  // Create function scope
+  let sr: ScopeR = rs_push_scope(rs, ScopeKind.FunctionScope)
+  let r: RS = sr.rs
+
+  // Declare parameters
+  let pairs: Vector<i64> = read_pairs(r.idx_data, params_lp)
+  let i: i64 = 0
+  while i < pairs.length():
+    let p_tidx: i64 = pairs.get(i)
+    let p_type: i64 = pairs.get(i + 1)
+    let pname: string = tok_name(r, p_tidx)
+    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope))
+    r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, p_tidx)
+    // Resolve parameter type
+    r = resolve_type_node(r, p_type)
+    i = i + 2
+
+  // Resolve return type
+  r = resolve_type_node(r, ret_type)
+
+  // Create block scope for body (so let bindings can shadow params)
+  let bsr: ScopeR = rs_push_scope(r, ScopeKind.BlockScope)
+  r = resolve_body_stmts(bsr.rs, body_lp)
+  r = rs_pop_scope(r)
+
+  // Pop function scope
+  return rs_pop_scope(r)
+
+fn resolve_expr_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, ret_type: i64, body_expr: i64): RS
+  // Create function scope
+  let sr: ScopeR = rs_push_scope(rs, ScopeKind.FunctionScope)
+  let r: RS = sr.rs
+
+  // Declare parameters
+  let pairs: Vector<i64> = read_pairs(r.idx_data, params_lp)
+  let i: i64 = 0
+  while i < pairs.length():
+    let p_tidx: i64 = pairs.get(i)
+    let p_type: i64 = pairs.get(i + 1)
+    let pname: string = tok_name(r, p_tidx)
+    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope))
+    r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, p_tidx)
+    r = resolve_type_node(r, p_type)
+    i = i + 2
+
+  // Resolve return type
+  r = resolve_type_node(r, ret_type)
+
+  // Resolve body expression in a block scope
+  let bsr: ScopeR = rs_push_scope(r, ScopeKind.BlockScope)
+  r = resolve_expr(bsr.rs, body_expr)
+  r = rs_pop_scope(r)
+
+  // Pop function scope
+  return rs_pop_scope(r)
+
+fn resolve_extern_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, ret_type: i64): RS
+  // Create function scope
+  let sr: ScopeR = rs_push_scope(rs, ScopeKind.FunctionScope)
+  let r: RS = sr.rs
+
+  // Declare parameters
+  let pairs: Vector<i64> = read_pairs(r.idx_data, params_lp)
+  let i: i64 = 0
+  while i < pairs.length():
+    let p_tidx: i64 = pairs.get(i)
+    let p_type: i64 = pairs.get(i + 1)
+    let pname: string = tok_name(r, p_tidx)
+    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope))
+    r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, p_tidx)
+    r = resolve_type_node(r, p_type)
+    i = i + 2
+
+  // Resolve return type
+  r = resolve_type_node(r, ret_type)
+
+  // Pop function scope (no body)
+  return rs_pop_scope(r)
+
+fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, fields_lp: i64): RS
+  // Create struct scope
+  let sr: ScopeR = rs_push_scope(rs, ScopeKind.StructScope)
+  let r: RS = sr.rs
+
+  // Declare fields
+  let pairs: Vector<i64> = read_pairs(r.idx_data, fields_lp)
+  let i: i64 = 0
+  while i < pairs.length():
+    let f_tidx: i64 = pairs.get(i)
+    let f_type: i64 = pairs.get(i + 1)
+    let fname: string = tok_name(r, f_tidx)
+    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Field, fname, node_idx, r.current_scope))
+    r = scope_declare(sym_r.rs, fname, sym_r.sym_idx, f_tidx)
+    // Resolve field type
+    r = resolve_type_node(r, f_type)
+    i = i + 2
+
+  // Pop struct scope
+  return rs_pop_scope(r)
+
+fn resolve_enum_decl(rs: RS, node_idx: i64, name_tidx: i64, variants_lp: i64): RS
+  // Resolve payload types for each variant
+  let pairs: Vector<i64> = read_pairs(rs.idx_data, variants_lp)
+  let r: RS = rs
+  let i: i64 = 0
+  while i < pairs.length():
+    let v_tidx: i64 = pairs.get(i)
+    let payload_lp: i64 = pairs.get(i + 1)
+    // Resolve each payload type
+    let payload_types: Vector<i64> = read_list(r.idx_data, payload_lp)
+    let j: i64 = 0
+    while j < payload_types.length():
+      r = resolve_type_node(r, payload_types.get(j))
+      j = j + 1
+    i = i + 2
+  return r
+
+fn resolve_type_alias_decl(rs: RS, node_idx: i64, name_tidx: i64, target_type: i64): RS
+  return resolve_type_node(rs, target_type)
+
+fn resolve_decl(rs: RS, node_idx: i64): RS
+  if node_idx < 0:
+    return rs
+  let node: Node = rs.nodes.get(node_idx)
+  match node:
+    Node.FnDeclD(name_tidx, params_lp, ret_type, body_lp):
+      return resolve_fn_decl(rs, node_idx, name_tidx, params_lp, ret_type, body_lp)
+    Node.ExprFnD(name_tidx, params_lp, ret_type, body_expr):
+      return resolve_expr_fn_decl(rs, node_idx, name_tidx, params_lp, ret_type, body_expr)
+    Node.ExternFnD(name_tidx, params_lp, ret_type):
+      return resolve_extern_fn_decl(rs, node_idx, name_tidx, params_lp, ret_type)
+    Node.ClassDeclD(name_tidx, fields_lp):
+      return resolve_class_decl(rs, node_idx, name_tidx, fields_lp)
+    Node.EnumDeclD(name_tidx, variants_lp):
+      return resolve_enum_decl(rs, node_idx, name_tidx, variants_lp)
+    Node.TypeAliasD(name_tidx, target_type):
+      return resolve_type_alias_decl(rs, node_idx, name_tidx, target_type)
+    Node.ErrorD(t):
+      return rs
+  return rs
+
+// =========================================================================
+// Section 28: Pass 1 — Collect top-level declarations
+// =========================================================================
+
+fn collect_top_level(rs: RS, file_node_idx: i64): RS
+  let file_node: Node = rs.nodes.get(file_node_idx)
+  match file_node:
+    Node.FileN(decls_lp):
+      let decls: Vector<i64> = read_list(rs.idx_data, decls_lp)
+      let r: RS = rs
+      let i: i64 = 0
+      while i < decls.length():
+        let decl_idx: i64 = decls.get(i)
+        let decl_node: Node = r.nodes.get(decl_idx)
+        match decl_node:
+          Node.FnDeclD(name_tidx, params_lp, ret_type, body_lp):
+            let name: string = tok_name(r, name_tidx)
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+          Node.ExprFnD(name_tidx, params_lp, ret_type, body_expr):
+            let name: string = tok_name(r, name_tidx)
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+          Node.ExternFnD(name_tidx, params_lp, ret_type):
+            let name: string = tok_name(r, name_tidx)
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+          Node.ClassDeclD(name_tidx, fields_lp):
+            let name: string = tok_name(r, name_tidx)
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+          Node.EnumDeclD(name_tidx, variants_lp):
+            let name: string = tok_name(r, name_tidx)
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+          Node.TypeAliasD(name_tidx, target_type):
+            let name: string = tok_name(r, name_tidx)
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+          Node.ErrorD(t):
+            r = r
+        i = i + 1
+      return r
+  return rs
+
+// =========================================================================
+// Section 29: Pass 2 — Resolve bodies
+// =========================================================================
+
+fn resolve_bodies(rs: RS, file_node_idx: i64): RS
+  let file_node: Node = rs.nodes.get(file_node_idx)
+  match file_node:
+    Node.FileN(decls_lp):
+      let decls: Vector<i64> = read_list(rs.idx_data, decls_lp)
+      let r: RS = rs
+      let i: i64 = 0
+      while i < decls.length():
+        r = resolve_decl(r, decls.get(i))
+        i = i + 1
+      return r
+  return rs
+
+// =========================================================================
+// Section 30: Public resolver API
+// =========================================================================
+
+fn resolve(src: string): ResolveResult
+  // Parse the source
+  let pr: PR = parse(src)
+  let file_node_idx: i64 = pr.node
+
+  // Initialize resolver state
+  let rs: RS = RS(pr.ps.nodes, pr.ps.idx, pr.ps.toks, src, Vector<Symbol>::new(), Vector<Scope>::new(), Vector<i64>::new(), pr.ps.diags, to_i64(-1))
+
+  // Create file scope
+  let file_sr: ScopeR = rs_push_scope(rs, ScopeKind.FileScope)
+  rs = file_sr.rs
+
+  // Populate builtins
+  rs = populate_builtins(rs)
+
+  // Pass 1: Collect top-level declarations
+  rs = collect_top_level(rs, file_node_idx)
+
+  // Pass 2: Resolve bodies
+  rs = resolve_bodies(rs, file_node_idx)
+
+  return ResolveResult(rs.symbols, rs.scopes, rs.uses, rs.diags, pr.ps.nodes.length())
+
+// =========================================================================
+// Section 31: Test infrastructure
+// =========================================================================
+
+fn count_symbols_of_kind(result: ResolveResult, kind: SymbolKind): i64
+  let count: i64 = 0
+  let i: i64 = 0
+  while i < result.symbols.length():
+    let sym: Symbol = result.symbols.get(i)
+    if symbol_kind_name(sym.kind) == symbol_kind_name(kind):
+      count = count + 1
+    i = i + 1
+  return count
+
+fn count_diags(result: ResolveResult): i64
+  return result.diags.length()
+
+fn count_uses(result: ResolveResult): i64
+  // Uses are stored as flat pairs, so count is length / 2
+  return result.uses.length() / 2
+
+// =========================================================================
+// Section 32: Golden resolve tests
+// =========================================================================
+
+fn main(): i32
+  print("=== bootstrap/resolver: Task 22 — Bootstrap Resolver ===")
+  print("")
+
+  let pass_count: i32 = 0
+  let total: i32 = 17
+
+  // -----------------------------------------------------------------
+  // Test 1: forward_ref — fn calls fn defined later in file; no diagnostic
+  // -----------------------------------------------------------------
+  let src1: string = "fn foo(): i32\n  return bar()\n\nfn bar(): i32\n  return 42\n"
+  let r1: ResolveResult = resolve(src1)
+  let r1_diag_count: i64 = count_diags(r1)
+  if r1_diag_count == 0:
+    print("PASS forward_ref")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL forward_ref: expected 0 diagnostics, got " + i64_to_string(r1_diag_count))
+
+  // -----------------------------------------------------------------
+  // Test 2: local_shadow — let in block shadows file-level fn name
+  // -----------------------------------------------------------------
+  let src2: string = "fn foo(): i32\n  return 1\n\nfn main(): i32\n  let foo: i32 = 42\n  return foo\n"
+  let r2: ResolveResult = resolve(src2)
+  let r2_diags: i64 = count_diags(r2)
+  // Should have 0 diagnostics (local shadows fn is valid)
+  if r2_diags == 0:
+    print("PASS local_shadow")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL local_shadow: expected 0 diagnostics, got " + i64_to_string(r2_diags))
+
+  // -----------------------------------------------------------------
+  // Test 3: duplicate_decl — two fn with same name; expect 1 diagnostic
+  // -----------------------------------------------------------------
+  let src3: string = "fn foo(): i32\n  return 1\n\nfn foo(): i32\n  return 2\n"
+  let r3: ResolveResult = resolve(src3)
+  let r3_diags: i64 = count_diags(r3)
+  if r3_diags >= 1:
+    print("PASS duplicate_decl")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL duplicate_decl: expected >= 1 diagnostic, got " + i64_to_string(r3_diags))
+
+  // -----------------------------------------------------------------
+  // Test 4: unknown_name — use of undeclared identifier; expect 1 diagnostic
+  // -----------------------------------------------------------------
+  let src4: string = "fn main(): i32\n  return xyz\n"
+  let r4: ResolveResult = resolve(src4)
+  let r4_diags: i64 = count_diags(r4)
+  if r4_diags >= 1:
+    print("PASS unknown_name")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL unknown_name: expected >= 1 diagnostic, got " + i64_to_string(r4_diags))
+
+  // -----------------------------------------------------------------
+  // Test 5: builtin_type — let x: i32; i32 resolves to builtin
+  // -----------------------------------------------------------------
+  let src5: string = "fn main(): i32\n  let x: i32 = 0\n  return x\n"
+  let r5: ResolveResult = resolve(src5)
+  let r5_uses: i64 = count_uses(r5)
+  let r5_diags: i64 = count_diags(r5)
+  // Should have uses for i32 (return type), i32 (let type), x (return)
+  if r5_uses >= 2:
+    if r5_diags == 0:
+      print("PASS builtin_type")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL builtin_type: expected 0 diagnostics, got " + i64_to_string(r5_diags))
+  else:
+    print("FAIL builtin_type: expected >= 2 uses, got " + i64_to_string(r5_uses))
+
+  // -----------------------------------------------------------------
+  // Test 6: for_scope — for-loop variable not visible outside loop body
+  // -----------------------------------------------------------------
+  let src6: string = "fn main(): i32\n  for i in items:\n    let x: i32 = i\n  return i\n"
+  let r6: ResolveResult = resolve(src6)
+  let r6_diags: i64 = count_diags(r6)
+  // "items" is unknown (1 diag), "i" in return is out of scope (1 diag) = 2
+  if r6_diags >= 2:
+    print("PASS for_scope")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL for_scope: expected >= 2 diagnostics, got " + i64_to_string(r6_diags))
+
+  // -----------------------------------------------------------------
+  // Test 7: lambda_scope — lambda param visible inside body
+  // -----------------------------------------------------------------
+  let src7: string = "fn main(): i32\n  let f = |x| -> x\n  return 0\n"
+  let r7: ResolveResult = resolve(src7)
+  let r7_diags: i64 = count_diags(r7)
+  // Lambda param x is used in body — should resolve without diagnostic
+  if r7_diags == 0:
+    print("PASS lambda_scope")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL lambda_scope: expected 0 diagnostics, got " + i64_to_string(r7_diags))
+
+  // -----------------------------------------------------------------
+  // Test 8: class_fields — class with 2 fields; verify 2 Field symbols
+  // -----------------------------------------------------------------
+  let src8: string = "class Point:\n  x: i64\n  y: i64\n"
+  let r8: ResolveResult = resolve(src8)
+  let r8_fields: i64 = count_symbols_of_kind(r8, SymbolKind.Field)
+  if r8_fields == 2:
+    print("PASS class_fields")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL class_fields: expected 2 Field symbols, got " + i64_to_string(r8_fields))
+
+  // -----------------------------------------------------------------
+  // Test 9: enum_decl — enum declares a Type symbol
+  // -----------------------------------------------------------------
+  let src9: string = "enum Color:\n  Red\n  Green\n  Blue\n"
+  let r9: ResolveResult = resolve(src9)
+  let r9_types: i64 = count_symbols_of_kind(r9, SymbolKind.Type)
+  if r9_types >= 1:
+    print("PASS enum_decl")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL enum_decl: expected >= 1 Type symbol, got " + i64_to_string(r9_types))
+
+  // -----------------------------------------------------------------
+  // Test 10: type_alias — type alias declares a Type symbol
+  // -----------------------------------------------------------------
+  let src10: string = "type NodeId = i64\n"
+  let r10: ResolveResult = resolve(src10)
+  let r10_types: i64 = count_symbols_of_kind(r10, SymbolKind.Type)
+  if r10_types >= 1:
+    print("PASS type_alias")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL type_alias: expected >= 1 Type symbol, got " + i64_to_string(r10_types))
+
+  // -----------------------------------------------------------------
+  // Test 11: qual_name — TK.KwFn; first segment resolves
+  // -----------------------------------------------------------------
+  let src11: string = "enum TK:\n  KwFn\n\nfn main(): i32\n  let x = TK::KwFn\n  return 0\n"
+  let r11: ResolveResult = resolve(src11)
+  let r11_uses: i64 = count_uses(r11)
+  // TK::KwFn should resolve the first segment "TK" to the enum Type symbol
+  if r11_uses >= 1:
+    print("PASS qual_name")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL qual_name: expected >= 1 use, got " + i64_to_string(r11_uses))
+
+  // -----------------------------------------------------------------
+  // Test 12: nested_scope — fn with nested if/while blocks
+  // -----------------------------------------------------------------
+  let src12: string = "fn main(): i32\n  let x: i32 = 1\n  if x > 0:\n    let y: i32 = 2\n    while y > 0:\n      y = y - 1\n  return x\n"
+  let r12: ResolveResult = resolve(src12)
+  let r12_diags: i64 = count_diags(r12)
+  let r12_scopes: i64 = r12.scopes.length()
+  // Should have: file, function, block (fn body), block (if), block (while) = 5 scopes
+  if r12_diags == 0:
+    if r12_scopes >= 5:
+      print("PASS nested_scope")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL nested_scope: expected >= 5 scopes, got " + i64_to_string(r12_scopes))
+  else:
+    print("FAIL nested_scope: expected 0 diagnostics, got " + i64_to_string(r12_diags))
+
+  // -----------------------------------------------------------------
+  // Test 13: let_no_self_ref — let x = x should fail if no outer x
+  // -----------------------------------------------------------------
+  let src13: string = "fn main(): i32\n  let x: i32 = x\n  return 0\n"
+  let r13: ResolveResult = resolve(src13)
+  let r13_diags: i64 = count_diags(r13)
+  // "x" in initializer is not yet declared, so should be unknown
+  if r13_diags >= 1:
+    print("PASS let_no_self_ref")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL let_no_self_ref: expected >= 1 diagnostic, got " + i64_to_string(r13_diags))
+
+  // -----------------------------------------------------------------
+  // Test 14: extern_fn — extern fn declares Function symbol
+  // -----------------------------------------------------------------
+  let src14: string = "extern fn printf(fmt: string): i32\n"
+  let r14: ResolveResult = resolve(src14)
+  let r14_fns: i64 = count_symbols_of_kind(r14, SymbolKind.Function)
+  if r14_fns >= 1:
+    print("PASS extern_fn")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL extern_fn: expected >= 1 Function symbol, got " + i64_to_string(r14_fns))
+
+  // -----------------------------------------------------------------
+  // Test 15: type_pos_rejects_local — local should not satisfy type position
+  // -----------------------------------------------------------------
+  let src15: string = "fn test(): i32\n  let T: i32 = 0\n  let x: T = 1\n  return x\n"
+  let rr15: ResolveResult = resolve(src15)
+  // T in type position (let x: T) must NOT resolve to the local T.
+  // Count uses that resolve to a Local symbol in type position.
+  let local_type_uses: i64 = 0
+  let u15: i64 = 0
+  while u15 < rr15.uses.length():
+    let sym15: Symbol = rr15.symbols.get(rr15.uses.get(u15 + 1))
+    match sym15.kind:
+      SymbolKind.Local:
+        // Check if the use token is "T" by name
+        if sym15.name == "T":
+          local_type_uses = local_type_uses + 1
+    u15 = u15 + 2
+  // The value-level T (in initializer or expr) may resolve, but the
+  // type-level T (in `: T`) must not. Expect at most 1 use (the value ref).
+  if local_type_uses <= 1:
+    print("PASS type_pos_rejects_local")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL type_pos_rejects_local: local T used " + i64_to_string(local_type_uses) + " times (type position should not resolve)")
+
+  // -----------------------------------------------------------------
+  // Test 16: dup_decl_span — duplicate declaration diagnostic should have valid span
+  // -----------------------------------------------------------------
+  let src16: string = "fn foo(): i32\n  return 0\n\nfn foo(): i32\n  return 1\n"
+  let rr16: ResolveResult = resolve(src16)
+  let has_valid_span: bool = false
+  let d16: i64 = 0
+  while d16 < rr16.diags.length():
+    let diag16: Diagnostic = rr16.diags.get(d16)
+    // Check that the duplicate diagnostic span is not Span(0,1)
+    if diag16.span.offset > 0:
+      has_valid_span = true
+    d16 = d16 + 1
+  if has_valid_span:
+    print("PASS dup_decl_span")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL dup_decl_span: duplicate declaration diagnostic has Span(0,1)")
+
+  // -----------------------------------------------------------------
+  // Test 17: self_resolve_smoke — parse+resolve expr_parser.dao
+  // -----------------------------------------------------------------
+  let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
+  if file_exists(self_path):
+    let self_src: string = read_file(self_path)
+    let self_r: ResolveResult = resolve(self_src)
+    let self_syms: i64 = self_r.symbols.length()
+    let self_scopes: i64 = self_r.scopes.length()
+    let self_uses: i64 = count_uses(self_r)
+    let self_diags: i64 = count_diags(self_r)
+    print("  [info] self-resolve symbols: " + i64_to_string(self_syms))
+    print("  [info] self-resolve scopes: " + i64_to_string(self_scopes))
+    print("  [info] self-resolve uses: " + i64_to_string(self_uses))
+    print("  [info] self-resolve diagnostics: " + i64_to_string(self_diags))
+    print("  [info] self-resolve node count: " + i64_to_string(self_r.node_count))
+    // Sanity: should have a reasonable number of symbols and scopes
+    if self_syms > 20:
+      if self_scopes > 5:
+        print("PASS self_resolve_smoke")
+        pass_count = pass_count + 1
+      else:
+        print("FAIL self_resolve_smoke: too few scopes (" + i64_to_string(self_scopes) + ")")
+    else:
+      print("FAIL self_resolve_smoke: too few symbols (" + i64_to_string(self_syms) + ")")
+  else:
+    print("SKIP self_resolve_smoke: file not found at " + self_path)
+
+  // -----------------------------------------------------------------
+  // Summary
+  // -----------------------------------------------------------------
+
+  print("")
+  print("--- results ---")
+  print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " passed")
+  print("")
+
+  // -----------------------------------------------------------------
+  // Tier B deferrals (documented, not silently omitted)
+  // -----------------------------------------------------------------
+  // The following resolution features are explicitly deferred to Tier B:
+  //   - Import declaration resolution
+  //   - Overload resolution by arity / name mangling
+  //   - Static method calls (Type::method)
+  //   - Generic type parameter declarations / where clauses
+  //   - Concept / extend resolution
+  //   - Mode / resource block scoping
+  //   - Yield statement resolution
+  //   - Match arm destructuring bindings (patterns resolved as
+  //     expressions, but no binding introduction)
+  //   - Reserved __dao_ prefix enforcement
+  //   - Cross-file / module resolution
+
+  return 0

@@ -38,7 +38,9 @@ examples/**
 bootstrap/**
 !bootstrap/**/*/
 !bootstrap/**/*.dao
+!bootstrap/**/*.part.dao
 !bootstrap/**/*.md
+!bootstrap/**/*.sh
 
 # Playground frontend
 tools/playground/frontend/node_modules/

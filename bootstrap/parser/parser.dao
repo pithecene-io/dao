@@ -1,19 +1,26 @@
+// GENERATED — do not edit. Edit bootstrap/shared/base.dao or
+// the .part.dao fragment instead, then run: bash bootstrap/assemble.sh
+
 // =========================================================================
-// Bootstrap Parser — Dao compiler self-hosting subsystem
+// Bootstrap Shared Substrate — Dao compiler self-hosting infrastructure
 // =========================================================================
 //
-// Module:  bootstrap/parser
-// Phase:   Phase 7 — Bootstrap Compiler (Task 21)
-// Purpose: Recursive-descent parser for Dao source, producing an
-//          arena-indexed AST from the token stream.
+// Module:  bootstrap/shared
+// Phase:   Phase 7 — Bootstrap Compiler
+// Purpose: Shared token model, lexer, AST, and parser used by all
+//          bootstrap subsystems (lexer tests, parser tests, resolver,
+//          future type checker).
 //
-// This is maintained bootstrap infrastructure, not a probe.
-// See docs/task_specs/TASK_21_BOOTSTRAP_PARSER.md for full spec.
+// This file is the SINGLE SOURCE OF TRUTH for the bootstrap frontend
+// pipeline.  Subsystem-specific code (tests, resolver logic, etc.)
+// lives in .part.dao fragments under each subsystem directory.
 //
-// Single-file constraint: Dao has no multi-file compilation yet.
-// This file contains the token model, lexer, AST, parser, and tests.
+// Assembly: bootstrap/assemble.sh concatenates this base with each
+// subsystem's .part.dao to produce the final compilable .dao files.
 //
-// Stdlib types used: Span, Diagnostic, Severity, Vector<T>.
+// DO NOT duplicate this content into subsystem files manually.
+//
+// Stdlib types used: Span, Diagnostic, Severity, Vector<T>, HashMap<i64>.
 // Stdlib functions used: char_at, substring, length, print,
 //   i32_to_string, i64_to_string, read_file, file_exists.
 //
@@ -25,15 +32,12 @@
 //   For param/field pairs: count = N pairs, 2*N entries before count.
 //   For variant pairs: count = N variants, 2*N entries before count.
 //   For match arm pairs: count = N arms, 2*N entries before count.
-
 // =========================================================================
-// Section 1: Token model (TEMPORARY DEBT — duplicated from bootstrap/lexer)
+// Section 1: Token model
 // =========================================================================
 //
-// Tier A may duplicate token definitions from the bootstrap lexer due
-// to current bootstrap subsystem constraints.  This is follow-up debt
-// and should be centralized once shared bootstrap module boundaries
-// stabilize.
+// Canonical token definitions for the bootstrap pipeline.
+// All subsystems consume these via assembly from this shared base.
 
 enum TK:
   // Keywords — control
@@ -123,8 +127,7 @@ class LexResult:
   diagnostics: Vector<Diagnostic>
 
 // =========================================================================
-// Section 2: Character classification (duplicated from lexer)
-// =========================================================================
+// Section 2: Character classification// =========================================================================
 
 fn is_digit(ch: i32): bool
   if ch >= 48:
@@ -149,8 +152,7 @@ fn is_alnum(ch: i32): bool
   return is_alpha(ch)
 
 // =========================================================================
-// Section 3: Keyword classification (duplicated from lexer)
-// =========================================================================
+// Section 3: Keyword classification// =========================================================================
 
 fn classify_keyword(src: string, start: i64, klen: i64): TK
   let text: string = substring(src, start, klen)
@@ -215,8 +217,7 @@ fn classify_keyword(src: string, start: i64, klen: i64): TK
   return TK.Identifier
 
 // =========================================================================
-// Section 4: Token kind names (duplicated from lexer)
-// =========================================================================
+// Section 4: Token kind names// =========================================================================
 
 fn tk_name(kind: TK): string
   match kind:
@@ -353,8 +354,7 @@ fn tk_name(kind: TK): string
   return "Unknown"
 
 // =========================================================================
-// Section 5: Lexer (duplicated from bootstrap/lexer/lexer.dao)
-// =========================================================================
+// Section 5: Lexer// =========================================================================
 //
 // TEMPORARY DEBT: Full lexer duplication due to single-file constraint.
 // This will be centralized when shared bootstrap module boundaries
@@ -2031,6 +2031,7 @@ fn node_kind_name(n: Node): string
     Node.FileN(a):
       return "FileN"
   return "Unknown"
+
 
 // =========================================================================
 // Section 17: Test infrastructure

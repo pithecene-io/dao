@@ -6,6 +6,13 @@ This directory contains maintained bootstrap infrastructure — code that
 is intended to evolve into the self-hosted Dao compiler.  It is **not**
 a probe or experiment directory.
 
+## Shared substrate
+
+`shared/base.dao` is the single source of truth for the bootstrap
+frontend pipeline (token model, lexer, AST, parser).  Subsystem
+`.dao` files are assembled from `base.dao` + subsystem `.part.dao`
+fragments via `bash bootstrap/assemble.sh`.  See `shared/README.md`.
+
 ## Subsystems
 
 ### `lexer/`
@@ -94,11 +101,6 @@ slice of Dao syntax.
 - Immutable `ParserState` threaded through all parse functions
 - Structured fail-fast with diagnostics as data
 
-**Token model duplication**: The parser duplicates the lexer's token
-model (~650 lines) due to the single-file bootstrap constraint.  This
-is temporary debt — follow-up work should centralize shared token
-definitions once bootstrap module boundaries stabilize.
-
 **How to run tests**:
 
 ```sh
@@ -135,10 +137,6 @@ uses map over the bootstrap parser's AST.
 - Concept / extend resolution
 - Mode / resource block scoping
 - Match arm destructuring bindings
-
-**Token/parser duplication**: The resolver duplicates the full lexer
-and parser (~2370 lines) due to the single-file constraint.  This is
-temporary debt.
 
 **How to run tests**:
 

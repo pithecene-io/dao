@@ -73,6 +73,11 @@ tasks:
         {{.BUILD_DIR}}/tools/playground/compiler_service/dao_playground &
         cd tools/playground/frontend && npx vite
 
+  bootstrap-assemble:
+    desc: Assemble bootstrap .dao files from shared base + subsystem parts
+    cmds:
+      - bash bootstrap/assemble.sh
+
   format:
     desc: Run clang-format on all source files
     cmds:

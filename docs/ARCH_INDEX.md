@@ -118,12 +118,17 @@ Dao standard library surface and future implementation roots.
 Self-hosting compiler subsystems written in Dao.
 
 - `README.md` — scope, parity notes, and subsystem inventory
+- `shared/` — single source of truth for the bootstrap frontend pipeline:
+  token model, lexer, AST, parser (`base.dao`); assembled into subsystem
+  files via `assemble.sh`
+- `assemble.sh` — concatenates `shared/base.dao` with subsystem `.part.dao`
+  fragments to produce compilable single-file `.dao` outputs
 - `lexer/` — indentation-aware lexer matching the host compiler's token
-  surface; promoted from probe in Task 20 (Phase 7)
+  surface; tests in `tests.part.dao` (Task 20)
 - `parser/` — recursive-descent parser producing arena-indexed AST for
-  Tier A Dao syntax; promoted from probe in Task 21 (Phase 7)
+  Tier A Dao syntax; tests in `tests.part.dao` (Task 21)
 - `resolver/` — two-pass name resolver with scope chains, symbol tables,
-  and uses map; first downstream consumer of the bootstrap AST (Task 22)
+  and uses map; logic + tests in `impl.part.dao` (Task 22)
 
 ## `examples/`
 
