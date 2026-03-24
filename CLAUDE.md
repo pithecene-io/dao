@@ -58,6 +58,7 @@ Use this rule when classifying documentation:
 ## 4. Structural Invariants
 
 Required top-level directories:
+- `bootstrap/`
 - `compiler/`
 - `runtime/`
 - `stdlib/`
