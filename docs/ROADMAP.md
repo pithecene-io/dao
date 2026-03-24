@@ -207,8 +207,11 @@ Exit criteria:
 
 ## Phase 7 — Bootstrap Compiler
 
-Status: **entry leaf selected** — diagnostic formatter as first real
-subsystem extraction (Task 19)
+Status: **lexer subsystem promoted** — Task 19 (diagnostic formatter)
+complete as entry leaf, Task 20 (bootstrap lexer) complete as first
+real subsystem extraction.  The bootstrap lexer lives at
+`bootstrap/lexer/lexer.dao` with 97+ golden tests, self-lex
+regression, and verified parity with the C++ lexer.
 
 Goals:
 - begin implementing non-trivial compiler subsystems in Dao itself
@@ -227,13 +230,17 @@ Entry decision:
   that every subsequent extraction depends on
 - see `docs/task_specs/TASK_19_DIAGNOSTIC_FORMATTER.md` for the full
   task spec
+- the full lexer was promoted from probe to maintained bootstrap
+  subsystem in Task 20 — see `docs/task_specs/TASK_20_BOOTSTRAP_LEXER.md`
 
 Recommended bootstrap sequence:
 1. keep the initial compiler in an implementation language suited to
    rapid frontend/backend construction
 2. implement leaf or utility components in Dao first — starting with
    diagnostic formatting (Task 19)
-3. migrate increasingly central compiler phases only when Dao can
+3. promote probes into maintained subsystems once parity is verified —
+   lexer (Task 20) is the first extraction
+4. migrate increasingly central compiler phases only when Dao can
    express them ergonomically and compile them reliably
 4. reach stage-2 self-hosting before claiming the compiler is truly
    self-hosted

@@ -113,6 +113,14 @@ Dao standard library surface and future implementation roots.
 - `numerics/` — compute- and math-oriented surface
 - `io/` — explicit IO-facing surface
 
+## `bootstrap/`
+
+Self-hosting compiler subsystems written in Dao.
+
+- `README.md` — scope, parity notes, and subsystem inventory
+- `lexer/` — indentation-aware lexer matching the host compiler's token
+  surface; promoted from probe in Task 20 (Phase 7)
+
 ## `examples/`
 
 Small Dao programs and human-readable examples. Non-authoritative.

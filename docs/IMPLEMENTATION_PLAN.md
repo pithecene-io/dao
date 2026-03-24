@@ -290,11 +290,17 @@ Exit criteria:
 
 Tasks 6–13 (resolve, types, typecheck, HIR, MIR, LLVM backend,
 generics, coroutines) are complete or substantially complete.
+Task 15 (C ABI interop) v1 and v2 are complete — struct-by-value,
+function pointer types, and named-function callbacks all landed.
 Task 18 (enum payloads and match destructuring) is complete.
+Task 19 (diagnostic formatter, Phase 7 entry leaf) is complete.
+Task 20 (bootstrap lexer extraction) is complete — the lexer probe
+has been promoted to `bootstrap/lexer/lexer.dao` with verified C++
+parity, 97+ golden tests, and self-lex regression.
 
-The next implementation tasks are sequenced below. Task 19
-(diagnostic formatter) is the Phase 7 entry leaf — see
-`docs/task_specs/TASK_19_DIAGNOSTIC_FORMATTER.md`.
+The next implementation focus is further Phase 7 bootstrap extraction
+(parser, diagnostic formatter integration) and Task 17 (low-level
+memory substrate).
 
 ### Task 14 — Numeric Type Expansion
 

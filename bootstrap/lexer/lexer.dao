@@ -1,19 +1,26 @@
-// DEPRECATED — this probe has been promoted to a bootstrap subsystem.
-// The authoritative Dao bootstrap lexer now lives at:
+// =========================================================================
+// Bootstrap Lexer — Dao compiler self-hosting subsystem
+// =========================================================================
 //
-//   bootstrap/lexer/lexer.dao
+// Module:  bootstrap/lexer
+// Phase:   Phase 7 — Bootstrap Compiler (Task 20)
+// Purpose: Indentation-aware lexer for Dao source, matching the host
+//          compiler's lexer (compiler/frontend/lexer/).
 //
-// This file is retained as a historical probe artifact.  Do not modify
-// it — all lexer work should happen in bootstrap/lexer/ from now on.
+// This is maintained bootstrap infrastructure, not a probe.
+// See bootstrap/README.md for scope, parity notes, and limitations.
 //
-// Original description:
-// dao_lexer_v2.dao — Phase 7 lexer extraction: real compiler subsystem.
-// Full Dao lexer matching the C++ compiler's lexer, with indentation,
-// paren-depth tracking, diagnostics, and source spans.
+// Stdlib types used: Span, Diagnostic, Severity, Vector<T>.
+// Stdlib functions used: char_at, substring, length, print,
+//   i32_to_string, i64_to_string, read_file, file_exists.
 
-// ---------------------------------------------------------------------------
-// Token kinds — matches compiler/frontend/lexer/token.h
-// ---------------------------------------------------------------------------
+// =========================================================================
+// Section 1: Token model
+// =========================================================================
+//
+// Token kinds match compiler/frontend/lexer/token.h exactly.
+// The TK enum, Token class, and LexResult class form the public
+// surface consumed by downstream bootstrap subsystems (future parser).
 
 enum TK:
   // Keywords — control
@@ -93,18 +100,24 @@ enum TK:
   // Error
   Error
 
+// Token: a single lexical unit with kind, source offset, and byte length.
+// Designed for parser consumption — offset/len index into the original
+// source buffer to recover token text on demand.
 class Token:
   kind: TK
   offset: i64
   len: i64
 
+// LexResult: the complete output of a lex() call.
+// Tokens are the primary data; diagnostics carry error/warning info
+// with source spans for later formatting.
 class LexResult:
   tokens: Vector<Token>
   diagnostics: Vector<Diagnostic>
 
-// ---------------------------------------------------------------------------
-// Character classification
-// ---------------------------------------------------------------------------
+// =========================================================================
+// Section 2: Character classification
+// =========================================================================
 
 fn is_digit(ch: i32): bool
   if ch >= 48:
@@ -128,9 +141,9 @@ fn is_alnum(ch: i32): bool
     return true
   return is_alpha(ch)
 
-// ---------------------------------------------------------------------------
-// Keyword classification
-// ---------------------------------------------------------------------------
+// =========================================================================
+// Section 3: Keyword classification
+// =========================================================================
 
 fn classify_keyword(src: string, start: i64, len: i64): TK
   let text: string = substring(src, start, len)
@@ -194,9 +207,9 @@ fn classify_keyword(src: string, start: i64, len: i64): TK
     return TK.KwWhere
   return TK.Identifier
 
-// ---------------------------------------------------------------------------
-// Token kind name (for diagnostics)
-// ---------------------------------------------------------------------------
+// =========================================================================
+// Section 4: Token kind names (for diagnostics and test output)
+// =========================================================================
 
 fn tk_name(kind: TK): string
   match kind:
@@ -332,9 +345,20 @@ fn tk_name(kind: TK): string
       return "Error"
   return "Unknown"
 
-// ---------------------------------------------------------------------------
-// Lexer — full indentation-aware tokenizer
-// ---------------------------------------------------------------------------
+// =========================================================================
+// Section 5: Lexer implementation
+// =========================================================================
+//
+// Public API:
+//   lex(src: string): LexResult
+//
+// The lexer is indentation-aware: it emits INDENT/DEDENT tokens based
+// on leading whitespace changes at line boundaries.  Newlines inside
+// parentheses/brackets are suppressed (paren_depth tracking).
+//
+// Errors are represented as data in LexResult.diagnostics — the lexer
+// does not print.  Error tokens (TK.Error) are emitted into the token
+// stream to match the host compiler's emit_error() behavior.
 
 // Helper: pop the last element from a Vector<i64>.
 fn vec_pop(v: Vector<i64>): Vector<i64>
@@ -730,9 +754,12 @@ fn lex(src: string): LexResult
 
   return LexResult(tokens, diags)
 
-// ---------------------------------------------------------------------------
-// Test harness
-// ---------------------------------------------------------------------------
+// =========================================================================
+// Section 6: Test infrastructure
+// =========================================================================
+//
+// Test helpers return bool and print PASS/FAIL lines.  The main()
+// function tallies results and prints a summary.
 
 fn expect_token(label: string, result: LexResult, idx: i64, expected_kind: TK, src: string): bool
   if idx >= result.tokens.length():
@@ -793,13 +820,50 @@ fn expect_error_count(label: string, result: LexResult, expected: i64): bool
   print("FAIL " + label + ": expected " + i64_to_string(expected) + " errors, got " + i64_to_string(result.diagnostics.length()))
   return false
 
+fn expect_min_tokens(label: string, result: LexResult, min_count: i64): bool
+  if result.tokens.length() >= min_count:
+    print("PASS " + label)
+    return true
+  print("FAIL " + label + ": expected >= " + i64_to_string(min_count) + " tokens, got " + i64_to_string(result.tokens.length()))
+  return false
+
+// Check that the token stream ends with Eof.
+fn expect_eof_last(label: string, result: LexResult): bool
+  if result.tokens.length() == 0:
+    print("FAIL " + label + ": empty token stream")
+    return false
+  let last: Token = result.tokens.get(result.tokens.length() - 1)
+  if tk_name(last.kind) == tk_name(TK.Eof):
+    print("PASS " + label)
+    return true
+  print("FAIL " + label + ": last token is " + tk_name(last.kind) + ", expected Eof")
+  return false
+
+// Check that a given token kind appears at least once.
+fn expect_has_kind(label: string, result: LexResult, kind: TK): bool
+  let i: i64 = 0
+  while i < result.tokens.length():
+    let tok: Token = result.tokens.get(i)
+    if tk_name(tok.kind) == tk_name(kind):
+      print("PASS " + label)
+      return true
+    i = i + 1
+  print("FAIL " + label + ": token kind " + tk_name(kind) + " not found in stream")
+  return false
+
+// =========================================================================
+// Section 7: Golden token stream tests
+// =========================================================================
+
 fn main(): i32
-  print("=== dao_lexer_v2: Phase 7 lexer extraction ===")
+  print("=== bootstrap/lexer: Task 20 — Bootstrap Lexer ===")
   print("")
 
   let pass_count: i32 = 0
 
-  // --- Basic tokens ---
+  // -----------------------------------------------------------------
+  // 7.1 Basic tokens
+  // -----------------------------------------------------------------
 
   let src1: string = "let x = 42\n"
   let r1: LexResult = lex(src1)
@@ -818,7 +882,9 @@ fn main(): i32
   if expect_no_errors("basic_no_err", r1):
     pass_count = pass_count + 1
 
-  // --- All keywords ---
+  // -----------------------------------------------------------------
+  // 7.2 All keywords
+  // -----------------------------------------------------------------
 
   let src_kw: string = "fn class enum if else while for in return match\n"
   let rkw: LexResult = lex(src_kw)
@@ -833,7 +899,9 @@ fn main(): i32
   if expect_token("kw_match", rkw, 9, TK.KwMatch, src_kw):
     pass_count = pass_count + 1
 
-  // --- Multi-character operators ---
+  // -----------------------------------------------------------------
+  // 7.3 Multi-character operators
+  // -----------------------------------------------------------------
 
   let src2: string = "== != <= >= -> => :: |>\n"
   let r2: LexResult = lex(src2)
@@ -854,7 +922,44 @@ fn main(): i32
   if expect_token("op_pipegt", r2, 7, TK.PipeGt, src2):
     pass_count = pass_count + 1
 
-  // --- String literal ---
+  // -----------------------------------------------------------------
+  // 7.4 Single-character operators
+  // -----------------------------------------------------------------
+
+  let src_ops: string = "+ - * / % & . , | ! < > ?\n"
+  let r_ops: LexResult = lex(src_ops)
+  if expect_token("op_plus", r_ops, 0, TK.Plus, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_minus", r_ops, 1, TK.Minus, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_star", r_ops, 2, TK.Star, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_slash", r_ops, 3, TK.Slash, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_percent", r_ops, 4, TK.Percent, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_amp", r_ops, 5, TK.Amp, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_dot", r_ops, 6, TK.Dot, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_comma", r_ops, 7, TK.Comma, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_pipe", r_ops, 8, TK.Pipe, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_bang", r_ops, 9, TK.Bang, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_lt", r_ops, 10, TK.Lt, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_gt", r_ops, 11, TK.Gt, src_ops):
+    pass_count = pass_count + 1
+  if expect_token("op_question", r_ops, 12, TK.Question, src_ops):
+    pass_count = pass_count + 1
+  if expect_no_errors("ops_no_err", r_ops):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
+  // 7.5 String literal
+  // -----------------------------------------------------------------
 
   let src3: string = "\"hello world\"\n"
   let r3: LexResult = lex(src3)
@@ -863,36 +968,73 @@ fn main(): i32
   if expect_no_errors("str_no_err", r3):
     pass_count = pass_count + 1
 
-  // --- Float literal ---
+  // -----------------------------------------------------------------
+  // 7.6 String with escape sequences
+  // -----------------------------------------------------------------
+
+  let src_esc: string = "\"hello\\nworld\\t\\\"end\"\n"
+  let r_esc: LexResult = lex(src_esc)
+  if expect_token("str_esc", r_esc, 0, TK.StringLiteral, src_esc):
+    pass_count = pass_count + 1
+  if expect_no_errors("str_esc_no_err", r_esc):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
+  // 7.7 Float literal
+  // -----------------------------------------------------------------
 
   let src4: string = "3.14\n"
   let r4: LexResult = lex(src4)
   if expect_token_text("float_lit", r4, 0, TK.FloatLiteral, "3.14", src4):
     pass_count = pass_count + 1
 
-  // --- Indentation ---
+  // -----------------------------------------------------------------
+  // 7.8 Indentation with span assertions
+  // -----------------------------------------------------------------
 
   let src5: string = "fn foo():\n  let x = 1\n  let y = 2\nlet z = 3\n"
   let r5: LexResult = lex(src5)
   // Tokens: fn foo ( ) : NL INDENT let x = 1 NL let y = 2 NL DEDENT let z = 3 NL EOF
   if expect_token("indent_fn", r5, 0, TK.KwFn, src5):
     pass_count = pass_count + 1
-  // After "fn foo():\n" (tokens 0-5), INDENT at index 6.
   if expect_token("indent_tok", r5, 6, TK.Indent, src5):
     pass_count = pass_count + 1
-  // INDENT span: line_begin=10 (start of "  let x"), length=2 (two spaces).
+  // INDENT span: line_begin=10, length=2.
   if expect_token_span("indent_span", r5, 6, 10, 2):
     pass_count = pass_count + 1
-  // DEDENT before "let z": fn(0) foo(1) ((2) )(3) :(4) NL(5) INDENT(6) let(7) x(8) =(9) 1(10) NL(11) let(12) y(13) =(14) 2(15) NL(16) DEDENT(17)
+  // DEDENT at index 17: line_begin=34, length=0.
   if expect_token("dedent_tok", r5, 17, TK.Dedent, src5):
     pass_count = pass_count + 1
-  // DEDENT span: line_begin=34 (start of "let z" line), length=0.
   if expect_token_span("dedent_span", r5, 17, 34, 0):
     pass_count = pass_count + 1
   if expect_no_errors("indent_no_err", r5):
     pass_count = pass_count + 1
 
-  // --- Paren depth suppresses newlines ---
+  // -----------------------------------------------------------------
+  // 7.9 Multi-level indentation
+  // -----------------------------------------------------------------
+
+  let src_ml: string = "if x:\n  if y:\n    z\n"
+  let r_ml: LexResult = lex(src_ml)
+  // Tokens: if(0) x(1) :(2) NL(3) INDENT(4) if(5) y(6) :(7) NL(8)
+  //         INDENT(9) z(10) NL(11) DEDENT(12) DEDENT(13) EOF(14)
+  if expect_token("ml_if", r_ml, 0, TK.KwIf, src_ml):
+    pass_count = pass_count + 1
+  if expect_token("ml_indent1", r_ml, 4, TK.Indent, src_ml):
+    pass_count = pass_count + 1
+  if expect_token("ml_indent2", r_ml, 9, TK.Indent, src_ml):
+    pass_count = pass_count + 1
+  // Two DEDENTs emitted at EOF
+  if expect_token("ml_dedent1", r_ml, 12, TK.Dedent, src_ml):
+    pass_count = pass_count + 1
+  if expect_token("ml_dedent2", r_ml, 13, TK.Dedent, src_ml):
+    pass_count = pass_count + 1
+  if expect_no_errors("ml_no_err", r_ml):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
+  // 7.10 Paren depth suppresses newlines
+  // -----------------------------------------------------------------
 
   let src6: string = "foo(\n  1,\n  2\n)\n"
   let r6: LexResult = lex(src6)
@@ -915,7 +1057,29 @@ fn main(): i32
   if expect_no_errors("paren_no_err", r6):
     pass_count = pass_count + 1
 
-  // --- Comments ---
+  // -----------------------------------------------------------------
+  // 7.11 Nested brackets inside parens
+  // -----------------------------------------------------------------
+
+  let src_nb: string = "f(a[0], b)\n"
+  let r_nb: LexResult = lex(src_nb)
+  // f ( a [ 0 ] , b ) NL EOF
+  if expect_token("nb_f", r_nb, 0, TK.Identifier, src_nb):
+    pass_count = pass_count + 1
+  if expect_token("nb_lp", r_nb, 1, TK.LParen, src_nb):
+    pass_count = pass_count + 1
+  if expect_token("nb_lb", r_nb, 3, TK.LBracket, src_nb):
+    pass_count = pass_count + 1
+  if expect_token("nb_rb", r_nb, 5, TK.RBracket, src_nb):
+    pass_count = pass_count + 1
+  if expect_token("nb_rp", r_nb, 8, TK.RParen, src_nb):
+    pass_count = pass_count + 1
+  if expect_no_errors("nb_no_err", r_nb):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
+  // 7.12 Comments
+  // -----------------------------------------------------------------
 
   let src7: string = "x // comment\ny\n"
   let r7: LexResult = lex(src7)
@@ -927,7 +1091,24 @@ fn main(): i32
   if expect_token_text("comment_y", r7, 2, TK.Identifier, "y", src7):
     pass_count = pass_count + 1
 
-  // --- Tab error ---
+  // -----------------------------------------------------------------
+  // 7.13 Comment-only line preserves indentation
+  // -----------------------------------------------------------------
+
+  let src_co: string = "if x:\n  // comment\n  y\n"
+  let r_co: LexResult = lex(src_co)
+  // Comment line is blank — does not affect indentation.
+  // Tokens: if x : NL INDENT y NL DEDENT EOF
+  if expect_token("co_indent", r_co, 4, TK.Indent, src_co):
+    pass_count = pass_count + 1
+  if expect_token_text("co_y", r_co, 5, TK.Identifier, "y", src_co):
+    pass_count = pass_count + 1
+  if expect_no_errors("co_no_err", r_co):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
+  // 7.14 Tab error
+  // -----------------------------------------------------------------
 
   let src8: string = "\tx\n"
   let r8: LexResult = lex(src8)
@@ -937,7 +1118,9 @@ fn main(): i32
   if expect_error_count("tab_err", r8, 1):
     pass_count = pass_count + 1
 
-  // --- Question mark (try operator) ---
+  // -----------------------------------------------------------------
+  // 7.15 Question mark (try operator)
+  // -----------------------------------------------------------------
 
   let src9: string = "x?\n"
   let r9: LexResult = lex(src9)
@@ -946,7 +1129,9 @@ fn main(): i32
   if expect_token("try_question", r9, 1, TK.Question, src9):
     pass_count = pass_count + 1
 
-  // --- Brackets track paren depth ---
+  // -----------------------------------------------------------------
+  // 7.16 Brackets track paren depth
+  // -----------------------------------------------------------------
 
   let src10: string = "a[0]\n"
   let r10: LexResult = lex(src10)
@@ -959,7 +1144,9 @@ fn main(): i32
   if expect_token("bracket_r", r10, 3, TK.RBracket, src10):
     pass_count = pass_count + 1
 
-  // --- Unterminated string at EOF ---
+  // -----------------------------------------------------------------
+  // 7.17 Unterminated string at EOF
+  // -----------------------------------------------------------------
 
   let src11: string = "\"hello"
   let r11: LexResult = lex(src11)
@@ -968,16 +1155,107 @@ fn main(): i32
   if expect_error_count("unterm_eof_err", r11, 1):
     pass_count = pass_count + 1
 
-  // --- Empty source ---
+  // -----------------------------------------------------------------
+  // 7.18 Unterminated string at newline
+  // -----------------------------------------------------------------
+
+  let src_unl: string = "\"hello\nx\n"
+  let r_unl: LexResult = lex(src_unl)
+  if expect_token("unterm_nl_tok", r_unl, 0, TK.Error, src_unl):
+    pass_count = pass_count + 1
+  if expect_error_count("unterm_nl_err", r_unl, 1):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
+  // 7.19 Unexpected character
+  // -----------------------------------------------------------------
+
+  let src_uc: string = "x @ y\n"
+  let r_uc: LexResult = lex(src_uc)
+  if expect_token("uc_x", r_uc, 0, TK.Identifier, src_uc):
+    pass_count = pass_count + 1
+  if expect_token("uc_err", r_uc, 1, TK.Error, src_uc):
+    pass_count = pass_count + 1
+  if expect_token("uc_y", r_uc, 2, TK.Identifier, src_uc):
+    pass_count = pass_count + 1
+  if expect_error_count("uc_err_count", r_uc, 1):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
+  // 7.20 Empty source
+  // -----------------------------------------------------------------
 
   let src_empty: string = ""
   let re: LexResult = lex(src_empty)
   if expect_token("empty_eof", re, 0, TK.Eof, src_empty):
     pass_count = pass_count + 1
 
-  // --- Summary ---
+  // -----------------------------------------------------------------
+  // 7.21 Comprehensive Dao snippet (golden regression)
+  // -----------------------------------------------------------------
 
-  let total: i32 = 51
+  let src_dao: string = "enum Color:\n  Red\n  Green\n  Blue\n\nclass Point:\n  x: f64\n  y: f64\n\nfn distance(a: Point, b: Point): f64\n  let dx: f64 = b.x - a.x\n  let dy: f64 = b.y - a.y\n  return sqrt(dx * dx + dy * dy)\n\nfn main(): i32\n  let p: Point = Point(1.0, 2.0)\n  let q: Point = Point(4.0, 6.0)\n  print(distance(p, q))\n  return 0\n"
+  let r_dao: LexResult = lex(src_dao)
+  // Smoke: correct keywords, no errors, ends with Eof.
+  if expect_has_kind("dao_has_enum", r_dao, TK.KwEnum):
+    pass_count = pass_count + 1
+  if expect_has_kind("dao_has_class", r_dao, TK.KwClass):
+    pass_count = pass_count + 1
+  if expect_has_kind("dao_has_fn", r_dao, TK.KwFn):
+    pass_count = pass_count + 1
+  if expect_has_kind("dao_has_return", r_dao, TK.KwReturn):
+    pass_count = pass_count + 1
+  if expect_has_kind("dao_has_float", r_dao, TK.FloatLiteral):
+    pass_count = pass_count + 1
+  if expect_has_kind("dao_has_indent", r_dao, TK.Indent):
+    pass_count = pass_count + 1
+  if expect_has_kind("dao_has_dedent", r_dao, TK.Dedent):
+    pass_count = pass_count + 1
+  if expect_eof_last("dao_eof_last", r_dao):
+    pass_count = pass_count + 1
+  if expect_no_errors("dao_no_err", r_dao):
+    pass_count = pass_count + 1
+
+  // =========================================================================
+  // Section 8: Self-lex regression
+  // =========================================================================
+  //
+  // Read this file and lex it.  This is a smoke test: we verify that
+  // the bootstrap lexer can tokenize its own source without crashing,
+  // produces a non-trivial token stream, and ends with Eof.
+
+  let self_tests: i32 = 0
+  let self_path: string = "bootstrap/lexer/lexer.dao"
+  if file_exists(self_path):
+    let self_src: string = read_file(self_path)
+    let r_self: LexResult = lex(self_src)
+    self_tests = 8
+    // The file is ~1100 lines — expect a substantial token count.
+    if expect_min_tokens("self_lex_count", r_self, 500):
+      pass_count = pass_count + 1
+    if expect_eof_last("self_lex_eof", r_self):
+      pass_count = pass_count + 1
+    if expect_has_kind("self_lex_has_fn", r_self, TK.KwFn):
+      pass_count = pass_count + 1
+    if expect_has_kind("self_lex_has_enum", r_self, TK.KwEnum):
+      pass_count = pass_count + 1
+    if expect_has_kind("self_lex_has_match", r_self, TK.KwMatch):
+      pass_count = pass_count + 1
+    if expect_has_kind("self_lex_has_class", r_self, TK.KwClass):
+      pass_count = pass_count + 1
+    if expect_has_kind("self_lex_has_string", r_self, TK.StringLiteral):
+      pass_count = pass_count + 1
+    if expect_no_errors("self_lex_no_err", r_self):
+      pass_count = pass_count + 1
+  else:
+    print("SKIP self-lex: file not found at " + self_path)
+
+  // =========================================================================
+  // Section 9: Summary
+  // =========================================================================
+
+  // Golden tests: 97 fixed.  Self-lex adds 8 when file is available.
+  let total: i32 = 97 + self_tests
   print("")
   print("--- results ---")
   print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " passed")
