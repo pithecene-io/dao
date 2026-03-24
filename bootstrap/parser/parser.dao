@@ -1780,7 +1780,7 @@ fn parse_extern_fn(ps: PS): PR
   let params_lp: i64 = params.node
   let cur: PS = params.ps
 
-  // Optional return type
+  // Return type is required for extern fn (CONTRACT_SYNTAX_SURFACE.md §extern).
   let ret_type: i64 = to_i64(-1)
   if tk_name(peek_kind(cur)) == tk_name(TK.Colon):
     cur = ps_advance(cur)
@@ -1788,6 +1788,9 @@ fn parse_extern_fn(ps: PS): PR
     if ty.node >= 0:
       ret_type = ty.node
     cur = ty.ps
+  else:
+    let sp: Span = tok_span(cur)
+    cur = ps_add_diag(cur, sp, "extern fn requires a return type annotation")
 
   cur = match_tok(cur, TK.Newline)
   return ps_add_node(cur, Node.ExternFnD(name_tidx, params_lp, ret_type))
@@ -1800,7 +1803,8 @@ fn parse_class_decl(ps: PS): PR
   let ps5: PS = expect(ps4, TK.Newline)
   let ps6: PS = expect(ps5, TK.Indent)
 
-  // Parse fields: push [name_tok, type_node] pairs, then count
+  // Parse fields: collect [name_tok, type_node] pairs, then flush.
+  let field_pairs: Vector<i64> = Vector<i64>::new()
   let field_count: i64 = 0
   let cur: PS = ps6
   let done: bool = false
@@ -1814,19 +1818,23 @@ fn parse_class_decl(ps: PS): PR
       cur = expect(cur, TK.Identifier)
       cur = expect(cur, TK.Colon)
       let fty: PR = parse_type(cur)
-      cur = idx_push(fty.ps, fname_tidx)
+      cur = fty.ps
+      field_pairs = field_pairs.push(fname_tidx)
       if fty.node >= 0:
-        cur = idx_push(cur, fty.node)
+        field_pairs = field_pairs.push(fty.node)
       else:
-        cur = idx_push(cur, to_i64(-1))
+        field_pairs = field_pairs.push(to_i64(-1))
       field_count = field_count + 1
       cur = match_tok(cur, TK.Newline)
 
-  // Push field count last
-  let fields_lp: i64 = cur.idx.length()
-  cur = idx_push(cur, field_count)
-  cur = expect(cur, TK.Dedent)
-  return ps_add_node(cur, Node.ClassDeclD(name_tidx, fields_lp))
+  // Diagnose empty class body (contract: must have at least one field).
+  if field_count == 0:
+    let sp: Span = tok_span(cur)
+    cur = ps_add_diag(cur, sp, "class body must contain at least one field")
+
+  let fields_fl: FlushResult = flush_pairs(cur, field_pairs, field_count)
+  cur = expect(fields_fl.ps, TK.Dedent)
+  return ps_add_node(cur, Node.ClassDeclD(name_tidx, fields_fl.list_pos))
 
 fn parse_enum_decl(ps: PS): PR
   let ps2: PS = ps_advance(ps)
@@ -2079,7 +2087,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 33
+  let total: i32 = 36
 
   // -----------------------------------------------------------------
   // Expression tests
@@ -2278,10 +2286,33 @@ fn main(): i32
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
+  // Regression: class with generic field type (idx interleaving)
+  // -----------------------------------------------------------------
+
+  // Test 28: Class with generic field type — verifies field pairs
+  // are contiguous in idx despite nested generic type list entries.
+  let src28: string = "class Foo:\n  items: Vector<Token>\n  count: i64\n"
+  let r28: PR = parse(src28)
+  if expect_no_parse_errors("class_generic_field_no_err", r28):
+    pass_count = pass_count + 1
+
+  // Test 29: extern fn without return type produces diagnostic.
+  let src29: string = "extern fn bad(x: i32)\n"
+  let r29: PR = parse(src29)
+  if expect_parse_errors("extern_fn_no_ret", r29, to_i64(1)):
+    pass_count = pass_count + 1
+
+  // Test 30: Empty class body produces diagnostic.
+  let src30: string = "class Empty:\n  \n"
+  let r30: PR = parse(src30)
+  if expect_parse_errors("empty_class_body", r30, to_i64(1)):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
   // Self-parse smoke test
   // -----------------------------------------------------------------
 
-  // Test 28-30: Parse a representative bootstrap source file
+  // Test 31-33: Parse a representative bootstrap source file
   // (uses expr_parser probe as the self-parse target, since this file
   //  is too large for the immutable-vector bootstrap runtime)
   let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
