@@ -74,9 +74,26 @@ tasks:
         cd tools/playground/frontend && npx vite
 
   bootstrap-assemble:
-    desc: Assemble bootstrap .dao files from shared base + subsystem parts
+    desc: Assemble bootstrap .gen.dao files from shared base + subsystem sources
     cmds:
       - bash bootstrap/assemble.sh
+    sources:
+      - bootstrap/shared/base.dao
+      - bootstrap/lexer/tests.dao
+      - bootstrap/parser/tests.dao
+      - bootstrap/resolver/impl.dao
+    generates:
+      - bootstrap/lexer/lexer.gen.dao
+      - bootstrap/parser/parser.gen.dao
+      - bootstrap/resolver/resolver.gen.dao
+
+  bootstrap-test:
+    desc: Assemble, build, and test all bootstrap subsystems
+    deps: [build, bootstrap-assemble]
+    cmds:
+      - "{{.BUILD_DIR}}/compiler/driver/daoc build bootstrap/lexer/lexer.gen.dao && ./bootstrap/lexer/lexer.gen"
+      - "{{.BUILD_DIR}}/compiler/driver/daoc build bootstrap/parser/parser.gen.dao && ./bootstrap/parser/parser.gen"
+      - "{{.BUILD_DIR}}/compiler/driver/daoc build bootstrap/resolver/resolver.gen.dao && ./bootstrap/resolver/resolver.gen"
 
   format:
     desc: Run clang-format on all source files

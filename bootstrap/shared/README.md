@@ -17,10 +17,10 @@ subsystems:
 
 ## How assembly works
 
-Each bootstrap subsystem has a `.part.dao` fragment containing its
+Each bootstrap subsystem has its own `.dao` source containing
 subsystem-specific code (tests, resolver logic, etc.).  The
-`assemble.sh` script concatenates `base.dao` with each fragment to
-produce the final compilable `.dao` files.
+`assemble.sh` script concatenates `base.dao` with each subsystem
+source to produce `*.gen.dao` files that the compiler can build.
 
 ```sh
 # From repository root:
@@ -28,14 +28,16 @@ bash bootstrap/assemble.sh
 ```
 
 This produces:
-- `bootstrap/lexer/lexer.dao` = `base.dao` + `lexer/tests.part.dao`
-- `bootstrap/parser/parser.dao` = `base.dao` + `parser/tests.part.dao`
-- `bootstrap/resolver/resolver.dao` = `base.dao` + `resolver/impl.part.dao`
+- `bootstrap/lexer/lexer.gen.dao` = `base.dao` + `lexer/tests.dao`
+- `bootstrap/parser/parser.gen.dao` = `base.dao` + `parser/tests.dao`
+- `bootstrap/resolver/resolver.gen.dao` = `base.dao` + `resolver/impl.dao`
+
+The `*.gen.dao` files are gitignored — they are build artifacts.
 
 ## Editing rules
 
-1. **Edit `base.dao` or `.part.dao` fragments** — never edit the
-   assembled `.dao` files directly.
+1. **Edit `base.dao` or subsystem `.dao` sources** — never edit the
+   `.gen.dao` files directly.
 2. **Run `bash bootstrap/assemble.sh`** after any edit.
 3. **Verify all three subsystems** still compile and pass tests.
 

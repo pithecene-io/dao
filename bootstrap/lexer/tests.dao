@@ -469,7 +469,7 @@ fn main(): i32
   // produces a non-trivial token stream, and ends with Eof.
 
   let self_tests: i32 = 0
-  let self_path: string = "bootstrap/lexer/lexer.dao"
+  let self_path: string = "bootstrap/lexer/lexer.gen.dao"
   if file_exists(self_path):
     let self_src: string = read_file(self_path)
     let r_self: LexResult = lex(self_src)

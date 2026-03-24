@@ -56,7 +56,7 @@ The bootstrap lexer matches the C++ lexer on:
 
 ```sh
 # From repository root:
-daoc build bootstrap/lexer/lexer.dao && ./bootstrap/lexer/lexer
+bash bootstrap/assemble.sh && daoc build bootstrap/lexer/lexer.gen.dao && ./bootstrap/lexer/lexer.gen
 ```
 
 Tests include golden token stream assertions, malformed-input tests,
@@ -105,7 +105,7 @@ slice of Dao syntax.
 
 ```sh
 # From repository root:
-daoc build bootstrap/parser/parser.dao && ./bootstrap/parser/parser
+bash bootstrap/assemble.sh && daoc build bootstrap/parser/parser.gen.dao && ./bootstrap/parser/parser.gen
 ```
 
 Tests include golden parse tree assertions, error recovery tests,
@@ -141,7 +141,7 @@ uses map over the bootstrap parser's AST.
 **How to run tests**:
 
 ```sh
-daoc build bootstrap/resolver/resolver.dao && ./bootstrap/resolver/resolver
+bash bootstrap/assemble.sh && daoc build bootstrap/resolver/resolver.gen.dao && ./bootstrap/resolver/resolver.gen
 ```
 
 ## Relationship to probes
