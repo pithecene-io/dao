@@ -185,10 +185,13 @@ Exit criteria:
 
 ## Phase 6 — C ABI Interop and Host Integration
 
-Status: **v2 in progress** — v1 (scalar/pointer C ABI calls, driver
-link passthrough, extern fn type validation, E2E examples) complete.
-v2 adds struct-by-value arguments and returns with repr-C-compatible
-predicate. Callbacks and variadics deferred.
+Status: **v2 complete** — v1 (scalar/pointer C ABI calls, driver link
+passthrough, extern fn type validation, E2E examples) and v2
+(struct-by-value with repr-C predicate, x86-64 SysV eightbyte
+classification, byval/sret for >16 B structs, function pointer types
+at extern boundary with named-function callbacks) both landed.
+Variadics, C unions, and indirect calls through C-supplied function
+pointers with struct params/returns are deferred.
 
 Goals:
 - stable C ABI entry/exit surface for initial foreign function calls
@@ -207,8 +210,11 @@ Exit criteria:
 
 ## Phase 7 — Bootstrap Compiler
 
-Status: **entry leaf selected** — diagnostic formatter as first real
-subsystem extraction (Task 19)
+Status: **probes complete, extraction next** — diagnostic formatter
+(Task 19) landed as entry leaf. Full lexer probe (`dao_lexer_v2.dao`)
+landed with verified C++ parity (error-token emission, INDENT/DEDENT
+spans, self-tests). Next: promote the lexer probe into a real
+bootstrap compiler subsystem.
 
 Goals:
 - begin implementing non-trivial compiler subsystems in Dao itself
@@ -227,6 +233,9 @@ Entry decision:
   that every subsequent extraction depends on
 - see `docs/task_specs/TASK_19_DIAGNOSTIC_FORMATTER.md` for the full
   task spec
+- the full lexer probe (`dao_lexer_v2.dao`) has verified parity with
+  the C++ lexer across token kinds, error tokens, and INDENT/DEDENT
+  source spans — ready for extraction into a real bootstrap subsystem
 
 Recommended bootstrap sequence:
 1. keep the initial compiler in an implementation language suited to
