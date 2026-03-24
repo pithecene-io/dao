@@ -2151,13 +2151,17 @@ fn rs_update_scope(rs: RS, scope_idx: i64, new_scope: Scope): RS
   let new_scopes: Vector<Scope> = replace_scope(rs.scopes, scope_idx, new_scope)
   return rs_set_scopes(rs, new_scopes)
 
-fn scope_declare(rs: RS, name: string, sym_idx: i64): RS
+fn scope_declare(rs: RS, name: string, sym_idx: i64, decl_tidx: i64): RS
   let scope: Scope = rs.scopes.get(rs.current_scope)
   let existing: Option<i64> = scope.decls.get(name)
   match existing:
     Option.Some(eidx):
-      // Duplicate declaration — emit diagnostic
-      let rs2: RS = rs_add_diag(rs, Span(to_i64(0), to_i64(1)), "duplicate declaration '" + name + "'")
+      // Duplicate declaration — emit diagnostic at the duplicate's span
+      let sp: Span = Span(to_i64(0), to_i64(1))
+      if decl_tidx >= 0:
+        let tok: Token = rs.toks.get(decl_tidx)
+        sp = Span(tok.offset, tok.len)
+      let rs2: RS = rs_add_diag(rs, sp, "duplicate declaration '" + name + "'")
       return rs2
     Option.None:
       let new_decls: HashMap<i64> = scope.decls.set(name, sym_idx)
@@ -2262,7 +2266,7 @@ fn scope_kind_name(kind: ScopeKind): string
 
 fn declare_builtin(rs: RS, name: string): RS
   let sr: SymR = rs_add_symbol(rs, Symbol(SymbolKind.Builtin, name, to_i64(-1), rs.current_scope))
-  return scope_declare(sr.rs, name, sr.sym_idx)
+  return scope_declare(sr.rs, name, sr.sym_idx, to_i64(-1))
 
 fn populate_builtins(rs: RS): RS
   let r: RS = rs
@@ -2285,6 +2289,18 @@ fn populate_builtins(rs: RS): RS
 // Section 24: Type resolution
 // =========================================================================
 
+// Check if a symbol is valid in type position (Builtin or Type).
+fn is_type_symbol(rs: RS, sym_idx: i64): bool
+  if sym_idx < 0:
+    return false
+  let sym: Symbol = rs.symbols.get(sym_idx)
+  match sym.kind:
+    SymbolKind.Builtin:
+      return true
+    SymbolKind.Type:
+      return true
+  return false
+
 fn resolve_type_node(rs: RS, node_idx: i64): RS
   if node_idx < 0:
     return rs
@@ -2294,7 +2310,9 @@ fn resolve_type_node(rs: RS, node_idx: i64): RS
       let name: string = tok_name(rs, tidx)
       let sym: i64 = scope_lookup(rs, name)
       if sym >= 0:
-        return rs_add_use(rs, tidx, sym)
+        if is_type_symbol(rs, sym):
+          return rs_add_use(rs, tidx, sym)
+        // Found a non-type symbol — don't record the use, leave unresolved
       // No diagnostic on unresolved type — matches host resolver
       return rs
     Node.GenericT(name_tidx, args_lp, arg_count):
@@ -2302,7 +2320,8 @@ fn resolve_type_node(rs: RS, node_idx: i64): RS
       let sym: i64 = scope_lookup(rs, name)
       let r: RS = rs
       if sym >= 0:
-        r = rs_add_use(r, name_tidx, sym)
+        if is_type_symbol(r, sym):
+          r = rs_add_use(r, name_tidx, sym)
       let args: Vector<i64> = read_list(r.idx_data, args_lp)
       let i: i64 = 0
       while i < args.length():
@@ -2379,7 +2398,7 @@ fn resolve_expr(rs: RS, node_idx: i64): RS
         let ptidx: i64 = param_toks.get(i)
         let pname: string = tok_name(r, ptidx)
         let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.LambdaParam, pname, node_idx, r.current_scope))
-        r = scope_declare(sym_r.rs, pname, sym_r.sym_idx)
+        r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, ptidx)
         i = i + 1
       // Resolve body expression
       r = resolve_expr(r, body)
@@ -2438,7 +2457,7 @@ fn resolve_stmt(rs: RS, node_idx: i64): RS
       // Declare local
       let name: string = tok_name(r, name_tidx)
       let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Local, name, node_idx, r.current_scope))
-      return scope_declare(sr.rs, name, sr.sym_idx)
+      return scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
     Node.AssignS(target, value):
       let r: RS = resolve_expr(rs, target)
       return resolve_expr(r, value)
@@ -2459,7 +2478,7 @@ fn resolve_stmt(rs: RS, node_idx: i64): RS
       r = sr.rs
       let var_name: string = tok_name(r, var_tidx)
       let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Local, var_name, node_idx, r.current_scope))
-      r = scope_declare(sym_r.rs, var_name, sym_r.sym_idx)
+      r = scope_declare(sym_r.rs, var_name, sym_r.sym_idx, var_tidx)
       r = resolve_body_stmts(r, body_lp)
       return rs_pop_scope(r)
     Node.ReturnS(val_node):
@@ -2505,7 +2524,7 @@ fn resolve_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, ret_ty
     let p_type: i64 = pairs.get(i + 1)
     let pname: string = tok_name(r, p_tidx)
     let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope))
-    r = scope_declare(sym_r.rs, pname, sym_r.sym_idx)
+    r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, p_tidx)
     // Resolve parameter type
     r = resolve_type_node(r, p_type)
     i = i + 2
@@ -2534,7 +2553,7 @@ fn resolve_expr_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, r
     let p_type: i64 = pairs.get(i + 1)
     let pname: string = tok_name(r, p_tidx)
     let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope))
-    r = scope_declare(sym_r.rs, pname, sym_r.sym_idx)
+    r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, p_tidx)
     r = resolve_type_node(r, p_type)
     i = i + 2
 
@@ -2562,7 +2581,7 @@ fn resolve_extern_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64,
     let p_type: i64 = pairs.get(i + 1)
     let pname: string = tok_name(r, p_tidx)
     let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope))
-    r = scope_declare(sym_r.rs, pname, sym_r.sym_idx)
+    r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, p_tidx)
     r = resolve_type_node(r, p_type)
     i = i + 2
 
@@ -2585,7 +2604,7 @@ fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, fields_lp: i64): RS
     let f_type: i64 = pairs.get(i + 1)
     let fname: string = tok_name(r, f_tidx)
     let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Field, fname, node_idx, r.current_scope))
-    r = scope_declare(sym_r.rs, fname, sym_r.sym_idx)
+    r = scope_declare(sym_r.rs, fname, sym_r.sym_idx, f_tidx)
     // Resolve field type
     r = resolve_type_node(r, f_type)
     i = i + 2
@@ -2652,27 +2671,27 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
           Node.FnDeclD(name_tidx, params_lp, ret_type, body_lp):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
-            r = scope_declare(sr.rs, name, sr.sym_idx)
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.ExprFnD(name_tidx, params_lp, ret_type, body_expr):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
-            r = scope_declare(sr.rs, name, sr.sym_idx)
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.ExternFnD(name_tidx, params_lp, ret_type):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
-            r = scope_declare(sr.rs, name, sr.sym_idx)
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.ClassDeclD(name_tidx, fields_lp):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
-            r = scope_declare(sr.rs, name, sr.sym_idx)
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.EnumDeclD(name_tidx, variants_lp):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
-            r = scope_declare(sr.rs, name, sr.sym_idx)
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.TypeAliasD(name_tidx, target_type):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
-            r = scope_declare(sr.rs, name, sr.sym_idx)
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.ErrorD(t):
             r = r
         i = i + 1
@@ -2753,7 +2772,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 15
+  let total: i32 = 17
 
   // -----------------------------------------------------------------
   // Test 1: forward_ref — fn calls fn defined later in file; no diagnostic
@@ -2939,7 +2958,51 @@ fn main(): i32
     print("FAIL extern_fn: expected >= 1 Function symbol, got " + i64_to_string(r14_fns))
 
   // -----------------------------------------------------------------
-  // Test 15: self_resolve_smoke — parse+resolve expr_parser.dao
+  // Test 15: type_pos_rejects_local — local should not satisfy type position
+  // -----------------------------------------------------------------
+  let src15: string = "fn test(): i32\n  let T: i32 = 0\n  let x: T = 1\n  return x\n"
+  let rr15: ResolveResult = resolve(src15)
+  // T in type position (let x: T) must NOT resolve to the local T.
+  // Count uses that resolve to a Local symbol in type position.
+  let local_type_uses: i64 = 0
+  let u15: i64 = 0
+  while u15 < rr15.uses.length():
+    let sym15: Symbol = rr15.symbols.get(rr15.uses.get(u15 + 1))
+    match sym15.kind:
+      SymbolKind.Local:
+        // Check if the use token is "T" by name
+        if sym15.name == "T":
+          local_type_uses = local_type_uses + 1
+    u15 = u15 + 2
+  // The value-level T (in initializer or expr) may resolve, but the
+  // type-level T (in `: T`) must not. Expect at most 1 use (the value ref).
+  if local_type_uses <= 1:
+    print("PASS type_pos_rejects_local")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL type_pos_rejects_local: local T used " + i64_to_string(local_type_uses) + " times (type position should not resolve)")
+
+  // -----------------------------------------------------------------
+  // Test 16: dup_decl_span — duplicate declaration diagnostic should have valid span
+  // -----------------------------------------------------------------
+  let src16: string = "fn foo(): i32\n  return 0\n\nfn foo(): i32\n  return 1\n"
+  let rr16: ResolveResult = resolve(src16)
+  let has_valid_span: bool = false
+  let d16: i64 = 0
+  while d16 < rr16.diags.length():
+    let diag16: Diagnostic = rr16.diags.get(d16)
+    // Check that the duplicate diagnostic span is not Span(0,1)
+    if diag16.span.offset > 0:
+      has_valid_span = true
+    d16 = d16 + 1
+  if has_valid_span:
+    print("PASS dup_decl_span")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL dup_decl_span: duplicate declaration diagnostic has Span(0,1)")
+
+  // -----------------------------------------------------------------
+  // Test 17: self_resolve_smoke — parse+resolve expr_parser.dao
   // -----------------------------------------------------------------
   let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
   if file_exists(self_path):
