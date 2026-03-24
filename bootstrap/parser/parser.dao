@@ -895,6 +895,36 @@ fn skip_newlines(ps: PS): PS
       done = true
   return cur
 
+// flush_list: push collected items contiguously to idx, then push count.
+// Returns the list_pos (position of the count entry) and updated PS.
+// This ensures list elements are contiguous even when sub-parses
+// interleave their own idx entries during collection.
+class FlushResult:
+  ps: PS
+  list_pos: i64
+
+fn flush_list(ps: PS, items: Vector<i64>): FlushResult
+  let cur: PS = ps
+  let i: i64 = 0
+  while i < items.length():
+    cur = idx_push(cur, items.get(i))
+    i = i + 1
+  let lp: i64 = cur.idx.length()
+  cur = idx_push(cur, items.length())
+  return FlushResult(cur, lp)
+
+// flush_pairs: push collected pairs contiguously to idx, then push count.
+// items contains [a0, b0, a1, b1, ...] — count is number of pairs.
+fn flush_pairs(ps: PS, items: Vector<i64>, pair_count: i64): FlushResult
+  let cur: PS = ps
+  let i: i64 = 0
+  while i < items.length():
+    cur = idx_push(cur, items.get(i))
+    i = i + 1
+  let lp: i64 = cur.idx.length()
+  cur = idx_push(cur, pair_count)
+  return FlushResult(cur, lp)
+
 fn tok_text(ps: PS, tidx: i64): string
   let tok: Token = ps.toks.get(tidx)
   if tok.len <= 0:
@@ -979,30 +1009,28 @@ fn parse_named_type(ps: PS): PR
   // Check for generic: Name<...>
   if tk_name(peek_kind(ps2)) == tk_name(TK.Lt):
     let ps3: PS = ps_advance(ps2)
-    // Parse type arguments — push elements, then count
-    let count: i64 = 0
+    // Parse type arguments — collect then flush for contiguity
+    let collected: Vector<i64> = Vector<i64>::new()
     let first_arg: PR = parse_type(ps3)
     if first_arg.node >= 0:
-      let cur: PS = idx_push(first_arg.ps, first_arg.node)
-      count = count + 1
+      collected = collected.push(first_arg.node)
+      let cur: PS = first_arg.ps
       let done: bool = false
       while done == false:
         if tk_name(peek_kind(cur)) == tk_name(TK.Comma):
           cur = ps_advance(cur)
           let arg: PR = parse_type(cur)
           if arg.node >= 0:
-            cur = idx_push(arg.ps, arg.node)
-            count = count + 1
+            collected = collected.push(arg.node)
+            cur = arg.ps
           else:
             cur = arg.ps
             done = true
         else:
           done = true
-      // Push count last
-      let list_pos: i64 = cur.idx.length()
-      cur = idx_push(cur, count)
-      let ps7: PS = expect(cur, TK.Gt)
-      return ps_add_node(ps7, Node.GenericT(name_tidx, list_pos, count))
+      let fl: FlushResult = flush_list(cur, collected)
+      let ps7: PS = expect(fl.ps, TK.Gt)
+      return ps_add_node(ps7, Node.GenericT(name_tidx, fl.list_pos, collected.length()))
     else:
       // Error parsing first type arg
       let ps5: PS = expect(first_arg.ps, TK.Gt)
@@ -1072,22 +1100,22 @@ fn parse_primary(ps: PS): PR
 
 fn parse_list_literal(ps: PS): PR
   let ps2: PS = ps_advance(ps)
-  let count: i64 = 0
+  let collected: Vector<i64> = Vector<i64>::new()
   let cur: PS = ps2
 
   if tk_name(peek_kind(cur)) != tk_name(TK.RBracket):
     let first: PR = parse_expr(cur)
     if first.node >= 0:
-      cur = idx_push(first.ps, first.node)
-      count = count + 1
+      collected = collected.push(first.node)
+      cur = first.ps
       let done: bool = false
       while done == false:
         if tk_name(peek_kind(cur)) == tk_name(TK.Comma):
           cur = ps_advance(cur)
           let elem: PR = parse_expr(cur)
           if elem.node >= 0:
-            cur = idx_push(elem.ps, elem.node)
-            count = count + 1
+            collected = collected.push(elem.node)
+            cur = elem.ps
           else:
             cur = elem.ps
             done = true
@@ -1096,41 +1124,37 @@ fn parse_list_literal(ps: PS): PR
     else:
       cur = first.ps
 
-  let list_pos: i64 = cur.idx.length()
-  cur = idx_push(cur, count)
-  cur = expect(cur, TK.RBracket)
-  return ps_add_node(cur, Node.ListLitE(list_pos, count))
+  let fl: FlushResult = flush_list(cur, collected)
+  cur = expect(fl.ps, TK.RBracket)
+  return ps_add_node(cur, Node.ListLitE(fl.list_pos, collected.length()))
 
 fn parse_lambda(ps: PS): PR
   let ps2: PS = expect(ps, TK.Pipe)
-  let count: i64 = 0
+  let param_toks: Vector<i64> = Vector<i64>::new()
   let cur: PS = ps2
 
   if tk_name(peek_kind(cur)) != tk_name(TK.Pipe):
     // First param
     let tidx: i64 = cur.pos
     cur = expect(cur, TK.Identifier)
-    cur = idx_push(cur, tidx)
-    count = count + 1
+    param_toks = param_toks.push(tidx)
     let done: bool = false
     while done == false:
       if tk_name(peek_kind(cur)) == tk_name(TK.Comma):
         cur = ps_advance(cur)
         let tidx2: i64 = cur.pos
         cur = expect(cur, TK.Identifier)
-        cur = idx_push(cur, tidx2)
-        count = count + 1
+        param_toks = param_toks.push(tidx2)
       else:
         done = true
 
-  let list_pos: i64 = cur.idx.length()
-  cur = idx_push(cur, count)
-  cur = expect(cur, TK.Pipe)
+  let param_fl: FlushResult = flush_list(cur, param_toks)
+  cur = expect(param_fl.ps, TK.Pipe)
   cur = expect(cur, TK.Arrow)
   let body: PR = parse_expr(cur)
   if body.node < 0:
     return body
-  return ps_add_node(body.ps, Node.LambdaE(list_pos, count, body.node))
+  return ps_add_node(body.ps, Node.LambdaE(param_fl.list_pos, param_toks.length(), body.node))
 
 fn parse_ident_or_qual(ps: PS): PR
   let first_tidx: i64 = ps.pos
@@ -1141,22 +1165,21 @@ fn parse_ident_or_qual(ps: PS): PR
     return ps_add_node(ps2, Node.IdentE(first_tidx))
 
   // Qualified name: ident::ident (::ident)*
-  let cur: PS = idx_push(ps2, first_tidx)
-  let count: i64 = 1
+  let seg_toks: Vector<i64> = Vector<i64>::new()
+  seg_toks = seg_toks.push(first_tidx)
+  let cur: PS = ps2
   let done: bool = false
   while done == false:
     if tk_name(peek_kind(cur)) == tk_name(TK.ColonColon):
       cur = ps_advance(cur)
       let tidx: i64 = cur.pos
       cur = expect(cur, TK.Identifier)
-      cur = idx_push(cur, tidx)
-      count = count + 1
+      seg_toks = seg_toks.push(tidx)
     else:
       done = true
 
-  let list_pos: i64 = cur.idx.length()
-  cur = idx_push(cur, count)
-  return ps_add_node(cur, Node.QualNameE(list_pos, count))
+  let seg_fl: FlushResult = flush_list(cur, seg_toks)
+  return ps_add_node(seg_fl.ps, Node.QualNameE(seg_fl.list_pos, seg_toks.length()))
 
 // Postfix expressions: call, field, index, try
 fn parse_postfix(ps: PS): PR
@@ -1172,21 +1195,21 @@ fn parse_postfix(ps: PS): PR
     // Call: expr(args)
     if tk_name(k) == tk_name(TK.LParen):
       let ps2: PS = ps_advance(cur_ps)
-      let count: i64 = 0
+      let call_args: Vector<i64> = Vector<i64>::new()
       let inner: PS = ps2
       if tk_name(peek_kind(inner)) != tk_name(TK.RParen):
         let arg: PR = parse_expr(inner)
         if arg.node >= 0:
-          inner = idx_push(arg.ps, arg.node)
-          count = count + 1
+          call_args = call_args.push(arg.node)
+          inner = arg.ps
           let arg_done: bool = false
           while arg_done == false:
             if tk_name(peek_kind(inner)) == tk_name(TK.Comma):
               inner = ps_advance(inner)
               let arg2: PR = parse_expr(inner)
               if arg2.node >= 0:
-                inner = idx_push(arg2.ps, arg2.node)
-                count = count + 1
+                call_args = call_args.push(arg2.node)
+                inner = arg2.ps
               else:
                 inner = arg2.ps
                 arg_done = true
@@ -1194,10 +1217,9 @@ fn parse_postfix(ps: PS): PR
               arg_done = true
         else:
           inner = arg.ps
-      let list_pos: i64 = inner.idx.length()
-      inner = idx_push(inner, count)
-      inner = expect(inner, TK.RParen)
-      let call_r: PR = ps_add_node(inner, Node.CallE(cur_node, list_pos, count))
+      let call_fl: FlushResult = flush_list(inner, call_args)
+      inner = expect(call_fl.ps, TK.RParen)
+      let call_r: PR = ps_add_node(inner, Node.CallE(cur_node, call_fl.list_pos, call_args.length()))
       cur_ps = call_r.ps
       cur_node = call_r.node
 
@@ -1410,7 +1432,7 @@ fn parse_expr(ps: PS): PR
 fn parse_suite(ps: PS): PR
   let ps2: PS = expect(ps, TK.Newline)
   let ps3: PS = expect(ps2, TK.Indent)
-  let count: i64 = 0
+  let collected: Vector<i64> = Vector<i64>::new()
   let cur: PS = ps3
   let done: bool = false
   while done == false:
@@ -1421,20 +1443,18 @@ fn parse_suite(ps: PS): PR
     else:
       let stmt: PR = parse_statement(cur)
       if stmt.node >= 0:
-        cur = idx_push(stmt.ps, stmt.node)
-        count = count + 1
+        collected = collected.push(stmt.node)
+        cur = stmt.ps
       else:
         // Error recovery: skip to next statement boundary
         cur = sync_to_stmt(stmt.ps)
         let err_r: PR = ps_add_node(cur, Node.ErrorS(cur.pos))
-        cur = idx_push(err_r.ps, err_r.node)
-        count = count + 1
+        collected = collected.push(err_r.node)
+        cur = err_r.ps
 
-  // Push count last
-  let list_pos: i64 = cur.idx.length()
-  cur = idx_push(cur, count)
-  cur = expect(cur, TK.Dedent)
-  return PR(cur, list_pos)
+  let fl: FlushResult = flush_list(cur, collected)
+  cur = expect(fl.ps, TK.Dedent)
+  return PR(cur, fl.list_pos)
 
 fn parse_statement(ps: PS): PR
   let k: TK = peek_kind(ps)
@@ -1535,10 +1555,11 @@ fn parse_if_stmt(ps: PS): PR
       // else if — parse as a single-element body containing an if stmt
       let nested_if: PR = parse_if_stmt(cur)
       if nested_if.node >= 0:
-        cur = idx_push(nested_if.ps, nested_if.node)
-        // Push count=1
-        else_list_pos = cur.idx.length()
-        cur = idx_push(cur, to_i64(1))
+        let else_items: Vector<i64> = Vector<i64>::new()
+        else_items = else_items.push(nested_if.node)
+        let else_fl: FlushResult = flush_list(nested_if.ps, else_items)
+        else_list_pos = else_fl.list_pos
+        cur = else_fl.ps
       else:
         cur = nested_if.ps
     else:
@@ -1594,7 +1615,8 @@ fn parse_match_stmt(ps: PS): PR
   let ps4: PS = expect(ps3, TK.Newline)
   let ps5: PS = expect(ps4, TK.Indent)
 
-  // Arms: push [pattern, body_list_pos] pairs, then count
+  // Arms: collect [pattern, body_list_pos] pairs, then flush
+  let arm_pairs: Vector<i64> = Vector<i64>::new()
   let arm_count: i64 = 0
   let cur: PS = ps5
   let done: bool = false
@@ -1609,17 +1631,16 @@ fn parse_match_stmt(ps: PS): PR
       if pat.node < 0:
         cur = sync_to_stmt(pat.ps)
       else:
-        cur = idx_push(pat.ps, pat.node)
-        cur = expect(cur, TK.Colon)
+        cur = expect(pat.ps, TK.Colon)
         let arm_body: PR = parse_suite(cur)
-        cur = idx_push(arm_body.ps, arm_body.node)
+        arm_pairs = arm_pairs.push(pat.node)
+        arm_pairs = arm_pairs.push(arm_body.node)
+        cur = arm_body.ps
         arm_count = arm_count + 1
 
-  // Push arm count last
-  let arms_lp: i64 = cur.idx.length()
-  cur = idx_push(cur, arm_count)
-  cur = expect(cur, TK.Dedent)
-  return ps_add_node(cur, Node.MatchS(scrut.node, arms_lp))
+  let arms_fl: FlushResult = flush_pairs(cur, arm_pairs, arm_count)
+  cur = expect(arms_fl.ps, TK.Dedent)
+  return ps_add_node(cur, Node.MatchS(scrut.node, arms_fl.list_pos))
 
 // =========================================================================
 // Section 13: Declaration parsing
@@ -1647,6 +1668,7 @@ fn parse_declaration(ps: PS): PR
 // Pushes pairs [name_tok, type_node, ...], then count
 fn parse_params_list(ps: PS): PR
   let ps2: PS = expect(ps, TK.LParen)
+  let param_pairs: Vector<i64> = Vector<i64>::new()
   let count: i64 = 0
   let cur: PS = ps2
 
@@ -1656,11 +1678,12 @@ fn parse_params_list(ps: PS): PR
     cur = expect(cur, TK.Identifier)
     cur = expect(cur, TK.Colon)
     let ty: PR = parse_type(cur)
-    cur = idx_push(ty.ps, name_tidx)
+    cur = ty.ps
+    param_pairs = param_pairs.push(name_tidx)
     if ty.node >= 0:
-      cur = idx_push(cur, ty.node)
+      param_pairs = param_pairs.push(ty.node)
     else:
-      cur = idx_push(cur, to_i64(-1))
+      param_pairs = param_pairs.push(to_i64(-1))
     count = count + 1
 
     let done: bool = false
@@ -1671,20 +1694,19 @@ fn parse_params_list(ps: PS): PR
         cur = expect(cur, TK.Identifier)
         cur = expect(cur, TK.Colon)
         let ty2: PR = parse_type(cur)
-        cur = idx_push(ty2.ps, name_tidx2)
+        cur = ty2.ps
+        param_pairs = param_pairs.push(name_tidx2)
         if ty2.node >= 0:
-          cur = idx_push(cur, ty2.node)
+          param_pairs = param_pairs.push(ty2.node)
         else:
-          cur = idx_push(cur, to_i64(-1))
+          param_pairs = param_pairs.push(to_i64(-1))
         count = count + 1
       else:
         done = true
 
-  // Push count last
-  let list_pos: i64 = cur.idx.length()
-  cur = idx_push(cur, count)
-  cur = expect(cur, TK.RParen)
-  return PR(cur, list_pos)
+  let fl: FlushResult = flush_pairs(cur, param_pairs, count)
+  cur = expect(fl.ps, TK.RParen)
+  return PR(cur, fl.list_pos)
 
 fn parse_fn_decl(ps: PS): PR
   let ps2: PS = ps_advance(ps)
@@ -1717,8 +1739,8 @@ fn parse_fn_decl(ps: PS): PR
   let ps4: PS = expect(cur, TK.Newline)
   if tk_name(peek_kind(ps4)) == tk_name(TK.Indent):
     let ps5: PS = ps_advance(ps4)
-    // Parse statement list inline
-    let body_count: i64 = 0
+    // Parse statement list inline — collect then flush
+    let body_items: Vector<i64> = Vector<i64>::new()
     let bcur: PS = ps5
     let bdone: bool = false
     while bdone == false:
@@ -1729,18 +1751,16 @@ fn parse_fn_decl(ps: PS): PR
       else:
         let stmt: PR = parse_statement(bcur)
         if stmt.node >= 0:
-          bcur = idx_push(stmt.ps, stmt.node)
-          body_count = body_count + 1
+          body_items = body_items.push(stmt.node)
+          bcur = stmt.ps
         else:
           bcur = sync_to_stmt(stmt.ps)
           let err_r: PR = ps_add_node(bcur, Node.ErrorS(bcur.pos))
-          bcur = idx_push(err_r.ps, err_r.node)
-          body_count = body_count + 1
-    // Push body count last
-    let body_lp: i64 = bcur.idx.length()
-    bcur = idx_push(bcur, body_count)
-    bcur = expect(bcur, TK.Dedent)
-    return ps_add_node(bcur, Node.FnDeclD(name_tidx, params_lp, ret_type, body_lp))
+          body_items = body_items.push(err_r.node)
+          bcur = err_r.ps
+    let body_fl: FlushResult = flush_list(bcur, body_items)
+    bcur = expect(body_fl.ps, TK.Dedent)
+    return ps_add_node(bcur, Node.FnDeclD(name_tidx, params_lp, ret_type, body_fl.list_pos))
   else:
     // No body — error
     let sp: Span = tok_span(ps4)
@@ -1817,7 +1837,9 @@ fn parse_enum_decl(ps: PS): PR
   let ps6: PS = expect(ps5, TK.Indent)
 
   // Variants: push [name_tok, payload_list_pos] pairs, then count
-  // Each payload_list_pos points to a count-last list of type nodes
+  // Each variant has a name_tok and a payload_list_pos.
+  // Collect variant pairs, flushing payload lists first.
+  let variant_pairs: Vector<i64> = Vector<i64>::new()
   let variant_count: i64 = 0
   let cur: PS = ps6
   let done: bool = false
@@ -1830,15 +1852,15 @@ fn parse_enum_decl(ps: PS): PR
       let vname_tidx: i64 = cur.pos
       cur = expect(cur, TK.Identifier)
 
-      // Parse optional payload: (Type, Type, ...)
-      let payload_count: i64 = 0
+      // Parse optional payload: (Type, Type, ...) — collect then flush
+      let payload_types: Vector<i64> = Vector<i64>::new()
       if tk_name(peek_kind(cur)) == tk_name(TK.LParen):
         cur = ps_advance(cur)
         if tk_name(peek_kind(cur)) != tk_name(TK.RParen):
           let pty: PR = parse_type(cur)
           if pty.node >= 0:
-            cur = idx_push(pty.ps, pty.node)
-            payload_count = payload_count + 1
+            payload_types = payload_types.push(pty.node)
+            cur = pty.ps
           else:
             cur = pty.ps
           let pdone: bool = false
@@ -1847,8 +1869,8 @@ fn parse_enum_decl(ps: PS): PR
               cur = ps_advance(cur)
               let pty2: PR = parse_type(cur)
               if pty2.node >= 0:
-                cur = idx_push(pty2.ps, pty2.node)
-                payload_count = payload_count + 1
+                payload_types = payload_types.push(pty2.node)
+                cur = pty2.ps
               else:
                 cur = pty2.ps
                 pdone = true
@@ -1856,21 +1878,20 @@ fn parse_enum_decl(ps: PS): PR
               pdone = true
         cur = expect(cur, TK.RParen)
 
-      // Push payload count
-      let payload_lp: i64 = cur.idx.length()
-      cur = idx_push(cur, payload_count)
+      // Flush payload list
+      let payload_fl: FlushResult = flush_list(cur, payload_types)
+      cur = payload_fl.ps
 
-      // Push variant pair: name_tok, payload_list_pos
-      cur = idx_push(cur, vname_tidx)
-      cur = idx_push(cur, payload_lp)
+      // Collect variant pair: name_tok, payload_list_pos
+      variant_pairs = variant_pairs.push(vname_tidx)
+      variant_pairs = variant_pairs.push(payload_fl.list_pos)
       variant_count = variant_count + 1
       cur = match_tok(cur, TK.Newline)
 
-  // Push variant count last
-  let variants_lp: i64 = cur.idx.length()
-  cur = idx_push(cur, variant_count)
-  cur = expect(cur, TK.Dedent)
-  return ps_add_node(cur, Node.EnumDeclD(name_tidx, variants_lp))
+  // Flush variant pairs
+  let variants_fl: FlushResult = flush_pairs(cur, variant_pairs, variant_count)
+  cur = expect(variants_fl.ps, TK.Dedent)
+  return ps_add_node(cur, Node.EnumDeclD(name_tidx, variants_fl.list_pos))
 
 fn parse_type_alias(ps: PS): PR
   let ps2: PS = ps_advance(ps)
@@ -1889,7 +1910,7 @@ fn parse_type_alias(ps: PS): PR
 
 fn parse_file(ps: PS): PR
   let cur: PS = skip_newlines(ps)
-  let decl_count: i64 = 0
+  let decl_items: Vector<i64> = Vector<i64>::new()
   let done: bool = false
   while done == false:
     cur = skip_newlines(cur)
@@ -1898,19 +1919,17 @@ fn parse_file(ps: PS): PR
     else:
       let decl: PR = parse_declaration(cur)
       if decl.node >= 0:
-        cur = idx_push(decl.ps, decl.node)
-        decl_count = decl_count + 1
+        decl_items = decl_items.push(decl.node)
+        cur = decl.ps
       else:
         cur = sync_to_decl(decl.ps)
         let err_r: PR = ps_add_node(cur, Node.ErrorD(cur.pos))
-        cur = idx_push(err_r.ps, err_r.node)
-        decl_count = decl_count + 1
+        decl_items = decl_items.push(err_r.node)
+        cur = err_r.ps
     cur = skip_newlines(cur)
 
-  // Push decl count last
-  let decls_lp: i64 = cur.idx.length()
-  cur = idx_push(cur, decl_count)
-  return ps_add_node(cur, Node.FileN(decls_lp))
+  let decls_fl: FlushResult = flush_list(cur, decl_items)
+  return ps_add_node(decls_fl.ps, Node.FileN(decls_fl.list_pos))
 
 // =========================================================================
 // Section 15: Public API
@@ -2060,7 +2079,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 30
+  let total: i32 = 33
 
   // -----------------------------------------------------------------
   // Expression tests
@@ -2114,6 +2133,32 @@ fn main(): i32
   // Test 10: Qualified name
   let r10: PR = parse_expr_str("A::B")
   if expect_node_kind("expr_qual_name", r10, r10.node, "QualNameE"):
+    pass_count = pass_count + 1
+
+  // Test 10a: Nested call — regression for idx interleaving bug.
+  // f(g(1), 2) must produce CallE with 2 args where arg 0 is CallE.
+  let r10a: PR = parse_expr_str("f(g(1), 2)")
+  if expect_node_kind("nested_call_outer", r10a, r10a.node, "CallE"):
+    pass_count = pass_count + 1
+  // Verify the outer call has 2 arguments by reading from the idx list.
+  if r10a.node >= 0:
+    let outer: Node = r10a.ps.nodes.get(r10a.node)
+    let ok_nested: bool = false
+    match outer:
+      Node.CallE(callee, list_pos, arg_count):
+        // Read count from idx list at list_pos
+        let cnt: i64 = r10a.ps.idx.get(list_pos)
+        if cnt == 2:
+          ok_nested = true
+    if ok_nested:
+      print("PASS nested_call_arg_count")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL nested_call_arg_count: outer call should have 2 args")
+
+  // Test 10b: Nested list literal — regression for list idx interleaving.
+  let r10b: PR = parse_expr_str("[f(1), 2]")
+  if expect_node_kind("nested_list_outer", r10b, r10b.node, "ListLitE"):
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
