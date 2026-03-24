@@ -297,10 +297,12 @@ Task 19 (diagnostic formatter, Phase 7 entry leaf) is complete.
 Task 20 (bootstrap lexer extraction) is complete — the lexer probe
 has been promoted to `bootstrap/lexer/lexer.dao` with verified C++
 parity, 97+ golden tests, and self-lex regression.
+Task 21 (bootstrap parser extraction) is complete — the parser is
+promoted to `bootstrap/parser/parser.dao` with Tier A syntax coverage,
+arena-indexed AST, 30 golden tests, and self-parse of real Dao source.
 
-The next implementation focus is further Phase 7 bootstrap extraction
-(parser, diagnostic formatter integration) and Task 17 (low-level
-memory substrate).
+The next implementation focus is Tier B parser expansion, bootstrap
+resolver extraction, and Task 17 (low-level memory substrate).
 
 ### Task 14 — Numeric Type Expansion
 
