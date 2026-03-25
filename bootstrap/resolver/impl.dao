@@ -707,6 +707,7 @@ fn resolve(src: string): ResolveResult
 
   return ResolveResult(rs.symbols, rs.scopes, rs.uses, rs.diags, pr.ps.nodes.length())
 
+// BEGIN_RESOLVER_TESTS
 // =========================================================================
 // Section 31: Test infrastructure
 // =========================================================================

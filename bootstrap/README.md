@@ -144,6 +144,38 @@ uses map over the bootstrap parser's AST.
 bash bootstrap/assemble.sh && daoc build bootstrap/resolver/resolver.gen.dao && ./bootstrap/resolver/resolver.gen
 ```
 
+### `typecheck/`
+
+Type checker assigning types to expressions and validating type
+correctness for Tier A Dao syntax.
+
+**Status**: implemented (Task 23, Phase 7).
+
+**Tier A scope**:
+
+- Two-pass: register declarations (aliases, structs, enums, functions),
+  then check bodies
+- Expression typing: literals, identifiers, binary/unary ops, calls,
+  field access, pipe
+- Statement checking: let, assign, if/while (bool condition), for,
+  return, break, match, expression statements
+- Struct constructors and field access
+- Enum variant constructors
+- Assignability via structural type comparison
+
+**Tier B deferrals**:
+
+- Generics, inference, substitution
+- Concepts, extend, derived conformance
+- Method tables, lambda contextual typing, list literal inference
+- Try operator, deref/addr-of, index expressions
+
+**How to run tests**:
+
+```sh
+bash bootstrap/assemble.sh && daoc build bootstrap/typecheck/typecheck.gen.dao && ./bootstrap/typecheck/typecheck.gen
+```
+
 ## Relationship to probes
 
 The `examples/bootstrap_probe/` directory contains earlier experimental
@@ -158,8 +190,7 @@ probe. The probe is retained as a historical artifact.
 
 ## What comes next
 
-- Bootstrap type checker extraction
-- Diagnostic formatting for bootstrap errors
-- Shared source buffer / span / token infrastructure
-- Stronger parity testing (host resolver golden comparison)
-- Tier B expansion (concepts, extend, mode/resource, generics)
+- Tier B expansion (generics, concepts, extend, mode/resource)
+- Bootstrap HIR/MIR lowering
+- Diagnostic formatting integration
+- Multi-file compilation (eliminate assembly workaround)

@@ -129,6 +129,8 @@ Self-hosting compiler subsystems written in Dao.
   Tier A Dao syntax; tests in `tests.dao` (Task 21)
 - `resolver/` — two-pass name resolver with scope chains, symbol tables,
   and uses map; logic + tests in `impl.dao` (Task 22)
+- `typecheck/` — type checker assigning types to expressions and
+  validating type correctness; logic + tests in `impl.dao` (Task 23)
 
 ## `examples/`
 

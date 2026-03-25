@@ -82,10 +82,12 @@ tasks:
       - bootstrap/lexer/tests.dao
       - bootstrap/parser/tests.dao
       - bootstrap/resolver/impl.dao
+      - bootstrap/typecheck/impl.dao
     generates:
       - bootstrap/lexer/lexer.gen.dao
       - bootstrap/parser/parser.gen.dao
       - bootstrap/resolver/resolver.gen.dao
+      - bootstrap/typecheck/typecheck.gen.dao
 
   bootstrap-test:
     desc: Assemble, build, and test all bootstrap subsystems
@@ -94,6 +96,7 @@ tasks:
       - "{{.BUILD_DIR}}/compiler/driver/daoc build bootstrap/lexer/lexer.gen.dao && ./bootstrap/lexer/lexer.gen"
       - "{{.BUILD_DIR}}/compiler/driver/daoc build bootstrap/parser/parser.gen.dao && ./bootstrap/parser/parser.gen"
       - "{{.BUILD_DIR}}/compiler/driver/daoc build bootstrap/resolver/resolver.gen.dao && ./bootstrap/resolver/resolver.gen"
+      - "{{.BUILD_DIR}}/compiler/driver/daoc build bootstrap/typecheck/typecheck.gen.dao && ./bootstrap/typecheck/typecheck.gen"
 
   format:
     desc: Run clang-format on all source files

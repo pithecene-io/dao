@@ -210,12 +210,11 @@ Exit criteria:
 
 ## Phase 7 — Bootstrap Compiler
 
-Status: **lexer + parser + resolver promoted** — Tasks 19–22 complete.
-The bootstrap lexer (`bootstrap/lexer/lexer.dao`, 105 tests), parser
-(`bootstrap/parser/parser.dao`, 36 tests, Tier A syntax), and resolver
-(`bootstrap/resolver/resolver.dao`, 15 tests, two-pass name resolution
-with scope chains and symbol tables) form the first three-stage
-bootstrap frontend pipeline.
+Status: **full Tier A frontend pipeline** — Tasks 19–23 complete.
+Four bootstrap subsystems share a consolidated substrate
+(`bootstrap/shared/base.dao`): lexer (105 tests), parser (36 tests),
+resolver (17 tests), and type checker (16 tests).  Together they form
+a complete Tier A frontend pipeline: lex → parse → resolve → typecheck.
 
 Goals:
 - begin implementing non-trivial compiler subsystems in Dao itself
