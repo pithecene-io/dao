@@ -32,7 +32,7 @@ enum HirNode:
   HirFile(i64)
 
   // Declarations
-  HirFunction(i64, i64, i64, i64, i64, i64)
+  HirFunction(i64, i64, i64, i64, i64, i64, i64)  // name, tparams_lp, params_lp, ret_ti, body_lp, is_extern, class_owner_tidx (-1 for free fns)
   HirStruct(i64, i64, i64)
   HirEnum(i64, i64, i64)
   HirTypeAlias(i64, i64)
@@ -549,10 +549,8 @@ fn lower_type_params(hs: HS, ast_tparams_lp: i64): HirFlush
     return HirFlush(hs, to_i64(-1))
   return hir_flush_list(hs, tok_indices)
 
-fn lower_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, params_lp: i64, ret_type_node: i64, body_lp: i64): HirR
-  // Lower type params into HIR-owned idx
+fn lower_fn_decl_with_owner(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, params_lp: i64, ret_type_node: i64, body_lp: i64, class_owner_tidx: i64): HirR
   let tp_fl: HirFlush = lower_type_params(hs, tparams_lp)
-  // Resolve return type
   let ret_ti: i64 = to_i64(11)
   let fn_sym: i64 = hir_find_sym_by_decl(tp_fl.hs, decl_idx, "Function")
   if fn_sym >= 0:
@@ -560,7 +558,6 @@ fn lower_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, params_
     if fn_ti >= 0:
       let fn_type: DaoType = tp_fl.hs.types.get(fn_ti)
       ret_ti = fn_type.ret_type
-  // Lower params: flush pairs (name_tok_idx, type_idx)
   let pairs: Vector<i64> = read_pairs(tp_fl.hs.idx_data, params_lp)
   let param_items: Vector<i64> = Vector<i64>::new()
   let param_count: i64 = 0
@@ -568,7 +565,6 @@ fn lower_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, params_
   while pi < pairs.length():
     let p_tidx: i64 = pairs.get(pi)
     let p_type_node: i64 = pairs.get(pi + 1)
-    // Get param type from sym_types
     let p_name: string = hs_tok_name(hs, p_tidx)
     let p_sym: i64 = hir_find_param_sym(hs, decl_idx, p_name)
     let p_ti: i64 = to_i64(-1)
@@ -579,9 +575,11 @@ fn lower_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, params_
     param_count = param_count + 1
     pi = pi + 2
   let param_fl: HirFlush = hir_flush_pairs(tp_fl.hs, param_items, param_count)
-  // Lower body
   let body_fl: HirFlush = lower_body_stmts(param_fl.hs, body_lp)
-  return hs_add_node(body_fl.hs, HirNode.HirFunction(name_tidx, tp_fl.list_pos, param_fl.list_pos, ret_ti, body_fl.list_pos, to_i64(0)))
+  return hs_add_node(body_fl.hs, HirNode.HirFunction(name_tidx, tp_fl.list_pos, param_fl.list_pos, ret_ti, body_fl.list_pos, to_i64(0), class_owner_tidx))
+
+fn lower_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, params_lp: i64, ret_type_node: i64, body_lp: i64): HirR
+  return lower_fn_decl_with_owner(hs, decl_idx, name_tidx, tparams_lp, params_lp, ret_type_node, body_lp, to_i64(-1))
 
 fn lower_expr_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, params_lp: i64, ret_type_node: i64, body_expr: i64): HirR
   // Lower type params into HIR-owned idx
@@ -620,7 +618,7 @@ fn lower_expr_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, pa
   let body_stmts: Vector<i64> = Vector<i64>::new()
   body_stmts = body_stmts.push(ret_r.hir)
   let body_fl: HirFlush = hir_flush_list(ret_r.hs, body_stmts)
-  return hs_add_node(body_fl.hs, HirNode.HirFunction(name_tidx, tp_fl.list_pos, param_fl.list_pos, ret_ti, body_fl.list_pos, to_i64(0)))
+  return hs_add_node(body_fl.hs, HirNode.HirFunction(name_tidx, tp_fl.list_pos, param_fl.list_pos, ret_ti, body_fl.list_pos, to_i64(0), to_i64(-1)))
 
 fn lower_extern_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, params_lp: i64, ret_type_node: i64): HirR
   let tp_fl: HirFlush = lower_type_params(hs, tparams_lp)
@@ -651,7 +649,7 @@ fn lower_extern_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, 
   let param_fl: HirFlush = hir_flush_pairs(tp_fl.hs, param_items, param_count)
   // No body — use empty list
   let empty_body_fl: HirFlush = hir_flush_list(param_fl.hs, Vector<i64>::new())
-  return hs_add_node(empty_body_fl.hs, HirNode.HirFunction(name_tidx, tp_fl.list_pos, param_fl.list_pos, ret_ti, empty_body_fl.list_pos, to_i64(1)))
+  return hs_add_node(empty_body_fl.hs, HirNode.HirFunction(name_tidx, tp_fl.list_pos, param_fl.list_pos, ret_ti, empty_body_fl.list_pos, to_i64(1), to_i64(-1)))
 
 fn lower_class_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, fields_lp: i64, methods_lp: i64): HirR
   let tp_fl: HirFlush = lower_type_params(hs, tparams_lp)
@@ -840,7 +838,8 @@ fn lower_file(hs: HS, file_node_idx: i64): HirR
         let dr: HirR = lower_decl(cur, decls.get(i))
         cur = dr.hs
         hir_decls = hir_decls.push(dr.hir)
-        // Emit methods as flat top-level HirFunction nodes
+        // Emit methods as flat top-level HirFunction nodes with
+        // class_owner set to the class name token for mangled identity.
         let decl_node: Node = hs.nodes.get(decls.get(i))
         match decl_node:
           Node.ClassDeclD(cn_tidx, cn_tp, cn_fl, cn_ml):
@@ -852,7 +851,7 @@ fn lower_file(hs: HS, file_node_idx: i64): HirR
                 let meth_node: Node = cur.nodes.get(meth_idx)
                 match meth_node:
                   Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
-                    let mr: HirR = lower_fn_decl(cur, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp)
+                    let mr: HirR = lower_fn_decl_with_owner(cur, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp, cn_tidx)
                     cur = mr.hs
                     hir_decls = hir_decls.push(mr.hir)
                 mi = mi + 1
@@ -888,7 +887,7 @@ fn hir_node_kind(node: HirNode): string
   match node:
     HirNode.HirFile(a):
       return "HirFile"
-    HirNode.HirFunction(a, b, c, d, e, f):
+    HirNode.HirFunction(a, b, c, d, e, f, g):
       return "HirFunction"
     HirNode.HirStruct(a, b, c):
       return "HirStruct"
@@ -972,7 +971,10 @@ fn hir_dump_node(hr: HirResult, idx: i64, indent: i64): string
         line = line + hir_dump_node(hr, decls.get(di), indent + 1)
         di = di + 1
       return line
-    HirNode.HirFunction(name_tidx, tparams_lp, params_lp, ret_ti, body_lp, is_extern):
+    HirNode.HirFunction(name_tidx, tparams_lp, params_lp, ret_ti, body_lp, is_extern, class_owner):
+      if class_owner >= 0:
+        let co_tok: Token = hr.toks.get(class_owner)
+        line = line + " [" + substring(hr.src, co_tok.offset, co_tok.len) + ".]"
       if tparams_lp >= 0:
         let tps: Vector<i64> = read_list(hr.hir_idx, tparams_lp)
         line = line + "<"
@@ -1379,7 +1381,7 @@ fn main(): i32
     while i12 < hir_count_nodes(r12):
       let n12: HirNode = r12.hir_nodes.get(i12)
       match n12:
-        HirNode.HirFunction(nt, tp, plp, rti, blp, is_ext):
+        HirNode.HirFunction(nt, tp, plp, rti, blp, is_ext, co):
           if is_ext > 0:
             found_extern = true
       i12 = i12 + 1
@@ -1432,7 +1434,7 @@ fn main(): i32
     while i14g < hir_count_nodes(r14g):
       let n14g: HirNode = r14g.hir_nodes.get(i14g)
       match n14g:
-        HirNode.HirFunction(nm, tp_lp, pl, rt, bl, ie):
+        HirNode.HirFunction(nm, tp_lp, pl, rt, bl, ie, co2):
           found_fn14 = true
           if tp_lp >= 0:
             let tps: Vector<i64> = read_list(r14g.hir_idx, tp_lp)

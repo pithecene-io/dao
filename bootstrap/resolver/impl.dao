@@ -608,11 +608,8 @@ fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, fi
     r = resolve_type_node(r, f_type)
     i = i + 2
 
-  // Pop struct scope
-  r = rs_pop_scope(r)
-
-  // Resolve methods (declared in file scope by collect_top_level)
-  let class_name: string = tok_name(r, name_tidx)
+  // Resolve methods BEFORE popping struct scope, so class type params
+  // (e.g. T in class Box<T>) are visible in method signatures/bodies.
   if methods_lp >= 0:
     let methods: Vector<i64> = read_list(r.idx_data, methods_lp)
     let mi: i64 = 0
@@ -623,6 +620,9 @@ fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, fi
         Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
           r = resolve_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp)
       mi = mi + 1
+
+  // Pop struct scope after methods are resolved
+  r = rs_pop_scope(r)
   return r
 
 fn resolve_enum_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, variants_lp: i64): RS

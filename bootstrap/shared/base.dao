@@ -1735,7 +1735,10 @@ fn parse_params_list(ps: PS): PR
       if tk_name(peek_kind(cur)) == tk_name(TK.Comma):
         cur = ps_advance(cur)
         let name_tidx2: i64 = cur.pos
+        // self is only valid as the first parameter — reject here
         if tk_name(peek_kind(cur)) == tk_name(TK.KwSelf):
+          let sp: Span = tok_span(cur)
+          cur = ps_add_diag(cur, sp, "self must be the first parameter")
           cur = ps_advance(cur)
           param_pairs = param_pairs.push(name_tidx2)
           param_pairs = param_pairs.push(to_i64(-1))
