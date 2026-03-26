@@ -653,7 +653,7 @@ fn lower_extern_fn_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, 
   let empty_body_fl: HirFlush = hir_flush_list(param_fl.hs, Vector<i64>::new())
   return hs_add_node(empty_body_fl.hs, HirNode.HirFunction(name_tidx, tp_fl.list_pos, param_fl.list_pos, ret_ti, empty_body_fl.list_pos, to_i64(1)))
 
-fn lower_class_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, fields_lp: i64): HirR
+fn lower_class_decl(hs: HS, decl_idx: i64, name_tidx: i64, tparams_lp: i64, fields_lp: i64, methods_lp: i64): HirR
   let tp_fl: HirFlush = lower_type_params(hs, tparams_lp)
   let pairs: Vector<i64> = read_pairs(tp_fl.hs.idx_data, fields_lp)
   let field_items: Vector<i64> = Vector<i64>::new()
@@ -778,8 +778,8 @@ fn lower_decl(hs: HS, decl_idx: i64): HirR
       return lower_expr_fn_decl(hs, decl_idx, name_tidx, tparams_lp, params_lp, ret_type_node, body_expr)
     Node.ExternFnD(name_tidx, tparams_lp, params_lp, ret_type_node):
       return lower_extern_fn_decl(hs, decl_idx, name_tidx, tparams_lp, params_lp, ret_type_node)
-    Node.ClassDeclD(name_tidx, tparams_lp, fields_lp):
-      return lower_class_decl(hs, decl_idx, name_tidx, tparams_lp, fields_lp)
+    Node.ClassDeclD(name_tidx, tparams_lp, fields_lp, methods_lp):
+      return lower_class_decl(hs, decl_idx, name_tidx, tparams_lp, fields_lp, methods_lp)
     Node.EnumDeclD(name_tidx, tparams_lp, variants_lp):
       return lower_enum_decl(hs, decl_idx, name_tidx, tparams_lp, variants_lp)
     Node.TypeAliasD(name_tidx, target_type):
@@ -840,6 +840,22 @@ fn lower_file(hs: HS, file_node_idx: i64): HirR
         let dr: HirR = lower_decl(cur, decls.get(i))
         cur = dr.hs
         hir_decls = hir_decls.push(dr.hir)
+        // Emit methods as flat top-level HirFunction nodes
+        let decl_node: Node = hs.nodes.get(decls.get(i))
+        match decl_node:
+          Node.ClassDeclD(cn_tidx, cn_tp, cn_fl, cn_ml):
+            if cn_ml >= 0:
+              let methods: Vector<i64> = read_list(cur.idx_data, cn_ml)
+              let mi: i64 = 0
+              while mi < methods.length():
+                let meth_idx: i64 = methods.get(mi)
+                let meth_node: Node = cur.nodes.get(meth_idx)
+                match meth_node:
+                  Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
+                    let mr: HirR = lower_fn_decl(cur, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp)
+                    cur = mr.hs
+                    hir_decls = hir_decls.push(mr.hir)
+                mi = mi + 1
         i = i + 1
       let fl: HirFlush = hir_flush_list(cur, hir_decls)
       return hs_add_node(fl.hs, HirNode.HirFile(fl.list_pos))

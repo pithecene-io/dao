@@ -796,7 +796,7 @@ enum Node:
   FnDeclD(i64, i64, i64, i64, i64)
   ExternFnD(i64, i64, i64, i64)
   ExprFnD(i64, i64, i64, i64, i64)
-  ClassDeclD(i64, i64, i64)
+  ClassDeclD(i64, i64, i64, i64)
   EnumDeclD(i64, i64, i64)
   TypeAliasD(i64, i64)
   ErrorD(i64)
@@ -1091,6 +1091,11 @@ fn parse_primary(ps: PS): PR
   // Identifier or qualified name
   if tk_name(k) == tk_name(TK.Identifier):
     return parse_ident_or_qual(ps)
+
+  // self keyword as expression (inside method bodies)
+  if tk_name(k) == tk_name(TK.KwSelf):
+    let self_tidx: i64 = ps.pos
+    return ps_add_node(ps_advance(ps), Node.IdentE(self_tidx))
 
   // Error
   let sp: Span = tok_span(ps)
@@ -1706,34 +1711,46 @@ fn parse_params_list(ps: PS): PR
   let cur: PS = ps2
 
   if tk_name(peek_kind(cur)) != tk_name(TK.RParen):
-    // Parse first param
+    // Parse first param — accept KwSelf as a parameter name (self param)
     let name_tidx: i64 = cur.pos
-    cur = expect(cur, TK.Identifier)
-    cur = expect(cur, TK.Colon)
-    let ty: PR = parse_type(cur)
-    cur = ty.ps
-    param_pairs = param_pairs.push(name_tidx)
-    if ty.node >= 0:
-      param_pairs = param_pairs.push(ty.node)
-    else:
+    if tk_name(peek_kind(cur)) == tk_name(TK.KwSelf):
+      cur = ps_advance(cur)
+      param_pairs = param_pairs.push(name_tidx)
       param_pairs = param_pairs.push(to_i64(-1))
-    count = count + 1
+      count = count + 1
+    else:
+      cur = expect(cur, TK.Identifier)
+      cur = expect(cur, TK.Colon)
+      let ty: PR = parse_type(cur)
+      cur = ty.ps
+      param_pairs = param_pairs.push(name_tidx)
+      if ty.node >= 0:
+        param_pairs = param_pairs.push(ty.node)
+      else:
+        param_pairs = param_pairs.push(to_i64(-1))
+      count = count + 1
 
     let done: bool = false
     while done == false:
       if tk_name(peek_kind(cur)) == tk_name(TK.Comma):
         cur = ps_advance(cur)
         let name_tidx2: i64 = cur.pos
-        cur = expect(cur, TK.Identifier)
-        cur = expect(cur, TK.Colon)
-        let ty2: PR = parse_type(cur)
-        cur = ty2.ps
-        param_pairs = param_pairs.push(name_tidx2)
-        if ty2.node >= 0:
-          param_pairs = param_pairs.push(ty2.node)
-        else:
+        if tk_name(peek_kind(cur)) == tk_name(TK.KwSelf):
+          cur = ps_advance(cur)
+          param_pairs = param_pairs.push(name_tidx2)
           param_pairs = param_pairs.push(to_i64(-1))
-        count = count + 1
+          count = count + 1
+        else:
+          cur = expect(cur, TK.Identifier)
+          cur = expect(cur, TK.Colon)
+          let ty2: PR = parse_type(cur)
+          cur = ty2.ps
+          param_pairs = param_pairs.push(name_tidx2)
+          if ty2.node >= 0:
+            param_pairs = param_pairs.push(ty2.node)
+          else:
+            param_pairs = param_pairs.push(to_i64(-1))
+          count = count + 1
       else:
         done = true
 
@@ -1861,18 +1878,21 @@ fn parse_class_decl(ps: PS): PR
     if tk_name(k) == tk_name(TK.Dedent) or at_end(cur):
       done = true
     else:
-      let fname_tidx: i64 = cur.pos
-      cur = expect(cur, TK.Identifier)
-      cur = expect(cur, TK.Colon)
-      let fty: PR = parse_type(cur)
-      cur = fty.ps
-      field_pairs = field_pairs.push(fname_tidx)
-      if fty.node >= 0:
-        field_pairs = field_pairs.push(fty.node)
+      if tk_name(k) == tk_name(TK.KwFn):
+        done = true
       else:
-        field_pairs = field_pairs.push(to_i64(-1))
-      field_count = field_count + 1
-      cur = match_tok(cur, TK.Newline)
+        let fname_tidx: i64 = cur.pos
+        cur = expect(cur, TK.Identifier)
+        cur = expect(cur, TK.Colon)
+        let fty: PR = parse_type(cur)
+        cur = fty.ps
+        field_pairs = field_pairs.push(fname_tidx)
+        if fty.node >= 0:
+          field_pairs = field_pairs.push(fty.node)
+        else:
+          field_pairs = field_pairs.push(to_i64(-1))
+        field_count = field_count + 1
+        cur = match_tok(cur, TK.Newline)
 
   // Diagnose empty class body (contract: must have at least one field).
   if field_count == 0:
@@ -1880,8 +1900,30 @@ fn parse_class_decl(ps: PS): PR
     cur = ps_add_diag(cur, sp, "class body must contain at least one field")
 
   let fields_fl: FlushResult = flush_pairs(cur, field_pairs, field_count)
-  cur = expect(fields_fl.ps, TK.Dedent)
-  return ps_add_node(cur, Node.ClassDeclD(name_tidx, tparams_lp, fields_fl.list_pos))
+  cur = fields_fl.ps
+
+  // Parse methods: collect method node indices when we see KwFn
+  let method_items: Vector<i64> = Vector<i64>::new()
+  let mdone: bool = false
+  while mdone == false:
+    cur = skip_newlines(cur)
+    let mk: TK = peek_kind(cur)
+    if tk_name(mk) == tk_name(TK.KwFn):
+      let meth: PR = parse_fn_decl(cur)
+      if meth.node >= 0:
+        method_items = method_items.push(meth.node)
+      cur = meth.ps
+    else:
+      mdone = true
+
+  let methods_lp: i64 = to_i64(-1)
+  if method_items.length() > 0:
+    let mfl: FlushResult = flush_list(cur, method_items)
+    cur = mfl.ps
+    methods_lp = mfl.list_pos
+
+  cur = expect(cur, TK.Dedent)
+  return ps_add_node(cur, Node.ClassDeclD(name_tidx, tparams_lp, fields_fl.list_pos, methods_lp))
 
 fn parse_enum_decl(ps: PS): PR
   let ps2: PS = ps_advance(ps)
@@ -2074,7 +2116,7 @@ fn node_kind_name(n: Node): string
       return "ExternFnD"
     Node.ExprFnD(a, b, c, d, e):
       return "ExprFnD"
-    Node.ClassDeclD(a, b, c):
+    Node.ClassDeclD(a, b, c, d):
       return "ClassDeclD"
     Node.EnumDeclD(a, b, c):
       return "EnumDeclD"

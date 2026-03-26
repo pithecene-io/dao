@@ -479,7 +479,7 @@ fn tc_register_struct_shells(ts: TS, decls: Vector<i64>): TS
     let decl_idx: i64 = decls.get(i)
     let node: Node = r.tc.nodes.get(decl_idx)
     match node:
-      Node.ClassDeclD(name_tidx, tparams_lp, fields_lp):
+      Node.ClassDeclD(name_tidx, tparams_lp, fields_lp, methods_lp):
         let name: string = ts_tok_name(r, name_tidx)
         let tr: TypeR = ts_add_type(r, DaoType(TypeKind.TStruct, to_i64(-1), name, decl_idx, to_i64(-1), to_i64(0), to_i64(-1), to_i64(-1)))
         r = tr.ts
@@ -542,7 +542,7 @@ fn tc_fill_struct_fields(ts: TS, decls: Vector<i64>): TS
     let decl_idx: i64 = decls.get(i)
     let node: Node = r.tc.nodes.get(decl_idx)
     match node:
-      Node.ClassDeclD(name_tidx, tparams_lp, fields_lp):
+      Node.ClassDeclD(name_tidx, tparams_lp, fields_lp, methods_lp):
         let pairs: Vector<i64> = read_pairs(r.tc.idx_data, fields_lp)
         let field_info_start: i64 = r.type_info.length()
         let field_count: i64 = 0
@@ -647,6 +647,51 @@ fn tc_register_functions(ts: TS, decls: Vector<i64>): TS
     j = j + 1
   return TS(r.tc, r.types, r.type_info, st, r.diags, r.return_type, r.loop_depth, r.expr_types)
 
+fn tc_register_methods(ts: TS, decls: Vector<i64>): TS
+  let r: TS = ts
+  let i: i64 = 0
+  while i < decls.length():
+    let decl_idx: i64 = decls.get(i)
+    let node: Node = r.tc.nodes.get(decl_idx)
+    match node:
+      Node.ClassDeclD(name_tidx, tparams_lp, fields_lp, methods_lp):
+        if methods_lp >= 0:
+          let class_name: string = ts_tok_name(r, name_tidx)
+          let methods: Vector<i64> = read_list(r.tc.idx_data, methods_lp)
+          let mi: i64 = 0
+          while mi < methods.length():
+            let meth_idx: i64 = methods.get(mi)
+            let meth_node: Node = r.tc.nodes.get(meth_idx)
+            match meth_node:
+              Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
+                // Register method function type (including self param)
+                let tr: TypeR = tc_register_fn_sig_core(r, meth_idx, m_name_tidx, m_params_lp, m_ret_type)
+                r = tr.ts
+                // Find the mangled symbol and set its type
+                let mname: string = ts_tok_name(r, m_name_tidx)
+                let mangled: string = class_name + "." + mname
+                let msym: i64 = to_i64(-1)
+                let si: i64 = 0
+                while si < r.tc.symbols.length():
+                  let sym: Symbol = r.tc.symbols.get(si)
+                  if sym.name == mangled:
+                    if symbol_kind_name(sym.kind) == "Function":
+                      msym = si
+                  si = si + 1
+                if msym >= 0:
+                  r = ts_set_sym_type(r, msym, tr.type_idx)
+                // Set self param type to the enclosing struct type
+                let struct_sym: i64 = find_sym_by_decl(r, decl_idx, "Type")
+                if struct_sym >= 0:
+                  let struct_ti: i64 = vec_i64_get(r.sym_types, struct_sym)
+                  if struct_ti >= 0:
+                    let self_sym: i64 = find_param_sym(r, meth_idx, "self")
+                    if self_sym >= 0:
+                      r = ts_set_sym_type(r, self_sym, struct_ti)
+            mi = mi + 1
+    i = i + 1
+  return r
+
 fn tc_pass1(ts: TS, file_node_idx: i64): TS
   let file_node: Node = ts.tc.nodes.get(file_node_idx)
   match file_node:
@@ -658,6 +703,7 @@ fn tc_pass1(ts: TS, file_node_idx: i64): TS
       r = tc_register_enums(r, decls)
       r = tc_fill_struct_fields(r, decls)
       r = tc_register_functions(r, decls)
+      r = tc_register_methods(r, decls)
       return r
   return ts
 
@@ -899,14 +945,26 @@ fn check_call_expr(ts: TS, node_idx: i64, callee: i64, args_lp: i64, arg_count: 
   let callee_type: DaoType = r.types.get(callee_ti)
   match callee_type.kind:
     TypeKind.TFunction:
-      if args.length() != callee_type.info_count:
+      // Detect method call: callee is a FieldE and first param is self
+      let is_method: bool = false
+      let callee_node2: Node = r.tc.nodes.get(callee)
+      match callee_node2:
+        Node.FieldE(mobj, mfield):
+          if callee_type.info_count > 0:
+            is_method = true
+      let param_offset: i64 = 0
+      let expected_args: i64 = callee_type.info_count
+      if is_method:
+        param_offset = 1
+        expected_args = callee_type.info_count - 1
+      if args.length() != expected_args:
         let sp: Span = ts_node_span(r, callee)
-        r = ts_add_diag(r, sp, "arity mismatch: expected " + i64_to_string(callee_type.info_count) + " arguments, got " + i64_to_string(args.length()))
+        r = ts_add_diag(r, sp, "arity mismatch: expected " + i64_to_string(expected_args) + " arguments, got " + i64_to_string(args.length()))
         return r
       let ci: i64 = 0
       while ci < args.length():
         let arg_ti: i64 = get_expr_type(r, args.get(ci))
-        let param_ti: i64 = r.type_info.get(callee_type.info_lp + ci)
+        let param_ti: i64 = r.type_info.get(callee_type.info_lp + param_offset + ci)
         if arg_ti >= 0:
           if param_ti >= 0:
             if types_equal(r, arg_ti, param_ti) == false:
@@ -943,6 +1001,7 @@ fn check_field_expr(ts: TS, node_idx: i64, obj: i64, field_tidx: i64): TS
   match obj_type.kind:
     TypeKind.TStruct:
       let field_name: string = ts_tok_name(r, field_tidx)
+      // Try field lookup first
       let fi: i64 = 0
       while fi < obj_type.info_count:
         let f_name_tidx: i64 = r.type_info.get(obj_type.info_lp + fi * 2)
@@ -951,6 +1010,20 @@ fn check_field_expr(ts: TS, node_idx: i64, obj: i64, field_tidx: i64): TS
         if f_name == field_name:
           return ts_set_expr_type(r, node_idx, f_type_idx)
         fi = fi + 1
+      // Try method lookup: look for mangled symbol "StructName.fieldName"
+      let mangled_name: string = obj_type.name + "." + field_name
+      let msym: i64 = to_i64(-1)
+      let si: i64 = 0
+      while si < r.tc.symbols.length():
+        let sym: Symbol = r.tc.symbols.get(si)
+        if sym.name == mangled_name:
+          if symbol_kind_name(sym.kind) == "Function":
+            msym = si
+        si = si + 1
+      if msym >= 0:
+        let meth_ti: i64 = vec_i64_get(r.sym_types, msym)
+        if meth_ti >= 0:
+          return ts_set_expr_type(r, node_idx, meth_ti)
       let sp: Span = ts_tok_span(r, field_tidx)
       r = ts_add_diag(r, sp, "no field '" + field_name + "' on type " + type_name(r, obj_ti))
       return r
@@ -1228,6 +1301,57 @@ fn tc_check_expr_fn_body(ts: TS, decl_idx: i64, name_tidx: i64, params_lp: i64, 
   r = ts_set_return_type(r, old_return_type)
   return r
 
+fn tc_check_method_body(ts: TS, class_decl_idx: i64, meth_idx: i64, m_name_tidx: i64, m_params_lp: i64, m_ret_type: i64, m_body_lp: i64): TS
+  let r: TS = ts
+  let fn_ti: i64 = to_i64(-1)
+  // Find the mangled symbol for this method
+  let class_name: string = ""
+  let class_node: Node = r.tc.nodes.get(class_decl_idx)
+  match class_node:
+    Node.ClassDeclD(cn_tidx, cn_tp, cn_fl, cn_ml):
+      class_name = ts_tok_name(r, cn_tidx)
+  let mname: string = ts_tok_name(r, m_name_tidx)
+  let mangled: string = class_name + "." + mname
+  let msym: i64 = to_i64(-1)
+  let si: i64 = 0
+  while si < r.tc.symbols.length():
+    let sym: Symbol = r.tc.symbols.get(si)
+    if sym.name == mangled:
+      if symbol_kind_name(sym.kind) == "Function":
+        msym = si
+    si = si + 1
+  if msym >= 0:
+    fn_ti = vec_i64_get(r.sym_types, msym)
+  let old_return_type: i64 = r.return_type
+  if fn_ti >= 0:
+    let fn_type: DaoType = r.types.get(fn_ti)
+    r = ts_set_return_type(r, fn_type.ret_type)
+  // Declare param types — self gets the enclosing struct type
+  let pairs: Vector<i64> = read_pairs(r.tc.idx_data, m_params_lp)
+  let pi: i64 = 0
+  while pi < pairs.length():
+    let p_tidx: i64 = pairs.get(pi)
+    let p_type_node: i64 = pairs.get(pi + 1)
+    let p_name: string = ts_tok_name(r, p_tidx)
+    let p_sym: i64 = find_param_sym(r, meth_idx, p_name)
+    if p_sym >= 0:
+      if p_name == "self":
+        // Self type is the enclosing struct
+        let struct_sym: i64 = find_sym_by_decl(r, class_decl_idx, "Type")
+        if struct_sym >= 0:
+          let struct_ti: i64 = vec_i64_get(r.sym_types, struct_sym)
+          if struct_ti >= 0:
+            r = ts_set_sym_type(r, p_sym, struct_ti)
+      else:
+        let pt_r: TypeR = resolve_ast_type(r, p_type_node)
+        r = pt_r.ts
+        if pt_r.type_idx >= 0:
+          r = ts_set_sym_type(r, p_sym, pt_r.type_idx)
+    pi = pi + 2
+  r = check_body_stmts(r, m_body_lp)
+  r = ts_set_return_type(r, old_return_type)
+  return r
+
 fn tc_pass2(ts: TS, file_node_idx: i64): TS
   let file_node: Node = ts.tc.nodes.get(file_node_idx)
   match file_node:
@@ -1243,6 +1367,17 @@ fn tc_pass2(ts: TS, file_node_idx: i64): TS
             r = tc_check_fn_body(r, decl_idx, name_tidx, params_lp, ret_type_node, body_lp)
           Node.ExprFnD(name_tidx, tparams_lp, params_lp, ret_type_node, body_expr):
             r = tc_check_expr_fn_body(r, decl_idx, name_tidx, params_lp, ret_type_node, body_expr)
+          Node.ClassDeclD(name_tidx, tparams_lp, fields_lp, methods_lp):
+            if methods_lp >= 0:
+              let meths: Vector<i64> = read_list(r.tc.idx_data, methods_lp)
+              let mi: i64 = 0
+              while mi < meths.length():
+                let meth_idx: i64 = meths.get(mi)
+                let meth_node: Node = r.tc.nodes.get(meth_idx)
+                match meth_node:
+                  Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
+                    r = tc_check_method_body(r, decl_idx, meth_idx, m_name_tidx, m_params_lp, m_ret_type, m_body_lp)
+                mi = mi + 1
         i = i + 1
       return r
   return ts
