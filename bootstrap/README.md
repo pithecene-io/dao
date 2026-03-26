@@ -176,6 +176,33 @@ correctness for Tier A Dao syntax.
 bash bootstrap/assemble.sh && daoc build bootstrap/typecheck/typecheck.gen.dao && ./bootstrap/typecheck/typecheck.gen
 ```
 
+### `hir/`
+
+HIR lowering pass producing compiler-owned typed IR from the
+type-checked AST.
+
+**Status**: implemented (Task 24, Phase 7).
+
+**What it does**:
+
+- Lowers typed AST → flat `HirNode` arena with resolved types
+- Expression-bodied fns desugared to block + return
+- Match desugared to if/else chain
+- Every HIR expression carries its resolved type index
+- Pipe preserved as first-class node (MIR lowers it)
+- HirMatch reserved for Tier B pattern compilation
+
+**Tier A coverage**: literals, identifiers, binary/unary ops, calls,
+field access, pipe, qualified names, let, assign, if/else, while,
+for, return, break, match (desugared), expression statements,
+fn/extern fn/class/enum/type alias declarations
+
+**How to run tests**:
+
+```sh
+bash bootstrap/assemble.sh && daoc build bootstrap/hir/hir.gen.dao && ./bootstrap/hir/hir.gen
+```
+
 ## Relationship to probes
 
 The `examples/bootstrap_probe/` directory contains earlier experimental

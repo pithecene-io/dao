@@ -1238,6 +1238,8 @@ fn typecheck(src: string): TypeCheckResult
 
   return TypeCheckResult(ts.types, ts.expr_types, ts.sym_types, ts.diags, pr.ps.nodes.length())
 
+// BEGIN_TYPECHECK_TESTS
+
 // =========================================================================
 // Section 47: Test helpers
 // =========================================================================

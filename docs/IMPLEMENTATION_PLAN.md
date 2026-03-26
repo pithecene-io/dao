@@ -303,12 +303,14 @@ arena-indexed AST, 36 golden tests, and self-parse of real Dao source.
 Task 22 (bootstrap resolver) is complete — two-pass name resolution
 with scope chains, symbol tables, uses map, 17 tests.
 Task 23 (bootstrap type checker) is complete — expression/statement
-type checking with 16 tests.  Shared substrate consolidated in
-`bootstrap/shared/base.dao`; assembly via `bootstrap/assemble.sh`.
+type checking with 19 tests.  Task 24 (bootstrap HIR) is complete —
+typed AST lowered to compiler-owned HIR with 14 tests.  Shared
+substrate consolidated in `bootstrap/shared/base.dao`; assembly
+via `bootstrap/assemble.sh`.
 
-The Tier A bootstrap frontend pipeline (lex → parse → resolve →
-typecheck) is complete.  Next focus is Tier B expansion, bootstrap
-HIR/MIR lowering, and Task 17 (low-level memory substrate).
+The Tier A bootstrap pipeline (lex → parse → resolve → typecheck →
+HIR) is complete.  Next focus is Tier B expansion in vertical slices
+through all layers, then multi-file compilation.
 
 ### Task 14 — Numeric Type Expansion
 
