@@ -436,57 +436,67 @@ fn lower_return_stmt(hs: HS, val_node: i64): HirR
   return hs_add_node(vr.hs, HirNode.HirReturn(vr.hir))
 
 fn lower_match_stmt(hs: HS, scrut_node: i64, arms_lp: i64): HirR
-  // Desugar match into if/else chain:
+  // Desugar match into chained if/else-if:
   // let _scrut = <scrutinee>
   // if _scrut == pat0: body0
   // else if _scrut == pat1: body1
-  // ...
+  // else if _scrut == pat2: body2
   let scrut_r: HirR = lower_expr(hs, scrut_node)
   let cur: HS = scrut_r.hs
   let scrut_ti: i64 = hir_get_expr_type(cur, scrut_node)
-  // Create a let for the scrutinee: HirLet(_scrut, type, init)
-  // Use the scrutinee's token as name placeholder (it won't be referenced by name)
+  // Create a let for the scrutinee
   let scrut_let_r: HirR = hs_add_node(cur, HirNode.HirLet(to_i64(-1), scrut_ti, scrut_r.hir))
   cur = scrut_let_r.hs
 
   let arms: Vector<i64> = read_pairs(cur.idx_data, arms_lp)
-  // Build if/else chain from bottom up — collect arm HIR indices
-  let arm_hirs: Vector<i64> = Vector<i64>::new()
+  // First pass: lower all arm conditions and bodies, collecting info.
+  let arm_conds: Vector<i64> = Vector<i64>::new()
+  let arm_bodies: Vector<i64> = Vector<i64>::new()
   let i: i64 = 0
   while i < arms.length():
     let pat_node: i64 = arms.get(i)
     let body_lp2: i64 = arms.get(i + 1)
-    // Lower pattern as expression
+    // Lower pattern
     let pat_r: HirR = lower_expr(cur, pat_node)
     cur = pat_r.hs
     // Lower body
     let body_fl: HirFlush = lower_body_stmts(cur, body_lp2)
     cur = body_fl.hs
-    // Create condition: HirBinary(==, scrut_ident, pattern, bool)
-    // For simplicity, use the scrutinee let index as a reference
+    // Create condition: scrut == pattern
     let scrut_ref_r: HirR = hs_add_node(cur, HirNode.HirIdent(to_i64(-1), scrut_ti, to_i64(-1)))
     cur = scrut_ref_r.hs
     let cond_r: HirR = hs_add_node(cur, HirNode.HirBinary(to_i64(-1), scrut_ref_r.hir, pat_r.hir, to_i64(10)))
     cur = cond_r.hs
-    // Create if stmt for this arm (no else for now, will chain later)
-    let if_r: HirR = hs_add_node(cur, HirNode.HirIf(cond_r.hir, body_fl.list_pos, to_i64(-1)))
-    cur = if_r.hs
-    arm_hirs = arm_hirs.push(if_r.hir)
+    arm_conds = arm_conds.push(cond_r.hir)
+    arm_bodies = arm_bodies.push(body_fl.list_pos)
     i = i + 2
-  // Return the scrut_let wrapped with the arm chain in a block
-  // Collect: scrut_let + all arm ifs
+
+  // Build if/else chain from last arm to first.
+  // Last arm: if(cond_N, body_N, -1)
+  // N-1: if(cond_N-1, body_N-1, [last_if])
+  // ...
+  let chain_hir: i64 = to_i64(-1)
+  let ai: i64 = arm_conds.length() - 1
+  while ai >= 0:
+    let else_lp: i64 = to_i64(-1)
+    if chain_hir >= 0:
+      // Wrap previous if in a single-element list for the else branch
+      let else_items: Vector<i64> = Vector<i64>::new()
+      else_items = else_items.push(chain_hir)
+      let else_fl: HirFlush = hir_flush_list(cur, else_items)
+      cur = else_fl.hs
+      else_lp = else_fl.list_pos
+    let if_r: HirR = hs_add_node(cur, HirNode.HirIf(arm_conds.get(ai), arm_bodies.get(ai), else_lp))
+    cur = if_r.hs
+    chain_hir = if_r.hir
+    ai = ai - 1
+
+  // Wrap scrut_let + chained if into a block
   let block_items: Vector<i64> = Vector<i64>::new()
   block_items = block_items.push(scrut_let_r.hir)
-  let ai: i64 = 0
-  while ai < arm_hirs.length():
-    block_items = block_items.push(arm_hirs.get(ai))
-    ai = ai + 1
-  // Flush as a list and wrap in a synthetic if(true) block
+  if chain_hir >= 0:
+    block_items = block_items.push(chain_hir)
   let block_fl: HirFlush = hir_flush_list(cur, block_items)
-  // Actually, since match desugars into multiple statements, we just return
-  // the first arm if available; for a clean representation, wrap in HirIf(true, block, -1)
-  // But the cleanest approach: return the first if and chain else pointers.
-  // For Tier A simplicity, just return the let followed by arms as a block via HirIf(true_lit, block, -1)
   let true_r: HirR = hs_add_node(block_fl.hs, HirNode.HirBoolLit(to_i64(-1), to_i64(10)))
   return hs_add_node(true_r.hs, HirNode.HirIf(true_r.hir, block_fl.list_pos, to_i64(-1)))
 
@@ -631,15 +641,40 @@ fn lower_enum_decl(hs: HS, decl_idx: i64, name_tidx: i64, variants_lp: i64): Hir
   let pairs: Vector<i64> = read_pairs(hs.idx_data, variants_lp)
   let var_items: Vector<i64> = Vector<i64>::new()
   let var_count: i64 = 0
+  let cur: HS = hs
   let vi: i64 = 0
   while vi < pairs.length():
     let v_tidx: i64 = pairs.get(vi)
-    let payload_lp: i64 = pairs.get(vi + 1)
+    let ast_payload_lp: i64 = pairs.get(vi + 1)
+    // Resolve payload types from AST into HIR-owned type indices.
+    // AST payload_lp points into AST idx_data: [type_count, type_node_0, type_node_1, ...]
+    let payload_types: Vector<i64> = read_list(cur.idx_data, ast_payload_lp)
+    let hir_payload: Vector<i64> = Vector<i64>::new()
+    let pi: i64 = 0
+    while pi < payload_types.length():
+      let type_node_idx: i64 = payload_types.get(pi)
+      // Look up the resolved type for this AST type node
+      let pti: i64 = hir_get_expr_type(cur, type_node_idx)
+      if pti < 0:
+        // Type node might be NamedT — try to resolve by name
+        if type_node_idx >= 0:
+          let tn: Node = cur.nodes.get(type_node_idx)
+          match tn:
+            Node.NamedT(ttidx):
+              let tname: string = hs_tok_name(cur, ttidx)
+              let tsym: i64 = hir_lookup_use(cur, ttidx)
+              if tsym >= 0:
+                pti = hir_sym_type(cur, tsym)
+      hir_payload = hir_payload.push(pti)
+      pi = pi + 1
+    // Flush payload types into HIR idx
+    let payload_fl: HirFlush = hir_flush_list(cur, hir_payload)
+    cur = payload_fl.hs
     var_items = var_items.push(v_tidx)
-    var_items = var_items.push(payload_lp)
+    var_items = var_items.push(payload_fl.list_pos)
     var_count = var_count + 1
     vi = vi + 2
-  let fl: HirFlush = hir_flush_pairs(hs, var_items, var_count)
+  let fl: HirFlush = hir_flush_pairs(cur, var_items, var_count)
   return hs_add_node(fl.hs, HirNode.HirEnum(name_tidx, fl.list_pos))
 
 fn lower_type_alias_decl(hs: HS, decl_idx: i64, name_tidx: i64, target_type_node: i64): HirR
@@ -737,7 +772,7 @@ fn lower_to_hir(src: string): HirResult
   let um: HashMap<i64> = build_uses_map(rr.uses)
 
   // Construct HS
-  let hs: HS = HS(pr.ps.nodes, pr.ps.idx, pr.ps.toks, src, rr.symbols, tcr.types, Vector<i64>::new(), tcr.expr_types, tcr.sym_types, um, Vector<HirNode>::new(), Vector<i64>::new(), tcr.diags)
+  let hs: HS = HS(pr.ps.nodes, pr.ps.idx, pr.ps.toks, src, rr.symbols, tcr.types, tcr.type_info, tcr.expr_types, tcr.sym_types, um, Vector<HirNode>::new(), Vector<i64>::new(), tcr.diags)
 
   // Lower
   let result: HirR = lower_file(hs, file_node_idx)
