@@ -931,12 +931,27 @@ fn check_field_expr(ts: TS, node_idx: i64, obj: i64, field_tidx: i64): TS
 fn check_pipe_expr(ts: TS, node_idx: i64, left: i64, right: i64): TS
   let r: TS = check_expr(ts, left)
   r = check_expr(r, right)
+  let lhs_ti: i64 = get_expr_type(r, left)
   let rhs_ti: i64 = get_expr_type(r, right)
   if rhs_ti >= 0:
     let rhs_type: DaoType = r.types.get(rhs_ti)
     match rhs_type.kind:
       TypeKind.TFunction:
+        // RHS must accept at least 1 param, and LHS type must match first param
+        if rhs_type.info_count < 1:
+          let sp: Span = ts_node_span(r, right)
+          r = ts_add_diag(r, sp, "pipe target function takes no arguments")
+          return r
+        // Check LHS type against first param type
+        if lhs_ti >= 0:
+          let first_param_ti: i64 = r.type_info.get(rhs_type.info_lp)
+          if types_equal(r, lhs_ti, first_param_ti) == false:
+            let sp2: Span = ts_node_span(r, left)
+            r = ts_add_diag(r, sp2, "pipe argument type mismatch: expected " + type_name(r, first_param_ti) + ", got " + type_name(r, lhs_ti))
         return ts_set_expr_type(r, node_idx, rhs_type.ret_type)
+    // RHS not a function
+    let sp3: Span = ts_node_span(r, right)
+    r = ts_add_diag(r, sp3, "pipe target is not a function")
   return r
 
 // =========================================================================
@@ -1001,16 +1016,39 @@ fn check_let_stmt(ts: TS, node_idx: i64, name_tidx: i64, type_node: i64, init_no
           r = ts_set_sym_type(r, local_sym, init_ti2)
   return r
 
+// Check whether a node is a valid lvalue (assignable target).
+fn is_lvalue(ts: TS, node_idx: i64): bool
+  if node_idx < 0:
+    return false
+  let node: Node = ts.tc.nodes.get(node_idx)
+  match node:
+    Node.IdentE(tidx):
+      return true
+    Node.FieldE(obj, ftidx):
+      return true
+    Node.IndexE(obj, idx_expr):
+      return true
+    Node.UnaryE(op_tidx, operand):
+      // Deref (*ptr = val) is an lvalue — Tier B, accept for now
+      let tok: Token = ts.tc.toks.get(op_tidx)
+      if tok.kind == TK.Star:
+        return true
+  return false
+
 fn check_assign_stmt(ts: TS, node_idx: i64, target: i64, value: i64): TS
   let r: TS = check_expr(ts, target)
   r = check_expr(r, value)
+  // Validate lvalue
+  if is_lvalue(r, target) == false:
+    let sp: Span = ts_node_span(r, target)
+    r = ts_add_diag(r, sp, "invalid assignment target: expected identifier, field, or index expression")
   let target_ti: i64 = get_expr_type(r, target)
   let value_ti: i64 = get_expr_type(r, value)
   if target_ti >= 0:
     if value_ti >= 0:
       if types_equal(r, target_ti, value_ti) == false:
-        let sp: Span = ts_node_span(r, target)
-        r = ts_add_diag(r, sp, "type mismatch in assignment: expected " + type_name(r, target_ti) + ", got " + type_name(r, value_ti))
+        let sp2: Span = ts_node_span(r, target)
+        r = ts_add_diag(r, sp2, "type mismatch in assignment: expected " + type_name(r, target_ti) + ", got " + type_name(r, value_ti))
   return r
 
 fn check_if_stmt(ts: TS, cond: i64, then_lp: i64, else_lp: i64): TS
@@ -1068,12 +1106,20 @@ fn check_break_stmt(ts: TS, tidx: i64): TS
 
 fn check_match_stmt(ts: TS, scrut_node: i64, arms_lp: i64): TS
   let r: TS = check_expr(ts, scrut_node)
+  let scrut_ti: i64 = get_expr_type(r, scrut_node)
   let arms: Vector<i64> = read_pairs(r.tc.idx_data, arms_lp)
   let i: i64 = 0
   while i < arms.length():
     let pat_node: i64 = arms.get(i)
     let body_lp2: i64 = arms.get(i + 1)
     r = check_expr(r, pat_node)
+    // Compare pattern type against scrutinee type
+    if scrut_ti >= 0:
+      let pat_ti: i64 = get_expr_type(r, pat_node)
+      if pat_ti >= 0:
+        if types_equal(r, scrut_ti, pat_ti) == false:
+          let sp: Span = ts_node_span(r, pat_node)
+          r = ts_add_diag(r, sp, "match arm pattern type " + type_name(r, pat_ti) + " does not match scrutinee type " + type_name(r, scrut_ti))
     r = check_body_stmts(r, body_lp2)
     i = i + 2
   return r
@@ -1211,7 +1257,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 16
+  let total: i32 = 19
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -1348,7 +1394,34 @@ fn main(): i32
   else:
     print("FAIL correct_expr_fn: expected 0 diagnostics, got " + i64_to_string(tc_count_diags(r15)))
 
-  // Test 16: self_typecheck_smoke
+  // Test 16: err_assign_to_literal — assignment to non-lvalue
+  let src16a: string = "fn test(): i32\n  42 = 1\n  return 0\n"
+  let r16a: TypeCheckResult = typecheck(src16a)
+  if tc_count_diags(r16a) >= 1:
+    print("PASS err_assign_to_literal")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL err_assign_to_literal: expected diagnostic for non-lvalue target")
+
+  // Test 17: err_pipe_type_mismatch — pipe LHS type incompatible with RHS first param
+  let src17: string = "fn add_one(x: i32): i32\n  return x + 1\n\nfn test(): i32\n  let x: string = \"hello\" |> add_one\n  return 0\n"
+  let r17: TypeCheckResult = typecheck(src17)
+  if tc_count_diags(r17) >= 1:
+    print("PASS err_pipe_type_mismatch")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL err_pipe_type_mismatch: expected diagnostic for pipe argument type")
+
+  // Test 18: err_match_pattern_type — match arm pattern type != scrutinee type
+  let src18: string = "fn test(): i32\n  let x: i32 = 1\n  match x:\n    \"hello\":\n      return 0\n  return 0\n"
+  let r18: TypeCheckResult = typecheck(src18)
+  if tc_count_diags(r18) >= 1:
+    print("PASS err_match_pattern_type")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL err_match_pattern_type: expected diagnostic for pattern type mismatch")
+
+  // Test 19: self_typecheck_smoke
   let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
   if file_exists(self_path):
     let self_src: string = read_file(self_path)
