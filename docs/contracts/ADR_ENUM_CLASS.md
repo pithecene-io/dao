@@ -71,13 +71,13 @@ enum class Expr:
 Named fields at construction site:
 
 ```dao
-let e = Expr.Call(callee = f, args = my_args)
+let e = Expr::Call(callee = f, args = my_args)
 ```
 
 Fieldless variants:
 
 ```dao
-let o = Option.None
+let o = Option::None
 ```
 
 ### Match destructuring
@@ -86,11 +86,11 @@ Named destructuring:
 
 ```dao
 match expr:
-  Expr.IntLit(value):
+  Expr::IntLit(value):
     print(value)
-  Expr.Call(callee, args):
+  Expr::Call(callee, args):
     dispatch(callee, args)
-  Expr.Function(name, ret, ..):
+  Expr::Function(name, ret, ..):
     // .. ignores remaining fields
 ```
 
@@ -104,7 +104,7 @@ Rules:
 
 ```dao
 match expr:
-  Expr.Call as c:
+  Expr::Call as c:
     let callee = c.callee
     let args = c.args
 ```
@@ -211,18 +211,15 @@ semantics, not representation.
 `enum class` variants cannot declare methods.  Methods belong on the
 outer type:
 
-```dao
-enum class Expr:
-  IntLit(value: i64)
-  Call(callee: ExprId, args: List[ExprId])
-
-// Methods on the whole Expr type go in extend blocks:
-extend Expr:
-  fn is_literal(self): bool -> ...
-```
+Methods on the outer `enum class` type are attached through the same
+mechanism as class methods — either inside the declaration body after
+all variants, or through `extend` blocks once plain-extend syntax is
+frozen (currently only `extend Type as Concept:` is frozen in the
+syntax contract).
 
 This preserves the principle that variants are structured data, not
-behavioral objects.
+behavioral objects.  The exact method-attachment syntax for `enum
+class` is deferred until plain `extend` is frozen.
 
 ## Migration path
 
@@ -230,8 +227,8 @@ behavioral objects.
    rewritten as `enum class` with named fields.
 2. All existing `match` arms that destructure payloads positionally
    must adopt named destructuring.
-3. All existing `Enum.Variant(value)` construction must adopt named
-   construction: `Enum.Variant(field = value)`.
+3. All existing `Enum::Variant(value)` construction must adopt named
+   construction: `Enum::Variant(field = value)`.
 
 This affects:
 - stdlib (`Option<T>`, `Result<T, E>`)

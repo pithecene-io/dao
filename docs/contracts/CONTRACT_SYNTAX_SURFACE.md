@@ -124,9 +124,9 @@ Rules:
   comma-separated, multiline when inside parens
 - anonymous positional payloads are not allowed — all fields must be
   named
-- construction uses named fields: `Expr.Call(callee = f, args = a)`
+- construction uses named fields: `Expr::Call(callee = f, args = a)`
 - match is exhaustive and uses named destructuring:
-  `Expr.Call(callee, args):` or `Expr.Call as c:` for field access
+  `Expr::Call(callee, args):` or `Expr::Call as c:` for field access
 - `..` in match ignores remaining fields (forward-compatible with
   new fields)
 - variants cannot declare methods; methods go on the outer type via
