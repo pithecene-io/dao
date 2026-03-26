@@ -10,6 +10,7 @@ enum SymbolKind:
   Param
   Field
   LambdaParam
+  GenericParam
 
 class Symbol:
   kind: SymbolKind
@@ -211,6 +212,8 @@ fn symbol_kind_name(kind: SymbolKind): string
       return "Field"
     SymbolKind.LambdaParam:
       return "LambdaParam"
+    SymbolKind.GenericParam:
+      return "GenericParam"
   return "Unknown"
 
 fn scope_kind_name(kind: ScopeKind): string
@@ -263,6 +266,8 @@ fn is_type_symbol(rs: RS, sym_idx: i64): bool
     SymbolKind.Builtin:
       return true
     SymbolKind.Type:
+      return true
+    SymbolKind.GenericParam:
       return true
   return false
 
@@ -476,10 +481,30 @@ fn resolve_stmt(rs: RS, node_idx: i64): RS
 // Section 27: Declaration resolution (Pass 2)
 // =========================================================================
 
-fn resolve_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, ret_type: i64, body_lp: i64): RS
+fn resolve_type_params(rs: RS, tparams_lp: i64, node_idx: i64): RS
+  if tparams_lp < 0:
+    return rs
+  let tparams: Vector<i64> = read_list(rs.idx_data, tparams_lp)
+  let r: RS = rs
+  let i: i64 = 0
+  while i < tparams.length():
+    let tp_node_idx: i64 = tparams.get(i)
+    let tp_node: Node = r.nodes.get(tp_node_idx)
+    match tp_node:
+      Node.GenericParamT(tidx):
+        let tname: string = tok_name(r, tidx)
+        let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.GenericParam, tname, node_idx, r.current_scope))
+        r = scope_declare(sym_r.rs, tname, sym_r.sym_idx, tidx)
+    i = i + 1
+  return r
+
+fn resolve_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, params_lp: i64, ret_type: i64, body_lp: i64): RS
   // Create function scope
   let sr: ScopeR = rs_push_scope(rs, ScopeKind.FunctionScope)
   let r: RS = sr.rs
+
+  // Declare generic type parameters
+  r = resolve_type_params(r, tparams_lp, node_idx)
 
   // Declare parameters
   let pairs: Vector<i64> = read_pairs(r.idx_data, params_lp)
@@ -505,10 +530,13 @@ fn resolve_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, ret_ty
   // Pop function scope
   return rs_pop_scope(r)
 
-fn resolve_expr_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, ret_type: i64, body_expr: i64): RS
+fn resolve_expr_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, params_lp: i64, ret_type: i64, body_expr: i64): RS
   // Create function scope
   let sr: ScopeR = rs_push_scope(rs, ScopeKind.FunctionScope)
   let r: RS = sr.rs
+
+  // Declare generic type parameters
+  r = resolve_type_params(r, tparams_lp, node_idx)
 
   // Declare parameters
   let pairs: Vector<i64> = read_pairs(r.idx_data, params_lp)
@@ -533,10 +561,13 @@ fn resolve_expr_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, r
   // Pop function scope
   return rs_pop_scope(r)
 
-fn resolve_extern_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64, ret_type: i64): RS
+fn resolve_extern_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, params_lp: i64, ret_type: i64): RS
   // Create function scope
   let sr: ScopeR = rs_push_scope(rs, ScopeKind.FunctionScope)
   let r: RS = sr.rs
+
+  // Declare generic type parameters
+  r = resolve_type_params(r, tparams_lp, node_idx)
 
   // Declare parameters
   let pairs: Vector<i64> = read_pairs(r.idx_data, params_lp)
@@ -556,10 +587,13 @@ fn resolve_extern_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, params_lp: i64,
   // Pop function scope (no body)
   return rs_pop_scope(r)
 
-fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, fields_lp: i64): RS
+fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, fields_lp: i64): RS
   // Create struct scope
   let sr: ScopeR = rs_push_scope(rs, ScopeKind.StructScope)
   let r: RS = sr.rs
+
+  // Declare generic type parameters
+  r = resolve_type_params(r, tparams_lp, node_idx)
 
   // Declare fields
   let pairs: Vector<i64> = read_pairs(r.idx_data, fields_lp)
@@ -577,10 +611,17 @@ fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, fields_lp: i64): RS
   // Pop struct scope
   return rs_pop_scope(r)
 
-fn resolve_enum_decl(rs: RS, node_idx: i64, name_tidx: i64, variants_lp: i64): RS
+fn resolve_enum_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, variants_lp: i64): RS
+  // Create a scope for type parameters if present
+  let r0: RS = rs
+  let has_tparams: bool = false
+  if tparams_lp >= 0:
+    let sr: ScopeR = rs_push_scope(r0, ScopeKind.BlockScope)
+    r0 = resolve_type_params(sr.rs, tparams_lp, node_idx)
+    has_tparams = true
   // Resolve payload types for each variant
-  let pairs: Vector<i64> = read_pairs(rs.idx_data, variants_lp)
-  let r: RS = rs
+  let pairs: Vector<i64> = read_pairs(r0.idx_data, variants_lp)
+  let r: RS = r0
   let i: i64 = 0
   while i < pairs.length():
     let v_tidx: i64 = pairs.get(i)
@@ -592,6 +633,8 @@ fn resolve_enum_decl(rs: RS, node_idx: i64, name_tidx: i64, variants_lp: i64): R
       r = resolve_type_node(r, payload_types.get(j))
       j = j + 1
     i = i + 2
+  if has_tparams:
+    r = rs_pop_scope(r)
   return r
 
 fn resolve_type_alias_decl(rs: RS, node_idx: i64, name_tidx: i64, target_type: i64): RS
@@ -602,16 +645,16 @@ fn resolve_decl(rs: RS, node_idx: i64): RS
     return rs
   let node: Node = rs.nodes.get(node_idx)
   match node:
-    Node.FnDeclD(name_tidx, params_lp, ret_type, body_lp):
-      return resolve_fn_decl(rs, node_idx, name_tidx, params_lp, ret_type, body_lp)
-    Node.ExprFnD(name_tidx, params_lp, ret_type, body_expr):
-      return resolve_expr_fn_decl(rs, node_idx, name_tidx, params_lp, ret_type, body_expr)
-    Node.ExternFnD(name_tidx, params_lp, ret_type):
-      return resolve_extern_fn_decl(rs, node_idx, name_tidx, params_lp, ret_type)
-    Node.ClassDeclD(name_tidx, fields_lp):
-      return resolve_class_decl(rs, node_idx, name_tidx, fields_lp)
-    Node.EnumDeclD(name_tidx, variants_lp):
-      return resolve_enum_decl(rs, node_idx, name_tidx, variants_lp)
+    Node.FnDeclD(name_tidx, tparams_lp, params_lp, ret_type, body_lp):
+      return resolve_fn_decl(rs, node_idx, name_tidx, tparams_lp, params_lp, ret_type, body_lp)
+    Node.ExprFnD(name_tidx, tparams_lp, params_lp, ret_type, body_expr):
+      return resolve_expr_fn_decl(rs, node_idx, name_tidx, tparams_lp, params_lp, ret_type, body_expr)
+    Node.ExternFnD(name_tidx, tparams_lp, params_lp, ret_type):
+      return resolve_extern_fn_decl(rs, node_idx, name_tidx, tparams_lp, params_lp, ret_type)
+    Node.ClassDeclD(name_tidx, tparams_lp, fields_lp):
+      return resolve_class_decl(rs, node_idx, name_tidx, tparams_lp, fields_lp)
+    Node.EnumDeclD(name_tidx, tparams_lp, variants_lp):
+      return resolve_enum_decl(rs, node_idx, name_tidx, tparams_lp, variants_lp)
     Node.TypeAliasD(name_tidx, target_type):
       return resolve_type_alias_decl(rs, node_idx, name_tidx, target_type)
     Node.ErrorD(t):
@@ -633,23 +676,23 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
         let decl_idx: i64 = decls.get(i)
         let decl_node: Node = r.nodes.get(decl_idx)
         match decl_node:
-          Node.FnDeclD(name_tidx, params_lp, ret_type, body_lp):
+          Node.FnDeclD(name_tidx, tparams_lp, params_lp, ret_type, body_lp):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
-          Node.ExprFnD(name_tidx, params_lp, ret_type, body_expr):
+          Node.ExprFnD(name_tidx, tparams_lp, params_lp, ret_type, body_expr):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
-          Node.ExternFnD(name_tidx, params_lp, ret_type):
+          Node.ExternFnD(name_tidx, tparams_lp, params_lp, ret_type):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
-          Node.ClassDeclD(name_tidx, fields_lp):
+          Node.ClassDeclD(name_tidx, tparams_lp, fields_lp):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
-          Node.EnumDeclD(name_tidx, variants_lp):
+          Node.EnumDeclD(name_tidx, tparams_lp, variants_lp):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
@@ -738,7 +781,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 17
+  let total: i32 = 18
 
   // -----------------------------------------------------------------
   // Test 1: forward_ref — fn calls fn defined later in file; no diagnostic
@@ -996,6 +1039,22 @@ fn main(): i32
     print("SKIP self_resolve_smoke: file not found at " + self_path)
 
   // -----------------------------------------------------------------
+  // Test 18: generic_param — fn identity<T>(x: T): T — T resolves as GenericParam
+  // -----------------------------------------------------------------
+  let src18: string = "fn identity<T>(x: T): T\n  return x\n"
+  let r18: ResolveResult = resolve(src18)
+  let r18_gp: i64 = count_symbols_of_kind(r18, SymbolKind.GenericParam)
+  let r18_diags: i64 = count_diags(r18)
+  if r18_gp >= 1:
+    if r18_diags == 0:
+      print("PASS generic_param")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL generic_param: expected 0 diagnostics, got " + i64_to_string(r18_diags))
+  else:
+    print("FAIL generic_param: expected >= 1 GenericParam symbol, got " + i64_to_string(r18_gp))
+
+  // -----------------------------------------------------------------
   // Summary
   // -----------------------------------------------------------------
 
@@ -1011,7 +1070,8 @@ fn main(): i32
   //   - Import declaration resolution
   //   - Overload resolution by arity / name mangling
   //   - Static method calls (Type::method)
-  //   - Generic type parameter declarations / where clauses
+  //   - Generic type parameter constraints / where clauses (parsing and
+  //     resolution of generic params is implemented in Tier A)
   //   - Concept / extend resolution
   //   - Mode / resource block scoping
   //   - Yield statement resolution

@@ -15,7 +15,8 @@
 //       > bootstrap/typecheck/typecheck.gen.dao
 //
 // Tier B deferrals:
-//   - Generic type parameters, inference, substitution
+//   - Generic type inference, substitution, instantiation (TGenericParam
+//     types are registered in Tier A; full monomorphization is deferred)
 //   - Concept / extend / derived conformance
 //   - Method tables and method dispatch
 //   - Lambda contextual typing
@@ -39,6 +40,7 @@ enum TypeKind:
   TFunction
   TStruct
   TEnum
+  TGenericParam
 
 class DaoType:
   kind: TypeKind
@@ -373,8 +375,33 @@ fn resolve_ast_type(ts: TS, node_idx: i64): TypeR
         return TypeR(ts, bi)
       let sym_idx: i64 = lookup_use(ts, tidx)
       if sym_idx >= 0:
+        let sym: Symbol = ts.tc.symbols.get(sym_idx)
+        let sk: string = symbol_kind_name(sym.kind)
+        if sk == "GenericParam":
+          // Check if we already have a TGenericParam type for this symbol
+          let existing_ti: i64 = vec_i64_get(ts.sym_types, sym_idx)
+          if existing_ti >= 0:
+            return TypeR(ts, existing_ti)
+          // Create a new TGenericParam type
+          let tr: TypeR = ts_add_type(ts, DaoType(TypeKind.TGenericParam, sym_idx, name, to_i64(-1), to_i64(-1), to_i64(0), to_i64(-1), to_i64(-1)))
+          let ts2: TS = ts_set_sym_type(tr.ts, sym_idx, tr.type_idx)
+          return TypeR(ts2, tr.type_idx)
         let ti: i64 = vec_i64_get(ts.sym_types, sym_idx)
         return TypeR(ts, ti)
+      // sym not found in uses_map — might be an unresolved type param
+      // Try to find it by scanning symbols for GenericParam with matching name
+      let gi: i64 = 0
+      while gi < ts.tc.symbols.length():
+        let gsym: Symbol = ts.tc.symbols.get(gi)
+        if gsym.name == name:
+          if symbol_kind_name(gsym.kind) == "GenericParam":
+            let existing_ti: i64 = vec_i64_get(ts.sym_types, gi)
+            if existing_ti >= 0:
+              return TypeR(ts, existing_ti)
+            let tr: TypeR = ts_add_type(ts, DaoType(TypeKind.TGenericParam, gi, name, to_i64(-1), to_i64(-1), to_i64(0), to_i64(-1), to_i64(-1)))
+            let ts2: TS = ts_set_sym_type(tr.ts, gi, tr.type_idx)
+            return TypeR(ts2, tr.type_idx)
+        gi = gi + 1
       return TypeR(ts, to_i64(-1))
     Node.PointerT(inner):
       let inner_r: TypeR = resolve_ast_type(ts, inner)
@@ -452,7 +479,7 @@ fn tc_register_struct_shells(ts: TS, decls: Vector<i64>): TS
     let decl_idx: i64 = decls.get(i)
     let node: Node = r.tc.nodes.get(decl_idx)
     match node:
-      Node.ClassDeclD(name_tidx, fields_lp):
+      Node.ClassDeclD(name_tidx, tparams_lp, fields_lp):
         let name: string = ts_tok_name(r, name_tidx)
         let tr: TypeR = ts_add_type(r, DaoType(TypeKind.TStruct, to_i64(-1), name, decl_idx, to_i64(-1), to_i64(0), to_i64(-1), to_i64(-1)))
         r = tr.ts
@@ -469,7 +496,7 @@ fn tc_register_enums(ts: TS, decls: Vector<i64>): TS
     let decl_idx: i64 = decls.get(i)
     let node: Node = r.tc.nodes.get(decl_idx)
     match node:
-      Node.EnumDeclD(name_tidx, variants_lp):
+      Node.EnumDeclD(name_tidx, tparams_lp, variants_lp):
         let name: string = ts_tok_name(r, name_tidx)
         let info_start: i64 = r.type_info.length()
         let pairs: Vector<i64> = read_pairs(r.tc.idx_data, variants_lp)
@@ -515,7 +542,7 @@ fn tc_fill_struct_fields(ts: TS, decls: Vector<i64>): TS
     let decl_idx: i64 = decls.get(i)
     let node: Node = r.tc.nodes.get(decl_idx)
     match node:
-      Node.ClassDeclD(name_tidx, fields_lp):
+      Node.ClassDeclD(name_tidx, tparams_lp, fields_lp):
         let pairs: Vector<i64> = read_pairs(r.tc.idx_data, fields_lp)
         let field_info_start: i64 = r.type_info.length()
         let field_count: i64 = 0
@@ -586,17 +613,17 @@ fn tc_register_functions(ts: TS, decls: Vector<i64>): TS
     let fn_params_lp: i64 = to_i64(-1)
     let fn_ret_type: i64 = to_i64(-1)
     match node:
-      Node.FnDeclD(nt, plp, rtn, blp):
+      Node.FnDeclD(nt, tp, plp, rtn, blp):
         is_fn = true
         fn_name_tidx = nt
         fn_params_lp = plp
         fn_ret_type = rtn
-      Node.ExprFnD(nt, plp, rtn, be):
+      Node.ExprFnD(nt, tp, plp, rtn, be):
         is_fn = true
         fn_name_tidx = nt
         fn_params_lp = plp
         fn_ret_type = rtn
-      Node.ExternFnD(nt, plp, rtn):
+      Node.ExternFnD(nt, tp, plp, rtn):
         is_fn = true
         fn_name_tidx = nt
         fn_params_lp = plp
@@ -1212,9 +1239,9 @@ fn tc_pass2(ts: TS, file_node_idx: i64): TS
         let decl_idx: i64 = decls.get(i)
         let node: Node = r.tc.nodes.get(decl_idx)
         match node:
-          Node.FnDeclD(name_tidx, params_lp, ret_type_node, body_lp):
+          Node.FnDeclD(name_tidx, tparams_lp, params_lp, ret_type_node, body_lp):
             r = tc_check_fn_body(r, decl_idx, name_tidx, params_lp, ret_type_node, body_lp)
-          Node.ExprFnD(name_tidx, params_lp, ret_type_node, body_expr):
+          Node.ExprFnD(name_tidx, tparams_lp, params_lp, ret_type_node, body_expr):
             r = tc_check_expr_fn_body(r, decl_idx, name_tidx, params_lp, ret_type_node, body_expr)
         i = i + 1
       return r
@@ -1260,7 +1287,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 19
+  let total: i32 = 20
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -1424,7 +1451,29 @@ fn main(): i32
   else:
     print("FAIL err_match_pattern_type: expected diagnostic for pattern type mismatch")
 
-  // Test 19: self_typecheck_smoke
+  // Test 19: generic_fn_parses — fn identity<T>(x: T): T typechecks and
+  // produces TGenericParam in the type table.
+  let src19: string = "fn identity<T>(x: T): T\n  return x\n"
+  let r19: TypeCheckResult = typecheck(src19)
+  let found_gp: bool = false
+  let ti19: i64 = 0
+  while ti19 < tc_count_types(r19):
+    let t19: DaoType = r19.types.get(ti19)
+    match t19.kind:
+      TypeKind.TGenericParam:
+        found_gp = true
+      TypeKind.TFunction:
+        found_gp = found_gp
+      TypeKind.TStruct:
+        found_gp = found_gp
+    ti19 = ti19 + 1
+  if found_gp:
+    print("PASS generic_fn_parses")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL generic_fn_parses: TGenericParam not found in types (count: " + i64_to_string(tc_count_types(r19)) + ")")
+
+  // Test 20: self_typecheck_smoke
   let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
   if file_exists(self_path):
     let self_src: string = read_file(self_path)
