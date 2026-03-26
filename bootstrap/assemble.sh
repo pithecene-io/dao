@@ -41,4 +41,12 @@ assemble bootstrap/parser/parser.gen.dao \
 assemble bootstrap/resolver/resolver.gen.dao \
   bootstrap/resolver/impl.dao
 
-echo "done — 3 files assembled"
+# Type checker: include resolver library (everything before BEGIN_RESOLVER_TESTS).
+RESOLVER_LIB=$(mktemp)
+sed '/^\/\/ BEGIN_RESOLVER_TESTS/,$d' bootstrap/resolver/impl.dao > "$RESOLVER_LIB"
+assemble bootstrap/typecheck/typecheck.gen.dao \
+  "$RESOLVER_LIB" \
+  bootstrap/typecheck/impl.dao
+rm -f "$RESOLVER_LIB"
+
+echo "done — 4 files assembled"

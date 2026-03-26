@@ -301,11 +301,14 @@ Task 21 (bootstrap parser extraction) is complete — the parser is
 promoted to `bootstrap/parser/parser.dao` with Tier A syntax coverage,
 arena-indexed AST, 36 golden tests, and self-parse of real Dao source.
 Task 22 (bootstrap resolver) is complete — two-pass name resolution
-at `bootstrap/resolver/resolver.dao` with scope chains, symbol tables,
-uses map, 15 tests, and self-resolve of real Dao source.
+with scope chains, symbol tables, uses map, 17 tests.
+Task 23 (bootstrap type checker) is complete — expression/statement
+type checking with 16 tests.  Shared substrate consolidated in
+`bootstrap/shared/base.dao`; assembly via `bootstrap/assemble.sh`.
 
-The next implementation focus is bootstrap type checker extraction,
-Tier B expansion, and Task 17 (low-level memory substrate).
+The Tier A bootstrap frontend pipeline (lex → parse → resolve →
+typecheck) is complete.  Next focus is Tier B expansion, bootstrap
+HIR/MIR lowering, and Task 17 (low-level memory substrate).
 
 ### Task 14 — Numeric Type Expansion
 
