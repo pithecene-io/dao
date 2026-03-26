@@ -32,6 +32,9 @@ The current frozen surface assumptions are:
 - `mode <name> =>` enters an execution/safety mode
 - `resource <kind> <name> =>` binds a scoped resource domain
 - `|>` is a first-class pipeline operator
+- `enum` declares fieldless closed variants (classification only)
+- `enum class` declares closed structured variants with named fields
+  (see `docs/contracts/ADR_ENUM_CLASS.md`)
 
 Agents must not introduce alternate spellings for these without an
 explicit syntax revision task.

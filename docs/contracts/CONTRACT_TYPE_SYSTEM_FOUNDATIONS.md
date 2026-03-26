@@ -106,17 +106,54 @@ The semantic representation may use enums such as `I32`, `U64`, `F32`,
 
 ## 7. Enums and algebraic data
 
-Dao enums are true sum types.
+Dao has two closed-type declarations:
 
-This means the language direction assumes:
+- `enum` — closed set of fieldless atomic variants (classification)
+- `enum class` — closed set of structured variants with named fields
+  (branching with embodiment)
 
-- enums are not limited to C-style integer tags
-- payload-bearing variants are part of the intended model
-- later pattern matching and exhaustiveness checking are compatible
-  with the type model
+### 7.1 `enum` (fieldless)
 
-The exact surface syntax for payload-bearing variants may evolve, but
-the semantic direction is fixed.
+`enum` variants carry no data.  They are pure classifications.
+
+```dao
+enum Visibility:
+  Public
+  Private
+  Internal
+```
+
+Payload-bearing variants are not allowed in `enum`.  Use `enum class`
+instead.
+
+### 7.2 `enum class` (structured)
+
+`enum class` variants carry named fields.  Each variant is a
+structured alternative.
+
+```dao
+enum class Option<T>:
+  Some(value: T)
+  None
+```
+
+Rules:
+- fields are always named — no anonymous positional payloads
+- match is exhaustive with named destructuring
+- `..` in match ignores remaining fields
+- see `ADR_ENUM_CLASS.md` for full design rationale
+
+### 7.3 Semantic representation
+
+Both `enum` and `enum class` are represented as `TypeEnum` in the
+compiler's semantic type layer.  `enum class` variants additionally
+carry field name metadata.
+
+### 7.4 Migration
+
+Existing `enum` declarations with payload-bearing variants must
+migrate to `enum class` with named fields.  This is a breaking change.
+See `ADR_ENUM_CLASS.md` for the migration path.
 
 ## 8. Class semantics
 

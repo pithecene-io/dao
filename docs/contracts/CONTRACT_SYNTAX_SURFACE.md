@@ -86,6 +86,53 @@ Rules:
 - the uninitialized form requires an explicit type annotation
 - initialization semantics for the uninitialized form are not yet frozen
 
+## Enum Declarations
+
+```dao
+enum Visibility:
+  Public
+  Private
+  Internal
+```
+
+Rules:
+- `enum Name:` introduces a closed set of atomic variants
+- variants are fieldless — no payloads, no parenthesized data
+- enums are value types
+- for variants with structured data, use `enum class` instead
+
+## Enum Class Declarations
+
+```dao
+enum class Option<T>:
+  Some(value: T)
+  None
+
+enum class Expr:
+  IntLit(value: i64)
+  Call(
+    callee: ExprId,
+    args: List[ExprId]
+  )
+```
+
+Rules:
+- `enum class Name:` introduces a closed set of structured variants
+- each variant is `VariantName(field: Type, ...)` with named fields
+- fieldless variants use bare names (no parentheses needed)
+- field lists follow function-parameter conventions: parenthesized,
+  comma-separated, multiline when inside parens
+- anonymous positional payloads are not allowed — all fields must be
+  named
+- construction uses named fields: `Expr::Call(callee = f, args = a)`
+- match is exhaustive and uses named destructuring:
+  `Expr::Call(callee, args):` or `Expr::Call as c:` for field access
+- `..` in match ignores remaining fields (forward-compatible with
+  new fields)
+- variants cannot declare methods; methods go on the outer type via
+  `extend`
+- see `ADR_ENUM_CLASS.md` for full design rationale
+
 ## Class Declarations
 
 ```dao
@@ -290,12 +337,15 @@ This contract does not yet freeze:
 - receiver declaration syntax beyond `self`
 - mutable receiver syntax (`mut self`)
 - class construction syntax
-- pattern matching syntax
+- pattern matching syntax beyond named destructuring and `..` for
+  `enum class` (guards, nested patterns, or-patterns are not yet
+  frozen)
 - import alias syntax
 - concept object / dynamic dispatch syntax
 - operator overloading syntax
 - associated types inside concepts
-- `sealed` modifier for concepts and classes
+- `sealed` modifier for concepts (closedness for data types is
+  expressed via `enum class`, not a class modifier)
 - generator delegation (`yield from` or similar)
 - bidirectional coroutines (send values into a generator)
 - generator type inference from yield expressions without explicit
