@@ -292,11 +292,10 @@ fn lower_expr(hs: HS, node_idx: i64): HirR
       let rr: HirR = lower_expr(lr.hs, right)
       return hs_add_node(rr.hs, HirNode.HirPipe(lr.hir, rr.hir, ti))
     Node.QualNameE(seg_lp, seg_count):
+      // Preserve all segment token indices in HIR idx.
       let segs: Vector<i64> = read_list(hs.idx_data, seg_lp)
-      let first_tok: i64 = to_i64(-1)
-      if segs.length() > 0:
-        first_tok = segs.get(0)
-      return hs_add_node(hs, HirNode.HirQualName(first_tok, seg_count, ti))
+      let seg_fl: HirFlush = hir_flush_list(hs, segs)
+      return hs_add_node(seg_fl.hs, HirNode.HirQualName(seg_fl.list_pos, segs.length(), ti))
     Node.TryE(operand):
       // Tier B deferral — lower operand, emit error
       let cur: HS = hs_add_diag(hs, Span(to_i64(0), to_i64(1)), "try operator not supported in Tier A HIR")
@@ -444,9 +443,15 @@ fn lower_match_stmt(hs: HS, scrut_node: i64, arms_lp: i64): HirR
   let scrut_r: HirR = lower_expr(hs, scrut_node)
   let cur: HS = scrut_r.hs
   let scrut_ti: i64 = hir_get_expr_type(cur, scrut_node)
-  // Create a let for the scrutinee
+  // Create a synthetic symbol for the scrutinee temporary.
+  // Use a negative decl_node to mark it as compiler-generated.
+  let scrut_sym_idx: i64 = cur.symbols.length()
+  // We can't add to hs.symbols (it's from the resolver, immutable in HS).
+  // Instead, use the HirLet node index itself as the synthetic sym reference.
   let scrut_let_r: HirR = hs_add_node(cur, HirNode.HirLet(to_i64(-1), scrut_ti, scrut_r.hir))
   cur = scrut_let_r.hs
+  // The scrut_let_r.hir node index serves as the synthetic binding ID.
+  let scrut_binding: i64 = scrut_let_r.hir
 
   let arms: Vector<i64> = read_pairs(cur.idx_data, arms_lp)
   // First pass: lower all arm conditions and bodies, collecting info.
@@ -463,7 +468,9 @@ fn lower_match_stmt(hs: HS, scrut_node: i64, arms_lp: i64): HirR
     let body_fl: HirFlush = lower_body_stmts(cur, body_lp2)
     cur = body_fl.hs
     // Create condition: scrut == pattern
-    let scrut_ref_r: HirR = hs_add_node(cur, HirNode.HirIdent(to_i64(-1), scrut_ti, to_i64(-1)))
+    // Use scrut_binding (the HirLet node index) as sym_idx so downstream
+    // passes can identify which binding this references.
+    let scrut_ref_r: HirR = hs_add_node(cur, HirNode.HirIdent(scrut_binding, scrut_ti, to_i64(-1)))
     cur = scrut_ref_r.hs
     let cond_r: HirR = hs_add_node(cur, HirNode.HirBinary(to_i64(-1), scrut_ref_r.hir, pat_r.hir, to_i64(10)))
     cur = cond_r.hs
@@ -637,6 +644,65 @@ fn lower_class_decl(hs: HS, decl_idx: i64, name_tidx: i64, fields_lp: i64): HirR
   let fl: HirFlush = hir_flush_pairs(hs, field_items, field_count)
   return hs_add_node(fl.hs, HirNode.HirStruct(name_tidx, fl.list_pos))
 
+// Resolve an AST type node to a type index. Handles NamedT, GenericT, PointerT.
+fn resolve_type_to_idx(hs: HS, type_node_idx: i64): i64
+  if type_node_idx < 0:
+    return to_i64(-1)
+  // First try expr_types (type checker may have recorded it)
+  let ti: i64 = hir_get_expr_type(hs, type_node_idx)
+  if ti >= 0:
+    return ti
+  let tn: Node = hs.nodes.get(type_node_idx)
+  match tn:
+    Node.NamedT(ttidx):
+      let tsym: i64 = hir_lookup_use(hs, ttidx)
+      if tsym >= 0:
+        return hir_sym_type(hs, tsym)
+      // Try builtin name lookup
+      let tname: string = hs_tok_name(hs, ttidx)
+      if tname == "i8":
+        return 0
+      if tname == "i16":
+        return 1
+      if tname == "i32":
+        return 2
+      if tname == "i64":
+        return 3
+      if tname == "u8":
+        return 4
+      if tname == "u16":
+        return 5
+      if tname == "u32":
+        return 6
+      if tname == "u64":
+        return 7
+      if tname == "f32":
+        return 8
+      if tname == "f64":
+        return 9
+      if tname == "bool":
+        return 10
+      if tname == "string":
+        return 12
+    Node.PointerT(inner):
+      // Resolve inner, return pointer type if available
+      let inner_ti: i64 = resolve_type_to_idx(hs, inner)
+      // Search for existing pointer type in types table
+      let pti: i64 = 0
+      while pti < hs.types.length():
+        let pt: DaoType = hs.types.get(pti)
+        match pt.kind:
+          TypeKind.TPointer:
+            if pt.pointee == inner_ti:
+              return pti
+        pti = pti + 1
+    Node.GenericT(name_tidx, args_lp, arg_count):
+      // Try resolving the base name
+      let tsym: i64 = hir_lookup_use(hs, name_tidx)
+      if tsym >= 0:
+        return hir_sym_type(hs, tsym)
+  return to_i64(-1)
+
 fn lower_enum_decl(hs: HS, decl_idx: i64, name_tidx: i64, variants_lp: i64): HirR
   let pairs: Vector<i64> = read_pairs(hs.idx_data, variants_lp)
   let var_items: Vector<i64> = Vector<i64>::new()
@@ -646,25 +712,12 @@ fn lower_enum_decl(hs: HS, decl_idx: i64, name_tidx: i64, variants_lp: i64): Hir
   while vi < pairs.length():
     let v_tidx: i64 = pairs.get(vi)
     let ast_payload_lp: i64 = pairs.get(vi + 1)
-    // Resolve payload types from AST into HIR-owned type indices.
-    // AST payload_lp points into AST idx_data: [type_count, type_node_0, type_node_1, ...]
     let payload_types: Vector<i64> = read_list(cur.idx_data, ast_payload_lp)
     let hir_payload: Vector<i64> = Vector<i64>::new()
     let pi: i64 = 0
     while pi < payload_types.length():
       let type_node_idx: i64 = payload_types.get(pi)
-      // Look up the resolved type for this AST type node
-      let pti: i64 = hir_get_expr_type(cur, type_node_idx)
-      if pti < 0:
-        // Type node might be NamedT — try to resolve by name
-        if type_node_idx >= 0:
-          let tn: Node = cur.nodes.get(type_node_idx)
-          match tn:
-            Node.NamedT(ttidx):
-              let tname: string = hs_tok_name(cur, ttidx)
-              let tsym: i64 = hir_lookup_use(cur, ttidx)
-              if tsym >= 0:
-                pti = hir_sym_type(cur, tsym)
+      let pti: i64 = resolve_type_to_idx(cur, type_node_idx)
       hir_payload = hir_payload.push(pti)
       pi = pi + 1
     // Flush payload types into HIR idx
