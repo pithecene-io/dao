@@ -131,6 +131,8 @@ Self-hosting compiler subsystems written in Dao.
   and uses map; logic + tests in `impl.dao` (Task 22)
 - `typecheck/` — type checker assigning types to expressions and
   validating type correctness; logic + tests in `impl.dao` (Task 23)
+- `hir/` — HIR lowering pass producing compiler-owned typed IR from
+  the type-checked AST; logic + tests in `impl.dao` (Task 24)
 
 ## `examples/`
 

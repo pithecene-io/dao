@@ -49,4 +49,15 @@ assemble bootstrap/typecheck/typecheck.gen.dao \
   bootstrap/typecheck/impl.dao
 rm -f "$RESOLVER_LIB"
 
-echo "done — 4 files assembled"
+# HIR: include resolver library + typecheck library (before their test markers).
+RESOLVER_LIB2=$(mktemp)
+sed '/^\/\/ BEGIN_RESOLVER_TESTS/,$d' bootstrap/resolver/impl.dao > "$RESOLVER_LIB2"
+TYPECHECK_LIB=$(mktemp)
+sed '/^\/\/ BEGIN_TYPECHECK_TESTS/,$d' bootstrap/typecheck/impl.dao > "$TYPECHECK_LIB"
+assemble bootstrap/hir/hir.gen.dao \
+  "$RESOLVER_LIB2" \
+  "$TYPECHECK_LIB" \
+  bootstrap/hir/impl.dao
+rm -f "$RESOLVER_LIB2" "$TYPECHECK_LIB"
+
+echo "done — 5 files assembled"
