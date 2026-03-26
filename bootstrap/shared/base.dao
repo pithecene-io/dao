@@ -754,7 +754,8 @@ fn lex(src: string): LexResult
 // into nodes vector. Variable-length children use a shared idx list.
 //
 // Tier B deferrals: concept, derived, extend, mode, resource, yield,
-// function types, generic parameter bounds, where clauses.
+// function types, generic parameter bounds / where clauses.
+// (GenericParamT nodes and parse_type_params are Tier A.)
 
 enum Node:
   // --- Expressions ---
@@ -778,6 +779,7 @@ enum Node:
   NamedT(i64)
   GenericT(i64, i64, i64)
   PointerT(i64)
+  GenericParamT(i64)
   ErrorT(i64)
   // --- Statements ---
   LetS(i64, i64, i64)
@@ -791,11 +793,11 @@ enum Node:
   ExprStmtS(i64)
   ErrorS(i64)
   // --- Declarations ---
-  FnDeclD(i64, i64, i64, i64)
-  ExternFnD(i64, i64, i64)
-  ExprFnD(i64, i64, i64, i64)
-  ClassDeclD(i64, i64)
-  EnumDeclD(i64, i64)
+  FnDeclD(i64, i64, i64, i64, i64)
+  ExternFnD(i64, i64, i64, i64)
+  ExprFnD(i64, i64, i64, i64, i64)
+  ClassDeclD(i64, i64, i64)
+  EnumDeclD(i64, i64, i64)
   TypeAliasD(i64, i64)
   ErrorD(i64)
   // --- File ---
@@ -1661,6 +1663,40 @@ fn parse_declaration(ps: PS): PR
   let ps2: PS = ps_add_diag(ps, sp, "expected declaration (fn, extern, class, enum, or type)")
   return ps_add_node(ps_advance(ps2), Node.ErrorD(ps.pos))
 
+// Parse optional type parameters: <T, U, V> — returns PR where .node = list_pos
+// Returns -1 if no type params are present.
+fn parse_type_params(ps: PS): PR
+  if tk_name(peek_kind(ps)) != tk_name(TK.Lt):
+    return PR(ps, to_i64(-1))
+  let ps2: PS = ps_advance(ps)
+  let collected: Vector<i64> = Vector<i64>::new()
+  // Parse first type param (must be an identifier)
+  if tk_name(peek_kind(ps2)) == tk_name(TK.Identifier):
+    let tidx: i64 = ps2.pos
+    let ps3: PS = ps_advance(ps2)
+    let gp: PR = ps_add_node(ps3, Node.GenericParamT(tidx))
+    collected = collected.push(gp.node)
+    let cur: PS = gp.ps
+    let done: bool = false
+    while done == false:
+      if tk_name(peek_kind(cur)) == tk_name(TK.Comma):
+        cur = ps_advance(cur)
+        let tidx2: i64 = cur.pos
+        cur = expect(cur, TK.Identifier)
+        let gp2: PR = ps_add_node(cur, Node.GenericParamT(tidx2))
+        collected = collected.push(gp2.node)
+        cur = gp2.ps
+      else:
+        done = true
+    let fl: FlushResult = flush_list(cur, collected)
+    let ps_end: PS = expect(fl.ps, TK.Gt)
+    return PR(ps_end, fl.list_pos)
+  else:
+    let sp: Span = tok_span(ps2)
+    let pse: PS = ps_add_diag(ps2, sp, "expected type parameter name")
+    let pse2: PS = expect(pse, TK.Gt)
+    return PR(pse2, to_i64(-1))
+
 // Parse (name: Type, name: Type, ...) — returns PR where .node = list_pos
 // Pushes pairs [name_tok, type_node, ...], then count
 fn parse_params_list(ps: PS): PR
@@ -1710,7 +1746,11 @@ fn parse_fn_decl(ps: PS): PR
   let name_tidx: i64 = ps2.pos
   let ps3: PS = expect(ps2, TK.Identifier)
 
-  let params: PR = parse_params_list(ps3)
+  // Parse optional type parameters
+  let tparams: PR = parse_type_params(ps3)
+  let tparams_lp: i64 = tparams.node
+
+  let params: PR = parse_params_list(tparams.ps)
   let params_lp: i64 = params.node
   let cur: PS = params.ps
 
@@ -1730,7 +1770,7 @@ fn parse_fn_decl(ps: PS): PR
     if body_expr.node < 0:
       return body_expr
     let psfn: PS = match_tok(body_expr.ps, TK.Newline)
-    return ps_add_node(psfn, Node.ExprFnD(name_tidx, params_lp, ret_type, body_expr.node))
+    return ps_add_node(psfn, Node.ExprFnD(name_tidx, tparams_lp, params_lp, ret_type, body_expr.node))
 
   // Block-bodied: NEWLINE INDENT stmts DEDENT
   let ps4: PS = expect(cur, TK.Newline)
@@ -1757,7 +1797,7 @@ fn parse_fn_decl(ps: PS): PR
           bcur = err_r.ps
     let body_fl: FlushResult = flush_list(bcur, body_items)
     bcur = expect(body_fl.ps, TK.Dedent)
-    return ps_add_node(bcur, Node.FnDeclD(name_tidx, params_lp, ret_type, body_fl.list_pos))
+    return ps_add_node(bcur, Node.FnDeclD(name_tidx, tparams_lp, params_lp, ret_type, body_fl.list_pos))
   else:
     // No body — error
     let sp: Span = tok_span(ps4)
@@ -1773,7 +1813,12 @@ fn parse_extern_fn(ps: PS): PR
   let ps3: PS = ps_advance(ps2)
   let name_tidx: i64 = ps3.pos
   let ps4: PS = expect(ps3, TK.Identifier)
-  let params: PR = parse_params_list(ps4)
+
+  // Parse optional type parameters
+  let tparams: PR = parse_type_params(ps4)
+  let tparams_lp: i64 = tparams.node
+
+  let params: PR = parse_params_list(tparams.ps)
   let params_lp: i64 = params.node
   let cur: PS = params.ps
 
@@ -1790,13 +1835,18 @@ fn parse_extern_fn(ps: PS): PR
     cur = ps_add_diag(cur, sp, "extern fn requires a return type annotation")
 
   cur = match_tok(cur, TK.Newline)
-  return ps_add_node(cur, Node.ExternFnD(name_tidx, params_lp, ret_type))
+  return ps_add_node(cur, Node.ExternFnD(name_tidx, tparams_lp, params_lp, ret_type))
 
 fn parse_class_decl(ps: PS): PR
   let ps2: PS = ps_advance(ps)
   let name_tidx: i64 = ps2.pos
   let ps3: PS = expect(ps2, TK.Identifier)
-  let ps4: PS = expect(ps3, TK.Colon)
+
+  // Parse optional type parameters
+  let tparams: PR = parse_type_params(ps3)
+  let tparams_lp: i64 = tparams.node
+
+  let ps4: PS = expect(tparams.ps, TK.Colon)
   let ps5: PS = expect(ps4, TK.Newline)
   let ps6: PS = expect(ps5, TK.Indent)
 
@@ -1831,13 +1881,18 @@ fn parse_class_decl(ps: PS): PR
 
   let fields_fl: FlushResult = flush_pairs(cur, field_pairs, field_count)
   cur = expect(fields_fl.ps, TK.Dedent)
-  return ps_add_node(cur, Node.ClassDeclD(name_tidx, fields_fl.list_pos))
+  return ps_add_node(cur, Node.ClassDeclD(name_tidx, tparams_lp, fields_fl.list_pos))
 
 fn parse_enum_decl(ps: PS): PR
   let ps2: PS = ps_advance(ps)
   let name_tidx: i64 = ps2.pos
   let ps3: PS = expect(ps2, TK.Identifier)
-  let ps4: PS = expect(ps3, TK.Colon)
+
+  // Parse optional type parameters
+  let tparams: PR = parse_type_params(ps3)
+  let tparams_lp: i64 = tparams.node
+
+  let ps4: PS = expect(tparams.ps, TK.Colon)
   let ps5: PS = expect(ps4, TK.Newline)
   let ps6: PS = expect(ps5, TK.Indent)
 
@@ -1896,7 +1951,7 @@ fn parse_enum_decl(ps: PS): PR
   // Flush variant pairs
   let variants_fl: FlushResult = flush_pairs(cur, variant_pairs, variant_count)
   cur = expect(variants_fl.ps, TK.Dedent)
-  return ps_add_node(cur, Node.EnumDeclD(name_tidx, variants_fl.list_pos))
+  return ps_add_node(cur, Node.EnumDeclD(name_tidx, tparams_lp, variants_fl.list_pos))
 
 fn parse_type_alias(ps: PS): PR
   let ps2: PS = ps_advance(ps)
@@ -1989,6 +2044,8 @@ fn node_kind_name(n: Node): string
       return "GenericT"
     Node.PointerT(a):
       return "PointerT"
+    Node.GenericParamT(t):
+      return "GenericParamT"
     Node.ErrorT(t):
       return "ErrorT"
     Node.LetS(a, b, c):
@@ -2011,15 +2068,15 @@ fn node_kind_name(n: Node): string
       return "ExprStmtS"
     Node.ErrorS(a):
       return "ErrorS"
-    Node.FnDeclD(a, b, c, d):
+    Node.FnDeclD(a, b, c, d, e):
       return "FnDeclD"
-    Node.ExternFnD(a, b, c):
+    Node.ExternFnD(a, b, c, d):
       return "ExternFnD"
-    Node.ExprFnD(a, b, c, d):
+    Node.ExprFnD(a, b, c, d, e):
       return "ExprFnD"
-    Node.ClassDeclD(a, b):
+    Node.ClassDeclD(a, b, c):
       return "ClassDeclD"
-    Node.EnumDeclD(a, b):
+    Node.EnumDeclD(a, b, c):
       return "EnumDeclD"
     Node.TypeAliasD(a, b):
       return "TypeAliasD"

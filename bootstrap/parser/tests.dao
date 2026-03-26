@@ -53,7 +53,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 36
+  let total: i32 = 38
 
   // -----------------------------------------------------------------
   // Expression tests
@@ -302,6 +302,22 @@ fn main(): i32
     print("SKIP self_parse_file: file not found at " + self_path)
     print("SKIP self_parse_nodes: file not found")
     print("SKIP self_parse_sanity: file not found")
+
+  // -----------------------------------------------------------------
+  // Generic type parameter tests
+  // -----------------------------------------------------------------
+
+  // Test 34: Generic fn declaration — fn foo<T>(x: T): T
+  let src34: string = "fn foo<T>(x: T): T\n  return x\n"
+  let r34: PR = parse(src34)
+  if expect_no_parse_errors("generic_fn_no_err", r34):
+    pass_count = pass_count + 1
+
+  // Test 35: Generic class declaration — class Box<T>
+  let src35: string = "class Box<T>:\n  value: T\n"
+  let r35: PR = parse(src35)
+  if expect_no_parse_errors("generic_class_no_err", r35):
+    pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
   // Summary
