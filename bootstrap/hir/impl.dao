@@ -27,40 +27,40 @@
 //   - Mode / resource blocks
 //   - Yield / generators
 
-enum HirNode:
+enum class HirNode:
   // File
-  HirFile(i64)
+  HirFile(decls: i64)
 
   // Declarations
-  HirFunction(i64, i64, i64, i64, i64, i64)
-  HirStruct(i64, i64, i64)
-  HirEnum(i64, i64, i64)
-  HirTypeAlias(i64, i64)
+  HirFunction(name: i64, params: i64, ret: i64, body: i64, nparams: i64, flags: i64)
+  HirStruct(name: i64, fields: i64, nfields: i64)
+  HirEnum(name: i64, variants: i64, nvariants: i64)
+  HirTypeAlias(name: i64, typ: i64)
 
   // Statements
-  HirLet(i64, i64, i64)
-  HirAssign(i64, i64)
-  HirIf(i64, i64, i64)
-  HirWhile(i64, i64)
-  HirFor(i64, i64, i64)
-  HirReturn(i64)
-  HirBreak(i64)
-  HirExprStmt(i64)
-  HirErrorStmt(i64)
+  HirLet(name: i64, typ: i64, init: i64)
+  HirAssign(target: i64, value: i64)
+  HirIf(cond: i64, then_body: i64, else_body: i64)
+  HirWhile(cond: i64, body: i64)
+  HirFor(var: i64, iter: i64, body: i64)
+  HirReturn(value: i64)
+  HirBreak(span: i64)
+  HirExprStmt(expr: i64)
+  HirErrorStmt(span: i64)
 
   // Expressions
-  HirIntLit(i64, i64)
-  HirFloatLit(i64, i64)
-  HirStringLit(i64, i64)
-  HirBoolLit(i64, i64)
-  HirIdent(i64, i64, i64)
-  HirBinary(i64, i64, i64, i64)
-  HirUnary(i64, i64, i64)
-  HirCall(i64, i64, i64, i64)
-  HirFieldAccess(i64, i64, i64)
-  HirPipe(i64, i64, i64)
-  HirQualName(i64, i64, i64)
-  HirErrorExpr(i64)
+  HirIntLit(value: i64, typ: i64)
+  HirFloatLit(value: i64, typ: i64)
+  HirStringLit(value: i64, typ: i64)
+  HirBoolLit(value: i64, typ: i64)
+  HirIdent(name: i64, sym: i64, typ: i64)
+  HirBinary(op: i64, left: i64, right: i64, typ: i64)
+  HirUnary(op: i64, operand: i64, typ: i64)
+  HirCall(callee: i64, args: i64, nargs: i64, typ: i64)
+  HirFieldAccess(object: i64, field: i64, typ: i64)
+  HirPipe(left: i64, right: i64, typ: i64)
+  HirQualName(segments: i64, nsegments: i64, typ: i64)
+  HirErrorExpr(span: i64)
 
 // =========================================================================
 // Section 50: HIR state and result types

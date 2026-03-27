@@ -41,7 +41,7 @@ struct CheckContext {
   const Type* return_type = nullptr; // enclosing function return type
   const Type* self_type = nullptr;   // type of `self` in current scope (class/extend)
   std::unordered_set<std::string_view> active_modes; // e.g. "unsafe"
-  uint32_t loop_depth = 0;           // nesting depth for break validation
+  uint32_t loop_depth = 0;                           // nesting depth for break validation
 };
 
 // ---------------------------------------------------------------------------
@@ -102,15 +102,17 @@ private:
   struct ConceptSelfMapGuard {
     std::unordered_map<std::string_view, const Type*>& map;
     std::unordered_map<std::string_view, const Type*> saved;
-    ConceptSelfMapGuard(std::unordered_map<std::string_view, const Type*>& m)
-        : map(m), saved(m) {}
-    ~ConceptSelfMapGuard() { map = saved; }
+    ConceptSelfMapGuard(std::unordered_map<std::string_view, const Type*>& m) : map(m), saved(m) {
+    }
+    ~ConceptSelfMapGuard() {
+      map = saved;
+    }
   };
 
   // Pre-built method lookup table: (type*, method_name) -> {fn_type, decl}.
   struct MethodEntry {
-    const Type* fn_type;      // method function type (self removed)
-    const Decl* method_decl;  // the FunctionDecl node for HIR resolution
+    const Type* fn_type;     // method function type (self removed)
+    const Decl* method_decl; // the FunctionDecl node for HIR resolution
   };
 
   struct MethodKey {
@@ -180,23 +182,23 @@ private:
   auto check_binary(const Expr* expr) -> const Type*;
   auto check_unary(const Expr* expr) -> const Type*;
   auto check_call(const Expr* expr) -> const Type*;
-  void infer_type_bindings(const Type* pattern, const Type* concrete,
+  void infer_type_bindings(const Type* pattern,
+                           const Type* concrete,
                            std::unordered_map<uint32_t, const Type*>& bindings,
                            Span error_span);
   auto substitute_generics(const Type* type,
                            const std::unordered_map<uint32_t, const Type*>& bindings)
       -> const Type*;
-  void verify_concept_constraints(
-      const Expr* callee_expr, Span error_span,
-      const std::unordered_map<uint32_t, const Type*>& bindings);
-  auto check_construct(const Expr* expr, const TypeStruct* struct_type)
-      -> const Type*;
+  void verify_concept_constraints(const Expr* callee_expr,
+                                  Span error_span,
+                                  const std::unordered_map<uint32_t, const Type*>& bindings);
+  auto check_construct(const Expr* expr, const TypeStruct* struct_type) -> const Type*;
   auto check_pipe(const Expr* expr) -> const Type*;
   auto check_try(const Expr* expr) -> const Type*;
   auto check_field(const Expr* expr) -> const Type*;
-  auto lookup_method(const Type* obj_type, std::string_view name,
-                     const Decl** resolved_decl = nullptr)
-      -> const Type*;
+  auto lookup_method(const Type* obj_type,
+                     std::string_view name,
+                     const Decl** resolved_decl = nullptr) -> const Type*;
   void validate_receiver(const Decl* method, Span context_span);
   auto check_index(const Expr* expr) -> const Type*;
   auto check_lambda(const Expr* expr, const Type* expected) -> const Type*;
@@ -217,8 +219,8 @@ private:
 // Top-level entry point.
 // ---------------------------------------------------------------------------
 
-auto typecheck(const FileNode& file, const ResolveResult& resolve,
-               TypeContext& types) -> TypeCheckResult;
+auto typecheck(const FileNode& file, const ResolveResult& resolve, TypeContext& types)
+    -> TypeCheckResult;
 
 } // namespace dao
 

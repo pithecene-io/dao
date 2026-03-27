@@ -210,8 +210,7 @@ suite<"type_generic_param"> type_generic_param = [] {
     TypeContext ctx;
     auto* t1 = ctx.generic_param(&kDeclA, "T", 0);
     auto* t2 = ctx.generic_param(&kDeclB, "T", 0);
-    expect(t1 != t2)
-        << "T@0 from different declarations must not collapse";
+    expect(t1 != t2) << "T@0 from different declarations must not collapse";
   };
 };
 
@@ -222,8 +221,7 @@ suite<"type_generic_param"> type_generic_param = [] {
 suite<"type_struct_enum"> type_struct_enum = [] {
   "struct creation with fields"_test = [] {
     TypeContext ctx;
-    auto* s = ctx.make_struct(&kDeclA, "Point",
-                              {{"x", ctx.f64()}, {"y", ctx.f64()}});
+    auto* s = ctx.make_struct(&kDeclA, "Point", {{"x", ctx.f64()}, {"y", ctx.f64()}});
     expect(s != nullptr);
     expect(s->kind() == TypeKind::Struct);
     expect(s->name() == "Point");
@@ -241,8 +239,7 @@ suite<"type_struct_enum"> type_struct_enum = [] {
 
   "enum creation with variants"_test = [] {
     TypeContext ctx;
-    auto* e = ctx.make_enum(&kDeclA, "Option",
-                            {{"None", {}}, {"Some", {ctx.i32()}}});
+    auto* e = ctx.make_enum(&kDeclA, "Option", {{"None", {}}, {"Some", {ctx.i32()}}});
     expect(e != nullptr);
     expect(e->kind() == TypeKind::Enum);
     expect(e->name() == "Option");
@@ -321,9 +318,7 @@ suite<"type_printer"> type_printer = [] {
     expect(print_type(outer) == "*fn(i32): *f64");
   };
 
-  "print null type"_test = [] {
-    expect(print_type(nullptr) == "<null>");
-  };
+  "print null type"_test = [] { expect(print_type(nullptr) == "<null>"); };
 };
 
 // ---------------------------------------------------------------------------
@@ -362,4 +357,5 @@ suite<"type_utilities"> type_utilities = [] {
 
 // NOLINTEND(readability-magic-numbers)
 
-auto main() -> int {} // NOLINT(readability-named-parameter)
+auto main() -> int {
+} // NOLINT(readability-named-parameter)

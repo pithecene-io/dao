@@ -58,17 +58,28 @@ auto builtin_kind_name(BuiltinKind kind) -> const char* {
 }
 
 auto builtin_kind_from_name(std::string_view name) -> std::optional<BuiltinKind> {
-  if (name == "i8") return BuiltinKind::I8;
-  if (name == "i16") return BuiltinKind::I16;
-  if (name == "i32") return BuiltinKind::I32;
-  if (name == "i64") return BuiltinKind::I64;
-  if (name == "u8") return BuiltinKind::U8;
-  if (name == "u16") return BuiltinKind::U16;
-  if (name == "u32") return BuiltinKind::U32;
-  if (name == "u64") return BuiltinKind::U64;
-  if (name == "f32") return BuiltinKind::F32;
-  if (name == "f64") return BuiltinKind::F64;
-  if (name == "bool") return BuiltinKind::Bool;
+  if (name == "i8")
+    return BuiltinKind::I8;
+  if (name == "i16")
+    return BuiltinKind::I16;
+  if (name == "i32")
+    return BuiltinKind::I32;
+  if (name == "i64")
+    return BuiltinKind::I64;
+  if (name == "u8")
+    return BuiltinKind::U8;
+  if (name == "u16")
+    return BuiltinKind::U16;
+  if (name == "u32")
+    return BuiltinKind::U32;
+  if (name == "u64")
+    return BuiltinKind::U64;
+  if (name == "f32")
+    return BuiltinKind::F32;
+  if (name == "f64")
+    return BuiltinKind::F64;
+  if (name == "bool")
+    return BuiltinKind::Bool;
   return std::nullopt;
 }
 

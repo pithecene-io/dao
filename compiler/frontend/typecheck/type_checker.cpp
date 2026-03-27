@@ -133,16 +133,13 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
           if (named.type_args.empty()) {
             error(node->span,
                   "generic type '" + std::string(name) + "' requires " +
-                      std::to_string(type_params->size()) +
-                      " type argument(s)");
+                      std::to_string(type_params->size()) + " type argument(s)");
             return nullptr;
           }
           if (named.type_args.size() != type_params->size()) {
             error(node->span,
-                  "'" + std::string(name) + "' expects " +
-                      std::to_string(type_params->size()) +
-                      " type argument(s), got " +
-                      std::to_string(named.type_args.size()));
+                  "'" + std::string(name) + "' expects " + std::to_string(type_params->size()) +
+                      " type argument(s), got " + std::to_string(named.type_args.size()));
             return nullptr;
           }
           std::unordered_map<uint32_t, const Type*> bindings;
@@ -162,11 +159,9 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
         }
 
         // Non-generic class used with type arguments.
-        if (type_params != nullptr && type_params->empty() &&
-            !named.type_args.empty()) {
+        if (type_params != nullptr && type_params->empty() && !named.type_args.empty()) {
           error(node->span,
-                "'" + std::string(name) +
-                    "' is not generic but was given type arguments");
+                "'" + std::string(name) + "' is not generic but was given type arguments");
           return nullptr;
         }
       }
@@ -183,16 +178,13 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
           if (named.type_args.empty()) {
             error(node->span,
                   "generic type '" + std::string(name) + "' requires " +
-                      std::to_string(type_params->size()) +
-                      " type argument(s)");
+                      std::to_string(type_params->size()) + " type argument(s)");
             return nullptr;
           }
           if (named.type_args.size() != type_params->size()) {
             error(node->span,
-                  "'" + std::string(name) + "' expects " +
-                      std::to_string(type_params->size()) +
-                      " type argument(s), got " +
-                      std::to_string(named.type_args.size()));
+                  "'" + std::string(name) + "' expects " + std::to_string(type_params->size()) +
+                      " type argument(s), got " + std::to_string(named.type_args.size()));
             return nullptr;
           }
           std::unordered_map<uint32_t, const Type*> bindings;
@@ -211,11 +203,9 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
           return nullptr;
         }
 
-        if (type_params != nullptr && type_params->empty() &&
-            !named.type_args.empty()) {
+        if (type_params != nullptr && type_params->empty() && !named.type_args.empty()) {
           error(node->span,
-                "'" + std::string(name) +
-                    "' is not generic but was given type arguments");
+                "'" + std::string(name) + "' is not generic but was given type arguments");
           return nullptr;
         }
       }
@@ -295,9 +285,8 @@ auto TypeChecker::resolve_symbol_type(const Symbol* sym) -> const Type* {
       }
       param_types.push_back(pt);
     }
-    const auto* ret = fn.return_type != nullptr
-                          ? resolve_type_node(fn.return_type)
-                          : types_.void_type();
+    const auto* ret =
+        fn.return_type != nullptr ? resolve_type_node(fn.return_type) : types_.void_type();
     if (!valid || ret == nullptr) {
       break;
     }
@@ -468,24 +457,20 @@ void TypeChecker::register_declarations(const FileNode& file) {
           payload_types.push_back(resolved);
           if (resolved == nullptr) {
             if (variant.payload_types[i]->is<NamedType>()) {
-              const auto& named =
-                  variant.payload_types[i]->as<NamedType>();
-              if (named.name.segments.size() == 1 &&
-                  named.name.segments[0] == en.name) {
+              const auto& named = variant.payload_types[i]->as<NamedType>();
+              if (named.name.segments.size() == 1 && named.name.segments[0] == en.name) {
                 error(variant.payload_types[i]->span,
                       "enum '" + std::string(en.name) +
                           "' cannot contain itself by value in variant '" +
-                          std::string(variant.name) +
-                          "'; use a pointer (*" + std::string(en.name) +
+                          std::string(variant.name) + "'; use a pointer (*" + std::string(en.name) +
                           ") for recursive types");
               }
             }
           }
         }
-        variants.push_back({variant.name, std::move(payload_types)});
+        variants.push_back({variant.name, std::move(payload_types), variant.field_names});
       }
-      const auto* enum_type =
-          types_.make_enum(sym, en.name, std::move(variants));
+      const auto* enum_type = types_.make_enum(sym, en.name, std::move(variants));
       symbol_types_[sym] = enum_type;
       typed_.set_decl_type(decl, enum_type);
     }
@@ -529,9 +514,8 @@ void TypeChecker::register_declarations(const FileNode& file) {
         }
         param_types.push_back(pt);
       }
-      const auto* ret = fn.return_type != nullptr
-                            ? resolve_type_node(fn.return_type)
-                            : types_.void_type();
+      const auto* ret =
+          fn.return_type != nullptr ? resolve_type_node(fn.return_type) : types_.void_type();
       if (valid && ret != nullptr) {
         const auto* fn_type = types_.function_type(std::move(param_types), ret);
         symbol_types_[sym] = fn_type;
@@ -546,8 +530,7 @@ void TypeChecker::register_declarations(const FileNode& file) {
       if (decl_it == decl_symbols_.end()) {
         break;
       }
-      const auto* struct_type = static_cast<const TypeStruct*>(
-          symbol_types_[decl_it->second]);
+      const auto* struct_type = static_cast<const TypeStruct*>(symbol_types_[decl_it->second]);
 
       // Register class body methods.
       for (const auto* method : st.methods) {
@@ -566,11 +549,9 @@ void TypeChecker::register_declarations(const FileNode& file) {
             param_types.push_back(param_type);
           }
         }
-        const auto* ret = fn.return_type != nullptr
-                              ? resolve_type_node(fn.return_type)
-                              : types_.void_type();
-        const auto* fn_type =
-            types_.function_type(std::move(param_types), ret);
+        const auto* ret =
+            fn.return_type != nullptr ? resolve_type_node(fn.return_type) : types_.void_type();
+        const auto* fn_type = types_.function_type(std::move(param_types), ret);
         symbol_types_[method_sym] = fn_type;
         typed_.set_decl_type(method, fn_type);
       }
@@ -604,8 +585,7 @@ void TypeChecker::register_declarations(const FileNode& file) {
                               ? resolve_type_node(method_fn.return_type)
                               : types_.void_type();
         if (valid && ret != nullptr) {
-          const auto* fn_type =
-              types_.function_type(std::move(param_types), ret);
+          const auto* fn_type = types_.function_type(std::move(param_types), ret);
           auto fn_decl_it = decl_symbols_.find(method_fn.name_span.offset);
           if (fn_decl_it != decl_symbols_.end()) {
             symbol_types_[fn_decl_it->second] = fn_type;
@@ -636,13 +616,11 @@ void TypeChecker::register_declarations(const FileNode& file) {
 // Derived conformance computation
 // ---------------------------------------------------------------------------
 
-auto TypeChecker::type_conforms_to(const Type* type,
-                                   const Decl* concept_decl) -> bool {
+auto TypeChecker::type_conforms_to(const Type* type, const Decl* concept_decl) -> bool {
   // Check explicit conformance: inline `as` blocks on structs.
   if (type->kind() == TypeKind::Struct) {
     const auto* struct_type = static_cast<const TypeStruct*>(type);
-    const auto* decl_sym =
-        static_cast<const Symbol*>(struct_type->decl_id());
+    const auto* decl_sym = static_cast<const Symbol*>(struct_type->decl_id());
     if (decl_sym != nullptr && decl_sym->decl != nullptr) {
       const auto* decl_node = static_cast<const Decl*>(decl_sym->decl);
       if (decl_node->is<ClassDecl>()) {
@@ -775,8 +753,7 @@ void TypeChecker::compute_derived_conformances(const FileNode& file) {
         const auto* stype = static_cast<const TypeStruct*>(entry.struct_type);
         bool all_fields_conform = true;
         for (const auto& field : stype->fields()) {
-          if (field.type == nullptr ||
-              !type_conforms_to(field.type, concept_decl)) {
+          if (field.type == nullptr || !type_conforms_to(field.type, concept_decl)) {
             all_fields_conform = false;
             break;
           }
@@ -815,8 +792,7 @@ void TypeChecker::check_declaration(const Decl* decl) {
     ctx_.self_type = resolve_type_node(ext.target_type);
 
     // Diagnose extend targeting a type that denies the concept.
-    if (ctx_.self_type != nullptr &&
-        ctx_.self_type->kind() == TypeKind::Struct) {
+    if (ctx_.self_type != nullptr && ctx_.self_type->kind() == TypeKind::Struct) {
       const auto* st = static_cast<const TypeStruct*>(ctx_.self_type);
       const auto* dsym = static_cast<const Symbol*>(st->decl_id());
       if (dsym != nullptr && dsym->decl != nullptr) {
@@ -825,9 +801,8 @@ void TypeChecker::check_declaration(const Decl* decl) {
           for (const auto& deny : dnode->as<ClassDecl>().denials) {
             if (deny.concept_name == ext.concept_name) {
               error(ext.concept_span,
-                    "cannot extend '" + std::string(st->name()) +
-                        "' as '" + std::string(ext.concept_name) +
-                        "' because the type denies it");
+                    "cannot extend '" + std::string(st->name()) + "' as '" +
+                        std::string(ext.concept_name) + "' because the type denies it");
             }
           }
         }
@@ -853,9 +828,8 @@ void TypeChecker::check_function(const Decl* decl) {
   const auto& fn = decl->as<FunctionDecl>();
 
   // Determine return type.
-  const auto* ret_type = fn.return_type != nullptr
-                             ? resolve_type_node(fn.return_type)
-                             : types_.void_type();
+  const auto* ret_type =
+      fn.return_type != nullptr ? resolve_type_node(fn.return_type) : types_.void_type();
 
   // Validate extern fn ABI types (user declarations only, not __dao_* hooks).
   // Validate extern fn ABI types for user declarations.
@@ -908,11 +882,10 @@ void TypeChecker::check_function(const Decl* decl) {
   if (fn.is_expr_bodied()) {
     // Expression-bodied: -> expr
     const auto* expr_type = check_expr(fn.expr_body);
-    if (expr_type != nullptr && ret_type != nullptr &&
-        !is_assignable(expr_type, ret_type)) {
+    if (expr_type != nullptr && ret_type != nullptr && !is_assignable(expr_type, ret_type)) {
       error(fn.expr_body->span,
-            "expression body type '" + print_type(expr_type) +
-                "' does not match return type '" + print_type(ret_type) + "'");
+            "expression body type '" + print_type(expr_type) + "' does not match return type '" +
+                print_type(ret_type) + "'");
     }
   } else {
     // Block-bodied: check statements.
@@ -1041,8 +1014,8 @@ void TypeChecker::check_let(const Stmt* stmt) {
     // let x: T = expr — check assignability.
     if (!is_assignable(init_type, declared_type)) {
       error(let.initializer->span,
-            "initializer type '" + print_type(init_type) +
-                "' is not assignable to '" + print_type(declared_type) + "'");
+            "initializer type '" + print_type(init_type) + "' is not assignable to '" +
+                print_type(declared_type) + "'");
     }
     typed_.set_local_type(stmt, declared_type);
   } else if (declared_type != nullptr) {
@@ -1053,8 +1026,7 @@ void TypeChecker::check_let(const Stmt* stmt) {
     typed_.set_local_type(stmt, init_type);
   } else {
     // let x — no type, no initializer.
-    error(stmt->span,
-          "declaration without type annotation requires an initializer");
+    error(stmt->span, "declaration without type annotation requires an initializer");
   }
 
   // Cache in symbol table for later identifier lookups.
@@ -1077,11 +1049,9 @@ void TypeChecker::check_assignment(const Stmt* stmt) {
   const auto* target_type = check_expr(assign.target);
   const auto* value_type = check_expr(assign.value, target_type);
 
-  if (target_type != nullptr && value_type != nullptr &&
-      !is_assignable(value_type, target_type)) {
+  if (target_type != nullptr && value_type != nullptr && !is_assignable(value_type, target_type)) {
     error(assign.value->span,
-          "cannot assign '" + print_type(value_type) + "' to '" +
-              print_type(target_type) + "'");
+          "cannot assign '" + print_type(value_type) + "' to '" + print_type(target_type) + "'");
   }
 }
 
@@ -1090,8 +1060,7 @@ void TypeChecker::check_if(const Stmt* stmt) {
 
   const auto* cond_type = check_expr(ifn.condition);
   if (cond_type != nullptr && !is_assignable(cond_type, types_.bool_type())) {
-    error(ifn.condition->span,
-          "condition must be 'bool', got '" + print_type(cond_type) + "'");
+    error(ifn.condition->span, "condition must be 'bool', got '" + print_type(cond_type) + "'");
   }
   check_body(ifn.then_body);
   if (ifn.has_else()) {
@@ -1104,8 +1073,7 @@ void TypeChecker::check_while(const Stmt* stmt) {
 
   const auto* cond_type = check_expr(wh.condition);
   if (cond_type != nullptr && !is_assignable(cond_type, types_.bool_type())) {
-    error(wh.condition->span,
-          "condition must be 'bool', got '" + print_type(cond_type) + "'");
+    error(wh.condition->span, "condition must be 'bool', got '" + print_type(cond_type) + "'");
   }
   ctx_.loop_depth++;
   check_body(wh.body);
@@ -1123,8 +1091,7 @@ void TypeChecker::check_for(const Stmt* stmt) {
     if (iter_type->kind() == TypeKind::Generator) {
       elem_type = static_cast<const TypeGenerator*>(iter_type)->yield_type();
     } else {
-      error(fo.iterable->span,
-            "for-in requires Generator<T>, got '" + print_type(iter_type) + "'");
+      error(fo.iterable->span, "for-in requires Generator<T>, got '" + print_type(iter_type) + "'");
     }
   }
 
@@ -1145,8 +1112,7 @@ void TypeChecker::check_yield(const Stmt* stmt) {
   const auto* value_type = check_expr(yield.value);
 
   // yield is only valid inside a generator function (return type is Generator<T>).
-  if (ctx_.return_type == nullptr ||
-      ctx_.return_type->kind() != TypeKind::Generator) {
+  if (ctx_.return_type == nullptr || ctx_.return_type->kind() != TypeKind::Generator) {
     error(stmt->span, "yield is only valid inside a generator function");
     return;
   }
@@ -1156,8 +1122,7 @@ void TypeChecker::check_yield(const Stmt* stmt) {
   const auto* expected = gen->yield_type();
   if (value_type != nullptr && expected != nullptr && value_type != expected) {
     error(yield.value->span,
-          "yield type '" + print_type(value_type) +
-              "' does not match Generator element type '" +
+          "yield type '" + print_type(value_type) + "' does not match Generator element type '" +
               print_type(expected) + "'");
   }
 
@@ -1176,8 +1141,7 @@ void TypeChecker::check_match(const Stmt* stmt) {
     if (scrutinee_type != nullptr && pattern_type != nullptr) {
       if (!is_assignable(pattern_type, scrutinee_type)) {
         error(arm.pattern->span,
-              "match arm type '" + print_type(pattern_type) +
-                  "' does not match scrutinee type '" +
+              "match arm type '" + print_type(pattern_type) + "' does not match scrutinee type '" +
                   print_type(scrutinee_type) + "'");
       }
     }
@@ -1185,12 +1149,10 @@ void TypeChecker::check_match(const Stmt* stmt) {
     // Validate destructuring bindings against variant payload arity.
     // This runs for ALL enum variant match arms, not just those with
     // bindings — a payload-bearing variant without bindings is an error.
-    if (scrutinee_type != nullptr &&
-        scrutinee_type->kind() == TypeKind::Enum &&
+    if (scrutinee_type != nullptr && scrutinee_type->kind() == TypeKind::Enum &&
         arm.pattern->is<FieldExpr>()) {
       const auto& field = arm.pattern->as<FieldExpr>();
-      const auto* enum_type =
-          static_cast<const TypeEnum*>(scrutinee_type);
+      const auto* enum_type = static_cast<const TypeEnum*>(scrutinee_type);
       const EnumVariant* matched_variant = nullptr;
       for (const auto& variant : enum_type->variants()) {
         if (variant.name == field.field) {
@@ -1199,28 +1161,21 @@ void TypeChecker::check_match(const Stmt* stmt) {
         }
       }
       if (matched_variant != nullptr) {
-        if (!arm.bindings.empty() &&
-            matched_variant->payload_types.empty()) {
-          error(arm.binding_spans.empty() ? arm.pattern->span
-                                          : arm.binding_spans[0],
+        if (!arm.bindings.empty() && matched_variant->payload_types.empty()) {
+          error(arm.binding_spans.empty() ? arm.pattern->span : arm.binding_spans[0],
                 "variant '" + std::string(matched_variant->name) +
                     "' has no payload to destructure");
-        } else if (arm.bindings.size() !=
-                   matched_variant->payload_types.size()) {
+        } else if (arm.bindings.size() != matched_variant->payload_types.size()) {
           error(arm.pattern->span,
-                "variant '" + std::string(matched_variant->name) +
-                    "' expects " +
-                    std::to_string(matched_variant->payload_types.size()) +
-                    " binding(s), got " +
+                "variant '" + std::string(matched_variant->name) + "' expects " +
+                    std::to_string(matched_variant->payload_types.size()) + " binding(s), got " +
                     std::to_string(arm.bindings.size()));
         } else {
           // Register binding types via the declaration symbol table.
           for (size_t i = 0; i < arm.bindings.size(); ++i) {
-            auto sym_it =
-                decl_symbols_.find(arm.binding_spans[i].offset);
+            auto sym_it = decl_symbols_.find(arm.binding_spans[i].offset);
             if (sym_it != decl_symbols_.end()) {
-              symbol_types_[sym_it->second] =
-                  matched_variant->payload_types[i];
+              symbol_types_[sym_it->second] = matched_variant->payload_types[i];
             }
           }
         }
@@ -1249,8 +1204,8 @@ void TypeChecker::check_return(const Stmt* stmt) {
   const auto& ret = stmt->as<ReturnStatement>();
 
   // In generator functions, only bare return is valid (early termination).
-  bool in_generator = ctx_.return_type != nullptr &&
-                      ctx_.return_type->kind() == TypeKind::Generator;
+  bool in_generator =
+      ctx_.return_type != nullptr && ctx_.return_type->kind() == TypeKind::Generator;
 
   if (ret.value != nullptr) {
     const auto* val_type = check_expr(ret.value, ctx_.return_type);
@@ -1261,17 +1216,14 @@ void TypeChecker::check_return(const Stmt* stmt) {
     } else if (val_type != nullptr && ctx_.return_type != nullptr &&
                !is_assignable(val_type, ctx_.return_type)) {
       error(ret.value->span,
-            "return type '" + print_type(val_type) +
-                "' does not match function return type '" +
+            "return type '" + print_type(val_type) + "' does not match function return type '" +
                 print_type(ctx_.return_type) + "'");
     }
   } else {
     // Bare return — valid for void functions and generator functions.
-    if (ctx_.return_type != nullptr &&
-        ctx_.return_type->kind() != TypeKind::Void && !in_generator) {
-      error(stmt->span,
-            "bare return in function returning '" +
-                print_type(ctx_.return_type) + "'");
+    if (ctx_.return_type != nullptr && ctx_.return_type->kind() != TypeKind::Void &&
+        !in_generator) {
+      error(stmt->span, "bare return in function returning '" + print_type(ctx_.return_type) + "'");
     }
   }
 }
@@ -1289,8 +1241,7 @@ auto TypeChecker::check_expr(const Expr* expr) -> const Type* {
   return check_expr(expr, nullptr);
 }
 
-auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
-    -> const Type* {
+auto TypeChecker::check_expr(const Expr* expr, const Type* expected) -> const Type* {
   if (expr == nullptr) {
     return nullptr;
   }
@@ -1362,13 +1313,11 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
   // If the result is already a concrete instantiation (e.g. Option<string>
   // inferred from Option.Some("oops")), it is NOT overwritten — the normal
   // is_assignable check catches mismatches.
-  if (result != nullptr && expected != nullptr &&
-      result->kind() == TypeKind::Enum &&
+  if (result != nullptr && expected != nullptr && result->kind() == TypeKind::Enum &&
       expected->kind() == TypeKind::Enum) {
     const auto* result_enum = static_cast<const TypeEnum*>(result);
     const auto* expected_enum = static_cast<const TypeEnum*>(expected);
-    if (result_enum->decl_id() == expected_enum->decl_id() &&
-        result_enum != expected_enum) {
+    if (result_enum->decl_id() == expected_enum->decl_id() && result_enum != expected_enum) {
       // Check if the result enum has any unresolved generic params.
       bool has_generic = false;
       for (const auto& variant : result_enum->variants()) {
@@ -1393,10 +1342,8 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
   // declaration are bound parameters from an enclosing class or
   // function and will be resolved at monomorphization. Only reject
   // GenericParams that belong to the enum itself (truly unresolved).
-  if (result != nullptr && result->kind() == TypeKind::Enum &&
-      !suppress_payload_check_ &&
-      (expr->kind() == NodeKind::FieldExpr ||
-       expr->kind() == NodeKind::CallExpr)) {
+  if (result != nullptr && result->kind() == TypeKind::Enum && !suppress_payload_check_ &&
+      (expr->kind() == NodeKind::FieldExpr || expr->kind() == NodeKind::CallExpr)) {
     const auto* re = static_cast<const TypeEnum*>(result);
     for (const auto& variant : re->variants()) {
       for (const auto* pt : variant.payload_types) {
@@ -1405,8 +1352,7 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
           // Allow params from enclosing scopes (class/function generics).
           if (gp->binder() == re->decl_id()) {
             error(expr->span,
-                  "cannot infer type argument(s) for generic enum '" +
-                      std::string(re->name()) +
+                  "cannot infer type argument(s) for generic enum '" + std::string(re->name()) +
                       "'; provide an explicit type annotation");
             result = nullptr;
             goto done_generic_check; // NOLINT
@@ -1415,7 +1361,7 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
       }
     }
   }
-  done_generic_check:
+done_generic_check:
 
   if (result != nullptr) {
     typed_.set_expr_type(expr, result);
@@ -1432,11 +1378,9 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected)
     if (result != nullptr && result->kind() == TypeKind::Enum) {
       const auto* en = static_cast<const TypeEnum*>(result);
       error(expr->span,
-            "enum variant '" + std::string(en->name()) + "." +
-                std::string(field.field) +
-                "' has a payload; use constructor syntax: " +
-                std::string(en->name()) + "." + std::string(field.field) +
-                "(...)");
+            "enum variant '" + std::string(en->name()) + "." + std::string(field.field) +
+                "' has a payload; use constructor syntax: " + std::string(en->name()) + "." +
+                std::string(field.field) + "(...)");
       return nullptr;
     }
   }
@@ -1458,7 +1402,8 @@ auto TypeChecker::check_identifier(const Expr* expr) -> const Type* {
     } else if (expr->is<QualifiedName>()) {
       const auto& qn = expr->as<QualifiedName>();
       for (size_t i = 0; i < qn.segments.size(); ++i) {
-        if (i > 0) name_str += "::";
+        if (i > 0)
+          name_str += "::";
         name_str += qn.segments[i];
       }
     }
@@ -1467,8 +1412,7 @@ auto TypeChecker::check_identifier(const Expr* expr) -> const Type* {
   }
   const auto* result = resolve_symbol_type(it->second);
   if (result == nullptr && it->second->kind == SymbolKind::Param) {
-    error(expr->span,
-          "'" + std::string(it->second->name) + "' has no known type in this context");
+    error(expr->span, "'" + std::string(it->second->name) + "' has no known type in this context");
   }
   return result;
 }
@@ -1477,8 +1421,7 @@ auto TypeChecker::check_identifier(const Expr* expr) -> const Type* {
 // Literals
 // ---------------------------------------------------------------------------
 
-auto TypeChecker::check_int_literal(const Expr* /*expr*/,
-                                     const Type* expected) -> const Type* {
+auto TypeChecker::check_int_literal(const Expr* /*expr*/, const Type* expected) -> const Type* {
   // If the target type is a known integer type, adopt it.
   // This allows `let x: i64 = 42` without requiring a suffix.
   if (expected != nullptr && is_integer(expected)) {
@@ -1487,8 +1430,7 @@ auto TypeChecker::check_int_literal(const Expr* /*expr*/,
   return types_.i32(); // default integer literal type
 }
 
-auto TypeChecker::check_float_literal(const Expr* /*expr*/,
-                                       const Type* expected) -> const Type* {
+auto TypeChecker::check_float_literal(const Expr* /*expr*/, const Type* expected) -> const Type* {
   // If the target type is a known float type, adopt it.
   if (expected != nullptr && is_float(expected)) {
     return expected;
@@ -1517,8 +1459,7 @@ auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
   // Second pass: if RHS provided a concrete type and LHS is a literal
   // that defaulted, re-check LHS with RHS as context.
   if (lhs != nullptr && rhs != nullptr && lhs != rhs &&
-      (bin.left->kind() == NodeKind::IntLiteral ||
-       bin.left->kind() == NodeKind::FloatLiteral)) {
+      (bin.left->kind() == NodeKind::IntLiteral || bin.left->kind() == NodeKind::FloatLiteral)) {
     lhs = check_expr(bin.left, rhs);
   }
   if (lhs == nullptr || rhs == nullptr) {
@@ -1532,21 +1473,20 @@ auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
     if (is_string(lhs)) {
       if (!is_assignable(lhs, rhs)) {
         error(expr->span,
-              "mismatched types in string concatenation: '" +
-                  print_type(lhs) + "' and '" + print_type(rhs) + "'");
+              "mismatched types in string concatenation: '" + print_type(lhs) + "' and '" +
+                  print_type(rhs) + "'");
         return nullptr;
       }
       return lhs;
     }
     if (!is_numeric(lhs)) {
-      error(bin.left->span,
-            "'+' requires numeric or string type, got '" + print_type(lhs) + "'");
+      error(bin.left->span, "'+' requires numeric or string type, got '" + print_type(lhs) + "'");
       return nullptr;
     }
     if (!is_assignable(lhs, rhs)) {
       error(expr->span,
-            "mismatched types in arithmetic: '" + print_type(lhs) +
-                "' and '" + print_type(rhs) + "'");
+            "mismatched types in arithmetic: '" + print_type(lhs) + "' and '" + print_type(rhs) +
+                "'");
       return nullptr;
     }
     return lhs;
@@ -1556,14 +1496,13 @@ auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
   case BinaryOp::Div:
   case BinaryOp::Mod: {
     if (!is_numeric(lhs)) {
-      error(bin.left->span,
-            "arithmetic requires numeric type, got '" + print_type(lhs) + "'");
+      error(bin.left->span, "arithmetic requires numeric type, got '" + print_type(lhs) + "'");
       return nullptr;
     }
     if (!is_assignable(lhs, rhs)) {
       error(expr->span,
-            "mismatched types in arithmetic: '" + print_type(lhs) +
-                "' and '" + print_type(rhs) + "'");
+            "mismatched types in arithmetic: '" + print_type(lhs) + "' and '" + print_type(rhs) +
+                "'");
       return nullptr;
     }
     return lhs;
@@ -1575,14 +1514,13 @@ auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
   case BinaryOp::Gt:
   case BinaryOp::GtEq: {
     if (!is_numeric(lhs)) {
-      error(bin.left->span,
-            "comparison requires numeric type, got '" + print_type(lhs) + "'");
+      error(bin.left->span, "comparison requires numeric type, got '" + print_type(lhs) + "'");
       return nullptr;
     }
     if (!is_assignable(lhs, rhs)) {
       error(expr->span,
-            "mismatched types in comparison: '" + print_type(lhs) +
-                "' and '" + print_type(rhs) + "'");
+            "mismatched types in comparison: '" + print_type(lhs) + "' and '" + print_type(rhs) +
+                "'");
       return nullptr;
     }
     return types_.bool_type();
@@ -1593,8 +1531,8 @@ auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
   case BinaryOp::BangEq: {
     if (!is_assignable(lhs, rhs)) {
       error(expr->span,
-            "mismatched types in equality: '" + print_type(lhs) +
-                "' and '" + print_type(rhs) + "'");
+            "mismatched types in equality: '" + print_type(lhs) + "' and '" + print_type(rhs) +
+                "'");
       return nullptr;
     }
     // Reject == / != on payload-bearing enums (unsound without full
@@ -1606,8 +1544,7 @@ auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
           error(expr->span,
                 "equality comparison is not yet supported for payload-bearing "
                 "enum '" +
-                    std::string(enum_type->name()) +
-                    "'; use match to inspect variants");
+                    std::string(enum_type->name()) + "'; use match to inspect variants");
           return nullptr;
         }
       }
@@ -1619,13 +1556,11 @@ auto TypeChecker::check_binary(const Expr* expr) -> const Type* {
   case BinaryOp::And:
   case BinaryOp::Or: {
     if (!is_assignable(lhs, types_.bool_type())) {
-      error(bin.left->span,
-            "logical operator requires 'bool', got '" + print_type(lhs) + "'");
+      error(bin.left->span, "logical operator requires 'bool', got '" + print_type(lhs) + "'");
       return nullptr;
     }
     if (!is_assignable(rhs, types_.bool_type())) {
-      error(bin.right->span,
-            "logical operator requires 'bool', got '" + print_type(rhs) + "'");
+      error(bin.right->span, "logical operator requires 'bool', got '" + print_type(rhs) + "'");
       return nullptr;
     }
     return types_.bool_type();
@@ -1649,8 +1584,7 @@ auto TypeChecker::check_unary(const Expr* expr) -> const Type* {
   switch (un.op) {
   case UnaryOp::Negate: {
     if (!is_numeric(operand)) {
-      error(un.operand->span,
-            "negation requires numeric type, got '" + print_type(operand) + "'");
+      error(un.operand->span, "negation requires numeric type, got '" + print_type(operand) + "'");
       return nullptr;
     }
     return operand;
@@ -1658,8 +1592,7 @@ auto TypeChecker::check_unary(const Expr* expr) -> const Type* {
 
   case UnaryOp::Not: {
     if (!is_assignable(operand, types_.bool_type())) {
-      error(un.operand->span,
-            "logical not requires 'bool', got '" + print_type(operand) + "'");
+      error(un.operand->span, "logical not requires 'bool', got '" + print_type(operand) + "'");
       return nullptr;
     }
     return types_.bool_type();
@@ -1672,8 +1605,7 @@ auto TypeChecker::check_unary(const Expr* expr) -> const Type* {
       return nullptr;
     }
     if (operand->kind() != TypeKind::Pointer) {
-      error(un.operand->span,
-            "cannot dereference non-pointer type '" + print_type(operand) + "'");
+      error(un.operand->span, "cannot dereference non-pointer type '" + print_type(operand) + "'");
       return nullptr;
     }
     return static_cast<const TypePointer*>(operand)->pointee();
@@ -1696,9 +1628,10 @@ auto TypeChecker::check_unary(const Expr* expr) -> const Type* {
 // Generic type inference and substitution helpers
 // ---------------------------------------------------------------------------
 
-void TypeChecker::infer_type_bindings(
-    const Type* pattern, const Type* concrete,
-    std::unordered_map<uint32_t, const Type*>& bindings, Span error_span) {
+void TypeChecker::infer_type_bindings(const Type* pattern,
+                                      const Type* concrete,
+                                      std::unordered_map<uint32_t, const Type*>& bindings,
+                                      Span error_span) {
   if (pattern == nullptr || concrete == nullptr) {
     return;
   }
@@ -1710,10 +1643,8 @@ void TypeChecker::infer_type_bindings(
       // Already bound — check consistency.
       if (it->second != concrete && !is_assignable(it->second, concrete)) {
         error(error_span,
-              "conflicting types for generic parameter '" +
-                  std::string(gp->name()) + "': '" +
-                  print_type(it->second) + "' vs '" +
-                  print_type(concrete) + "'");
+              "conflicting types for generic parameter '" + std::string(gp->name()) + "': '" +
+                  print_type(it->second) + "' vs '" + print_type(concrete) + "'");
       }
     } else {
       bindings[gp->index()] = concrete;
@@ -1722,48 +1653,39 @@ void TypeChecker::infer_type_bindings(
   }
 
   // Structural recursion for composite types.
-  if (pattern->kind() == TypeKind::Pointer &&
-      concrete->kind() == TypeKind::Pointer) {
-    infer_type_bindings(
-        static_cast<const TypePointer*>(pattern)->pointee(),
-        static_cast<const TypePointer*>(concrete)->pointee(),
-        bindings, error_span);
-  } else if (pattern->kind() == TypeKind::Generator &&
-             concrete->kind() == TypeKind::Generator) {
-    infer_type_bindings(
-        static_cast<const TypeGenerator*>(pattern)->yield_type(),
-        static_cast<const TypeGenerator*>(concrete)->yield_type(),
-        bindings, error_span);
-  } else if (pattern->kind() == TypeKind::Function &&
-             concrete->kind() == TypeKind::Function) {
+  if (pattern->kind() == TypeKind::Pointer && concrete->kind() == TypeKind::Pointer) {
+    infer_type_bindings(static_cast<const TypePointer*>(pattern)->pointee(),
+                        static_cast<const TypePointer*>(concrete)->pointee(),
+                        bindings,
+                        error_span);
+  } else if (pattern->kind() == TypeKind::Generator && concrete->kind() == TypeKind::Generator) {
+    infer_type_bindings(static_cast<const TypeGenerator*>(pattern)->yield_type(),
+                        static_cast<const TypeGenerator*>(concrete)->yield_type(),
+                        bindings,
+                        error_span);
+  } else if (pattern->kind() == TypeKind::Function && concrete->kind() == TypeKind::Function) {
     const auto* fp = static_cast<const TypeFunction*>(pattern);
     const auto* fc = static_cast<const TypeFunction*>(concrete);
     if (fp->param_types().size() == fc->param_types().size()) {
       for (size_t j = 0; j < fp->param_types().size(); ++j) {
-        infer_type_bindings(fp->param_types()[j], fc->param_types()[j],
-                            bindings, error_span);
+        infer_type_bindings(fp->param_types()[j], fc->param_types()[j], bindings, error_span);
       }
-      infer_type_bindings(fp->return_type(), fc->return_type(),
-                          bindings, error_span);
+      infer_type_bindings(fp->return_type(), fc->return_type(), bindings, error_span);
     }
-  } else if (pattern->kind() == TypeKind::Struct &&
-             concrete->kind() == TypeKind::Struct) {
+  } else if (pattern->kind() == TypeKind::Struct && concrete->kind() == TypeKind::Struct) {
     const auto* sp = static_cast<const TypeStruct*>(pattern);
     const auto* sc = static_cast<const TypeStruct*>(concrete);
     // Only infer bindings between instances of the same class.
-    if (sp->decl_id() == sc->decl_id() &&
-        sp->fields().size() == sc->fields().size()) {
+    if (sp->decl_id() == sc->decl_id() && sp->fields().size() == sc->fields().size()) {
       for (size_t j = 0; j < sp->fields().size(); ++j) {
-        infer_type_bindings(sp->fields()[j].type, sc->fields()[j].type,
-                            bindings, error_span);
+        infer_type_bindings(sp->fields()[j].type, sc->fields()[j].type, bindings, error_span);
       }
     }
   }
 }
 
-auto TypeChecker::substitute_generics(
-    const Type* type,
-    const std::unordered_map<uint32_t, const Type*>& bindings)
+auto TypeChecker::substitute_generics(const Type* type,
+                                      const std::unordered_map<uint32_t, const Type*>& bindings)
     -> const Type* {
   if (type == nullptr || bindings.empty()) {
     return type;
@@ -1792,11 +1714,13 @@ auto TypeChecker::substitute_generics(
     params.reserve(fn->param_types().size());
     for (const auto* param : fn->param_types()) {
       const auto* sub = substitute_generics(param, bindings);
-      if (sub != param) changed = true;
+      if (sub != param)
+        changed = true;
       params.push_back(sub);
     }
     const auto* ret = substitute_generics(fn->return_type(), bindings);
-    if (ret != fn->return_type()) changed = true;
+    if (ret != fn->return_type())
+      changed = true;
     return changed ? types_.function_type(std::move(params), ret) : type;
   }
   case TypeKind::Struct: {
@@ -1806,13 +1730,11 @@ auto TypeChecker::substitute_generics(
     new_fields.reserve(st->fields().size());
     for (const auto& field : st->fields()) {
       const auto* sub = substitute_generics(field.type, bindings);
-      if (sub != field.type) changed = true;
+      if (sub != field.type)
+        changed = true;
       new_fields.push_back({field.name, sub});
     }
-    return changed
-               ? types_.make_struct(st->decl_id(), st->name(),
-                                    std::move(new_fields))
-               : type;
+    return changed ? types_.make_struct(st->decl_id(), st->name(), std::move(new_fields)) : type;
   }
   case TypeKind::Enum: {
     const auto* en = static_cast<const TypeEnum*>(type);
@@ -1824,15 +1746,13 @@ auto TypeChecker::substitute_generics(
       new_payload.reserve(variant.payload_types.size());
       for (const auto* pt : variant.payload_types) {
         const auto* sub = substitute_generics(pt, bindings);
-        if (sub != pt) changed = true;
+        if (sub != pt)
+          changed = true;
         new_payload.push_back(sub);
       }
-      new_variants.push_back({variant.name, std::move(new_payload)});
+      new_variants.push_back({variant.name, std::move(new_payload), variant.field_names});
     }
-    return changed
-               ? types_.make_enum(en->decl_id(), en->name(),
-                                  std::move(new_variants))
-               : type;
+    return changed ? types_.make_enum(en->decl_id(), en->name(), std::move(new_variants)) : type;
   }
   default:
     return type;
@@ -1844,14 +1764,14 @@ auto TypeChecker::substitute_generics(
 // ---------------------------------------------------------------------------
 
 void TypeChecker::verify_concept_constraints(
-    const Expr* callee_expr, Span error_span,
+    const Expr* callee_expr,
+    Span error_span,
     const std::unordered_map<uint32_t, const Type*>& bindings) {
   if (bindings.empty() || !callee_expr->is<IdentifierExpr>()) {
     return;
   }
   auto sym_it = resolve_.uses.find(callee_expr->span.offset);
-  if (sym_it == resolve_.uses.end() ||
-      sym_it->second->kind != SymbolKind::Function ||
+  if (sym_it == resolve_.uses.end() || sym_it->second->kind != SymbolKind::Function ||
       sym_it->second->decl == nullptr) {
     return;
   }
@@ -1868,19 +1788,15 @@ void TypeChecker::verify_concept_constraints(
     }
     for (const auto* constraint : gp_decl.constraints) {
       auto csym_it = resolve_.uses.find(constraint->span.offset);
-      if (csym_it == resolve_.uses.end() ||
-          csym_it->second->kind != SymbolKind::Concept ||
+      if (csym_it == resolve_.uses.end() || csym_it->second->kind != SymbolKind::Concept ||
           csym_it->second->decl == nullptr) {
         continue;
       }
-      const auto* concept_decl =
-          static_cast<const Decl*>(csym_it->second->decl);
+      const auto* concept_decl = static_cast<const Decl*>(csym_it->second->decl);
       if (!type_conforms_to(binding_it->second, concept_decl)) {
         error(error_span,
-              "type '" + print_type(binding_it->second) +
-                  "' does not satisfy concept '" +
-                  std::string(csym_it->second->name) +
-                  "' required by generic parameter '" +
+              "type '" + print_type(binding_it->second) + "' does not satisfy concept '" +
+                  std::string(csym_it->second->name) + "' required by generic parameter '" +
                   std::string(gp_decl.name) + "'");
       }
     }
@@ -1903,8 +1819,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
 
   // Enum variant constructor: Token.Int(42) — callee is a FieldExpr
   // whose type is an enum type.
-  if (callee_type->kind() == TypeKind::Enum &&
-      call.callee->is<FieldExpr>()) {
+  if (callee_type->kind() == TypeKind::Enum && call.callee->is<FieldExpr>()) {
     const auto& field = call.callee->as<FieldExpr>();
     const auto* enum_type = static_cast<const TypeEnum*>(callee_type);
     for (const auto& variant : enum_type->variants()) {
@@ -1912,16 +1827,14 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
         if (variant.payload_types.empty()) {
           error(expr->span,
                 "enum variant '" + std::string(enum_type->name()) + "." +
-                    std::string(variant.name) +
-                    "' has no payload; use without parentheses");
+                    std::string(variant.name) + "' has no payload; use without parentheses");
           return callee_type;
         }
         if (call.args.size() != variant.payload_types.size()) {
           error(expr->span,
                 "enum variant '" + std::string(enum_type->name()) + "." +
                     std::string(variant.name) + "' expects " +
-                    std::to_string(variant.payload_types.size()) +
-                    " payload field(s), got " +
+                    std::to_string(variant.payload_types.size()) + " payload field(s), got " +
                     std::to_string(call.args.size()));
           return callee_type;
         }
@@ -1933,13 +1846,12 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
           if (arg_type != nullptr && variant.payload_types[i] != nullptr) {
             if (!is_assignable(arg_type, variant.payload_types[i])) {
               error(call.args[i]->span,
-                    "payload field type '" + print_type(arg_type) +
-                        "' is not assignable to '" +
+                    "payload field type '" + print_type(arg_type) + "' is not assignable to '" +
                         print_type(variant.payload_types[i]) + "'");
             }
             // Infer generic param bindings from concrete arg types.
-            infer_type_bindings(variant.payload_types[i], arg_type,
-                                type_bindings, call.args[i]->span);
+            infer_type_bindings(
+                variant.payload_types[i], arg_type, type_bindings, call.args[i]->span);
           }
         }
         // Clear the "needs-construction" mark set by check_field.
@@ -1958,19 +1870,15 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
   // Constructor call: callee must be an identifier that resolves to a
   // Type symbol (e.g. `Point`), not merely any expression whose type
   // happens to be a struct (e.g. `p` where `p: Point`).
-  if (callee_type->kind() == TypeKind::Struct &&
-      call.callee->is<IdentifierExpr>()) {
+  if (callee_type->kind() == TypeKind::Struct && call.callee->is<IdentifierExpr>()) {
     auto sym_it = resolve_.uses.find(call.callee->span.offset);
-    if (sym_it != resolve_.uses.end() &&
-        sym_it->second->kind == SymbolKind::Type) {
-      return check_construct(expr,
-                             static_cast<const TypeStruct*>(callee_type));
+    if (sym_it != resolve_.uses.end() && sym_it->second->kind == SymbolKind::Type) {
+      return check_construct(expr, static_cast<const TypeStruct*>(callee_type));
     }
   }
 
   if (callee_type->kind() != TypeKind::Function) {
-    error(call.callee->span,
-          "cannot call non-function type '" + print_type(callee_type) + "'");
+    error(call.callee->span, "cannot call non-function type '" + print_type(callee_type) + "'");
     return nullptr;
   }
 
@@ -1988,8 +1896,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
   bool callee_is_extern = false;
   if (call.callee->is<IdentifierExpr>()) {
     auto sym_it = resolve_.uses.find(call.callee->span.offset);
-    if (sym_it != resolve_.uses.end() &&
-        sym_it->second->kind == SymbolKind::Function &&
+    if (sym_it != resolve_.uses.end() && sym_it->second->kind == SymbolKind::Function &&
         sym_it->second->decl != nullptr) {
       const auto* fn_decl = sym_it->second->decl_as_decl();
       if (fn_decl->is<FunctionDecl>()) {
@@ -2005,8 +1912,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
   // Populate bindings from explicit type arguments: f<i32, f64>(x).
   if (!call.type_args.empty() && call.callee->is<IdentifierExpr>()) {
     auto sym_it = resolve_.uses.find(call.callee->span.offset);
-    if (sym_it != resolve_.uses.end() &&
-        sym_it->second->kind == SymbolKind::Function) {
+    if (sym_it != resolve_.uses.end() && sym_it->second->kind == SymbolKind::Function) {
       // Determine expected type param count.
       size_t expected_count = 0;
       if (sym_it->second->decl != nullptr) {
@@ -2017,8 +1923,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
           // class's type params when invoked via Type<Args>::method().
           if (expected_count == 0 && sym_it->second->name.find('.') != std::string_view::npos) {
             // Find the enclosing ClassDecl by checking file declarations.
-            auto class_name = sym_it->second->name.substr(
-                0, sym_it->second->name.find('.'));
+            auto class_name = sym_it->second->name.substr(0, sym_it->second->name.find('.'));
             for (const auto* file_decl : file_->declarations) {
               if (file_decl->kind() == NodeKind::ClassDecl &&
                   file_decl->as<ClassDecl>().name == class_name) {
@@ -2035,8 +1940,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
 
       if (call.type_args.size() != expected_count) {
         error(expr->span,
-              "expected " + std::to_string(expected_count) +
-                  " type argument(s), got " +
+              "expected " + std::to_string(expected_count) + " type argument(s), got " +
                   std::to_string(call.type_args.size()));
       } else {
         std::vector<const Type*> resolved_type_args;
@@ -2057,8 +1961,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
     // Lambdas cannot cross the C ABI boundary as closures have no
     // context pointer in a C function pointer representation.
     // (CONTRACT_C_ABI_INTEROP §4.4.5)
-    if (callee_is_extern && params[i] != nullptr &&
-        params[i]->kind() == TypeKind::Function &&
+    if (callee_is_extern && params[i] != nullptr && params[i]->kind() == TypeKind::Function &&
         call.args[i]->is<LambdaExpr>()) {
       error(call.args[i]->span,
             "lambda cannot be passed as a C function pointer; "
@@ -2071,13 +1974,11 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
     }
     if (!is_assignable(arg_type, params[i])) {
       error(call.args[i]->span,
-            "argument type '" + print_type(arg_type) +
-                "' is not assignable to parameter type '" +
+            "argument type '" + print_type(arg_type) + "' is not assignable to parameter type '" +
                 print_type(params[i]) + "'");
     }
     // Infer generic bindings by structural matching.
-    infer_type_bindings(params[i], arg_type, type_bindings,
-                        call.args[i]->span);
+    infer_type_bindings(params[i], arg_type, type_bindings, call.args[i]->span);
   }
 
   verify_concept_constraints(call.callee, expr->span, type_bindings);
@@ -2090,17 +1991,14 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
 // Constructor expressions (Point(1, 2))
 // ---------------------------------------------------------------------------
 
-auto TypeChecker::check_construct(const Expr* expr,
-                                  const TypeStruct* struct_type)
-    -> const Type* {
+auto TypeChecker::check_construct(const Expr* expr, const TypeStruct* struct_type) -> const Type* {
   const auto& call = expr->as<CallExpr>();
   const auto& fields = struct_type->fields();
 
   if (call.args.size() != fields.size()) {
     error(expr->span,
-          "'" + std::string(struct_type->name()) + "' expects " +
-              std::to_string(fields.size()) + " field(s), got " +
-              std::to_string(call.args.size()));
+          "'" + std::string(struct_type->name()) + "' expects " + std::to_string(fields.size()) +
+              " field(s), got " + std::to_string(call.args.size()));
     return nullptr;
   }
 
@@ -2111,11 +2009,9 @@ auto TypeChecker::check_construct(const Expr* expr,
       if (!is_assignable(arg_type, fields[i].type)) {
         error(call.args[i]->span,
               "field '" + std::string(fields[i].name) + "' expects type '" +
-                  print_type(fields[i].type) + "', got '" +
-                  print_type(arg_type) + "'");
+                  print_type(fields[i].type) + "', got '" + print_type(arg_type) + "'");
       }
-      infer_type_bindings(fields[i].type, arg_type, type_bindings,
-                          call.args[i]->span);
+      infer_type_bindings(fields[i].type, arg_type, type_bindings, call.args[i]->span);
     }
   }
 
@@ -2143,8 +2039,7 @@ auto TypeChecker::check_pipe(const Expr* expr) -> const Type* {
   }
 
   if (rhs_type->kind() != TypeKind::Function) {
-    error(pipe.right->span,
-          "pipe target must be callable, got '" + print_type(rhs_type) + "'");
+    error(pipe.right->span, "pipe target must be callable, got '" + print_type(rhs_type) + "'");
     return nullptr;
   }
 
@@ -2152,8 +2047,7 @@ auto TypeChecker::check_pipe(const Expr* expr) -> const Type* {
   const auto& params = fn_type->param_types();
 
   if (params.empty()) {
-    error(pipe.right->span,
-          "pipe target must accept at least one argument");
+    error(pipe.right->span, "pipe target must accept at least one argument");
     return nullptr;
   }
 
@@ -2161,8 +2055,7 @@ auto TypeChecker::check_pipe(const Expr* expr) -> const Type* {
   if (!is_assignable(lhs_type, params[0])) {
     error(pipe.left->span,
           "pipe source type '" + print_type(lhs_type) +
-              "' is not assignable to first parameter type '" +
-              print_type(params[0]) + "'");
+              "' is not assignable to first parameter type '" + print_type(params[0]) + "'");
     return nullptr;
   }
 
@@ -2189,8 +2082,7 @@ auto TypeChecker::check_try(const Expr* expr) -> const Type* {
 
   if (operand_type->kind() != TypeKind::Enum) {
     error(expr->span,
-          "'?' operator requires an Option or Result type, got '" +
-              print_type(operand_type) + "'");
+          "'?' operator requires an Option or Result type, got '" + print_type(operand_type) + "'");
     return nullptr;
   }
 
@@ -2199,15 +2091,13 @@ auto TypeChecker::check_try(const Expr* expr) -> const Type* {
 
   if (name != "Option" && name != "Result") {
     error(expr->span,
-          "'?' operator requires an Option or Result type, got '" +
-              print_type(operand_type) + "'");
+          "'?' operator requires an Option or Result type, got '" + print_type(operand_type) + "'");
     return nullptr;
   }
 
   // Validate enclosing function return type compatibility.
   if (ctx_.return_type == nullptr) {
-    error(expr->span,
-          "'?' operator can only be used inside a function with a return type");
+    error(expr->span, "'?' operator can only be used inside a function with a return type");
     return nullptr;
   }
 
@@ -2228,25 +2118,26 @@ auto TypeChecker::check_try(const Expr* expr) -> const Type* {
     if (ctx_.return_type->kind() != TypeKind::Enum) {
       error(expr->span,
             "enclosing function must return Result to use '?' on Result, "
-            "but returns '" + print_type(ctx_.return_type) + "'");
+            "but returns '" +
+                print_type(ctx_.return_type) + "'");
       return nullptr;
     }
     const auto* ret_enum = static_cast<const TypeEnum*>(ctx_.return_type);
     if (ret_enum->name() != "Result") {
       error(expr->span,
             "enclosing function must return Result to use '?' on Result, "
-            "but returns '" + print_type(ctx_.return_type) + "'");
+            "but returns '" +
+                print_type(ctx_.return_type) + "'");
       return nullptr;
     }
     // Check that the error types match.
-    if (ret_enum->variants().size() >= 2 &&
-        !ret_enum->variants()[1].payload_types.empty()) {
+    if (ret_enum->variants().size() >= 2 && !ret_enum->variants()[1].payload_types.empty()) {
       const auto* fn_err_type = ret_enum->variants()[1].payload_types[0];
       if (!is_assignable(err_type, fn_err_type)) {
         error(expr->span,
               "error type '" + print_type(err_type) +
-                  "' is not assignable to function return error type '" +
-                  print_type(fn_err_type) + "'");
+                  "' is not assignable to function return error type '" + print_type(fn_err_type) +
+                  "'");
       }
     }
     return ok_type;
@@ -2263,14 +2154,16 @@ auto TypeChecker::check_try(const Expr* expr) -> const Type* {
   if (ctx_.return_type->kind() != TypeKind::Enum) {
     error(expr->span,
           "enclosing function must return Option to use '?' on Option, "
-          "but returns '" + print_type(ctx_.return_type) + "'");
+          "but returns '" +
+              print_type(ctx_.return_type) + "'");
     return nullptr;
   }
   const auto* ret_enum = static_cast<const TypeEnum*>(ctx_.return_type);
   if (ret_enum->name() != "Option") {
     error(expr->span,
           "enclosing function must return Option to use '?' on Option, "
-          "but returns '" + print_type(ctx_.return_type) + "'");
+          "but returns '" +
+              print_type(ctx_.return_type) + "'");
     return nullptr;
   }
   return some_type;
@@ -2311,8 +2204,8 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
       }
     }
     error(field.field_span,
-          "'" + std::string(field.field) + "' is not a variant of '" +
-              std::string(en->name()) + "'");
+          "'" + std::string(field.field) + "' is not a variant of '" + std::string(en->name()) +
+              "'");
     return nullptr;
   }
 
@@ -2339,12 +2232,11 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
 
   if (obj_type->kind() == TypeKind::Struct) {
     error(field.field_span,
-          "no field or method '" + std::string(field.field) + "' on type '" +
-              print_type(obj_type) + "'");
+          "no field or method '" + std::string(field.field) + "' on type '" + print_type(obj_type) +
+              "'");
   } else {
     error(field.field_span,
-          "no method '" + std::string(field.field) + "' on type '" +
-              print_type(obj_type) + "'");
+          "no method '" + std::string(field.field) + "' on type '" + print_type(obj_type) + "'");
   }
   return nullptr;
 }
@@ -2353,8 +2245,7 @@ auto TypeChecker::check_field(const Expr* expr) -> const Type* {
 // build_method_fn_type — build a function type for a method with self removed.
 // ---------------------------------------------------------------------------
 
-auto TypeChecker::build_method_fn_type(const FunctionDecl& method)
-    -> const Type* {
+auto TypeChecker::build_method_fn_type(const FunctionDecl& method) -> const Type* {
   std::vector<const Type*> param_types;
   bool valid = true;
   for (size_t i = 0; i < method.params.size(); ++i) {
@@ -2367,9 +2258,8 @@ auto TypeChecker::build_method_fn_type(const FunctionDecl& method)
     }
     param_types.push_back(pt);
   }
-  const auto* ret = method.return_type != nullptr
-                        ? resolve_type_node(method.return_type)
-                        : types_.void_type();
+  const auto* ret =
+      method.return_type != nullptr ? resolve_type_node(method.return_type) : types_.void_type();
   if (!valid || ret == nullptr) {
     return nullptr;
   }
@@ -2456,20 +2346,22 @@ void TypeChecker::build_method_table(const FileNode& file) {
         // Find the concrete extend implementation for HIR lowering.
         const Decl* impl_decl = nullptr;
         for (const auto* decl : file.declarations) {
-          if (decl->kind() != NodeKind::ExtendDecl) continue;
+          if (decl->kind() != NodeKind::ExtendDecl)
+            continue;
           const auto& ext = decl->as<ExtendDecl>();
           const auto* target = resolve_type_node(ext.target_type);
-          if (target != type) continue;
+          if (target != type)
+            continue;
           for (const auto* ext_method : ext.methods) {
             if (ext_method->as<FunctionDecl>().name == method.name) {
               impl_decl = ext_method;
               break;
             }
           }
-          if (impl_decl != nullptr) break;
+          if (impl_decl != nullptr)
+            break;
         }
-        method_table_.insert(
-            {key, {fn_type, impl_decl != nullptr ? impl_decl : cpt_method_decl}});
+        method_table_.insert({key, {fn_type, impl_decl != nullptr ? impl_decl : cpt_method_decl}});
       }
     }
   }
@@ -2500,8 +2392,7 @@ auto TypeChecker::lookup_method(const Type* obj_type,
     const auto* concrete_st = static_cast<const TypeStruct*>(obj_type);
     // Look up the class declaration's generic struct type.
     for (const auto& [key, entry] : method_table_) {
-      if (key.name != name || key.type == nullptr ||
-          key.type->kind() != TypeKind::Struct) {
+      if (key.name != name || key.type == nullptr || key.type->kind() != TypeKind::Struct) {
         continue;
       }
       const auto* generic_st = static_cast<const TypeStruct*>(key.type);
@@ -2511,11 +2402,9 @@ auto TypeChecker::lookup_method(const Type* obj_type,
       // Found matching class. Build substitution from generic → concrete
       // field types.
       std::unordered_map<uint32_t, const Type*> bindings;
-      for (size_t i = 0; i < generic_st->fields().size() &&
-                          i < concrete_st->fields().size(); ++i) {
-        infer_type_bindings(generic_st->fields()[i].type,
-                            concrete_st->fields()[i].type,
-                            bindings, Span{});
+      for (size_t i = 0; i < generic_st->fields().size() && i < concrete_st->fields().size(); ++i) {
+        infer_type_bindings(
+            generic_st->fields()[i].type, concrete_st->fields()[i].type, bindings, Span{});
       }
       if (resolved_decl != nullptr) {
         *resolved_decl = entry.method_decl;
@@ -2542,14 +2431,11 @@ auto TypeChecker::lookup_method(const Type* obj_type,
       if (type_params != nullptr && gp->index() < type_params->size()) {
         const auto& gp_decl = (*type_params)[gp->index()];
         for (const auto* constraint : gp_decl.constraints) {
-          auto sym_it =
-              resolve_.uses.find(constraint->span.offset);
-          if (sym_it == resolve_.uses.end() ||
-              sym_it->second->kind != SymbolKind::Concept) {
+          auto sym_it = resolve_.uses.find(constraint->span.offset);
+          if (sym_it == resolve_.uses.end() || sym_it->second->kind != SymbolKind::Concept) {
             continue;
           }
-          const auto* cpt_decl =
-              static_cast<const Decl*>(sym_it->second->decl);
+          const auto* cpt_decl = static_cast<const Decl*>(sym_it->second->decl);
           if (cpt_decl == nullptr || !cpt_decl->is<ConceptDecl>()) {
             continue;
           }
@@ -2578,8 +2464,7 @@ void TypeChecker::validate_receiver(const Decl* method, Span context_span) {
   const auto& fn_decl = method->as<FunctionDecl>();
   if (fn_decl.params.empty() || fn_decl.params[0].name != "self") {
     error(fn_decl.name_span.length > 0 ? fn_decl.name_span : context_span,
-          "method '" + std::string(fn_decl.name) +
-              "' must have 'self' as its first parameter");
+          "method '" + std::string(fn_decl.name) + "' must have 'self' as its first parameter");
   }
 }
 
@@ -2607,8 +2492,7 @@ auto TypeChecker::check_index(const Expr* expr) -> const Type* {
 // Lambda expressions
 // ---------------------------------------------------------------------------
 
-auto TypeChecker::check_lambda(const Expr* expr, const Type* expected)
-    -> const Type* {
+auto TypeChecker::check_lambda(const Expr* expr, const Type* expected) -> const Type* {
   const auto& lam = expr->as<LambdaExpr>();
 
   // Lambdas require a contextual expected function type.
@@ -2622,8 +2506,7 @@ auto TypeChecker::check_lambda(const Expr* expr, const Type* expected)
 
   if (lam.params.size() != expected_params.size()) {
     error(expr->span,
-          "lambda has " + std::to_string(lam.params.size()) +
-              " parameter(s), expected " +
+          "lambda has " + std::to_string(lam.params.size()) + " parameter(s), expected " +
               std::to_string(expected_params.size()));
     return nullptr;
   }
@@ -2641,8 +2524,7 @@ auto TypeChecker::check_lambda(const Expr* expr, const Type* expected)
   if (body_type != nullptr && fn_expected->return_type() != nullptr &&
       !is_assignable(body_type, fn_expected->return_type())) {
     error(lam.body->span,
-          "lambda body type '" + print_type(body_type) +
-              "' does not match expected return type '" +
+          "lambda body type '" + print_type(body_type) + "' does not match expected return type '" +
               print_type(fn_expected->return_type()) + "'");
   }
 
@@ -2733,8 +2615,7 @@ auto TypeChecker::find_generic_param_index(const Symbol* sym) -> uint32_t {
 // Compiler builtin function types
 // ---------------------------------------------------------------------------
 
-auto TypeChecker::resolve_builtin_function_type(std::string_view name)
-    -> const Type* {
+auto TypeChecker::resolve_builtin_function_type(std::string_view name) -> const Type* {
   // null_ptr<T>(): *T
   if (name == "null_ptr") {
     auto* generic_t = types_.generic_param(nullptr, "T", 0);
@@ -2755,8 +2636,8 @@ auto TypeChecker::resolve_builtin_function_type(std::string_view name)
 // Free-function entry point
 // ---------------------------------------------------------------------------
 
-auto typecheck(const FileNode& file, const ResolveResult& resolve,
-               TypeContext& types) -> TypeCheckResult {
+auto typecheck(const FileNode& file, const ResolveResult& resolve, TypeContext& types)
+    -> TypeCheckResult {
   TypeChecker checker(types, resolve);
   return checker.check(file);
 }

@@ -556,9 +556,8 @@ suite<"qualified_name_tests"> qualified_name_tests = [] {
 
 suite<"concept_tests"> concept_tests = [] {
   "simple concept with bare method"_test = [] {
-    auto output = parse_string(
-        "concept Printable:\n"
-        "    fn to_string(self): string\n");
+    auto output = parse_string("concept Printable:\n"
+                               "    fn to_string(self): string\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     auto* file = output.parse_result.file;
     expect(file->declarations.size() == 1_u);
@@ -580,10 +579,9 @@ suite<"concept_tests"> concept_tests = [] {
   };
 
   "concept with default method"_test = [] {
-    auto output = parse_string(
-        "concept Equatable:\n"
-        "    fn eq(self, other: Equatable): bool\n"
-        "    fn ne(self, other: Equatable): bool -> !self.eq(other)\n");
+    auto output = parse_string("concept Equatable:\n"
+                               "    fn eq(self, other: Equatable): bool\n"
+                               "    fn ne(self, other: Equatable): bool -> !self.eq(other)\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     const auto& concept_ = output.parse_result.file->declarations[0]->as<ConceptDecl>();
     expect(concept_.name == "Equatable");
@@ -599,9 +597,8 @@ suite<"concept_tests"> concept_tests = [] {
   };
 
   "derived concept"_test = [] {
-    auto output = parse_string(
-        "derived concept Copyable:\n"
-        "    fn copy(self): Copyable\n");
+    auto output = parse_string("derived concept Copyable:\n"
+                               "    fn copy(self): Copyable\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     const auto& concept_ = output.parse_result.file->declarations[0]->as<ConceptDecl>();
     expect(concept_.name == "Copyable");
@@ -609,10 +606,9 @@ suite<"concept_tests"> concept_tests = [] {
   };
 
   "generic concept"_test = [] {
-    auto output = parse_string(
-        "concept Iterator<T>:\n"
-        "    fn has_next(self): bool\n"
-        "    fn next(self): T\n");
+    auto output = parse_string("concept Iterator<T>:\n"
+                               "    fn has_next(self): bool\n"
+                               "    fn next(self): T\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     const auto& concept_ = output.parse_result.file->declarations[0]->as<ConceptDecl>();
     expect(concept_.name == "Iterator");
@@ -628,12 +624,11 @@ suite<"concept_tests"> concept_tests = [] {
 
 suite<"conformance_tests"> conformance_tests = [] {
   "class with inline conformance"_test = [] {
-    auto output = parse_string(
-        "class Point:\n"
-        "    x: f64\n"
-        "    y: f64\n"
-        "    as Printable:\n"
-        "        fn to_string(self): string -> \"point\"\n");
+    auto output = parse_string("class Point:\n"
+                               "    x: f64\n"
+                               "    y: f64\n"
+                               "    as Printable:\n"
+                               "        fn to_string(self): string -> \"point\"\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
     expect(cls.name == "Point");
@@ -644,10 +639,9 @@ suite<"conformance_tests"> conformance_tests = [] {
   };
 
   "class with deny"_test = [] {
-    auto output = parse_string(
-        "class SecretKey:\n"
-        "    data: i32\n"
-        "    deny Printable\n");
+    auto output = parse_string("class SecretKey:\n"
+                               "    data: i32\n"
+                               "    deny Printable\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
     expect(cls.denials.size() == 1_u);
@@ -655,13 +649,12 @@ suite<"conformance_tests"> conformance_tests = [] {
   };
 
   "class with multiple conformances"_test = [] {
-    auto output = parse_string(
-        "class Point:\n"
-        "    x: f64\n"
-        "    as Printable:\n"
-        "        fn to_string(self): string -> \"p\"\n"
-        "    as Equatable:\n"
-        "        fn eq(self, other: Point): bool -> true\n");
+    auto output = parse_string("class Point:\n"
+                               "    x: f64\n"
+                               "    as Printable:\n"
+                               "        fn to_string(self): string -> \"p\"\n"
+                               "    as Equatable:\n"
+                               "        fn eq(self, other: Point): bool -> true\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
     expect(cls.conformances.size() == 2_u);
@@ -676,9 +669,8 @@ suite<"conformance_tests"> conformance_tests = [] {
 
 suite<"extend_tests"> extend_tests = [] {
   "extend builtin with concept"_test = [] {
-    auto output = parse_string(
-        "extend i32 as Printable:\n"
-        "    fn to_string(self): string -> \"num\"\n");
+    auto output = parse_string("extend i32 as Printable:\n"
+                               "    fn to_string(self): string -> \"num\"\n");
     expect(output.parse_result.diagnostics.empty()) << "no parse errors";
     auto* file = output.parse_result.file;
     expect(file->declarations.size() == 1_u);
@@ -698,26 +690,22 @@ suite<"extend_tests"> extend_tests = [] {
 
 suite<"self_keyword_tests"> self_keyword_tests = [] {
   "self is reserved in let binding"_test = [] {
-    auto output = parse_string(
-        "fn foo(): i32\n"
-        "    let self: i32 = 1\n"
-        "    return 0\n");
+    auto output = parse_string("fn foo(): i32\n"
+                               "    let self: i32 = 1\n"
+                               "    return 0\n");
     expect(!output.parse_result.diagnostics.empty())
         << "self should be rejected as a let binding name";
   };
 
   "self is reserved as class field name"_test = [] {
-    auto output = parse_string(
-        "class Wrapper:\n"
-        "    self: i32\n");
-    expect(!output.parse_result.diagnostics.empty())
-        << "self should be rejected as a field name";
+    auto output = parse_string("class Wrapper:\n"
+                               "    self: i32\n");
+    expect(!output.parse_result.diagnostics.empty()) << "self should be rejected as a field name";
   };
 
   "self is valid as parameter name"_test = [] {
-    auto output = parse_string(
-        "concept Show:\n"
-        "    fn show(self): string\n");
+    auto output = parse_string("concept Show:\n"
+                               "    fn show(self): string\n");
     expect(output.parse_result.diagnostics.empty())
         << "self should be accepted as a parameter name";
   };
@@ -730,17 +718,16 @@ suite<"self_keyword_tests"> self_keyword_tests = [] {
 suite<"error_recovery"> error_recovery = [] {
   "broken declaration does not prevent parsing subsequent ones"_test = [] {
     SourceBuffer src("test.dao",
-        "fn good1(): i32 -> 1\n"
-        "\n"
-        "this is garbage\n"
-        "\n"
-        "fn good2(): i32 -> 2\n");
+                     "fn good1(): i32 -> 1\n"
+                     "\n"
+                     "this is garbage\n"
+                     "\n"
+                     "fn good2(): i32 -> 2\n");
     auto lex_result = lex(src);
     auto result = parse(lex_result.tokens);
     expect(result.file != nullptr) << "file should be produced";
     // good1, ErrorDecl, and good2 should all be present.
-    expect(result.file->declarations.size() == 3_ul)
-        << "should have good1 + error + good2";
+    expect(result.file->declarations.size() == 3_ul) << "should have good1 + error + good2";
     if (result.file->declarations.size() == 3) {
       expect(result.file->declarations[0]->kind() == NodeKind::FunctionDecl);
       expect(result.file->declarations[1]->kind() == NodeKind::ErrorDecl)
@@ -751,20 +738,18 @@ suite<"error_recovery"> error_recovery = [] {
 
   "broken statement does not prevent parsing subsequent ones"_test = [] {
     SourceBuffer src("test.dao",
-        "fn main(): i32\n"
-        "  let x: i32 = 1\n"
-        "  @@@ broken\n"
-        "  return x\n");
+                     "fn main(): i32\n"
+                     "  let x: i32 = 1\n"
+                     "  @@@ broken\n"
+                     "  return x\n");
     auto lex_result = lex(src);
     auto result = parse(lex_result.tokens);
     expect(result.file != nullptr) << "file should be produced";
-    expect(!result.file->declarations.empty())
-        << "function should be parsed";
+    expect(!result.file->declarations.empty()) << "function should be parsed";
     if (!result.file->declarations.empty()) {
       const auto& fn = result.file->declarations[0]->as<FunctionDecl>();
       // Should have let, ErrorStmt, and return.
-      expect(fn.body.size() >= 3_ul)
-          << "should have let + error + return";
+      expect(fn.body.size() >= 3_ul) << "should have let + error + return";
       if (fn.body.size() >= 3) {
         expect(fn.body[0]->kind() == NodeKind::LetStatement);
         expect(fn.body[1]->kind() == NodeKind::ErrorStmt)
@@ -776,15 +761,14 @@ suite<"error_recovery"> error_recovery = [] {
 
   "incomplete source still produces partial AST"_test = [] {
     SourceBuffer src("test.dao",
-        "fn add(a: i32, b: i32): i32 -> a + b\n"
-        "\n"
-        "fn incomplete(\n");
+                     "fn add(a: i32, b: i32): i32 -> a + b\n"
+                     "\n"
+                     "fn incomplete(\n");
     auto lex_result = lex(src);
     auto result = parse(lex_result.tokens);
     expect(result.file != nullptr) << "file should be produced";
     // At least the first valid function should be present.
-    expect(!result.file->declarations.empty())
-        << "valid declaration should survive incomplete one";
+    expect(!result.file->declarations.empty()) << "valid declaration should survive incomplete one";
   };
 };
 
@@ -803,7 +787,8 @@ suite<"call_type_arg_tests"> call_type_arg_tests = [] {
   };
 
   "explicit type arg does not break comparison"_test = [] {
-    auto output = parse_string("fn f(x: i32): i32\n    if x < 3:\n        return 1\n    return 0\n");
+    auto output =
+        parse_string("fn f(x: i32): i32\n    if x < 3:\n        return 1\n    return 0\n");
     expect(output.parse_result.diagnostics.empty());
   };
 
@@ -822,11 +807,10 @@ suite<"call_type_arg_tests"> call_type_arg_tests = [] {
 
 suite<"class_method_tests"> class_method_tests = [] {
   "class with method parses"_test = [] {
-    auto output = parse_string(
-        "class Foo:\n"
-        "    x: i32\n"
-        "\n"
-        "    fn get(self): i32 -> self.x\n");
+    auto output = parse_string("class Foo:\n"
+                               "    x: i32\n"
+                               "\n"
+                               "    fn get(self): i32 -> self.x\n");
     expect(output.parse_result.diagnostics.empty());
     const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
     expect(cls.fields.size() == 1_u);
@@ -835,13 +819,12 @@ suite<"class_method_tests"> class_method_tests = [] {
   };
 
   "class with static method parses"_test = [] {
-    auto output = parse_string(
-        "class Foo:\n"
-        "    x: i32\n"
-        "\n"
-        "    fn zero(): Foo\n"
-        "        let z: i32 = 0\n"
-        "        return Foo(z)\n");
+    auto output = parse_string("class Foo:\n"
+                               "    x: i32\n"
+                               "\n"
+                               "    fn zero(): Foo\n"
+                               "        let z: i32 = 0\n"
+                               "        return Foo(z)\n");
     expect(output.parse_result.diagnostics.empty());
     const auto& cls = output.parse_result.file->declarations[0]->as<ClassDecl>();
     expect(cls.methods.size() == 1_u);
@@ -850,10 +833,9 @@ suite<"class_method_tests"> class_method_tests = [] {
   };
 
   "store through pointer parses"_test = [] {
-    auto output = parse_string(
-        "fn f(p: *i32): void\n"
-        "    mode unsafe =>\n"
-        "        *p = 42\n");
+    auto output = parse_string("fn f(p: *i32): void\n"
+                               "    mode unsafe =>\n"
+                               "        *p = 42\n");
     expect(output.parse_result.diagnostics.empty());
     const auto& fn = output.parse_result.file->declarations[0]->as<FunctionDecl>();
     const auto& mode = fn.body[0]->as<ModeBlock>();

@@ -95,10 +95,10 @@ fn lex(source: string): Vector<Token>
 // AST node — payload enum, arena-indexed
 // ---------------------------------------------------------------
 
-enum Expr:
-  IntLit(i64)
-  Binary(TK, i64, i64)
-  Unary(TK, i64)
+enum class Expr:
+  IntLit(value: i64)
+  Binary(op: TK, left: i64, right: i64)
+  Unary(op: TK, operand: i64)
 
 // ---------------------------------------------------------------
 // Parse result — bundles arena + node index + cursor position

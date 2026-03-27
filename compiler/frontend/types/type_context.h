@@ -30,17 +30,39 @@ public:
 
   auto builtin(BuiltinKind kind) -> const TypeBuiltin*;
 
-  auto i8() -> const TypeBuiltin* { return builtin(BuiltinKind::I8); }
-  auto i16() -> const TypeBuiltin* { return builtin(BuiltinKind::I16); }
-  auto i32() -> const TypeBuiltin* { return builtin(BuiltinKind::I32); }
-  auto i64() -> const TypeBuiltin* { return builtin(BuiltinKind::I64); }
-  auto u8() -> const TypeBuiltin* { return builtin(BuiltinKind::U8); }
-  auto u16() -> const TypeBuiltin* { return builtin(BuiltinKind::U16); }
-  auto u32() -> const TypeBuiltin* { return builtin(BuiltinKind::U32); }
-  auto u64() -> const TypeBuiltin* { return builtin(BuiltinKind::U64); }
-  auto f32() -> const TypeBuiltin* { return builtin(BuiltinKind::F32); }
-  auto f64() -> const TypeBuiltin* { return builtin(BuiltinKind::F64); }
-  auto bool_type() -> const TypeBuiltin* { return builtin(BuiltinKind::Bool); }
+  auto i8() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::I8);
+  }
+  auto i16() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::I16);
+  }
+  auto i32() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::I32);
+  }
+  auto i64() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::I64);
+  }
+  auto u8() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::U8);
+  }
+  auto u16() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::U16);
+  }
+  auto u32() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::U32);
+  }
+  auto u64() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::U64);
+  }
+  auto f32() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::F32);
+  }
+  auto f64() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::F64);
+  }
+  auto bool_type() -> const TypeBuiltin* {
+    return builtin(BuiltinKind::Bool);
+  }
 
   // Void is a compiler-internal return type, not a builtin scalar.
   // See CONTRACT_TYPE_SYSTEM_FOUNDATIONS.md §5.
@@ -50,30 +72,28 @@ public:
 
   auto pointer_to(const Type* pointee) -> const TypePointer*;
 
-  auto function_type(std::vector<const Type*> params, const Type* ret)
-      -> const TypeFunction*;
+  auto function_type(std::vector<const Type*> params, const Type* ret) -> const TypeFunction*;
 
-  auto named_type(const void* decl_id, std::string_view name,
-                  std::vector<const Type*> type_args) -> const TypeNamed*;
+  auto named_type(const void* decl_id, std::string_view name, std::vector<const Type*> type_args)
+      -> const TypeNamed*;
 
-  auto generic_param(const void* binder, std::string_view name,
-                     uint32_t index) -> const TypeGenericParam*;
+  auto generic_param(const void* binder, std::string_view name, uint32_t index)
+      -> const TypeGenericParam*;
 
   auto generator_type(const Type* yield_type) -> const TypeGenerator*;
 
   // --- Nominal constructors (not interned — each call allocates) ---
 
-  auto make_struct(const void* decl_id, std::string_view name,
-                   std::vector<StructField> fields) -> const TypeStruct*;
+  auto make_struct(const void* decl_id, std::string_view name, std::vector<StructField> fields)
+      -> const TypeStruct*;
 
   // Allocate a struct type shell with empty fields. Returns a mutable
   // pointer so the caller can call set_fields() once all type shells
   // are registered (enabling forward references between classes).
-  auto make_struct_shell(const void* decl_id,
-                         std::string_view name) -> TypeStruct*;
+  auto make_struct_shell(const void* decl_id, std::string_view name) -> TypeStruct*;
 
-  auto make_enum(const void* decl_id, std::string_view name,
-                 std::vector<EnumVariant> variants) -> const TypeEnum*;
+  auto make_enum(const void* decl_id, std::string_view name, std::vector<EnumVariant> variants)
+      -> const TypeEnum*;
 
 private:
   Arena arena_;

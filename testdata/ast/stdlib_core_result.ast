@@ -1,4 +1,4 @@
 File
-  EnumDecl Result
+  EnumClassDecl Result<T, E>
     Variant Ok
     Variant Err

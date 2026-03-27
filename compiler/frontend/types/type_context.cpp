@@ -38,8 +38,7 @@ auto TypeContext::NamedKeyHash::operator()(const NamedKey& key) const -> size_t 
   return h;
 }
 
-auto TypeContext::GenericParamKeyHash::operator()(const GenericParamKey& key) const
-    -> size_t {
+auto TypeContext::GenericParamKeyHash::operator()(const GenericParamKey& key) const -> size_t {
   size_t h = std::hash<const void*>{}(key.binder);
   return hash_combine(h, std::hash<uint32_t>{}(key.index));
 }
@@ -87,8 +86,8 @@ auto TypeContext::pointer_to(const Type* pointee) -> const TypePointer* {
   return it->second;
 }
 
-auto TypeContext::function_type(std::vector<const Type*> params,
-                                const Type* ret) -> const TypeFunction* {
+auto TypeContext::function_type(std::vector<const Type*> params, const Type* ret)
+    -> const TypeFunction* {
   FnKey key{params, ret};
   auto [it, inserted] = function_map_.try_emplace(key, nullptr);
   if (inserted) {
@@ -97,9 +96,9 @@ auto TypeContext::function_type(std::vector<const Type*> params,
   return it->second;
 }
 
-auto TypeContext::named_type(const void* decl_id, std::string_view name,
-                             std::vector<const Type*> type_args)
-    -> const TypeNamed* {
+auto TypeContext::named_type(const void* decl_id,
+                             std::string_view name,
+                             std::vector<const Type*> type_args) -> const TypeNamed* {
   NamedKey key{decl_id, type_args};
   auto [it, inserted] = named_map_.try_emplace(key, nullptr);
   if (inserted) {
@@ -108,8 +107,8 @@ auto TypeContext::named_type(const void* decl_id, std::string_view name,
   return it->second;
 }
 
-auto TypeContext::generic_param(const void* binder, std::string_view name,
-                                uint32_t index) -> const TypeGenericParam* {
+auto TypeContext::generic_param(const void* binder, std::string_view name, uint32_t index)
+    -> const TypeGenericParam* {
   GenericParamKey key{binder, index};
   auto [it, inserted] = generic_param_map_.try_emplace(key, nullptr);
   if (inserted) {
@@ -118,8 +117,7 @@ auto TypeContext::generic_param(const void* binder, std::string_view name,
   return it->second;
 }
 
-auto TypeContext::generator_type(const Type* yield_type)
-    -> const TypeGenerator* {
+auto TypeContext::generator_type(const Type* yield_type) -> const TypeGenerator* {
   auto [it, inserted] = generator_map_.try_emplace(yield_type, nullptr);
   if (inserted) {
     it->second = arena_.alloc<TypeGenerator>(yield_type);
@@ -131,20 +129,19 @@ auto TypeContext::generator_type(const Type* yield_type)
 // Nominal constructors
 // ---------------------------------------------------------------------------
 
-auto TypeContext::make_struct(const void* decl_id, std::string_view name,
-                              std::vector<StructField> fields)
-    -> const TypeStruct* {
+auto TypeContext::make_struct(const void* decl_id,
+                              std::string_view name,
+                              std::vector<StructField> fields) -> const TypeStruct* {
   return arena_.alloc<TypeStruct>(decl_id, name, std::move(fields));
 }
 
-auto TypeContext::make_struct_shell(const void* decl_id,
-                                    std::string_view name) -> TypeStruct* {
+auto TypeContext::make_struct_shell(const void* decl_id, std::string_view name) -> TypeStruct* {
   return arena_.alloc<TypeStruct>(decl_id, name, std::vector<StructField>{});
 }
 
-auto TypeContext::make_enum(const void* decl_id, std::string_view name,
-                             std::vector<EnumVariant> variants)
-    -> const TypeEnum* {
+auto TypeContext::make_enum(const void* decl_id,
+                            std::string_view name,
+                            std::vector<EnumVariant> variants) -> const TypeEnum* {
   return arena_.alloc<TypeEnum>(decl_id, name, std::move(variants));
 }
 
