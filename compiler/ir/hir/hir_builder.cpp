@@ -411,6 +411,27 @@ void HirBuilder::lower_match_into(const Stmt* stmt,
       }
     }
 
+    // Emit HirLet for `as` binding: `Pattern as name:` binds the
+    // scrutinee value to `name` in the arm body.
+    if (!it->as_binding.empty()) {
+      const Symbol* as_sym = nullptr;
+      for (const auto& sym_ptr : resolve_.context.symbols()) {
+        if (sym_ptr->name == it->as_binding &&
+            sym_ptr->decl_span.offset == it->as_binding_span.offset) {
+          as_sym = sym_ptr.get();
+          break;
+        }
+      }
+      if (as_sym != nullptr) {
+        auto* as_ref = ctx_.alloc<HirExpr>(
+            stmt->span, scrutinee_type, HirSymbolRef{scrutinee_sym});
+        auto* as_let = ctx_.alloc<HirStmt>(
+            stmt->span,
+            HirLet{as_sym, scrutinee_type, as_ref});
+        arm_body.insert(arm_body.begin(), as_let);
+      }
+    }
+
     auto* cond = ctx_.alloc<HirExpr>(
         stmt->span, nullptr,
         HirBinary{BinaryOp::EqEq, compare_value, pattern});
