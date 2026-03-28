@@ -53,7 +53,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 40
+  let total: i32 = 43
 
   // -----------------------------------------------------------------
   // Expression tests
@@ -336,6 +336,28 @@ fn main(): i32
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
+  // Concept and extend tests
+  // -----------------------------------------------------------------
+
+  // Test 38: concept declaration parses without error
+  let src38: string = "concept Printable:\n  fn to_string(self): string\n"
+  let r38: PR = parse(src38)
+  if expect_no_parse_errors("concept_decl_no_err", r38):
+    pass_count = pass_count + 1
+
+  // Test 39: extend declaration parses without error
+  let src39: string = "class Foo:\n  x: i32\n\nconcept Printable:\n  fn to_string(self): string\n\nextend Foo as Printable:\n  fn to_string(self): string\n    return \"Foo\"\n"
+  let r39: PR = parse(src39)
+  if expect_no_parse_errors("extend_decl_no_err", r39):
+    pass_count = pass_count + 1
+
+  // Test 40: concept with multiple method signatures
+  let src40: string = "concept Showable:\n  fn show(self): string\n  fn size(self): i64\n"
+  let r40: PR = parse(src40)
+  if expect_no_parse_errors("concept_multi_sig_no_err", r40):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
   // Summary
   // -----------------------------------------------------------------
 
@@ -348,9 +370,7 @@ fn main(): i32
   // Tier B deferrals (documented, not silently omitted)
   // -----------------------------------------------------------------
   // The following syntax is explicitly deferred to Tier B:
-  //   - concept declarations
   //   - derived concept declarations
-  //   - extend declarations
   //   - conformance blocks (as / deny)
   //   - mode / resource blocks
   //   - yield statements

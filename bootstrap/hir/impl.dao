@@ -27,40 +27,40 @@
 //   - Mode / resource blocks
 //   - Yield / generators
 
-enum HirNode:
+enum class HirNode:
   // File
-  HirFile(i64)
+  HirFile(decls_lp: i64)
 
   // Declarations
-  HirFunction(i64, i64, i64, i64, i64, i64, i64)  // name, tparams_lp, params_lp, ret_ti, body_lp, is_extern, class_owner_tidx (-1 for free fns)
-  HirStruct(i64, i64, i64)
-  HirEnum(i64, i64, i64)
-  HirTypeAlias(i64, i64)
+  HirFunction(name: i64, tparams: i64, params: i64, ret: i64, body: i64, is_extern: i64, class_owner: i64)
+  HirStruct(name: i64, tparams: i64, fields: i64)
+  HirEnum(name: i64, tparams: i64, variants: i64)
+  HirTypeAlias(name: i64, typ: i64)
 
   // Statements
-  HirLet(i64, i64, i64)
-  HirAssign(i64, i64)
-  HirIf(i64, i64, i64)
-  HirWhile(i64, i64)
-  HirFor(i64, i64, i64)
-  HirReturn(i64)
-  HirBreak(i64)
-  HirExprStmt(i64)
-  HirErrorStmt(i64)
+  HirLet(name: i64, typ: i64, init: i64)
+  HirAssign(target: i64, value: i64)
+  HirIf(cond: i64, then_lp: i64, else_lp: i64)
+  HirWhile(cond: i64, body_lp: i64)
+  HirFor(var_name: i64, iter: i64, body_lp: i64)
+  HirReturn(value: i64)
+  HirBreak(tok: i64)
+  HirExprStmt(expr: i64)
+  HirErrorStmt(tok: i64)
 
   // Expressions
-  HirIntLit(i64, i64)
-  HirFloatLit(i64, i64)
-  HirStringLit(i64, i64)
-  HirBoolLit(i64, i64)
-  HirIdent(i64, i64, i64)
-  HirBinary(i64, i64, i64, i64)
-  HirUnary(i64, i64, i64)
-  HirCall(i64, i64, i64, i64)
-  HirFieldAccess(i64, i64, i64)
-  HirPipe(i64, i64, i64)
-  HirQualName(i64, i64, i64)
-  HirErrorExpr(i64)
+  HirIntLit(tok: i64, typ: i64)
+  HirFloatLit(tok: i64, typ: i64)
+  HirStringLit(tok: i64, typ: i64)
+  HirBoolLit(tok: i64, typ: i64)
+  HirIdent(sym: i64, typ: i64, tok: i64)
+  HirBinary(op: i64, left: i64, right: i64, typ: i64)
+  HirUnary(op: i64, operand: i64, typ: i64)
+  HirCall(callee: i64, args_lp: i64, arg_count: i64, typ: i64)
+  HirFieldAccess(obj: i64, field: i64, typ: i64)
+  HirPipe(left: i64, right: i64, typ: i64)
+  HirQualName(segs_lp: i64, seg_count: i64, typ: i64)
+  HirErrorExpr(tok: i64)
 
 // =========================================================================
 // Section 50: HIR state and result types
@@ -782,6 +782,12 @@ fn lower_decl(hs: HS, decl_idx: i64): HirR
       return lower_enum_decl(hs, decl_idx, name_tidx, tparams_lp, variants_lp)
     Node.TypeAliasD(name_tidx, target_type):
       return lower_type_alias_decl(hs, decl_idx, name_tidx, target_type)
+    Node.ConceptDeclD(name_tidx, tparams_lp, methods_lp):
+      // Concepts produce no runtime code — emit a no-op
+      return hs_add_node(hs, HirNode.HirErrorStmt(to_i64(0)))
+    Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
+      // Extend methods are emitted in lower_file; return a no-op here
+      return hs_add_node(hs, HirNode.HirErrorStmt(to_i64(0)))
     Node.ErrorD(t):
       return hs_add_node(hs, HirNode.HirErrorStmt(to_i64(0)))
   return hs_add_node(hs, HirNode.HirErrorStmt(to_i64(0)))
@@ -855,6 +861,26 @@ fn lower_file(hs: HS, file_node_idx: i64): HirR
                     cur = mr.hs
                     hir_decls = hir_decls.push(mr.hir)
                 mi = mi + 1
+          Node.ExtendDeclD(ext_target, ext_cname, ext_ml):
+            if ext_ml >= 0:
+              // Get target type name token for owner
+              let ext_owner_tidx: i64 = to_i64(-1)
+              if ext_target >= 0:
+                let tnode: Node = cur.nodes.get(ext_target)
+                match tnode:
+                  Node.NamedT(t_tidx):
+                    ext_owner_tidx = t_tidx
+              let ext_methods: Vector<i64> = read_list(cur.idx_data, ext_ml)
+              let emi: i64 = 0
+              while emi < ext_methods.length():
+                let emeth_idx: i64 = ext_methods.get(emi)
+                let emeth_node: Node = cur.nodes.get(emeth_idx)
+                match emeth_node:
+                  Node.FnDeclD(em_name_tidx, em_tparams_lp, em_params_lp, em_ret_type, em_body_lp):
+                    let emr: HirR = lower_fn_decl_with_owner(cur, emeth_idx, em_name_tidx, em_tparams_lp, em_params_lp, em_ret_type, em_body_lp, ext_owner_tidx)
+                    cur = emr.hs
+                    hir_decls = hir_decls.push(emr.hir)
+                emi = emi + 1
         i = i + 1
       let fl: HirFlush = hir_flush_list(cur, hir_decls)
       return hs_add_node(fl.hs, HirNode.HirFile(fl.list_pos))
@@ -1151,7 +1177,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 15
+  let total: i32 = 16
 
   // Test 1: simple_fn
   let src1: string = "fn add(a: i32, b: i32): i32\n  return a + b\n"
@@ -1452,7 +1478,28 @@ fn main(): i32
   else:
     print("FAIL generic_fn_lower: root < 0")
 
-  // Test 15: self_lower_smoke
+  // Test 15: extend methods lower to HirFunction nodes
+  let src15e: string = "class Foo:\n  x: i32\n\nconcept Printable:\n  fn to_string(self): string\n\nextend Foo as Printable:\n  fn to_string(self): string\n    return \"Foo\"\n"
+  let r15e: HirResult = lower_to_hir(src15e)
+  if r15e.root >= 0:
+    // Count HirFunction nodes — should have at least one for the extend method
+    let fn_count_15e: i64 = 0
+    let i15e: i64 = 0
+    while i15e < hir_count_nodes(r15e):
+      let n15e: HirNode = r15e.hir_nodes.get(i15e)
+      match n15e:
+        HirNode.HirFunction(nm, tp_lp, pl, rt, bl, ie, co):
+          fn_count_15e = fn_count_15e + 1
+      i15e = i15e + 1
+    if fn_count_15e >= 1:
+      print("PASS extend_lower")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL extend_lower: expected >= 1 HirFunction, got " + i64_to_string(fn_count_15e))
+  else:
+    print("FAIL extend_lower: root < 0")
+
+  // Test 16: self_lower_smoke
   let self_src: string = "fn id(x: i32): i32\n  return x\nfn main(): i32\n  let a: i32 = id(42)\n  return a\n"
   let r15: HirResult = lower_to_hir(self_src)
   if r15.root >= 0:
