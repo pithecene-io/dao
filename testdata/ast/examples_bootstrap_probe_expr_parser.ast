@@ -426,7 +426,7 @@ File
                     IntLiteral 0
     ReturnStatement
       Identifier tokens
-  EnumDecl Expr
+  EnumClassDecl Expr
     Variant IntLit
     Variant Binary
     Variant Unary

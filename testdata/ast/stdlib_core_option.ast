@@ -1,4 +1,4 @@
 File
-  EnumDecl Option
+  EnumClassDecl Option<T>
     Variant Some
     Variant None

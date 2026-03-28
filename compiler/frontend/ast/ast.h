@@ -206,9 +206,9 @@ struct FunctionDecl {
   Span name_span;
   std::vector<GenericParam> type_params;
   std::vector<Param> params;
-  TypeNode* return_type;       // nullable
-  std::vector<Stmt*> body;     // empty if expression-bodied or extern
-  Expr* expr_body;             // nullptr if block-bodied or extern
+  TypeNode* return_type;   // nullable
+  std::vector<Stmt*> body; // empty if expression-bodied or extern
+  Expr* expr_body;         // nullptr if block-bodied or extern
   bool is_extern = false;
 
   [[nodiscard]] auto is_expr_bodied() const -> bool {
@@ -229,7 +229,9 @@ struct ClassDecl {
 struct EnumVariantSpec {
   std::string_view name;
   Span name_span;
-  std::vector<TypeNode*> payload_types; // empty for payload-free variants
+  std::vector<TypeNode*> payload_types;      // empty for payload-free variants
+  std::vector<std::string_view> field_names; // parallel to payload_types (enum class only)
+  std::vector<Span> field_name_spans;        // for diagnostics
 };
 
 struct EnumDeclNode {
@@ -237,6 +239,7 @@ struct EnumDeclNode {
   Span name_span;
   std::vector<GenericParam> type_params;
   std::vector<EnumVariantSpec> variants;
+  bool is_enum_class = false;
 };
 
 struct AliasDecl {
@@ -266,9 +269,13 @@ struct ErrorDeclNode {};
 struct ErrorStmtNode {};
 struct ErrorExprNode {};
 
-using DeclPayload =
-    std::variant<FunctionDecl, ClassDecl, EnumDeclNode, AliasDecl, ConceptDecl,
-                 ExtendDecl, ErrorDeclNode>;
+using DeclPayload = std::variant<FunctionDecl,
+                                 ClassDecl,
+                                 EnumDeclNode,
+                                 AliasDecl,
+                                 ConceptDecl,
+                                 ExtendDecl,
+                                 ErrorDeclNode>;
 
 // ---------------------------------------------------------------------------
 // Statement payloads
@@ -277,8 +284,8 @@ using DeclPayload =
 struct LetStatement {
   std::string_view name;
   Span name_span;
-  TypeNode* type;        // nullable
-  Expr* initializer;     // nullable
+  TypeNode* type;    // nullable
+  Expr* initializer; // nullable
 };
 
 struct Assignment {
@@ -329,9 +336,12 @@ struct YieldStatement {
 struct BreakStmtNode {};
 
 struct MatchArm {
-  Expr* pattern;                           // constant or qualified enum variant
-  std::vector<std::string_view> bindings;  // destructuring bindings (empty for payload-free)
-  std::vector<Span> binding_spans;         // spans for diagnostics / semantic tokens
+  Expr* pattern;                          // constant or qualified enum variant
+  std::vector<std::string_view> bindings; // destructuring bindings (empty for payload-free)
+  std::vector<Span> binding_spans;        // spans for diagnostics / semantic tokens
+  bool has_rest = false;                  // true when `..` appears at end of bindings
+  std::string_view as_binding;            // non-empty when `pattern as name:` form is used
+  Span as_binding_span;
   std::vector<Stmt*> body;
 };
 
@@ -348,10 +358,19 @@ struct ExpressionStatement {
   Expr* expr;
 };
 
-using StmtPayload = std::variant<
-    LetStatement, Assignment, IfStatement, WhileStatement, ForStatement,
-    YieldStatement, BreakStmtNode, MatchStmt, ModeBlock, ResourceBlock,
-    ReturnStatement, ExpressionStatement, ErrorStmtNode>;
+using StmtPayload = std::variant<LetStatement,
+                                 Assignment,
+                                 IfStatement,
+                                 WhileStatement,
+                                 ForStatement,
+                                 YieldStatement,
+                                 BreakStmtNode,
+                                 MatchStmt,
+                                 ModeBlock,
+                                 ResourceBlock,
+                                 ReturnStatement,
+                                 ExpressionStatement,
+                                 ErrorStmtNode>;
 
 // ---------------------------------------------------------------------------
 // Expression payloads
@@ -371,7 +390,8 @@ struct UnaryExpr {
 struct CallExpr {
   Expr* callee;
   std::vector<Expr*> args;
-  std::vector<TypeNode*> type_args; // Explicit type arguments: f<i32>(x)
+  std::vector<TypeNode*> type_args;          // Explicit type arguments: f<i32>(x)
+  std::vector<std::string_view> arg_names;   // parallel to args; empty string = positional
 };
 
 struct IndexExpr {
@@ -399,10 +419,18 @@ struct LambdaExpr {
   Expr* body;
 };
 
-struct IntLiteral   { std::string_view text; };
-struct FloatLiteral { std::string_view text; };
-struct StringLiteral { std::string_view text; };
-struct BoolLiteral  { bool value; };
+struct IntLiteral {
+  std::string_view text;
+};
+struct FloatLiteral {
+  std::string_view text;
+};
+struct StringLiteral {
+  std::string_view text;
+};
+struct BoolLiteral {
+  bool value;
+};
 
 struct ListLiteral {
   std::vector<Expr*> elements;
@@ -416,11 +444,22 @@ struct QualifiedName {
   std::vector<std::string_view> segments;
 };
 
-using ExprPayload = std::variant<
-    BinaryExpr, UnaryExpr, CallExpr, IndexExpr, FieldExpr, PipeExpr,
-    TryExpr, LambdaExpr, IntLiteral, FloatLiteral, StringLiteral,
-    BoolLiteral, ListLiteral, IdentifierExpr, QualifiedName,
-    ErrorExprNode>;
+using ExprPayload = std::variant<BinaryExpr,
+                                 UnaryExpr,
+                                 CallExpr,
+                                 IndexExpr,
+                                 FieldExpr,
+                                 PipeExpr,
+                                 TryExpr,
+                                 LambdaExpr,
+                                 IntLiteral,
+                                 FloatLiteral,
+                                 StringLiteral,
+                                 BoolLiteral,
+                                 ListLiteral,
+                                 IdentifierExpr,
+                                 QualifiedName,
+                                 ErrorExprNode>;
 
 // ---------------------------------------------------------------------------
 // Type node payloads
@@ -456,12 +495,10 @@ struct Decl {
 
   [[nodiscard]] auto kind() const -> NodeKind;
 
-  template <typename T>
-  [[nodiscard]] auto as() const -> const T& {
+  template <typename T> [[nodiscard]] auto as() const -> const T& {
     return std::get<T>(payload);
   }
-  template <typename T>
-  [[nodiscard]] auto is() const -> bool {
+  template <typename T> [[nodiscard]] auto is() const -> bool {
     return std::holds_alternative<T>(payload);
   }
 };
@@ -472,12 +509,10 @@ struct Stmt {
 
   [[nodiscard]] auto kind() const -> NodeKind;
 
-  template <typename T>
-  [[nodiscard]] auto as() const -> const T& {
+  template <typename T> [[nodiscard]] auto as() const -> const T& {
     return std::get<T>(payload);
   }
-  template <typename T>
-  [[nodiscard]] auto is() const -> bool {
+  template <typename T> [[nodiscard]] auto is() const -> bool {
     return std::holds_alternative<T>(payload);
   }
 };
@@ -488,12 +523,10 @@ struct Expr {
 
   [[nodiscard]] auto kind() const -> NodeKind;
 
-  template <typename T>
-  [[nodiscard]] auto as() const -> const T& {
+  template <typename T> [[nodiscard]] auto as() const -> const T& {
     return std::get<T>(payload);
   }
-  template <typename T>
-  [[nodiscard]] auto is() const -> bool {
+  template <typename T> [[nodiscard]] auto is() const -> bool {
     return std::holds_alternative<T>(payload);
   }
 };
@@ -504,12 +537,10 @@ struct TypeNode {
 
   [[nodiscard]] auto kind() const -> NodeKind;
 
-  template <typename T>
-  [[nodiscard]] auto as() const -> const T& {
+  template <typename T> [[nodiscard]] auto as() const -> const T& {
     return std::get<T>(payload);
   }
-  template <typename T>
-  [[nodiscard]] auto is() const -> bool {
+  template <typename T> [[nodiscard]] auto is() const -> bool {
     return std::holds_alternative<T>(payload);
   }
 };

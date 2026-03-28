@@ -32,7 +32,8 @@ void print_type(std::ostream& out, const Type* type) {
     out << "fn(";
     bool first = true;
     for (const auto* param : f->param_types()) {
-      if (!first) out << ", ";
+      if (!first)
+        out << ", ";
       first = false;
       print_type(out, param);
     }
@@ -47,7 +48,8 @@ void print_type(std::ostream& out, const Type* type) {
       out << '<';
       bool first = true;
       for (const auto* arg : n->type_args()) {
-        if (!first) out << ", ";
+        if (!first)
+          out << ", ";
         first = false;
         print_type(out, arg);
       }

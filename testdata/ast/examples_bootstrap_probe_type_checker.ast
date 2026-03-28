@@ -846,13 +846,13 @@ File
                     IntLiteral 0
     ReturnStatement
       Identifier tokens
-  EnumDecl Node
+  EnumClassDecl Node
     Variant IntLit
     Variant BoolLit
     Variant VarRef
     Variant Binary
     Variant Unary
-  EnumDecl Stmt
+  EnumClassDecl Stmt
     Variant Let
     Variant Expr
   ClassDecl ExprResult

@@ -162,16 +162,16 @@ fn lex(source: string): Vector<Token>
 // AST nodes
 // ---------------------------------------------------------------
 
-enum Node:
-  IntLit(i64)
-  BoolLit(i64)
-  VarRef(i64, i64)
-  Binary(TK, i64, i64)
-  Unary(TK, i64)
+enum class Node:
+  IntLit(value: i64)
+  BoolLit(value: i64)
+  VarRef(name: i64, span: i64)
+  Binary(op: TK, left: i64, right: i64)
+  Unary(op: TK, operand: i64)
 
-enum Stmt:
-  Let(i64, i64, i64)
-  Expr(i64)
+enum class Stmt:
+  Let(name: i64, typ: i64, init: i64)
+  Expr(node: i64)
 
 // ---------------------------------------------------------------
 // Parse state and helpers

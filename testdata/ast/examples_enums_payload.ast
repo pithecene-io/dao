@@ -1,5 +1,5 @@
 File
-  EnumDecl Token
+  EnumClassDecl Token
     Variant Int
     Variant Plus
     Variant Minus

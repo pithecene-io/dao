@@ -51,7 +51,7 @@ fn saturating_sub_i64(a: i64, b: i64): i64 -> __dao_saturating_sub_i64(a, b)
 fn saturating_mul_i64(a: i64, b: i64): i64 -> __dao_saturating_mul_i64(a, b)
 
 // ---------------------------------------------------------------------------
-// Checked operations — return Option.None on overflow
+// Checked operations — return Option::None on overflow
 //
 // Pure Dao implementations using widening (i8/i16/i32) or wrapping +
 // overflow detection (i64). No runtime hooks required.
@@ -63,60 +63,60 @@ fn saturating_mul_i64(a: i64, b: i64): i64 -> __dao_saturating_mul_i64(a, b)
 fn checked_add_i8(a: i8, b: i8): Option<i8>
   let r: i32 = i8_to_i32(a) + i8_to_i32(b)
   if r > 127 or r < -128:
-    return Option.None
-  return Option.Some(i32_to_i8(r))
+    return Option::None
+  return Option::Some(value = i32_to_i8(r))
 
 fn checked_sub_i8(a: i8, b: i8): Option<i8>
   let r: i32 = i8_to_i32(a) - i8_to_i32(b)
   if r > 127 or r < -128:
-    return Option.None
-  return Option.Some(i32_to_i8(r))
+    return Option::None
+  return Option::Some(value = i32_to_i8(r))
 
 fn checked_mul_i8(a: i8, b: i8): Option<i8>
   let r: i32 = i8_to_i32(a) * i8_to_i32(b)
   if r > 127 or r < -128:
-    return Option.None
-  return Option.Some(i32_to_i8(r))
+    return Option::None
+  return Option::Some(value = i32_to_i8(r))
 
 // --- i16 (widen to i32) ---
 
 fn checked_add_i16(a: i16, b: i16): Option<i16>
   let r: i32 = i16_to_i32(a) + i16_to_i32(b)
   if r > 32767 or r < -32768:
-    return Option.None
-  return Option.Some(i32_to_i16(r))
+    return Option::None
+  return Option::Some(value = i32_to_i16(r))
 
 fn checked_sub_i16(a: i16, b: i16): Option<i16>
   let r: i32 = i16_to_i32(a) - i16_to_i32(b)
   if r > 32767 or r < -32768:
-    return Option.None
-  return Option.Some(i32_to_i16(r))
+    return Option::None
+  return Option::Some(value = i32_to_i16(r))
 
 fn checked_mul_i16(a: i16, b: i16): Option<i16>
   let r: i32 = i16_to_i32(a) * i16_to_i32(b)
   if r > 32767 or r < -32768:
-    return Option.None
-  return Option.Some(i32_to_i16(r))
+    return Option::None
+  return Option::Some(value = i32_to_i16(r))
 
 // --- i32 (widen to i64) ---
 
 fn checked_add(a: i32, b: i32): Option<i32>
   let r: i64 = to_i64(a) + to_i64(b)
   if r > to_i64(2147483647) or r < to_i64(-2147483648):
-    return Option.None
-  return Option.Some(i64_to_i32(r))
+    return Option::None
+  return Option::Some(value = i64_to_i32(r))
 
 fn checked_sub(a: i32, b: i32): Option<i32>
   let r: i64 = to_i64(a) - to_i64(b)
   if r > to_i64(2147483647) or r < to_i64(-2147483648):
-    return Option.None
-  return Option.Some(i64_to_i32(r))
+    return Option::None
+  return Option::Some(value = i64_to_i32(r))
 
 fn checked_mul(a: i32, b: i32): Option<i32>
   let r: i64 = to_i64(a) * to_i64(b)
   if r > to_i64(2147483647) or r < to_i64(-2147483648):
-    return Option.None
-  return Option.Some(i64_to_i32(r))
+    return Option::None
+  return Option::Some(value = i64_to_i32(r))
 
 // --- i64 (cannot widen — use wrapping + overflow detection) ---
 
@@ -125,11 +125,11 @@ fn checked_add_i64(a: i64, b: i64): Option<i64>
   // Overflow iff operand and result signs disagree.
   if b >= to_i64(0):
     if r < a:
-      return Option.None
+      return Option::None
   else:
     if r > a:
-      return Option.None
-  return Option.Some(r)
+      return Option::None
+  return Option::Some(value = r)
 
 fn checked_sub_i64(a: i64, b: i64): Option<i64>
   let r: i64 = wrapping_sub_i64(a, b)
@@ -137,15 +137,15 @@ fn checked_sub_i64(a: i64, b: i64): Option<i64>
   // or subtracting negative made it smaller.
   if b > to_i64(0):
     if r > a:
-      return Option.None
+      return Option::None
   else if b < to_i64(0):
     if r < a:
-      return Option.None
-  return Option.Some(r)
+      return Option::None
+  return Option::Some(value = r)
 
 fn checked_mul_i64(a: i64, b: i64): Option<i64>
   if a == to_i64(0) or b == to_i64(0):
-    return Option.Some(to_i64(0))
+    return Option::Some(value = to_i64(0))
   let r: i64 = wrapping_mul_i64(a, b)
   // Guard -1 edge cases to avoid MIN/-1 divide trap in the
   // divide-back check below. -1 * x overflows only when x is
@@ -153,13 +153,13 @@ fn checked_mul_i64(a: i64, b: i64): Option<i64>
   // Detection: wrapping_mul(-1, MIN) = MIN = b, so r == b.
   if a == to_i64(-1):
     if r == b:
-      return Option.None
-    return Option.Some(r)
+      return Option::None
+    return Option::Some(value = r)
   if b == to_i64(-1):
     if r == a:
-      return Option.None
-    return Option.Some(r)
+      return Option::None
+    return Option::Some(value = r)
   // General case: divide-back (safe since a != 0, a != -1).
   if r / a != b:
-    return Option.None
-  return Option.Some(r)
+    return Option::None
+  return Option::Some(value = r)

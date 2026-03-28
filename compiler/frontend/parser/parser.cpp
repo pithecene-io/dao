@@ -101,8 +101,7 @@ private:
   /// Skip tokens until a statement boundary (NEWLINE, DEDENT, or EOF).
   void synchronize_to_statement() {
     while (!at_end()) {
-      if (peek_kind() == TokenKind::Newline ||
-          peek_kind() == TokenKind::Dedent) {
+      if (peek_kind() == TokenKind::Newline || peek_kind() == TokenKind::Dedent) {
         return;
       }
       advance();
@@ -156,8 +155,7 @@ private:
       } else {
         // Recovery: insert an error placeholder and skip to next declaration keyword.
         synchronize_to_declaration();
-        Span err_span = {.offset = before.offset,
-                         .length = peek().span.offset - before.offset};
+        Span err_span = {.offset = before.offset, .length = peek().span.offset - before.offset};
         declarations.push_back(make_error_decl(err_span));
       }
       skip_newlines();
@@ -228,10 +226,13 @@ private:
         consume(TokenKind::Colon);
         auto fields = parse_field_list();
         Span span = span_from(peek().span);
-        return ctx_.alloc<Decl>(
-            span, ClassDecl{.name = name_tok.text, .name_span = name_tok.span,
-                            .type_params = {}, .fields = std::move(fields),
-                            .conformances = {}, .denials = {}});
+        return ctx_.alloc<Decl>(span,
+                                ClassDecl{.name = name_tok.text,
+                                          .name_span = name_tok.span,
+                                          .type_params = {},
+                                          .fields = std::move(fields),
+                                          .conformances = {},
+                                          .denials = {}});
       }
       error("expected declaration (fn, extern, class, enum, concept, extend, or type)");
       advance(); // skip problematic token
@@ -325,13 +326,15 @@ private:
     }
 
     Span span = span_from(kw.span);
-    return ctx_.alloc<Decl>(
-        span,
-        FunctionDecl{.name = name_tok.text, .name_span = name_tok.span,
-                     .type_params = std::move(type_params),
-                     .params = std::move(params), .return_type = return_type,
-                     .body = std::move(body), .expr_body = expr_body,
-                     .is_extern = is_extern});
+    return ctx_.alloc<Decl>(span,
+                            FunctionDecl{.name = name_tok.text,
+                                         .name_span = name_tok.span,
+                                         .type_params = std::move(type_params),
+                                         .params = std::move(params),
+                                         .return_type = return_type,
+                                         .body = std::move(body),
+                                         .expr_body = expr_body,
+                                         .is_extern = is_extern});
   }
 
   auto parse_params() -> std::vector<Param> {
@@ -373,13 +376,14 @@ private:
     consume(TokenKind::Colon);
     auto body = parse_class_body();
     Span span = span_from(kw.span);
-    return ctx_.alloc<Decl>(
-        span, ClassDecl{.name = name_tok.text, .name_span = name_tok.span,
-                        .type_params = std::move(type_params),
-                        .fields = std::move(body.fields),
-                        .methods = std::move(body.methods),
-                        .conformances = std::move(body.conformances),
-                        .denials = std::move(body.denials)});
+    return ctx_.alloc<Decl>(span,
+                            ClassDecl{.name = name_tok.text,
+                                      .name_span = name_tok.span,
+                                      .type_params = std::move(type_params),
+                                      .fields = std::move(body.fields),
+                                      .methods = std::move(body.methods),
+                                      .conformances = std::move(body.conformances),
+                                      .denials = std::move(body.denials)});
   }
 
   struct ClassBody {
@@ -414,6 +418,14 @@ private:
 
   auto parse_enum_decl() -> Decl* {
     const auto& kw = consume(TokenKind::KwEnum);
+
+    // Check for 'class' keyword after 'enum' -> enum class
+    bool is_enum_class = false;
+    if (peek_kind() == TokenKind::KwClass) {
+      advance();
+      is_enum_class = true;
+    }
+
     const auto& name_tok = consume(TokenKind::Identifier);
     auto type_params = parse_type_params();
     consume(TokenKind::Colon);
@@ -432,20 +444,39 @@ private:
       }
       const auto& variant_tok = consume(TokenKind::Identifier);
       std::vector<TypeNode*> payload_types;
+      std::vector<std::string_view> field_names;
+      std::vector<Span> field_name_spans;
       if (peek_kind() == TokenKind::LParen) {
         advance(); // consume '('
         if (peek_kind() != TokenKind::RParen) {
-          payload_types.push_back(parse_type());
-          while (peek_kind() == TokenKind::Comma) {
-            advance(); // consume ','
+          if (is_enum_class) {
+            // Named fields: name: Type, name: Type, ...
+            do {
+              const auto& field_tok = consume(TokenKind::Identifier);
+              field_names.push_back(field_tok.text);
+              field_name_spans.push_back(field_tok.span);
+              consume(TokenKind::Colon);
+              payload_types.push_back(parse_type());
+            } while (peek_kind() == TokenKind::Comma && (advance(), true));
+          } else {
+            // Plain enum: payloads are an error
+            error("enum variants cannot carry payloads; use 'enum class' "
+                  "for structured variants");
+            // Still parse for recovery
             payload_types.push_back(parse_type());
+            while (peek_kind() == TokenKind::Comma) {
+              advance(); // consume ','
+              payload_types.push_back(parse_type());
+            }
           }
         }
         consume(TokenKind::RParen);
       }
       variants.push_back({.name = variant_tok.text,
-                           .name_span = variant_tok.span,
-                           .payload_types = std::move(payload_types)});
+                          .name_span = variant_tok.span,
+                          .payload_types = std::move(payload_types),
+                          .field_names = std::move(field_names),
+                          .field_name_spans = std::move(field_name_spans)});
       if (peek_kind() == TokenKind::Newline) {
         advance();
       }
@@ -455,10 +486,12 @@ private:
       error("enum must contain at least one variant");
     }
     Span span = span_from(kw.span);
-    return ctx_.alloc<Decl>(
-        span, EnumDeclNode{.name = name_tok.text, .name_span = name_tok.span,
-                           .type_params = std::move(type_params),
-                           .variants = std::move(variants)});
+    return ctx_.alloc<Decl>(span,
+                            EnumDeclNode{.name = name_tok.text,
+                                         .name_span = name_tok.span,
+                                         .type_params = std::move(type_params),
+                                         .variants = std::move(variants),
+                                         .is_enum_class = is_enum_class});
   }
 
   auto parse_conformance_block() -> ConformanceBlock {
@@ -466,7 +499,8 @@ private:
     const auto& concept_tok = consume(TokenKind::Identifier);
     consume(TokenKind::Colon);
     auto methods = parse_method_list();
-    return {.concept_name = concept_tok.text, .concept_span = concept_tok.span,
+    return {.concept_name = concept_tok.text,
+            .concept_span = concept_tok.span,
             .methods = std::move(methods)};
   }
 
@@ -534,13 +568,15 @@ private:
     }
 
     Span span = span_from(kw.span);
-    return ctx_.alloc<Decl>(
-        span,
-        FunctionDecl{.name = name_tok.text, .name_span = name_tok.span,
-                     .type_params = std::move(method_type_params),
-                     .params = std::move(params), .return_type = return_type,
-                     .body = std::move(fn_body), .expr_body = expr_body,
-                     .is_extern = false});
+    return ctx_.alloc<Decl>(span,
+                            FunctionDecl{.name = name_tok.text,
+                                         .name_span = name_tok.span,
+                                         .type_params = std::move(method_type_params),
+                                         .params = std::move(params),
+                                         .return_type = return_type,
+                                         .body = std::move(fn_body),
+                                         .expr_body = expr_body,
+                                         .is_extern = false});
   }
 
   auto parse_field_list() -> std::vector<FieldSpec*> {
@@ -574,8 +610,7 @@ private:
     consume(TokenKind::Newline);
     Span span = span_from(kw.span);
     return ctx_.alloc<Decl>(
-        span, AliasDecl{.name = name_tok.text, .name_span = name_tok.span,
-                        .type = type});
+        span, AliasDecl{.name = name_tok.text, .name_span = name_tok.span, .type = type});
   }
 
   auto parse_concept_decl(bool is_derived) -> Decl* {
@@ -590,11 +625,12 @@ private:
     consume(TokenKind::Colon);
     auto methods = parse_method_list();
     Span span = span_from(kw.span);
-    return ctx_.alloc<Decl>(
-        span, ConceptDecl{.name = name_tok.text, .name_span = name_tok.span,
-                          .type_params = std::move(type_params),
-                          .methods = std::move(methods),
-                          .is_derived = is_derived});
+    return ctx_.alloc<Decl>(span,
+                            ConceptDecl{.name = name_tok.text,
+                                        .name_span = name_tok.span,
+                                        .type_params = std::move(type_params),
+                                        .methods = std::move(methods),
+                                        .is_derived = is_derived});
   }
 
   auto parse_extend_decl() -> Decl* {
@@ -605,11 +641,11 @@ private:
     consume(TokenKind::Colon);
     auto methods = parse_method_list();
     Span span = span_from(kw.span);
-    return ctx_.alloc<Decl>(
-        span, ExtendDecl{.target_type = target_type,
-                         .concept_name = concept_tok.text,
-                         .concept_span = concept_tok.span,
-                         .methods = std::move(methods)});
+    return ctx_.alloc<Decl>(span,
+                            ExtendDecl{.target_type = target_type,
+                                       .concept_name = concept_tok.text,
+                                       .concept_span = concept_tok.span,
+                                       .methods = std::move(methods)});
   }
 
   // -----------------------------------------------------------------------
@@ -638,8 +674,7 @@ private:
       } else {
         // Recovery: insert an error placeholder and skip to next statement boundary.
         synchronize_to_statement();
-        Span err_span = {.offset = before.offset,
-                         .length = peek().span.offset - before.offset};
+        Span err_span = {.offset = before.offset, .length = peek().span.offset - before.offset};
         stmts.push_back(make_error_stmt(err_span));
       }
     }
@@ -747,8 +782,9 @@ private:
     match(TokenKind::Newline);
     Span span = span_from(kw.span);
     return ctx_.alloc<Stmt>(
-        span, LetStatement{.name = name_tok.text, .name_span = name_tok.span,
-                           .type = type, .initializer = init});
+        span,
+        LetStatement{
+            .name = name_tok.text, .name_span = name_tok.span, .type = type, .initializer = init});
   }
 
   auto parse_if_statement() -> Stmt* {
@@ -774,10 +810,10 @@ private:
     }
 
     Span span = span_from(kw.span);
-    return ctx_.alloc<Stmt>(
-        span, IfStatement{.condition = condition,
-                          .then_body = std::move(then_body),
-                          .else_body = std::move(else_body)});
+    return ctx_.alloc<Stmt>(span,
+                            IfStatement{.condition = condition,
+                                        .then_body = std::move(then_body),
+                                        .else_body = std::move(else_body)});
   }
 
   auto parse_match_statement() -> Stmt* {
@@ -798,16 +834,18 @@ private:
         break;
       }
       // Parse arm pattern (expression — constant, enum variant, etc.).
-      // The expression parser will parse `Enum.Variant(a, b)` as a CallExpr.
-      // If the callee is a FieldExpr and all args are simple identifiers,
-      // treat it as destructuring: extract the callee as the pattern and
-      // the identifier args as bindings.
+      // The expression parser will parse `Enum::Variant(a, b)` as a CallExpr.
+      // If the callee is a FieldExpr or QualifiedName and all args are
+      // simple identifiers (possibly ending with `..`), treat it as
+      // destructuring: extract the callee as the pattern and the
+      // identifier args as bindings.
       auto* pattern = parse_expression();
       std::vector<std::string_view> bindings;
       std::vector<Span> binding_spans;
+      bool has_rest = false;
       if (pattern->is<CallExpr>()) {
         const auto& call = pattern->as<CallExpr>();
-        if (call.callee->is<FieldExpr>()) {
+        if (call.callee->is<FieldExpr>() || call.callee->is<QualifiedName>()) {
           bool all_idents = true;
           for (const auto* arg : call.args) {
             if (!arg->is<IdentifierExpr>()) {
@@ -815,31 +853,52 @@ private:
               break;
             }
           }
-          if (all_idents && !call.args.empty()) {
+          // Check for `..` rest marker in arg_names.
+          bool trailing_rest = false;
+          if (!call.arg_names.empty()) {
+            for (const auto& an : call.arg_names) {
+              if (an.data() != nullptr && an == "..") {
+                trailing_rest = true;
+              }
+            }
+          }
+          if (all_idents && (!call.args.empty() || trailing_rest)) {
             for (const auto* arg : call.args) {
               const auto& ident = arg->as<IdentifierExpr>();
               bindings.push_back(ident.name);
               binding_spans.push_back(arg->span);
             }
+            has_rest = trailing_rest;
             pattern = call.callee;
           }
         }
       }
+      // Check for `as` binding: `Pattern as name:`
+      std::string_view as_binding;
+      Span as_binding_span{};
+      if (peek_kind() == TokenKind::KwAs) {
+        advance(); // consume 'as'
+        const auto& binding_tok = consume(TokenKind::Identifier);
+        as_binding = binding_tok.text;
+        as_binding_span = binding_tok.span;
+      }
+
       consume(TokenKind::Colon);
       auto body = parse_suite();
       arms.push_back({.pattern = pattern,
-                       .bindings = std::move(bindings),
-                       .binding_spans = std::move(binding_spans),
-                       .body = std::move(body)});
+                      .bindings = std::move(bindings),
+                      .binding_spans = std::move(binding_spans),
+                      .has_rest = has_rest,
+                      .as_binding = as_binding,
+                      .as_binding_span = as_binding_span,
+                      .body = std::move(body)});
     }
     consume(TokenKind::Dedent);
     if (arms.empty()) {
       error("match must contain at least one arm");
     }
     Span span = span_from(kw.span);
-    return ctx_.alloc<Stmt>(
-        span, MatchStmt{.scrutinee = scrutinee,
-                        .arms = std::move(arms)});
+    return ctx_.alloc<Stmt>(span, MatchStmt{.scrutinee = scrutinee, .arms = std::move(arms)});
   }
 
   auto parse_while_statement() -> Stmt* {
@@ -852,8 +911,7 @@ private:
     consume(TokenKind::Colon);
     auto body = parse_suite();
     Span span = span_from(kw.span);
-    return ctx_.alloc<Stmt>(span, WhileStatement{.condition = condition,
-                                                    .body = std::move(body)});
+    return ctx_.alloc<Stmt>(span, WhileStatement{.condition = condition, .body = std::move(body)});
   }
 
   auto parse_for_statement() -> Stmt* {
@@ -868,10 +926,11 @@ private:
     consume(TokenKind::Colon);
     auto body = parse_suite();
     Span span = span_from(kw.span);
-    return ctx_.alloc<Stmt>(
-        span,
-        ForStatement{.var = var_tok.text, .var_span = var_tok.span,
-                     .iterable = iterable, .body = std::move(body)});
+    return ctx_.alloc<Stmt>(span,
+                            ForStatement{.var = var_tok.text,
+                                         .var_span = var_tok.span,
+                                         .iterable = iterable,
+                                         .body = std::move(body)});
   }
 
   auto parse_mode_block() -> Stmt* {
@@ -881,9 +940,8 @@ private:
     auto body = parse_suite();
     Span span = span_from(kw.span);
     return ctx_.alloc<Stmt>(
-        span, ModeBlock{.mode_name = name_tok.text,
-                        .name_span = name_tok.span,
-                        .body = std::move(body)});
+        span,
+        ModeBlock{.mode_name = name_tok.text, .name_span = name_tok.span, .body = std::move(body)});
   }
 
   auto parse_resource_block() -> Stmt* {
@@ -893,13 +951,12 @@ private:
     consume(TokenKind::FatArrow);
     auto body = parse_suite();
     Span span = span_from(kw.span);
-    return ctx_.alloc<Stmt>(
-        span,
-        ResourceBlock{.resource_kind = kind_tok.text,
-                      .kind_span = kind_tok.span,
-                      .resource_name = name_tok.text,
-                      .name_span = name_tok.span,
-                      .body = std::move(body)});
+    return ctx_.alloc<Stmt>(span,
+                            ResourceBlock{.resource_kind = kind_tok.text,
+                                          .kind_span = kind_tok.span,
+                                          .resource_name = name_tok.text,
+                                          .name_span = name_tok.span,
+                                          .body = std::move(body)});
   }
 
   auto parse_yield_statement() -> Stmt* {
@@ -917,8 +974,7 @@ private:
   auto parse_return_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwReturn);
     Expr* value = nullptr;
-    if (peek_kind() != TokenKind::Newline &&
-        peek_kind() != TokenKind::Dedent &&
+    if (peek_kind() != TokenKind::Newline && peek_kind() != TokenKind::Dedent &&
         peek_kind() != TokenKind::Eof) {
       value = parse_expression();
       if (is_error_expr(value)) {
@@ -1119,8 +1175,7 @@ private:
       }
       auto* operand = parse_unary();
       Span span = {.offset = op_tok.span.offset,
-                   .length =
-                       (operand->span.offset + operand->span.length) - op_tok.span.offset};
+                   .length = (operand->span.offset + operand->span.length) - op_tok.span.offset};
       return ctx_.alloc<Expr>(span, UnaryExpr{.op = op, .operand = operand});
     }
     return parse_application();
@@ -1143,10 +1198,9 @@ private:
         }
       }
       Span span = {.offset = callee->span.offset,
-                   .length = (args.back()->span.offset + args.back()->span.length) -
-                             callee->span.offset};
-      return ctx_.alloc<Expr>(span, CallExpr{.callee = callee,
-                                               .args = std::move(args)});
+                   .length =
+                       (args.back()->span.offset + args.back()->span.length) - callee->span.offset};
+      return ctx_.alloc<Expr>(span, CallExpr{.callee = callee, .args = std::move(args)});
     }
 
     return callee;
@@ -1176,8 +1230,7 @@ private:
     }
     if (peek_kind() == TokenKind::Gt) {
       advance(); // consume >
-      if (peek_kind() == TokenKind::LParen ||
-          peek_kind() == TokenKind::ColonColon) {
+      if (peek_kind() == TokenKind::LParen || peek_kind() == TokenKind::ColonColon) {
         // Success: <Types>( or <Types>:: — call-site type arguments.
         return type_args;
       }
@@ -1188,13 +1241,54 @@ private:
     return {};
   }
 
+  // Parse call arguments: (expr, name = expr, ..)
+  // Returns args and fills arg_names (empty string_view = positional,
+  // ".." for rest marker). Caller must have already consumed '('.
+  auto parse_call_args(std::vector<std::string_view>& arg_names) -> std::vector<Expr*> {
+    std::vector<Expr*> args;
+    if (peek_kind() == TokenKind::RParen) {
+      return args;
+    }
+    auto parse_one_arg = [&]() -> bool {
+      // `..` rest marker (match destructuring).
+      if (peek_kind() == TokenKind::DotDot) {
+        advance();
+        arg_names.push_back("..");
+        return true; // signals rest was seen; no more args after this
+      }
+      // Lookahead for `Identifier =` (but NOT `==`).
+      if (peek_kind() == TokenKind::Identifier) {
+        uint32_t saved = pos_;
+        auto saved_diag_size = diagnostics_.size();
+        const auto& name_tok = advance();
+        if (peek_kind() == TokenKind::Eq) {
+          advance(); // consume '='
+          arg_names.push_back(name_tok.text);
+          args.push_back(parse_expression());
+          return false;
+        }
+        // Not a named arg — restore and parse as expression.
+        pos_ = saved;
+        diagnostics_.resize(saved_diag_size);
+      }
+      arg_names.push_back(std::string_view{});
+      args.push_back(parse_expression());
+      return false;
+    };
+    bool saw_rest = parse_one_arg();
+    while (!saw_rest && peek_kind() == TokenKind::Comma) {
+      advance();
+      saw_rest = parse_one_arg();
+    }
+    return args;
+  }
+
   auto parse_postfix() -> Expr* {
     auto* expr = parse_primary();
 
     while (true) {
       if (peek_kind() == TokenKind::Lt &&
-          (expr->kind() == NodeKind::Identifier ||
-           expr->kind() == NodeKind::FieldExpr ||
+          (expr->kind() == NodeKind::Identifier || expr->kind() == NodeKind::FieldExpr ||
            expr->kind() == NodeKind::QualifiedName)) {
         // Speculatively try call-site type arguments: ident<Type>(args).
         auto type_args = try_parse_call_type_args();
@@ -1205,14 +1299,14 @@ private:
             const auto& method_tok = consume(TokenKind::Identifier);
             // Synthesize a mangled callee: "Type.method"
             const auto& ident = expr->as<IdentifierExpr>();
-            auto* mangled_str = ctx_.alloc<std::string>(
-                std::string(ident.name) + "." + std::string(method_tok.text));
+            auto* mangled_str = ctx_.alloc<std::string>(std::string(ident.name) + "." +
+                                                        std::string(method_tok.text));
             std::string_view mangled(*mangled_str);
-            auto* callee = ctx_.alloc<Expr>(
-                Span{.offset = expr->span.offset,
-                     .length = (method_tok.span.offset + method_tok.span.length) -
-                               expr->span.offset},
-                IdentifierExpr{.name = mangled});
+            auto* callee =
+                ctx_.alloc<Expr>(Span{.offset = expr->span.offset,
+                                      .length = (method_tok.span.offset + method_tok.span.length) -
+                                                expr->span.offset},
+                                 IdentifierExpr{.name = mangled});
             consume(TokenKind::LParen);
             std::vector<Expr*> args;
             if (peek_kind() != TokenKind::RParen) {
@@ -1224,8 +1318,7 @@ private:
             }
             const auto& rparen = consume(TokenKind::RParen);
             Span span = {.offset = expr->span.offset,
-                         .length = (rparen.span.offset + rparen.span.length) -
-                                   expr->span.offset};
+                         .length = (rparen.span.offset + rparen.span.length) - expr->span.offset};
             expr = ctx_.alloc<Expr>(span,
                                     CallExpr{.callee = callee,
                                              .args = std::move(args),
@@ -1245,27 +1338,25 @@ private:
           const auto& rparen = consume(TokenKind::RParen);
           Span span = {.offset = expr->span.offset,
                        .length = (rparen.span.offset + rparen.span.length) - expr->span.offset};
-          expr = ctx_.alloc<Expr>(span, CallExpr{.callee = expr,
-                                                    .args = std::move(args),
-                                                    .type_args = std::move(type_args)});
+          expr = ctx_.alloc<Expr>(
+              span,
+              CallExpr{.callee = expr, .args = std::move(args), .type_args = std::move(type_args)});
           continue;
         }
         // Fall through to normal expression parsing (< as comparison).
         break;
       }
-      if (peek_kind() == TokenKind::ColonColon &&
-          expr->kind() == NodeKind::Identifier) {
+      if (peek_kind() == TokenKind::ColonColon && expr->kind() == NodeKind::Identifier) {
         // Static method call on nongeneric type: Type::method(args)
         advance(); // ::
         const auto& method_tok = consume(TokenKind::Identifier);
         const auto& ident = expr->as<IdentifierExpr>();
-        auto* mangled_str = ctx_.alloc<std::string>(
-            std::string(ident.name) + "." + std::string(method_tok.text));
+        auto* mangled_str =
+            ctx_.alloc<std::string>(std::string(ident.name) + "." + std::string(method_tok.text));
         std::string_view mangled(*mangled_str);
         auto* callee = ctx_.alloc<Expr>(
             Span{.offset = expr->span.offset,
-                 .length = (method_tok.span.offset + method_tok.span.length) -
-                           expr->span.offset},
+                 .length = (method_tok.span.offset + method_tok.span.length) - expr->span.offset},
             IdentifierExpr{.name = mangled});
         consume(TokenKind::LParen);
         std::vector<Expr*> args;
@@ -1278,39 +1369,30 @@ private:
         }
         const auto& rparen = consume(TokenKind::RParen);
         Span span = {.offset = expr->span.offset,
-                     .length = (rparen.span.offset + rparen.span.length) -
-                               expr->span.offset};
-        expr = ctx_.alloc<Expr>(span,
-                                CallExpr{.callee = callee,
-                                         .args = std::move(args)});
+                     .length = (rparen.span.offset + rparen.span.length) - expr->span.offset};
+        expr = ctx_.alloc<Expr>(span, CallExpr{.callee = callee, .args = std::move(args)});
         continue;
       }
       if (peek_kind() == TokenKind::LParen) {
-        // Call: expr(args)
+        // Call: expr(args) — supports named arguments (name = expr).
         advance(); // (
-        std::vector<Expr*> args;
-        if (peek_kind() != TokenKind::RParen) {
-          args.push_back(parse_expression());
-          while (peek_kind() == TokenKind::Comma) {
-            advance();
-            args.push_back(parse_expression());
-          }
-        }
+        std::vector<std::string_view> arg_names;
+        auto args = parse_call_args(arg_names);
         const auto& rparen = consume(TokenKind::RParen);
         Span span = {.offset = expr->span.offset,
                      .length = (rparen.span.offset + rparen.span.length) - expr->span.offset};
-        expr = ctx_.alloc<Expr>(span, CallExpr{.callee = expr,
-                                                  .args = std::move(args)});
+        expr = ctx_.alloc<Expr>(span,
+                                CallExpr{.callee = expr,
+                                         .args = std::move(args),
+                                         .arg_names = std::move(arg_names)});
       } else if (peek_kind() == TokenKind::Dot) {
         // Field access: expr.field
         advance(); // .
         const auto& field_tok = consume(TokenKind::Identifier);
         Span span = {.offset = expr->span.offset,
-                     .length =
-                         (field_tok.span.offset + field_tok.span.length) - expr->span.offset};
-        expr = ctx_.alloc<Expr>(span, FieldExpr{.object = expr,
-                                                  .field = field_tok.text,
-                                                  .field_span = field_tok.span});
+                     .length = (field_tok.span.offset + field_tok.span.length) - expr->span.offset};
+        expr = ctx_.alloc<Expr>(
+            span, FieldExpr{.object = expr, .field = field_tok.text, .field_span = field_tok.span});
       } else if (peek_kind() == TokenKind::Question) {
         // Try/propagate: expr?
         const auto& q_tok = advance(); // ?
@@ -1329,8 +1411,7 @@ private:
         const auto& rbracket = consume(TokenKind::RBracket);
         Span span = {.offset = expr->span.offset,
                      .length = (rbracket.span.offset + rbracket.span.length) - expr->span.offset};
-        expr = ctx_.alloc<Expr>(span, IndexExpr{.object = expr,
-                                                  .indices = std::move(indices)});
+        expr = ctx_.alloc<Expr>(span, IndexExpr{.object = expr, .indices = std::move(indices)});
       } else {
         break;
       }
@@ -1421,8 +1502,7 @@ private:
     auto* body = parse_expression();
     Span span = {.offset = open_pipe.span.offset,
                  .length = (body->span.offset + body->span.length) - open_pipe.span.offset};
-    return ctx_.alloc<Expr>(span, LambdaExpr{.params = std::move(params),
-                                               .body = body});
+    return ctx_.alloc<Expr>(span, LambdaExpr{.params = std::move(params), .body = body});
   }
 
   auto parse_qualified_name_or_identifier() -> Expr* {
@@ -1475,10 +1555,9 @@ private:
       consume(TokenKind::Colon);
       auto* return_type = parse_type();
       Span span = {.offset = fn_tok.span.offset,
-                   .length = (return_type->span.offset + return_type->span.length) -
-                             fn_tok.span.offset};
-      return ctx_.alloc<TypeNode>(
-          span, FunctionTypeNode{std::move(param_types), return_type});
+                   .length =
+                       (return_type->span.offset + return_type->span.length) - fn_tok.span.offset};
+      return ctx_.alloc<TypeNode>(span, FunctionTypeNode{std::move(param_types), return_type});
     }
 
     return parse_named_type();
@@ -1499,8 +1578,8 @@ private:
       path.span.length = (gt.span.offset + gt.span.length) - path.span.offset;
     }
 
-    return ctx_.alloc<TypeNode>(path.span, NamedType{.name = std::move(path),
-                                                        .type_args = std::move(type_args)});
+    return ctx_.alloc<TypeNode>(
+        path.span, NamedType{.name = std::move(path), .type_args = std::move(type_args)});
   }
 
   auto parse_type_path() -> QualifiedPath {
@@ -1526,8 +1605,7 @@ private:
   auto make_binary(BinaryOp op, Expr* left, Expr* right) -> Expr* {
     Span span = {.offset = left->span.offset,
                  .length = (right->span.offset + right->span.length) - left->span.offset};
-    return ctx_.alloc<Expr>(span, BinaryExpr{.op = op, .left = left,
-                                               .right = right});
+    return ctx_.alloc<Expr>(span, BinaryExpr{.op = op, .left = left, .right = right});
   }
 
   auto span_from(Span start) -> Span {

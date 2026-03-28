@@ -16,7 +16,8 @@ namespace dao {
 
 class Type {
 public:
-  explicit Type(TypeKind kind) : kind_(kind) {}
+  explicit Type(TypeKind kind) : kind_(kind) {
+  }
   virtual ~Type() = default;
 
   Type(const Type&) = delete;
@@ -24,7 +25,9 @@ public:
   Type(Type&&) = delete;
   auto operator=(Type&&) -> Type& = delete;
 
-  [[nodiscard]] auto kind() const -> TypeKind { return kind_; }
+  [[nodiscard]] auto kind() const -> TypeKind {
+    return kind_;
+  }
 
 private:
   TypeKind kind_;
@@ -36,10 +39,12 @@ private:
 
 class TypeBuiltin : public Type {
 public:
-  explicit TypeBuiltin(BuiltinKind builtin)
-      : Type(TypeKind::Builtin), builtin_(builtin) {}
+  explicit TypeBuiltin(BuiltinKind builtin) : Type(TypeKind::Builtin), builtin_(builtin) {
+  }
 
-  [[nodiscard]] auto builtin() const -> BuiltinKind { return builtin_; }
+  [[nodiscard]] auto builtin() const -> BuiltinKind {
+    return builtin_;
+  }
 
   static auto classof(const Type* t) -> bool {
     return t->kind() == TypeKind::Builtin;
@@ -53,7 +58,8 @@ private:
 // See CONTRACT_TYPE_SYSTEM_FOUNDATIONS.md §5.
 class TypeVoid : public Type {
 public:
-  TypeVoid() : Type(TypeKind::Void) {}
+  TypeVoid() : Type(TypeKind::Void) {
+  }
 
   static auto classof(const Type* t) -> bool {
     return t->kind() == TypeKind::Void;
@@ -62,10 +68,12 @@ public:
 
 class TypePointer : public Type {
 public:
-  explicit TypePointer(const Type* pointee)
-      : Type(TypeKind::Pointer), pointee_(pointee) {}
+  explicit TypePointer(const Type* pointee) : Type(TypeKind::Pointer), pointee_(pointee) {
+  }
 
-  [[nodiscard]] auto pointee() const -> const Type* { return pointee_; }
+  [[nodiscard]] auto pointee() const -> const Type* {
+    return pointee_;
+  }
 
   static auto classof(const Type* t) -> bool {
     return t->kind() == TypeKind::Pointer;
@@ -78,13 +86,15 @@ private:
 class TypeFunction : public Type {
 public:
   TypeFunction(std::vector<const Type*> param_types, const Type* return_type)
-      : Type(TypeKind::Function), param_types_(std::move(param_types)),
-        return_type_(return_type) {}
+      : Type(TypeKind::Function), param_types_(std::move(param_types)), return_type_(return_type) {
+  }
 
   [[nodiscard]] auto param_types() const -> const std::vector<const Type*>& {
     return param_types_;
   }
-  [[nodiscard]] auto return_type() const -> const Type* { return return_type_; }
+  [[nodiscard]] auto return_type() const -> const Type* {
+    return return_type_;
+  }
 
   static auto classof(const Type* t) -> bool {
     return t->kind() == TypeKind::Function;
@@ -97,13 +107,16 @@ private:
 
 class TypeNamed : public Type {
 public:
-  TypeNamed(const void* decl_id, std::string_view name,
-            std::vector<const Type*> type_args)
-      : Type(TypeKind::Named), decl_id_(decl_id), name_(name),
-        type_args_(std::move(type_args)) {}
+  TypeNamed(const void* decl_id, std::string_view name, std::vector<const Type*> type_args)
+      : Type(TypeKind::Named), decl_id_(decl_id), name_(name), type_args_(std::move(type_args)) {
+  }
 
-  [[nodiscard]] auto decl_id() const -> const void* { return decl_id_; }
-  [[nodiscard]] auto name() const -> std::string_view { return name_; }
+  [[nodiscard]] auto decl_id() const -> const void* {
+    return decl_id_;
+  }
+  [[nodiscard]] auto name() const -> std::string_view {
+    return name_;
+  }
   [[nodiscard]] auto type_args() const -> const std::vector<const Type*>& {
     return type_args_;
   }
@@ -121,13 +134,19 @@ private:
 class TypeGenericParam : public Type {
 public:
   TypeGenericParam(const void* binder, std::string_view name, uint32_t index)
-      : Type(TypeKind::GenericParam), binder_(binder), name_(name),
-        index_(index) {}
+      : Type(TypeKind::GenericParam), binder_(binder), name_(name), index_(index) {
+  }
 
   /// The declaration (Decl*) that introduces this type parameter.
-  [[nodiscard]] auto binder() const -> const void* { return binder_; }
-  [[nodiscard]] auto name() const -> std::string_view { return name_; }
-  [[nodiscard]] auto index() const -> uint32_t { return index_; }
+  [[nodiscard]] auto binder() const -> const void* {
+    return binder_;
+  }
+  [[nodiscard]] auto name() const -> std::string_view {
+    return name_;
+  }
+  [[nodiscard]] auto index() const -> uint32_t {
+    return index_;
+  }
 
   static auto classof(const Type* t) -> bool {
     return t->kind() == TypeKind::GenericParam;
@@ -146,13 +165,16 @@ struct StructField {
 
 class TypeStruct : public Type {
 public:
-  TypeStruct(const void* decl_id, std::string_view name,
-             std::vector<StructField> fields)
-      : Type(TypeKind::Struct), decl_id_(decl_id), name_(name),
-        fields_(std::move(fields)) {}
+  TypeStruct(const void* decl_id, std::string_view name, std::vector<StructField> fields)
+      : Type(TypeKind::Struct), decl_id_(decl_id), name_(name), fields_(std::move(fields)) {
+  }
 
-  [[nodiscard]] auto decl_id() const -> const void* { return decl_id_; }
-  [[nodiscard]] auto name() const -> std::string_view { return name_; }
+  [[nodiscard]] auto decl_id() const -> const void* {
+    return decl_id_;
+  }
+  [[nodiscard]] auto name() const -> std::string_view {
+    return name_;
+  }
   [[nodiscard]] auto fields() const -> const std::vector<StructField>& {
     return fields_;
   }
@@ -176,18 +198,22 @@ private:
 
 struct EnumVariant {
   std::string_view name;
-  std::vector<const Type*> payload_types; // empty for C-style variants
+  std::vector<const Type*> payload_types;    // empty for C-style variants
+  std::vector<std::string_view> field_names; // parallel to payload_types (enum class only)
 };
 
 class TypeEnum : public Type {
 public:
-  TypeEnum(const void* decl_id, std::string_view name,
-           std::vector<EnumVariant> variants)
-      : Type(TypeKind::Enum), decl_id_(decl_id), name_(name),
-        variants_(std::move(variants)) {}
+  TypeEnum(const void* decl_id, std::string_view name, std::vector<EnumVariant> variants)
+      : Type(TypeKind::Enum), decl_id_(decl_id), name_(name), variants_(std::move(variants)) {
+  }
 
-  [[nodiscard]] auto decl_id() const -> const void* { return decl_id_; }
-  [[nodiscard]] auto name() const -> std::string_view { return name_; }
+  [[nodiscard]] auto decl_id() const -> const void* {
+    return decl_id_;
+  }
+  [[nodiscard]] auto name() const -> std::string_view {
+    return name_;
+  }
   [[nodiscard]] auto variants() const -> const std::vector<EnumVariant>& {
     return variants_;
   }
@@ -207,9 +233,12 @@ private:
 class TypeGenerator : public Type {
 public:
   explicit TypeGenerator(const Type* yield_type)
-      : Type(TypeKind::Generator), yield_type_(yield_type) {}
+      : Type(TypeKind::Generator), yield_type_(yield_type) {
+  }
 
-  [[nodiscard]] auto yield_type() const -> const Type* { return yield_type_; }
+  [[nodiscard]] auto yield_type() const -> const Type* {
+    return yield_type_;
+  }
 
   static auto classof(const Type* t) -> bool {
     return t->kind() == TypeKind::Generator;

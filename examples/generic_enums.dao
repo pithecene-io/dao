@@ -9,9 +9,9 @@
 
 fn unwrap_i64_or(opt: Option<i64>, default_val: i64): i64
   match opt:
-    Option.Some(value):
+    Option::Some(value):
       return value
-    Option.None:
+    Option::None:
       return default_val
 
 // ---------------------------------------------------------------
@@ -20,24 +20,24 @@ fn unwrap_i64_or(opt: Option<i64>, default_val: i64): i64
 
 fn safe_divide(a: i64, b: i64): Result<i64, string>
   if b == to_i64(0):
-    return Result.Err("division by zero")
-  return Result.Ok(a / b)
+    return Result::Err("division by zero")
+  return Result::Ok(a / b)
 
 fn find_first_positive(a: i64, b: i64, c: i64): Option<i64>
   if a > to_i64(0):
-    return Option.Some(a)
+    return Option::Some(value = a)
   if b > to_i64(0):
-    return Option.Some(b)
+    return Option::Some(value = b)
   if c > to_i64(0):
-    return Option.Some(c)
-  return Option.None
+    return Option::Some(value = c)
+  return Option::None
 
 fn main(): i32
   // --- Option<i64> ---
   print("=== Option<T> ===")
 
-  let some_val: Option<i64> = Option.Some(to_i64(42))
-  let none_val: Option<i64> = Option.None
+  let some_val: Option<i64> = Option::Some(value = to_i64(42))
+  let none_val: Option<i64> = Option::None
 
   print("unwrap Some(42): " + i64_to_string(unwrap_i64_or(some_val, to_i64(0))))
   print("unwrap None:     " + i64_to_string(unwrap_i64_or(none_val, to_i64(-1))))
@@ -56,15 +56,15 @@ fn main(): i32
   let err_result: Result<i64, string> = safe_divide(to_i64(10), to_i64(0))
 
   match ok_result:
-    Result.Ok(value):
+    Result::Ok(value):
       print("20 / 4 = " + i64_to_string(value))
-    Result.Err(msg):
+    Result::Err(msg):
       print("error: " + msg)
 
   match err_result:
-    Result.Ok(value):
+    Result::Ok(value):
       print("10 / 0 = " + i64_to_string(value))
-    Result.Err(msg):
+    Result::Err(msg):
       print("error: " + msg)
 
   // Note: generic functions taking generic enum params (e.g.

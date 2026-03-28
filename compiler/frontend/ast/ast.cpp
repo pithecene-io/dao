@@ -8,61 +8,65 @@ namespace dao {
 
 auto Decl::kind() const -> NodeKind {
   return std::visit(overloaded{
-      [](const FunctionDecl&) { return NodeKind::FunctionDecl; },
-      [](const ClassDecl&) { return NodeKind::ClassDecl; },
-      [](const EnumDeclNode&) { return NodeKind::EnumDecl; },
-      [](const AliasDecl&) { return NodeKind::AliasDecl; },
-      [](const ConceptDecl&) { return NodeKind::ConceptDecl; },
-      [](const ExtendDecl&) { return NodeKind::ExtendDecl; },
-      [](const ErrorDeclNode&) { return NodeKind::ErrorDecl; },
-  }, payload);
+                        [](const FunctionDecl&) { return NodeKind::FunctionDecl; },
+                        [](const ClassDecl&) { return NodeKind::ClassDecl; },
+                        [](const EnumDeclNode&) { return NodeKind::EnumDecl; },
+                        [](const AliasDecl&) { return NodeKind::AliasDecl; },
+                        [](const ConceptDecl&) { return NodeKind::ConceptDecl; },
+                        [](const ExtendDecl&) { return NodeKind::ExtendDecl; },
+                        [](const ErrorDeclNode&) { return NodeKind::ErrorDecl; },
+                    },
+                    payload);
 }
 
 auto Stmt::kind() const -> NodeKind {
   return std::visit(overloaded{
-      [](const LetStatement&) { return NodeKind::LetStatement; },
-      [](const Assignment&) { return NodeKind::Assignment; },
-      [](const IfStatement&) { return NodeKind::IfStatement; },
-      [](const WhileStatement&) { return NodeKind::WhileStatement; },
-      [](const ForStatement&) { return NodeKind::ForStatement; },
-      [](const YieldStatement&) { return NodeKind::YieldStatement; },
-      [](const BreakStmtNode&) { return NodeKind::BreakStatement; },
-      [](const MatchStmt&) { return NodeKind::MatchStatement; },
-      [](const ModeBlock&) { return NodeKind::ModeBlock; },
-      [](const ResourceBlock&) { return NodeKind::ResourceBlock; },
-      [](const ReturnStatement&) { return NodeKind::ReturnStatement; },
-      [](const ExpressionStatement&) { return NodeKind::ExpressionStatement; },
-      [](const ErrorStmtNode&) { return NodeKind::ErrorStmt; },
-  }, payload);
+                        [](const LetStatement&) { return NodeKind::LetStatement; },
+                        [](const Assignment&) { return NodeKind::Assignment; },
+                        [](const IfStatement&) { return NodeKind::IfStatement; },
+                        [](const WhileStatement&) { return NodeKind::WhileStatement; },
+                        [](const ForStatement&) { return NodeKind::ForStatement; },
+                        [](const YieldStatement&) { return NodeKind::YieldStatement; },
+                        [](const BreakStmtNode&) { return NodeKind::BreakStatement; },
+                        [](const MatchStmt&) { return NodeKind::MatchStatement; },
+                        [](const ModeBlock&) { return NodeKind::ModeBlock; },
+                        [](const ResourceBlock&) { return NodeKind::ResourceBlock; },
+                        [](const ReturnStatement&) { return NodeKind::ReturnStatement; },
+                        [](const ExpressionStatement&) { return NodeKind::ExpressionStatement; },
+                        [](const ErrorStmtNode&) { return NodeKind::ErrorStmt; },
+                    },
+                    payload);
 }
 
 auto Expr::kind() const -> NodeKind {
   return std::visit(overloaded{
-      [](const BinaryExpr&) { return NodeKind::BinaryExpr; },
-      [](const UnaryExpr&) { return NodeKind::UnaryExpr; },
-      [](const CallExpr&) { return NodeKind::CallExpr; },
-      [](const IndexExpr&) { return NodeKind::IndexExpr; },
-      [](const FieldExpr&) { return NodeKind::FieldExpr; },
-      [](const PipeExpr&) { return NodeKind::PipeExpr; },
-      [](const TryExpr&) { return NodeKind::TryExpr; },
-      [](const LambdaExpr&) { return NodeKind::Lambda; },
-      [](const IntLiteral&) { return NodeKind::IntLiteral; },
-      [](const FloatLiteral&) { return NodeKind::FloatLiteral; },
-      [](const StringLiteral&) { return NodeKind::StringLiteral; },
-      [](const BoolLiteral&) { return NodeKind::BoolLiteral; },
-      [](const ListLiteral&) { return NodeKind::ListLiteral; },
-      [](const IdentifierExpr&) { return NodeKind::Identifier; },
-      [](const QualifiedName&) { return NodeKind::QualifiedName; },
-      [](const ErrorExprNode&) { return NodeKind::ErrorExpr; },
-  }, payload);
+                        [](const BinaryExpr&) { return NodeKind::BinaryExpr; },
+                        [](const UnaryExpr&) { return NodeKind::UnaryExpr; },
+                        [](const CallExpr&) { return NodeKind::CallExpr; },
+                        [](const IndexExpr&) { return NodeKind::IndexExpr; },
+                        [](const FieldExpr&) { return NodeKind::FieldExpr; },
+                        [](const PipeExpr&) { return NodeKind::PipeExpr; },
+                        [](const TryExpr&) { return NodeKind::TryExpr; },
+                        [](const LambdaExpr&) { return NodeKind::Lambda; },
+                        [](const IntLiteral&) { return NodeKind::IntLiteral; },
+                        [](const FloatLiteral&) { return NodeKind::FloatLiteral; },
+                        [](const StringLiteral&) { return NodeKind::StringLiteral; },
+                        [](const BoolLiteral&) { return NodeKind::BoolLiteral; },
+                        [](const ListLiteral&) { return NodeKind::ListLiteral; },
+                        [](const IdentifierExpr&) { return NodeKind::Identifier; },
+                        [](const QualifiedName&) { return NodeKind::QualifiedName; },
+                        [](const ErrorExprNode&) { return NodeKind::ErrorExpr; },
+                    },
+                    payload);
 }
 
 auto TypeNode::kind() const -> NodeKind {
   return std::visit(overloaded{
-      [](const NamedType&) { return NodeKind::NamedType; },
-      [](const PointerType&) { return NodeKind::PointerType; },
-      [](const FunctionTypeNode&) { return NodeKind::FunctionType; },
-  }, payload);
+                        [](const NamedType&) { return NodeKind::NamedType; },
+                        [](const PointerType&) { return NodeKind::PointerType; },
+                        [](const FunctionTypeNode&) { return NodeKind::FunctionType; },
+                    },
+                    payload);
 }
 
 // ---------------------------------------------------------------------------

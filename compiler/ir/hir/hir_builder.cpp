@@ -345,11 +345,32 @@ void HirBuilder::lower_match_into(const Stmt* stmt,
     auto arm_body = lower_body(it->body);
 
     // Prepend payload extraction let-bindings for arms with bindings.
+    // Extract the variant name from either FieldExpr (Enum.Variant) or
+    // QualifiedName (Enum::Variant) patterns.
+    std::string_view pattern_variant_name;
+    if (it->pattern->is<FieldExpr>()) {
+      pattern_variant_name = it->pattern->as<FieldExpr>().field;
+    } else if (it->pattern->is<QualifiedName>()) {
+      const auto& qn = it->pattern->as<QualifiedName>();
+      if (qn.segments.size() >= 2) {
+        pattern_variant_name = qn.segments.back();
+      }
+    } else if (it->pattern->is<CallExpr>()) {
+      // Enum::Variant(bindings) parsed as CallExpr with QualifiedName callee
+      const auto& call = it->pattern->as<CallExpr>();
+      if (call.callee->is<FieldExpr>()) {
+        pattern_variant_name = call.callee->as<FieldExpr>().field;
+      } else if (call.callee->is<QualifiedName>()) {
+        const auto& qn = call.callee->as<QualifiedName>();
+        if (qn.segments.size() >= 2) {
+          pattern_variant_name = qn.segments.back();
+        }
+      }
+    }
     if (!it->bindings.empty() && enum_type != nullptr &&
-        it->pattern->is<FieldExpr>()) {
-      const auto& field = it->pattern->as<FieldExpr>();
+        !pattern_variant_name.empty()) {
       for (size_t vi = 0; vi < enum_type->variants().size(); ++vi) {
-        if (enum_type->variants()[vi].name != field.field) {
+        if (enum_type->variants()[vi].name != pattern_variant_name) {
           continue;
         }
         const auto& variant = enum_type->variants()[vi];
@@ -387,6 +408,27 @@ void HirBuilder::lower_match_into(const Stmt* stmt,
         }
         arm_body = std::move(bindings_and_body);
         break;
+      }
+    }
+
+    // Emit HirLet for `as` binding: `Pattern as name:` binds the
+    // scrutinee value to `name` in the arm body.
+    if (!it->as_binding.empty()) {
+      const Symbol* as_sym = nullptr;
+      for (const auto& sym_ptr : resolve_.context.symbols()) {
+        if (sym_ptr->name == it->as_binding &&
+            sym_ptr->decl_span.offset == it->as_binding_span.offset) {
+          as_sym = sym_ptr.get();
+          break;
+        }
+      }
+      if (as_sym != nullptr) {
+        auto* as_ref = ctx_.alloc<HirExpr>(
+            stmt->span, scrutinee_type, HirSymbolRef{scrutinee_sym});
+        auto* as_let = ctx_.alloc<HirStmt>(
+            stmt->span,
+            HirLet{as_sym, scrutinee_type, as_ref});
+        arm_body.insert(arm_body.begin(), as_let);
       }
     }
 
@@ -440,10 +482,27 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
     return ctx_.alloc<HirExpr>(span, type, HirBoolLiteral{lit.value});
   }
 
-  case NodeKind::Identifier:
+  case NodeKind::Identifier: {
+    const auto* sym = find_symbol_at_use(expr->span.offset);
+    return ctx_.alloc<HirExpr>(span, type, HirSymbolRef{sym});
+  }
+
   case NodeKind::QualifiedName: {
-    // QualifiedName for static method calls (Type::method) is resolved
-    // by the resolver to a function symbol, same as an identifier.
+    // QualifiedName may be:
+    // 1. Enum variant access (Enum::Variant) — lower to discriminant
+    // 2. Static method call (Type::method) — lower to symbol ref
+    const auto& qn = expr->as<QualifiedName>();
+    if (type != nullptr && type->kind() == TypeKind::Enum &&
+        qn.segments.size() >= 2) {
+      const auto* enum_type = static_cast<const TypeEnum*>(type);
+      auto variant_name = qn.segments.back();
+      for (size_t i = 0; i < enum_type->variants().size(); ++i) {
+        if (enum_type->variants()[i].name == variant_name) {
+          return ctx_.alloc<HirExpr>(
+              span, type, HirIntLiteral{static_cast<int64_t>(i)});
+        }
+      }
+    }
     const auto* sym = find_symbol_at_use(expr->span.offset);
     return ctx_.alloc<HirExpr>(span, type, HirSymbolRef{sym});
   }
@@ -483,27 +542,36 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
       }
     }
 
-    // Enum variant construction: Token.Int(42) → HirEnumConstruct
+    // Enum variant construction: Enum.Variant(42) or Enum::Variant(42)
     // Use the CallExpr's type (which may be instantiated for generic enums)
     // rather than the callee's type (which may be the uninstantiated generic).
-    if (callee_type != nullptr && callee_type->kind() == TypeKind::Enum &&
-        call.callee->is<FieldExpr>()) {
-      const auto& field = call.callee->as<FieldExpr>();
-      const auto* enum_type =
-          (type != nullptr && type->kind() == TypeKind::Enum)
-              ? static_cast<const TypeEnum*>(type)
-              : static_cast<const TypeEnum*>(callee_type);
-      for (size_t i = 0; i < enum_type->variants().size(); ++i) {
-        if (enum_type->variants()[i].name == field.field &&
-            !enum_type->variants()[i].payload_types.empty()) {
-          std::vector<HirExpr*> payload_args;
-          for (const auto* arg : call.args) {
-            payload_args.push_back(lower_expr(arg));
+    if (callee_type != nullptr && callee_type->kind() == TypeKind::Enum) {
+      std::string_view variant_field;
+      if (call.callee->is<FieldExpr>()) {
+        variant_field = call.callee->as<FieldExpr>().field;
+      } else if (call.callee->is<QualifiedName>()) {
+        const auto& qn = call.callee->as<QualifiedName>();
+        if (qn.segments.size() >= 2) {
+          variant_field = qn.segments.back();
+        }
+      }
+      if (!variant_field.empty()) {
+        const auto* enum_type =
+            (type != nullptr && type->kind() == TypeKind::Enum)
+                ? static_cast<const TypeEnum*>(type)
+                : static_cast<const TypeEnum*>(callee_type);
+        for (size_t i = 0; i < enum_type->variants().size(); ++i) {
+          if (enum_type->variants()[i].name == variant_field &&
+              !enum_type->variants()[i].payload_types.empty()) {
+            std::vector<HirExpr*> payload_args;
+            for (const auto* arg : call.args) {
+              payload_args.push_back(lower_expr(arg));
+            }
+            return ctx_.alloc<HirExpr>(
+                span, type,
+                HirEnumConstruct{enum_type, static_cast<uint32_t>(i),
+                                 std::move(payload_args)});
           }
-          return ctx_.alloc<HirExpr>(
-              span, type,
-              HirEnumConstruct{enum_type, static_cast<uint32_t>(i),
-                               std::move(payload_args)});
         }
       }
     }

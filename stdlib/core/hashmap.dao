@@ -38,23 +38,23 @@ class HashMap<V>:
 
   fn get(self, key: string): Option<V>
     if self.cap == to_i64(0):
-      return Option.None
+      return Option::None
     let idx: i64 = hash_index(hash_string(key), self.cap)
     mode unsafe =>
       let probes: i64 = 0
       while probes < self.cap:
         let st: i32 = *ptr_offset(self.state_data, idx)
         if st == 0:
-          return Option.None
+          return Option::None
         if st == 1:
           if *ptr_offset(self.key_data, idx) == key:
-            return Option.Some(*ptr_offset(self.val_data, idx))
+            return Option::Some(value = *ptr_offset(self.val_data, idx))
         // st == 2 (tombstone) or different key — continue probing.
         idx = idx + 1
         if idx >= self.cap:
           idx = to_i64(0)
         probes = probes + 1
-    return Option.None
+    return Option::None
 
   fn contains(self, key: string): bool
     if self.cap == to_i64(0):

@@ -1,7 +1,7 @@
 // enums_payload.dao — payload-bearing enum variants with match destructuring.
 
-enum Token:
-  Int(i64)
+enum class Token:
+  Int(value: i64)
   Plus
   Minus
   Eof
