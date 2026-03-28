@@ -53,7 +53,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 38
+  let total: i32 = 40
 
   // -----------------------------------------------------------------
   // Expression tests
@@ -320,6 +320,22 @@ fn main(): i32
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
+  // Method tests
+  // -----------------------------------------------------------------
+
+  // Test 36: Class with method
+  let src36: string = "class Foo:\n  x: i32\n  fn get_x(self): i32\n    return self.x\n"
+  let r36: PR = parse(src36)
+  if expect_no_parse_errors("class_method_no_err", r36):
+    pass_count = pass_count + 1
+
+  // Test 37: Class with method and multiple params
+  let src37: string = "class Bar:\n  val: i64\n  fn add(self, n: i64): i64\n    return self.val + n\n"
+  let r37: PR = parse(src37)
+  if expect_no_parse_errors("class_method_multi_param_no_err", r37):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
   // Summary
   // -----------------------------------------------------------------
 
@@ -335,7 +351,7 @@ fn main(): i32
   //   - concept declarations
   //   - derived concept declarations
   //   - extend declarations
-  //   - class methods / conformance blocks (as / deny)
+  //   - conformance blocks (as / deny)
   //   - mode / resource blocks
   //   - yield statements
   //   - function types (fn(T): R as a type)
