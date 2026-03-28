@@ -339,6 +339,9 @@ struct MatchArm {
   Expr* pattern;                          // constant or qualified enum variant
   std::vector<std::string_view> bindings; // destructuring bindings (empty for payload-free)
   std::vector<Span> binding_spans;        // spans for diagnostics / semantic tokens
+  bool has_rest = false;                  // true when `..` appears at end of bindings
+  std::string_view as_binding;            // non-empty when `pattern as name:` form is used
+  Span as_binding_span;
   std::vector<Stmt*> body;
 };
 
@@ -387,7 +390,8 @@ struct UnaryExpr {
 struct CallExpr {
   Expr* callee;
   std::vector<Expr*> args;
-  std::vector<TypeNode*> type_args; // Explicit type arguments: f<i32>(x)
+  std::vector<TypeNode*> type_args;          // Explicit type arguments: f<i32>(x)
+  std::vector<std::string_view> arg_names;   // parallel to args; empty string = positional
 };
 
 struct IndexExpr {

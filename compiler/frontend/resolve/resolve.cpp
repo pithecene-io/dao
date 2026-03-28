@@ -712,6 +712,13 @@ private:
               nullptr);
           arm_scope->declare(arm.bindings[i], sym);
         }
+        // Register `as` binding: `Pattern as name:` binds the whole value.
+        if (!arm.as_binding.empty()) {
+          auto* as_sym = ctx_.make_symbol(
+              SymbolKind::Local, arm.as_binding, arm.as_binding_span,
+              nullptr);
+          arm_scope->declare(arm.as_binding, as_sym);
+        }
         for (const auto* body_stmt : arm.body) {
           resolve_stmt(*body_stmt, arm_scope);
         }
@@ -763,18 +770,18 @@ private:
             "unknown name '" + std::string(first_seg) + "'"));
       } else if (sym->kind == SymbolKind::Type &&
                  qn.segments.size() == 2) {
-        // Static method call: Type::method — resolve as the mangled
-        // symbol "Type.method" registered during resolve_class.
+        // Static method call or enum variant: Type::method / Enum::Variant.
+        // Try mangled method name first; fall back to the type symbol
+        // (the type checker handles enum variant resolution).
         auto mangled_name = ctx_.intern(
             std::string(qn.segments[0]) + "." + std::string(qn.segments[1]));
         auto* method_sym = file_scope_->lookup(mangled_name);
         if (method_sym != nullptr) {
           uses_[expr.span.offset] = method_sym;
         } else {
-          diagnostics_.push_back(Diagnostic::error(
-              expr.span,
-              "'" + std::string(first_seg) + "' has no static method '" +
-                  std::string(qn.segments[1]) + "'"));
+          // Resolve to the type symbol — the type checker will validate
+          // whether the second segment is a valid enum variant.
+          uses_[expr.span.offset] = sym;
         }
       } else if (sym->kind != SymbolKind::Module) {
         diagnostics_.push_back(Diagnostic::error(

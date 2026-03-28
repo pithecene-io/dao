@@ -1149,13 +1149,26 @@ void TypeChecker::check_match(const Stmt* stmt) {
     // Validate destructuring bindings against variant payload arity.
     // This runs for ALL enum variant match arms, not just those with
     // bindings — a payload-bearing variant without bindings is an error.
-    if (scrutinee_type != nullptr && scrutinee_type->kind() == TypeKind::Enum &&
-        arm.pattern->is<FieldExpr>()) {
-      const auto& field = arm.pattern->as<FieldExpr>();
+    // Extract the variant name from FieldExpr (.field) or QualifiedName (last segment).
+    std::string_view variant_name;
+    bool is_variant_pattern = false;
+    if (scrutinee_type != nullptr && scrutinee_type->kind() == TypeKind::Enum) {
+      if (arm.pattern->is<FieldExpr>()) {
+        variant_name = arm.pattern->as<FieldExpr>().field;
+        is_variant_pattern = true;
+      } else if (arm.pattern->is<QualifiedName>()) {
+        const auto& qn = arm.pattern->as<QualifiedName>();
+        if (qn.segments.size() >= 2) {
+          variant_name = qn.segments.back();
+          is_variant_pattern = true;
+        }
+      }
+    }
+    if (is_variant_pattern) {
       const auto* enum_type = static_cast<const TypeEnum*>(scrutinee_type);
       const EnumVariant* matched_variant = nullptr;
       for (const auto& variant : enum_type->variants()) {
-        if (variant.name == field.field) {
+        if (variant.name == variant_name) {
           matched_variant = &variant;
           break;
         }
@@ -1165,20 +1178,50 @@ void TypeChecker::check_match(const Stmt* stmt) {
           error(arm.binding_spans.empty() ? arm.pattern->span : arm.binding_spans[0],
                 "variant '" + std::string(matched_variant->name) +
                     "' has no payload to destructure");
-        } else if (arm.bindings.size() != matched_variant->payload_types.size()) {
+        } else if (!arm.has_rest &&
+                   arm.bindings.size() != matched_variant->payload_types.size()) {
           error(arm.pattern->span,
                 "variant '" + std::string(matched_variant->name) + "' expects " +
                     std::to_string(matched_variant->payload_types.size()) + " binding(s), got " +
                     std::to_string(arm.bindings.size()));
+        } else if (arm.has_rest &&
+                   arm.bindings.size() > matched_variant->payload_types.size()) {
+          error(arm.pattern->span,
+                "variant '" + std::string(matched_variant->name) + "' has " +
+                    std::to_string(matched_variant->payload_types.size()) +
+                    " field(s), but pattern binds " +
+                    std::to_string(arm.bindings.size()) + " (too many even with ..)");
         } else {
           // Register binding types via the declaration symbol table.
+          // Named bindings: match field_names for reordering; positional: by index.
           for (size_t i = 0; i < arm.bindings.size(); ++i) {
-            auto sym_it = decl_symbols_.find(arm.binding_spans[i].offset);
-            if (sym_it != decl_symbols_.end()) {
-              symbol_types_[sym_it->second] = matched_variant->payload_types[i];
+            size_t field_idx = i; // default positional mapping
+            // Try name-based matching if the variant has field_names.
+            if (!matched_variant->field_names.empty()) {
+              for (size_t j = 0; j < matched_variant->field_names.size(); ++j) {
+                if (matched_variant->field_names[j] == arm.bindings[i]) {
+                  field_idx = j;
+                  break;
+                }
+              }
+            }
+            if (field_idx < matched_variant->payload_types.size()) {
+              auto sym_it = decl_symbols_.find(arm.binding_spans[i].offset);
+              if (sym_it != decl_symbols_.end()) {
+                symbol_types_[sym_it->second] = matched_variant->payload_types[field_idx];
+              }
             }
           }
         }
+      }
+    }
+
+    // Register `as` binding: `Pattern as name:` binds the whole matched
+    // value to `name` with the scrutinee's type.
+    if (!arm.as_binding.empty()) {
+      auto sym_it = decl_symbols_.find(arm.as_binding_span.offset);
+      if (sym_it != decl_symbols_.end()) {
+        symbol_types_[sym_it->second] = scrutinee_type;
       }
     }
 
@@ -1291,11 +1334,38 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected) -> const Ty
   case NodeKind::ListLiteral:
     result = check_list_literal(expr);
     break;
-  case NodeKind::QualifiedName:
-    // Static method call: Type::method resolved by the resolver
-    // to a mangled function symbol. Treat like an identifier.
+  case NodeKind::QualifiedName: {
+    // Static method call or enum variant: Type::method / Enum::Variant.
+    // The resolver may resolve to a function symbol (static method) or
+    // the type symbol itself (enum variant).
     result = check_identifier(expr);
+    // If the result is an enum type and this is a 2-segment QualifiedName,
+    // validate the variant and mark payload-bearing variants.
+    if (result != nullptr && result->kind() == TypeKind::Enum) {
+      const auto& qn = expr->as<QualifiedName>();
+      if (qn.segments.size() >= 2) {
+        const auto* enum_type = static_cast<const TypeEnum*>(result);
+        std::string_view vname = qn.segments.back();
+        bool found = false;
+        for (const auto& variant : enum_type->variants()) {
+          if (variant.name == vname) {
+            found = true;
+            if (!variant.payload_types.empty()) {
+              pending_payload_constructions_.insert(expr);
+            }
+            break;
+          }
+        }
+        if (!found) {
+          error(expr->span,
+                "'" + std::string(vname) + "' is not a variant of '" +
+                    std::string(enum_type->name()) + "'");
+          result = nullptr;
+        }
+      }
+    }
     break;
+  }
   case NodeKind::ErrorExpr:
     // Recovery placeholder — skip silently.
     break;
@@ -1343,7 +1413,8 @@ auto TypeChecker::check_expr(const Expr* expr, const Type* expected) -> const Ty
   // function and will be resolved at monomorphization. Only reject
   // GenericParams that belong to the enum itself (truly unresolved).
   if (result != nullptr && result->kind() == TypeKind::Enum && !suppress_payload_check_ &&
-      (expr->kind() == NodeKind::FieldExpr || expr->kind() == NodeKind::CallExpr)) {
+      (expr->kind() == NodeKind::FieldExpr || expr->kind() == NodeKind::CallExpr ||
+       expr->kind() == NodeKind::QualifiedName)) {
     const auto* re = static_cast<const TypeEnum*>(result);
     for (const auto& variant : re->variants()) {
       for (const auto* pt : variant.payload_types) {
@@ -1371,16 +1442,21 @@ done_generic_check:
   // check_field inserts; check_call removes. If still present here, the
   // variant was used bare (e.g. `Token.Int` instead of `Token.Int(42)`).
   // Suppressed in match patterns — arity is checked by check_match.
-  if (expr->kind() == NodeKind::FieldExpr && !suppress_payload_check_ &&
-      pending_payload_constructions_.count(expr) > 0) {
+  if ((expr->kind() == NodeKind::FieldExpr || expr->kind() == NodeKind::QualifiedName) &&
+      !suppress_payload_check_ && pending_payload_constructions_.count(expr) > 0) {
     pending_payload_constructions_.erase(expr);
-    const auto& field = expr->as<FieldExpr>();
     if (result != nullptr && result->kind() == TypeKind::Enum) {
       const auto* en = static_cast<const TypeEnum*>(result);
+      std::string variant_str;
+      if (expr->kind() == NodeKind::FieldExpr) {
+        variant_str = std::string(en->name()) + "." + std::string(expr->as<FieldExpr>().field);
+      } else {
+        const auto& qn = expr->as<QualifiedName>();
+        variant_str = std::string(en->name()) + "::" + std::string(qn.segments.back());
+      }
       error(expr->span,
-            "enum variant '" + std::string(en->name()) + "." + std::string(field.field) +
-                "' has a payload; use constructor syntax: " + std::string(en->name()) + "." +
-                std::string(field.field) + "(...)");
+            "enum variant '" + variant_str +
+                "' has a payload; use constructor syntax: " + variant_str + "(...)");
       return nullptr;
     }
   }
@@ -1865,6 +1941,104 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
     }
     // Variant not found — already diagnosed in check_field.
     return callee_type;
+  }
+
+  // Enum variant constructor via :: syntax: Option::Some(42) — callee is
+  // a QualifiedName whose type resolves to the enum type.
+  if (callee_type->kind() == TypeKind::Enum && call.callee->is<QualifiedName>()) {
+    const auto& qn = call.callee->as<QualifiedName>();
+    if (qn.segments.size() >= 2) {
+      std::string_view variant_name = qn.segments.back();
+      const auto* enum_type = static_cast<const TypeEnum*>(callee_type);
+      for (const auto& variant : enum_type->variants()) {
+        if (variant.name == variant_name) {
+          if (variant.payload_types.empty()) {
+            error(expr->span,
+                  "enum variant '" + std::string(enum_type->name()) + "::" +
+                      std::string(variant.name) + "' has no payload; use without parentheses");
+            return callee_type;
+          }
+
+          // Determine argument order: named args may need reordering.
+          std::vector<size_t> arg_order;
+          bool has_named = false;
+          if (!call.arg_names.empty()) {
+            for (const auto& an : call.arg_names) {
+              if (!an.empty()) {
+                has_named = true;
+                break;
+              }
+            }
+          }
+          // enum class requires named construction — reject positional
+          if (!has_named && !variant.field_names.empty()) {
+            error(expr->span,
+                  "enum class variant '" + std::string(enum_type->name()) +
+                      "::" + std::string(variant.name) +
+                      "' requires named fields in construction");
+            return callee_type;
+          }
+          if (has_named && !variant.field_names.empty()) {
+            arg_order.resize(call.args.size());
+            for (size_t i = 0; i < call.arg_names.size(); ++i) {
+              if (!call.arg_names[i].empty()) {
+                bool found = false;
+                for (size_t j = 0; j < variant.field_names.size(); ++j) {
+                  if (variant.field_names[j] == call.arg_names[i]) {
+                    arg_order[i] = j;
+                    found = true;
+                    break;
+                  }
+                }
+                if (!found) {
+                  error(call.args[i]->span,
+                        "no field '" + std::string(call.arg_names[i]) +
+                            "' in variant '" + std::string(variant.name) + "'");
+                  return callee_type;
+                }
+              } else {
+                arg_order[i] = i; // positional fallback
+              }
+            }
+          }
+
+          if (call.args.size() != variant.payload_types.size()) {
+            error(expr->span,
+                  "enum variant '" + std::string(enum_type->name()) + "::" +
+                      std::string(variant.name) + "' expects " +
+                      std::to_string(variant.payload_types.size()) + " payload field(s), got " +
+                      std::to_string(call.args.size()));
+            return callee_type;
+          }
+          std::unordered_map<uint32_t, const Type*> type_bindings;
+          for (size_t i = 0; i < call.args.size(); ++i) {
+            size_t field_idx = (has_named && !arg_order.empty()) ? arg_order[i] : i;
+            const auto* arg_type = check_expr(call.args[i]);
+            if (arg_type != nullptr && field_idx < variant.payload_types.size() &&
+                variant.payload_types[field_idx] != nullptr) {
+              if (!is_assignable(arg_type, variant.payload_types[field_idx])) {
+                error(call.args[i]->span,
+                      "payload field type '" + print_type(arg_type) + "' is not assignable to '" +
+                          print_type(variant.payload_types[field_idx]) + "'");
+              }
+              infer_type_bindings(
+                  variant.payload_types[field_idx], arg_type, type_bindings, call.args[i]->span);
+            }
+          }
+          // Clear the "needs-construction" mark set by check_expr for QualifiedName.
+          pending_payload_constructions_.erase(call.callee);
+          if (!type_bindings.empty()) {
+            return substitute_generics(callee_type, type_bindings);
+          }
+          return callee_type;
+        }
+      }
+      // Variant not found — emit diagnostic.
+      error(expr->span,
+            "'" + std::string(variant_name) + "' is not a variant of '" +
+                std::string(enum_type->name()) + "'");
+      return callee_type;
+    }
   }
 
   // Constructor call: callee must be an identifier that resolves to a

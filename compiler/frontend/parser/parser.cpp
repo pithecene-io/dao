@@ -834,16 +834,18 @@ private:
         break;
       }
       // Parse arm pattern (expression — constant, enum variant, etc.).
-      // The expression parser will parse `Enum.Variant(a, b)` as a CallExpr.
-      // If the callee is a FieldExpr and all args are simple identifiers,
-      // treat it as destructuring: extract the callee as the pattern and
-      // the identifier args as bindings.
+      // The expression parser will parse `Enum::Variant(a, b)` as a CallExpr.
+      // If the callee is a FieldExpr or QualifiedName and all args are
+      // simple identifiers (possibly ending with `..`), treat it as
+      // destructuring: extract the callee as the pattern and the
+      // identifier args as bindings.
       auto* pattern = parse_expression();
       std::vector<std::string_view> bindings;
       std::vector<Span> binding_spans;
+      bool has_rest = false;
       if (pattern->is<CallExpr>()) {
         const auto& call = pattern->as<CallExpr>();
-        if (call.callee->is<FieldExpr>()) {
+        if (call.callee->is<FieldExpr>() || call.callee->is<QualifiedName>()) {
           bool all_idents = true;
           for (const auto* arg : call.args) {
             if (!arg->is<IdentifierExpr>()) {
@@ -851,21 +853,44 @@ private:
               break;
             }
           }
-          if (all_idents && !call.args.empty()) {
+          // Check for `..` rest marker in arg_names.
+          bool trailing_rest = false;
+          if (!call.arg_names.empty()) {
+            for (const auto& an : call.arg_names) {
+              if (an.data() != nullptr && an == "..") {
+                trailing_rest = true;
+              }
+            }
+          }
+          if (all_idents && (!call.args.empty() || trailing_rest)) {
             for (const auto* arg : call.args) {
               const auto& ident = arg->as<IdentifierExpr>();
               bindings.push_back(ident.name);
               binding_spans.push_back(arg->span);
             }
+            has_rest = trailing_rest;
             pattern = call.callee;
           }
         }
       }
+      // Check for `as` binding: `Pattern as name:`
+      std::string_view as_binding;
+      Span as_binding_span{};
+      if (peek_kind() == TokenKind::KwAs) {
+        advance(); // consume 'as'
+        const auto& binding_tok = consume(TokenKind::Identifier);
+        as_binding = binding_tok.text;
+        as_binding_span = binding_tok.span;
+      }
+
       consume(TokenKind::Colon);
       auto body = parse_suite();
       arms.push_back({.pattern = pattern,
                       .bindings = std::move(bindings),
                       .binding_spans = std::move(binding_spans),
+                      .has_rest = has_rest,
+                      .as_binding = as_binding,
+                      .as_binding_span = as_binding_span,
                       .body = std::move(body)});
     }
     consume(TokenKind::Dedent);
@@ -1216,6 +1241,48 @@ private:
     return {};
   }
 
+  // Parse call arguments: (expr, name = expr, ..)
+  // Returns args and fills arg_names (empty string_view = positional,
+  // ".." for rest marker). Caller must have already consumed '('.
+  auto parse_call_args(std::vector<std::string_view>& arg_names) -> std::vector<Expr*> {
+    std::vector<Expr*> args;
+    if (peek_kind() == TokenKind::RParen) {
+      return args;
+    }
+    auto parse_one_arg = [&]() -> bool {
+      // `..` rest marker (match destructuring).
+      if (peek_kind() == TokenKind::DotDot) {
+        advance();
+        arg_names.push_back("..");
+        return true; // signals rest was seen; no more args after this
+      }
+      // Lookahead for `Identifier =` (but NOT `==`).
+      if (peek_kind() == TokenKind::Identifier) {
+        uint32_t saved = pos_;
+        auto saved_diag_size = diagnostics_.size();
+        const auto& name_tok = advance();
+        if (peek_kind() == TokenKind::Eq) {
+          advance(); // consume '='
+          arg_names.push_back(name_tok.text);
+          args.push_back(parse_expression());
+          return false;
+        }
+        // Not a named arg — restore and parse as expression.
+        pos_ = saved;
+        diagnostics_.resize(saved_diag_size);
+      }
+      arg_names.push_back(std::string_view{});
+      args.push_back(parse_expression());
+      return false;
+    };
+    bool saw_rest = parse_one_arg();
+    while (!saw_rest && peek_kind() == TokenKind::Comma) {
+      advance();
+      saw_rest = parse_one_arg();
+    }
+    return args;
+  }
+
   auto parse_postfix() -> Expr* {
     auto* expr = parse_primary();
 
@@ -1307,20 +1374,17 @@ private:
         continue;
       }
       if (peek_kind() == TokenKind::LParen) {
-        // Call: expr(args)
+        // Call: expr(args) — supports named arguments (name = expr).
         advance(); // (
-        std::vector<Expr*> args;
-        if (peek_kind() != TokenKind::RParen) {
-          args.push_back(parse_expression());
-          while (peek_kind() == TokenKind::Comma) {
-            advance();
-            args.push_back(parse_expression());
-          }
-        }
+        std::vector<std::string_view> arg_names;
+        auto args = parse_call_args(arg_names);
         const auto& rparen = consume(TokenKind::RParen);
         Span span = {.offset = expr->span.offset,
                      .length = (rparen.span.offset + rparen.span.length) - expr->span.offset};
-        expr = ctx_.alloc<Expr>(span, CallExpr{.callee = expr, .args = std::move(args)});
+        expr = ctx_.alloc<Expr>(span,
+                                CallExpr{.callee = expr,
+                                         .args = std::move(args),
+                                         .arg_names = std::move(arg_names)});
       } else if (peek_kind() == TokenKind::Dot) {
         // Field access: expr.field
         advance(); // .
