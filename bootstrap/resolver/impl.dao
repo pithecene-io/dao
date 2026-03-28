@@ -587,7 +587,7 @@ fn resolve_extern_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64
   // Pop function scope (no body)
   return rs_pop_scope(r)
 
-fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, fields_lp: i64): RS
+fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, fields_lp: i64, methods_lp: i64): RS
   // Create struct scope
   let sr: ScopeR = rs_push_scope(rs, ScopeKind.StructScope)
   let r: RS = sr.rs
@@ -608,8 +608,22 @@ fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, fi
     r = resolve_type_node(r, f_type)
     i = i + 2
 
-  // Pop struct scope
-  return rs_pop_scope(r)
+  // Resolve methods BEFORE popping struct scope, so class type params
+  // (e.g. T in class Box<T>) are visible in method signatures/bodies.
+  if methods_lp >= 0:
+    let methods: Vector<i64> = read_list(r.idx_data, methods_lp)
+    let mi: i64 = 0
+    while mi < methods.length():
+      let meth_idx: i64 = methods.get(mi)
+      let meth_node: Node = r.nodes.get(meth_idx)
+      match meth_node:
+        Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
+          r = resolve_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp)
+      mi = mi + 1
+
+  // Pop struct scope after methods are resolved
+  r = rs_pop_scope(r)
+  return r
 
 fn resolve_enum_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, variants_lp: i64): RS
   // Create a scope for type parameters if present
@@ -651,8 +665,8 @@ fn resolve_decl(rs: RS, node_idx: i64): RS
       return resolve_expr_fn_decl(rs, node_idx, name_tidx, tparams_lp, params_lp, ret_type, body_expr)
     Node.ExternFnD(name_tidx, tparams_lp, params_lp, ret_type):
       return resolve_extern_fn_decl(rs, node_idx, name_tidx, tparams_lp, params_lp, ret_type)
-    Node.ClassDeclD(name_tidx, tparams_lp, fields_lp):
-      return resolve_class_decl(rs, node_idx, name_tidx, tparams_lp, fields_lp)
+    Node.ClassDeclD(name_tidx, tparams_lp, fields_lp, methods_lp):
+      return resolve_class_decl(rs, node_idx, name_tidx, tparams_lp, fields_lp, methods_lp)
     Node.EnumDeclD(name_tidx, tparams_lp, variants_lp):
       return resolve_enum_decl(rs, node_idx, name_tidx, tparams_lp, variants_lp)
     Node.TypeAliasD(name_tidx, target_type):
@@ -688,10 +702,24 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
-          Node.ClassDeclD(name_tidx, tparams_lp, fields_lp):
+          Node.ClassDeclD(name_tidx, tparams_lp, fields_lp, methods_lp):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+            // Register mangled method symbols in file scope
+            if methods_lp >= 0:
+              let meths: Vector<i64> = read_list(r.idx_data, methods_lp)
+              let mi: i64 = 0
+              while mi < meths.length():
+                let meth_idx: i64 = meths.get(mi)
+                let meth_node: Node = r.nodes.get(meth_idx)
+                match meth_node:
+                  Node.FnDeclD(m_name_tidx, m_tp, m_plp, m_rt, m_blp):
+                    let mname: string = tok_name(r, m_name_tidx)
+                    let mangled: string = name + "." + mname
+                    let msr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, mangled, meth_idx, r.current_scope))
+                    r = scope_declare(msr.rs, mangled, msr.sym_idx, m_name_tidx)
+                mi = mi + 1
           Node.EnumDeclD(name_tidx, tparams_lp, variants_lp):
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
