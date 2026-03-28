@@ -7,39 +7,64 @@ File
       Param self
       Param elem: T
       ReturnType: Vector<T>
-      LetStatement new_cap: i64
-        FieldExpr .cap
-          Identifier self
       IfStatement
         Condition
-          BinaryExpr >
-            BinaryExpr +
-              FieldExpr .len
-                Identifier self
-              IntLiteral 1
+          BinaryExpr <
+            FieldExpr .len
+              Identifier self
             FieldExpr .cap
               Identifier self
+        Then
+          ModeBlock unsafe
+            Assignment
+              Target
+                UnaryExpr *
+                  CallExpr
+                    Callee
+                      Identifier ptr_offset
+                    Args
+                      FieldExpr .data
+                        Identifier self
+                      FieldExpr .len
+                        Identifier self
+              Value
+                Identifier elem
+            ReturnStatement
+              CallExpr
+                Callee
+                  Identifier Vector
+                Args
+                  FieldExpr .data
+                    Identifier self
+                  BinaryExpr +
+                    FieldExpr .len
+                      Identifier self
+                    IntLiteral 1
+                  FieldExpr .cap
+                    Identifier self
+          ExpressionStatement
+            CallExpr
+              Callee
+                Identifier panic
+              Args
+                StringLiteral "unreachable"
+      LetStatement new_cap: i64
+        BinaryExpr *
+          FieldExpr .cap
+            Identifier self
+          IntLiteral 2
+      IfStatement
+        Condition
+          BinaryExpr ==
+            FieldExpr .cap
+              Identifier self
+            IntLiteral 0
         Then
           Assignment
             Target
               Identifier new_cap
             Value
-              BinaryExpr *
-                FieldExpr .cap
-                  Identifier self
-                IntLiteral 2
-          IfStatement
-            Condition
-              BinaryExpr ==
-                FieldExpr .cap
-                  Identifier self
-                IntLiteral 0
-            Then
-              Assignment
-                Target
-                  Identifier new_cap
-                Value
-                  IntLiteral 8
+              IntLiteral 8
       LetStatement new_data_raw
         CallExpr
           Callee

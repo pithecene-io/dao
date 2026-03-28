@@ -1,0 +1,11 @@
+File
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "dao_lexer_v2 has moved to bootstrap/lexer/lexer.dao"
+    ReturnStatement
+      IntLiteral 0

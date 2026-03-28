@@ -73,6 +73,7 @@ inline auto token_category(TokenKind kind) -> std::string_view {
   case TokenKind::Amp:
   case TokenKind::Bang:
   case TokenKind::Dot:
+  case TokenKind::DotDot:
   case TokenKind::Comma:
   case TokenKind::Pipe:
   case TokenKind::PipeGt:

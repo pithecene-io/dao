@@ -71,6 +71,7 @@ enum class TokenKind : std::uint8_t {
   Amp,        // &
   Bang,       // !
   Dot,        // .
+  DotDot,     // ..
   Comma,      // ,
   Pipe,       // |
   PipeGt,     // |>

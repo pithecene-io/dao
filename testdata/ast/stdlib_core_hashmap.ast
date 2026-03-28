@@ -95,8 +95,7 @@ File
                 IntLiteral 0
         Then
           ReturnStatement
-            FieldExpr .None
-              Identifier Option
+            QualifiedName Option::None
       LetStatement idx: i64
         CallExpr
           Callee
@@ -134,8 +133,7 @@ File
                 IntLiteral 0
             Then
               ReturnStatement
-                FieldExpr .None
-                  Identifier Option
+                QualifiedName Option::None
           IfStatement
             Condition
               BinaryExpr ==
@@ -158,8 +156,7 @@ File
                   ReturnStatement
                     CallExpr
                       Callee
-                        FieldExpr .Some
-                          Identifier Option
+                        QualifiedName Option::Some
                       Args
                         UnaryExpr *
                           CallExpr
@@ -200,8 +197,7 @@ File
                 Identifier probes
                 IntLiteral 1
       ReturnStatement
-        FieldExpr .None
-          Identifier Option
+        QualifiedName Option::None
     FunctionDecl contains
       Param self
       Param key: string
