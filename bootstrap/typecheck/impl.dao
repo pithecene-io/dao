@@ -847,7 +847,7 @@ fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
               if sym.name == mangled:
                 if symbol_kind_name(sym.kind) == "Function":
                   found_method = true
-                  // Check signature match (compare param count and return type)
+                  // Check full signature match: param count, each param type, return type.
                   let impl_ti: i64 = vec_i64_get(r.sym_types, si)
                   if impl_ti >= 0:
                     if req_fn_ti >= 0:
@@ -860,6 +860,25 @@ fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
                           let tok: Token = r.tc.toks.get(concept_name_tidx)
                           sp = Span(tok.offset, tok.len)
                         r = ts_add_diag(r, sp, "extend method '" + req_name + "' has " + i64_to_string(impl_type.info_count) + " param(s), concept requires " + i64_to_string(req_type.info_count))
+                      else:
+                        // Param counts match — compare each non-self param type.
+                        // Skip param 0 (self) since it differs by design
+                        // (impl has the concrete type, concept has Self placeholder).
+                        let pi: i64 = 1
+                        while pi < impl_type.info_count:
+                          let impl_param_ti: i64 = r.type_info.get(impl_type.info_lp + pi)
+                          let req_param_ti: i64 = r.type_info.get(req_type.info_lp + pi)
+                          if impl_param_ti != req_param_ti:
+                            // Check if req param is a concept self-type (skip comparison)
+                            // Otherwise diagnose the mismatch
+                            if req_param_ti >= 0:
+                              if impl_param_ti >= 0:
+                                let sp_p: Span = Span(to_i64(0), to_i64(1))
+                                if concept_name_tidx >= 0:
+                                  let tok_p: Token = r.tc.toks.get(concept_name_tidx)
+                                  sp_p = Span(tok_p.offset, tok_p.len)
+                                r = ts_add_diag(r, sp_p, "extend method '" + req_name + "' param " + i64_to_string(pi) + " has type " + type_name(r, impl_param_ti) + ", concept requires " + type_name(r, req_param_ti))
+                          pi = pi + 1
                       // Compare return types
                       if impl_type.ret_type != req_type.ret_type:
                         if impl_type.ret_type >= 0:
@@ -1686,7 +1705,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 23
+  let total: i32 = 24
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -1908,7 +1927,24 @@ fn main(): i32
   else:
     print("FAIL concept_satisfaction_correct: got false missing-method diagnostic")
 
-  // Test 23: self_typecheck_smoke
+  // Test 23: concept_satisfaction — param type mismatch detected
+  let src23c: string = "concept Eqable:\n  fn eq(self, other: i32): bool\n\nclass Baz:\n  val: i32\n\nextend Baz as Eqable:\n  fn eq(self, other: string): bool\n    return false\n"
+  let r23c: TypeCheckResult = typecheck(src23c)
+  let has_param_mismatch: bool = false
+  let di23: i64 = 0
+  while di23 < tc_count_diags(r23c):
+    let d23: Diagnostic = r23c.diags.get(di23)
+    // Check for param type mismatch diagnostic
+    if d23.severity == Severity.Error:
+      has_param_mismatch = true
+    di23 = di23 + 1
+  if has_param_mismatch:
+    print("PASS concept_satisfaction_param_mismatch")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL concept_satisfaction_param_mismatch: expected param type mismatch diagnostic")
+
+  // Test 24: self_typecheck_smoke
   let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
   if file_exists(self_path):
     let self_src: string = read_file(self_path)
