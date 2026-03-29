@@ -29,11 +29,14 @@ class Scope:
   parent: i64
   decls: HashMap<i64>
 
-class RS:
+class RC:
   nodes: Vector<Node>
   idx_data: Vector<i64>
   toks: Vector<Token>
   src: string
+
+class RS:
+  rc: RC
   symbols: Vector<Symbol>
   scopes: Vector<Scope>
   uses: Vector<i64>
@@ -62,20 +65,20 @@ class ScopeR:
 fn rs_add_symbol(rs: RS, sym: Symbol): SymR
   let idx: i64 = rs.symbols.length()
   let new_syms: Vector<Symbol> = rs.symbols.push(sym)
-  let new_rs: RS = RS(rs.nodes, rs.idx_data, rs.toks, rs.src, new_syms, rs.scopes, rs.uses, rs.diags, rs.current_scope)
+  let new_rs: RS = RS(rs.rc, new_syms, rs.scopes, rs.uses, rs.diags, rs.current_scope)
   return SymR(new_rs, idx)
 
 fn rs_set_scopes(rs: RS, scopes: Vector<Scope>): RS
-  return RS(rs.nodes, rs.idx_data, rs.toks, rs.src, rs.symbols, scopes, rs.uses, rs.diags, rs.current_scope)
+  return RS(rs.rc, rs.symbols, scopes, rs.uses, rs.diags, rs.current_scope)
 
 fn rs_set_current_scope(rs: RS, scope_idx: i64): RS
-  return RS(rs.nodes, rs.idx_data, rs.toks, rs.src, rs.symbols, rs.scopes, rs.uses, rs.diags, scope_idx)
+  return RS(rs.rc, rs.symbols, rs.scopes, rs.uses, rs.diags, scope_idx)
 
 fn rs_set_uses(rs: RS, uses: Vector<i64>): RS
-  return RS(rs.nodes, rs.idx_data, rs.toks, rs.src, rs.symbols, rs.scopes, uses, rs.diags, rs.current_scope)
+  return RS(rs.rc, rs.symbols, rs.scopes, uses, rs.diags, rs.current_scope)
 
 fn rs_set_diags(rs: RS, diags: Vector<Diagnostic>): RS
-  return RS(rs.nodes, rs.idx_data, rs.toks, rs.src, rs.symbols, rs.scopes, rs.uses, diags, rs.current_scope)
+  return RS(rs.rc, rs.symbols, rs.scopes, rs.uses, diags, rs.current_scope)
 
 fn rs_push_scope(rs: RS, kind: ScopeKind): ScopeR
   let idx: i64 = rs.scopes.length()
@@ -125,7 +128,7 @@ fn scope_declare(rs: RS, name: string, sym_idx: i64, decl_tidx: i64): RS
       // Duplicate declaration — emit diagnostic at the duplicate's span
       let sp: Span = Span(to_i64(0), to_i64(1))
       if decl_tidx >= 0:
-        let tok: Token = rs.toks.get(decl_tidx)
+        let tok: Token = rs.rc.toks.get(decl_tidx)
         sp = Span(tok.offset, tok.len)
       let rs2: RS = rs_add_diag(rs, sp, "duplicate declaration '" + name + "'")
       return rs2
@@ -185,11 +188,11 @@ fn read_pairs(idx_data: Vector<i64>, lp: i64): Vector<i64>
 // =========================================================================
 
 fn tok_name(rs: RS, tidx: i64): string
-  let tok: Token = rs.toks.get(tidx)
-  return substring(rs.src, tok.offset, tok.len)
+  let tok: Token = rs.rc.toks.get(tidx)
+  return substring(rs.rc.src, tok.offset, tok.len)
 
 fn tok_name_span(rs: RS, tidx: i64): Span
-  let tok: Token = rs.toks.get(tidx)
+  let tok: Token = rs.rc.toks.get(tidx)
   return Span(tok.offset, tok.len)
 
 // =========================================================================
@@ -274,7 +277,7 @@ fn is_type_symbol(rs: RS, sym_idx: i64): bool
 fn resolve_type_node(rs: RS, node_idx: i64): RS
   if node_idx < 0:
     return rs
-  let node: Node = rs.nodes.get(node_idx)
+  let node: Node = rs.rc.nodes.get(node_idx)
   match node:
     Node.NamedT(tidx):
       let name: string = tok_name(rs, tidx)
@@ -292,7 +295,7 @@ fn resolve_type_node(rs: RS, node_idx: i64): RS
       if sym >= 0:
         if is_type_symbol(r, sym):
           r = rs_add_use(r, name_tidx, sym)
-      let args: Vector<i64> = read_list(r.idx_data, args_lp)
+      let args: Vector<i64> = read_list(r.rc.idx_data, args_lp)
       let i: i64 = 0
       while i < args.length():
         r = resolve_type_node(r, args.get(i))
@@ -311,7 +314,7 @@ fn resolve_type_node(rs: RS, node_idx: i64): RS
 fn resolve_expr(rs: RS, node_idx: i64): RS
   if node_idx < 0:
     return rs
-  let node: Node = rs.nodes.get(node_idx)
+  let node: Node = rs.rc.nodes.get(node_idx)
   match node:
     Node.IdentE(tidx):
       let name: string = tok_name(rs, tidx)
@@ -323,7 +326,7 @@ fn resolve_expr(rs: RS, node_idx: i64): RS
       return rs_add_diag(rs, sp, "unknown name '" + name + "'")
     Node.QualNameE(seg_lp, seg_count):
       // Resolve first segment only
-      let segs: Vector<i64> = read_list(rs.idx_data, seg_lp)
+      let segs: Vector<i64> = read_list(rs.rc.idx_data, seg_lp)
       if segs.length() > 0:
         let first_tidx: i64 = segs.get(0)
         let name: string = tok_name(rs, first_tidx)
@@ -340,7 +343,7 @@ fn resolve_expr(rs: RS, node_idx: i64): RS
       return resolve_expr(rs, operand)
     Node.CallE(callee, args_lp, arg_count):
       let r: RS = resolve_expr(rs, callee)
-      let args: Vector<i64> = read_list(r.idx_data, args_lp)
+      let args: Vector<i64> = read_list(r.rc.idx_data, args_lp)
       let i: i64 = 0
       while i < args.length():
         r = resolve_expr(r, args.get(i))
@@ -362,7 +365,7 @@ fn resolve_expr(rs: RS, node_idx: i64): RS
       let sr: ScopeR = rs_push_scope(rs, ScopeKind.BlockScope)
       let r: RS = sr.rs
       // Declare lambda parameters
-      let param_toks: Vector<i64> = read_list(r.idx_data, params_lp)
+      let param_toks: Vector<i64> = read_list(r.rc.idx_data, params_lp)
       let i: i64 = 0
       while i < param_toks.length():
         let ptidx: i64 = param_toks.get(i)
@@ -374,7 +377,7 @@ fn resolve_expr(rs: RS, node_idx: i64): RS
       r = resolve_expr(r, body)
       return rs_pop_scope(r)
     Node.ListLitE(elems_lp, elem_count):
-      let elems: Vector<i64> = read_list(rs.idx_data, elems_lp)
+      let elems: Vector<i64> = read_list(rs.rc.idx_data, elems_lp)
       let r: RS = rs
       let i: i64 = 0
       while i < elems.length():
@@ -400,7 +403,7 @@ fn resolve_expr(rs: RS, node_idx: i64): RS
 fn resolve_body_stmts(rs: RS, list_pos: i64): RS
   if list_pos < 0:
     return rs
-  let stmts: Vector<i64> = read_list(rs.idx_data, list_pos)
+  let stmts: Vector<i64> = read_list(rs.rc.idx_data, list_pos)
   let r: RS = rs
   let i: i64 = 0
   while i < stmts.length():
@@ -418,7 +421,7 @@ fn resolve_body_in_new_scope(rs: RS, list_pos: i64): RS
 fn resolve_stmt(rs: RS, node_idx: i64): RS
   if node_idx < 0:
     return rs
-  let node: Node = rs.nodes.get(node_idx)
+  let node: Node = rs.rc.nodes.get(node_idx)
   match node:
     Node.LetS(name_tidx, type_node, init_node):
       // Resolve type and init BEFORE declaring (prevents self-reference)
@@ -460,7 +463,7 @@ fn resolve_stmt(rs: RS, node_idx: i64): RS
     Node.MatchS(scrut_node, arms_lp):
       let r: RS = resolve_expr(rs, scrut_node)
       // Arms are pairs: [pattern_node, body_list_pos]
-      let arms: Vector<i64> = read_pairs(r.idx_data, arms_lp)
+      let arms: Vector<i64> = read_pairs(r.rc.idx_data, arms_lp)
       let i: i64 = 0
       while i < arms.length():
         let pat_node: i64 = arms.get(i)
@@ -484,12 +487,12 @@ fn resolve_stmt(rs: RS, node_idx: i64): RS
 fn resolve_type_params(rs: RS, tparams_lp: i64, node_idx: i64): RS
   if tparams_lp < 0:
     return rs
-  let tparams: Vector<i64> = read_list(rs.idx_data, tparams_lp)
+  let tparams: Vector<i64> = read_list(rs.rc.idx_data, tparams_lp)
   let r: RS = rs
   let i: i64 = 0
   while i < tparams.length():
     let tp_node_idx: i64 = tparams.get(i)
-    let tp_node: Node = r.nodes.get(tp_node_idx)
+    let tp_node: Node = r.rc.nodes.get(tp_node_idx)
     match tp_node:
       Node.GenericParamT(tidx):
         let tname: string = tok_name(r, tidx)
@@ -507,7 +510,7 @@ fn resolve_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, param
   r = resolve_type_params(r, tparams_lp, node_idx)
 
   // Declare parameters
-  let pairs: Vector<i64> = read_pairs(r.idx_data, params_lp)
+  let pairs: Vector<i64> = read_pairs(r.rc.idx_data, params_lp)
   let i: i64 = 0
   while i < pairs.length():
     let p_tidx: i64 = pairs.get(i)
@@ -539,7 +542,7 @@ fn resolve_expr_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, 
   r = resolve_type_params(r, tparams_lp, node_idx)
 
   // Declare parameters
-  let pairs: Vector<i64> = read_pairs(r.idx_data, params_lp)
+  let pairs: Vector<i64> = read_pairs(r.rc.idx_data, params_lp)
   let i: i64 = 0
   while i < pairs.length():
     let p_tidx: i64 = pairs.get(i)
@@ -570,7 +573,7 @@ fn resolve_extern_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64
   r = resolve_type_params(r, tparams_lp, node_idx)
 
   // Declare parameters
-  let pairs: Vector<i64> = read_pairs(r.idx_data, params_lp)
+  let pairs: Vector<i64> = read_pairs(r.rc.idx_data, params_lp)
   let i: i64 = 0
   while i < pairs.length():
     let p_tidx: i64 = pairs.get(i)
@@ -596,7 +599,7 @@ fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, fi
   r = resolve_type_params(r, tparams_lp, node_idx)
 
   // Declare fields
-  let pairs: Vector<i64> = read_pairs(r.idx_data, fields_lp)
+  let pairs: Vector<i64> = read_pairs(r.rc.idx_data, fields_lp)
   let i: i64 = 0
   while i < pairs.length():
     let f_tidx: i64 = pairs.get(i)
@@ -611,11 +614,11 @@ fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, fi
   // Resolve methods BEFORE popping struct scope, so class type params
   // (e.g. T in class Box<T>) are visible in method signatures/bodies.
   if methods_lp >= 0:
-    let methods: Vector<i64> = read_list(r.idx_data, methods_lp)
+    let methods: Vector<i64> = read_list(r.rc.idx_data, methods_lp)
     let mi: i64 = 0
     while mi < methods.length():
       let meth_idx: i64 = methods.get(mi)
-      let meth_node: Node = r.nodes.get(meth_idx)
+      let meth_node: Node = r.rc.nodes.get(meth_idx)
       match meth_node:
         Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
           r = resolve_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp)
@@ -634,14 +637,14 @@ fn resolve_enum_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, var
     r0 = resolve_type_params(sr.rs, tparams_lp, node_idx)
     has_tparams = true
   // Resolve payload types for each variant
-  let pairs: Vector<i64> = read_pairs(r0.idx_data, variants_lp)
+  let pairs: Vector<i64> = read_pairs(r0.rc.idx_data, variants_lp)
   let r: RS = r0
   let i: i64 = 0
   while i < pairs.length():
     let v_tidx: i64 = pairs.get(i)
     let payload_lp: i64 = pairs.get(i + 1)
     // Resolve each payload type
-    let payload_types: Vector<i64> = read_list(r.idx_data, payload_lp)
+    let payload_types: Vector<i64> = read_list(r.rc.idx_data, payload_lp)
     let j: i64 = 0
     while j < payload_types.length():
       r = resolve_type_node(r, payload_types.get(j))
@@ -661,11 +664,11 @@ fn resolve_concept_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, 
   r = resolve_type_params(r, tparams_lp, node_idx)
   // Resolve method signature types (ExternFnD nodes — no body)
   if methods_lp >= 0:
-    let methods: Vector<i64> = read_list(r.idx_data, methods_lp)
+    let methods: Vector<i64> = read_list(r.rc.idx_data, methods_lp)
     let mi: i64 = 0
     while mi < methods.length():
       let meth_idx: i64 = methods.get(mi)
-      let meth_node: Node = r.nodes.get(meth_idx)
+      let meth_node: Node = r.rc.nodes.get(meth_idx)
       match meth_node:
         Node.ExternFnD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type):
           r = resolve_extern_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type)
@@ -683,11 +686,11 @@ fn resolve_extend_decl(rs: RS, node_idx: i64, target_type_node: i64, concept_nam
     r = rs_add_use(r, concept_name_tidx, csym)
   // Resolve each method body
   if methods_lp >= 0:
-    let methods: Vector<i64> = read_list(r.idx_data, methods_lp)
+    let methods: Vector<i64> = read_list(r.rc.idx_data, methods_lp)
     let mi: i64 = 0
     while mi < methods.length():
       let meth_idx: i64 = methods.get(mi)
-      let meth_node: Node = r.nodes.get(meth_idx)
+      let meth_node: Node = r.rc.nodes.get(meth_idx)
       match meth_node:
         Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
           r = resolve_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp)
@@ -697,7 +700,7 @@ fn resolve_extend_decl(rs: RS, node_idx: i64, target_type_node: i64, concept_nam
 fn resolve_decl(rs: RS, node_idx: i64): RS
   if node_idx < 0:
     return rs
-  let node: Node = rs.nodes.get(node_idx)
+  let node: Node = rs.rc.nodes.get(node_idx)
   match node:
     Node.FnDeclD(name_tidx, tparams_lp, params_lp, ret_type, body_lp):
       return resolve_fn_decl(rs, node_idx, name_tidx, tparams_lp, params_lp, ret_type, body_lp)
@@ -724,15 +727,15 @@ fn resolve_decl(rs: RS, node_idx: i64): RS
 // =========================================================================
 
 fn collect_top_level(rs: RS, file_node_idx: i64): RS
-  let file_node: Node = rs.nodes.get(file_node_idx)
+  let file_node: Node = rs.rc.nodes.get(file_node_idx)
   match file_node:
     Node.FileN(decls_lp):
-      let decls: Vector<i64> = read_list(rs.idx_data, decls_lp)
+      let decls: Vector<i64> = read_list(rs.rc.idx_data, decls_lp)
       let r: RS = rs
       let i: i64 = 0
       while i < decls.length():
         let decl_idx: i64 = decls.get(i)
-        let decl_node: Node = r.nodes.get(decl_idx)
+        let decl_node: Node = r.rc.nodes.get(decl_idx)
         match decl_node:
           Node.FnDeclD(name_tidx, tparams_lp, params_lp, ret_type, body_lp):
             let name: string = tok_name(r, name_tidx)
@@ -752,11 +755,11 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
             // Register mangled method symbols in file scope
             if methods_lp >= 0:
-              let meths: Vector<i64> = read_list(r.idx_data, methods_lp)
+              let meths: Vector<i64> = read_list(r.rc.idx_data, methods_lp)
               let mi: i64 = 0
               while mi < meths.length():
                 let meth_idx: i64 = meths.get(mi)
-                let meth_node: Node = r.nodes.get(meth_idx)
+                let meth_node: Node = r.rc.nodes.get(meth_idx)
                 match meth_node:
                   Node.FnDeclD(m_name_tidx, m_tp, m_plp, m_rt, m_blp):
                     let mname: string = tok_name(r, m_name_tidx)
@@ -781,15 +784,15 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
             if methods_lp >= 0:
               let target_name: string = ""
               if target_type_node >= 0:
-                let tnode: Node = r.nodes.get(target_type_node)
+                let tnode: Node = r.rc.nodes.get(target_type_node)
                 match tnode:
                   Node.NamedT(t_tidx):
                     target_name = tok_name(r, t_tidx)
-              let meths: Vector<i64> = read_list(r.idx_data, methods_lp)
+              let meths: Vector<i64> = read_list(r.rc.idx_data, methods_lp)
               let mi: i64 = 0
               while mi < meths.length():
                 let meth_idx: i64 = meths.get(mi)
-                let meth_node: Node = r.nodes.get(meth_idx)
+                let meth_node: Node = r.rc.nodes.get(meth_idx)
                 match meth_node:
                   Node.FnDeclD(m_name_tidx, m_tp, m_plp, m_rt, m_blp):
                     let mname: string = tok_name(r, m_name_tidx)
@@ -808,10 +811,10 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
 // =========================================================================
 
 fn resolve_bodies(rs: RS, file_node_idx: i64): RS
-  let file_node: Node = rs.nodes.get(file_node_idx)
+  let file_node: Node = rs.rc.nodes.get(file_node_idx)
   match file_node:
     Node.FileN(decls_lp):
-      let decls: Vector<i64> = read_list(rs.idx_data, decls_lp)
+      let decls: Vector<i64> = read_list(rs.rc.idx_data, decls_lp)
       let r: RS = rs
       let i: i64 = 0
       while i < decls.length():
@@ -826,11 +829,12 @@ fn resolve_bodies(rs: RS, file_node_idx: i64): RS
 
 fn resolve(src: string): ResolveResult
   // Parse the source
-  let pr: PR = parse(src)
-  let file_node_idx: i64 = pr.node
+  let po: ParseOutput = parse(src)
+  let file_node_idx: i64 = po.root
 
   // Initialize resolver state
-  let rs: RS = RS(pr.ps.nodes, pr.ps.idx, pr.ps.toks, src, Vector<Symbol>::new(), Vector<Scope>::new(), Vector<i64>::new(), pr.ps.diags, to_i64(-1))
+  let rc: RC = RC(po.nodes, po.idx, po.toks, src)
+  let rs: RS = RS(rc, Vector<Symbol>::new(), Vector<Scope>::new(), Vector<i64>::new(), po.diags, to_i64(-1))
 
   // Create file scope
   let file_sr: ScopeR = rs_push_scope(rs, ScopeKind.FileScope)
@@ -845,7 +849,7 @@ fn resolve(src: string): ResolveResult
   // Pass 2: Resolve bodies
   rs = resolve_bodies(rs, file_node_idx)
 
-  return ResolveResult(rs.symbols, rs.scopes, rs.uses, rs.diags, pr.ps.nodes.length())
+  return ResolveResult(rs.symbols, rs.scopes, rs.uses, rs.diags, po.nodes.length())
 
 // BEGIN_RESOLVER_TESTS
 // =========================================================================

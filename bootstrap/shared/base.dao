@@ -1946,9 +1946,12 @@ fn parse_class_decl(pc: PC, ps: PS): PR
 
 fn parse_enum_decl(pc: PC, ps: PS): PR
   let ps2: PS = ps_advance(pc, ps)
-  // Skip 'class' keyword for 'enum class' declarations.
+  // Track whether this is 'enum class' (named-field variants) or
+  // plain 'enum' (fieldless only, per CONTRACT_SYNTAX_SURFACE.md).
+  let is_enum_class: bool = false
   if tk_name(peek_kind(pc, ps2)) == tk_name(TK.KwClass):
     ps2 = ps_advance(pc, ps2)
+    is_enum_class = true
   let name_tidx: i64 = ps2.pos
   let ps3: PS = expect(pc, ps2, TK.Identifier)
 
@@ -1976,20 +1979,21 @@ fn parse_enum_decl(pc: PC, ps: PS): PR
       let vname_tidx: i64 = cur.pos
       cur = expect(pc, cur, TK.Identifier)
 
-      // Parse optional payload: (Type, ...) or (name: Type, ...)
-      // For enum class, fields are name: Type. Skip the name and colon.
+      // Parse optional payload.
+      // Plain enum: payloads are illegal (CONTRACT_SYNTAX_SURFACE §Enum).
+      // Enum class: fields must be named (CONTRACT_SYNTAX_SURFACE §Enum Class).
       let payload_types: Vector<i64> = Vector<i64>::new()
       if tk_name(peek_kind(pc, cur)) == tk_name(TK.LParen):
+        if is_enum_class == false:
+          // Plain enum with payload — diagnose per contract.
+          let sp: Span = tok_span(pc, cur)
+          cur = ps_add_diag(cur, sp, "enum variants cannot carry payloads; use 'enum class' for structured variants")
         cur = ps_advance(pc, cur)
         if tk_name(peek_kind(pc, cur)) != tk_name(TK.RParen):
-          // Skip field name and colon if present (enum class syntax)
-          if tk_name(peek_kind(pc, cur)) == tk_name(TK.Identifier):
-            let la: i64 = cur.pos + 1
-            if la < pc.toks.length():
-              let la_tok: Token = pc.toks.get(la)
-              if tk_name(la_tok.kind) == tk_name(TK.Colon):
-                cur = ps_advance(pc, cur)
-                cur = ps_advance(pc, cur)
+          if is_enum_class:
+            // Enum class: require name: Type syntax.
+            cur = expect(pc, cur, TK.Identifier)
+            cur = expect(pc, cur, TK.Colon)
           let pty: PR = parse_type(pc, cur)
           if pty.node >= 0:
             payload_types = payload_types.push(pty.node)
@@ -2000,14 +2004,10 @@ fn parse_enum_decl(pc: PC, ps: PS): PR
           while pdone == false:
             if tk_name(peek_kind(pc, cur)) == tk_name(TK.Comma):
               cur = ps_advance(pc, cur)
-              // Skip field name and colon if present
-              if tk_name(peek_kind(pc, cur)) == tk_name(TK.Identifier):
-                let la2: i64 = cur.pos + 1
-                if la2 < pc.toks.length():
-                  let la2_tok: Token = pc.toks.get(la2)
-                  if tk_name(la2_tok.kind) == tk_name(TK.Colon):
-                    cur = ps_advance(pc, cur)
-                    cur = ps_advance(pc, cur)
+              if is_enum_class:
+                // Enum class: require name: Type syntax.
+                cur = expect(pc, cur, TK.Identifier)
+                cur = expect(pc, cur, TK.Colon)
               let pty2: PR = parse_type(pc, cur)
               if pty2.node >= 0:
                 payload_types = payload_types.push(pty2.node)
