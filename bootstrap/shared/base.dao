@@ -799,6 +799,8 @@ enum class Node:
   ClassDeclD(name: i64, tparams: i64, fields: i64, methods: i64)
   EnumDeclD(name: i64, tparams: i64, variants: i64)
   TypeAliasD(name: i64, typ: i64)
+  ConceptDeclD(name: i64, tparams: i64, methods: i64)
+  ExtendDeclD(target: i64, concept_name: i64, methods: i64)
   ErrorD(tok: i64)
   // --- File ---
   FileN(decls_lp: i64)
@@ -1663,9 +1665,13 @@ fn parse_declaration(ps: PS): PR
     return parse_enum_decl(ps)
   if tk_name(k) == tk_name(TK.KwType):
     return parse_type_alias(ps)
+  if tk_name(k) == tk_name(TK.KwConcept):
+    return parse_concept_decl(ps)
+  if tk_name(k) == tk_name(TK.KwExtend):
+    return parse_extend_decl(ps)
 
   let sp: Span = tok_span(ps)
-  let ps2: PS = ps_add_diag(ps, sp, "expected declaration (fn, extern, class, enum, or type)")
+  let ps2: PS = ps_add_diag(ps, sp, "expected declaration (fn, extern, class, enum, type, concept, or extend)")
   return ps_add_node(ps_advance(ps2), Node.ErrorD(ps.pos))
 
 // Parse optional type parameters: <T, U, V> — returns PR where .node = list_pos
@@ -2009,6 +2015,110 @@ fn parse_type_alias(ps: PS): PR
   let cur: PS = match_tok(ty.ps, TK.Newline)
   return ps_add_node(cur, Node.TypeAliasD(name_tidx, ty.node))
 
+fn parse_concept_decl(ps: PS): PR
+  let ps2: PS = ps_advance(ps)
+  let name_tidx: i64 = ps2.pos
+  let ps3: PS = expect(ps2, TK.Identifier)
+
+  // Parse optional type parameters
+  let tparams: PR = parse_type_params(ps3)
+  let tparams_lp: i64 = tparams.node
+
+  let ps4: PS = expect(tparams.ps, TK.Colon)
+  let ps5: PS = expect(ps4, TK.Newline)
+  let ps6: PS = expect(ps5, TK.Indent)
+
+  // Parse method signatures (fn without body)
+  let method_items: Vector<i64> = Vector<i64>::new()
+  let cur: PS = ps6
+  let done: bool = false
+  while done == false:
+    cur = skip_newlines(cur)
+    let k: TK = peek_kind(cur)
+    if tk_name(k) == tk_name(TK.Dedent) or at_end(cur):
+      done = true
+    else:
+      if tk_name(k) == tk_name(TK.KwFn):
+        // Parse signature only: fn name(params): RetType NEWLINE (no body)
+        let ps_fn: PS = ps_advance(cur)
+        let sig_name_tidx: i64 = ps_fn.pos
+        let ps_fn2: PS = expect(ps_fn, TK.Identifier)
+        let sig_tparams: PR = parse_type_params(ps_fn2)
+        let sig_params: PR = parse_params_list(sig_tparams.ps)
+        let sig_cur: PS = sig_params.ps
+        let sig_ret_type: i64 = to_i64(-1)
+        if tk_name(peek_kind(sig_cur)) == tk_name(TK.Colon):
+          sig_cur = ps_advance(sig_cur)
+          let sig_ty: PR = parse_type(sig_cur)
+          if sig_ty.node >= 0:
+            sig_ret_type = sig_ty.node
+          sig_cur = sig_ty.ps
+        sig_cur = match_tok(sig_cur, TK.Newline)
+        let sig_r: PR = ps_add_node(sig_cur, Node.ExternFnD(sig_name_tidx, sig_tparams.node, sig_params.node, sig_ret_type))
+        method_items = method_items.push(sig_r.node)
+        cur = sig_r.ps
+      else:
+        // Skip unexpected token
+        let sp: Span = tok_span(cur)
+        cur = ps_add_diag(cur, sp, "expected method signature in concept body")
+        cur = ps_advance(cur)
+
+  let methods_lp: i64 = to_i64(-1)
+  if method_items.length() > 0:
+    let mfl: FlushResult = flush_list(cur, method_items)
+    cur = mfl.ps
+    methods_lp = mfl.list_pos
+
+  cur = expect(cur, TK.Dedent)
+  return ps_add_node(cur, Node.ConceptDeclD(name_tidx, tparams_lp, methods_lp))
+
+fn parse_extend_decl(ps: PS): PR
+  let ps2: PS = ps_advance(ps)
+
+  // Parse target type
+  let target_ty: PR = parse_type(ps2)
+  let target_type_node: i64 = target_ty.node
+  let cur: PS = target_ty.ps
+
+  // Consume 'as'
+  cur = expect(cur, TK.KwAs)
+
+  // Parse concept name (identifier token)
+  let concept_name_tidx: i64 = cur.pos
+  cur = expect(cur, TK.Identifier)
+
+  cur = expect(cur, TK.Colon)
+  cur = expect(cur, TK.Newline)
+  cur = expect(cur, TK.Indent)
+
+  // Parse method definitions (full fn with body)
+  let method_items: Vector<i64> = Vector<i64>::new()
+  let done: bool = false
+  while done == false:
+    cur = skip_newlines(cur)
+    let k: TK = peek_kind(cur)
+    if tk_name(k) == tk_name(TK.Dedent) or at_end(cur):
+      done = true
+    else:
+      if tk_name(k) == tk_name(TK.KwFn):
+        let meth: PR = parse_fn_decl(cur)
+        if meth.node >= 0:
+          method_items = method_items.push(meth.node)
+        cur = meth.ps
+      else:
+        let sp: Span = tok_span(cur)
+        cur = ps_add_diag(cur, sp, "expected method definition in extend body")
+        cur = ps_advance(cur)
+
+  let methods_lp: i64 = to_i64(-1)
+  if method_items.length() > 0:
+    let mfl: FlushResult = flush_list(cur, method_items)
+    cur = mfl.ps
+    methods_lp = mfl.list_pos
+
+  cur = expect(cur, TK.Dedent)
+  return ps_add_node(cur, Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp))
+
 // =========================================================================
 // Section 14: File-level parsing
 // =========================================================================
@@ -2125,6 +2235,10 @@ fn node_kind_name(n: Node): string
       return "EnumDeclD"
     Node.TypeAliasD(a, b):
       return "TypeAliasD"
+    Node.ConceptDeclD(a, b, c):
+      return "ConceptDeclD"
+    Node.ExtendDeclD(a, b, c):
+      return "ExtendDeclD"
     Node.ErrorD(a):
       return "ErrorD"
     Node.FileN(a):

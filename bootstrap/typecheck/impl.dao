@@ -692,6 +692,83 @@ fn tc_register_methods(ts: TS, decls: Vector<i64>): TS
     i = i + 1
   return r
 
+fn tc_register_concepts(ts: TS, decls: Vector<i64>): TS
+  let r: TS = ts
+  let i: i64 = 0
+  while i < decls.length():
+    let decl_idx: i64 = decls.get(i)
+    let node: Node = r.tc.nodes.get(decl_idx)
+    match node:
+      Node.ConceptDeclD(name_tidx, tparams_lp, methods_lp):
+        // Register concept as a Type in sym_types
+        let csym: i64 = find_sym_by_decl(r, decl_idx, "Type")
+        if csym >= 0:
+          let cname: string = ts_tok_name(r, name_tidx)
+          let tr: TypeR = ts_add_type(r, DaoType(TypeKind.TStruct, to_i64(-1), cname, decl_idx, to_i64(-1), to_i64(0), to_i64(-1), to_i64(-1)))
+          r = tr.ts
+          r = ts_set_sym_type(r, csym, tr.type_idx)
+    i = i + 1
+  return r
+
+fn tc_register_extend_methods(ts: TS, decls: Vector<i64>): TS
+  let r: TS = ts
+  let i: i64 = 0
+  while i < decls.length():
+    let decl_idx: i64 = decls.get(i)
+    let node: Node = r.tc.nodes.get(decl_idx)
+    match node:
+      Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
+        if methods_lp >= 0:
+          // Get target type name from NamedT node
+          let target_name: string = ""
+          if target_type_node >= 0:
+            let tnode: Node = r.tc.nodes.get(target_type_node)
+            match tnode:
+              Node.NamedT(t_tidx):
+                target_name = ts_tok_name(r, t_tidx)
+          // Find the target type index
+          let target_ti: i64 = to_i64(-1)
+          let tsi: i64 = 0
+          while tsi < r.tc.symbols.length():
+            let tsym: Symbol = r.tc.symbols.get(tsi)
+            if tsym.name == target_name:
+              if symbol_kind_name(tsym.kind) == "Type":
+                target_ti = vec_i64_get(r.sym_types, tsi)
+              if symbol_kind_name(tsym.kind) == "Builtin":
+                target_ti = vec_i64_get(r.sym_types, tsi)
+            tsi = tsi + 1
+          let methods: Vector<i64> = read_list(r.tc.idx_data, methods_lp)
+          let mi: i64 = 0
+          while mi < methods.length():
+            let meth_idx: i64 = methods.get(mi)
+            let meth_node: Node = r.tc.nodes.get(meth_idx)
+            match meth_node:
+              Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
+                // Register function type via tc_register_fn_sig_core
+                let tr: TypeR = tc_register_fn_sig_core(r, meth_idx, m_name_tidx, m_params_lp, m_ret_type)
+                r = tr.ts
+                // Find the mangled symbol and set its type
+                let mname: string = ts_tok_name(r, m_name_tidx)
+                let mangled: string = target_name + "." + mname
+                let msym: i64 = to_i64(-1)
+                let si: i64 = 0
+                while si < r.tc.symbols.length():
+                  let sym: Symbol = r.tc.symbols.get(si)
+                  if sym.name == mangled:
+                    if symbol_kind_name(sym.kind) == "Function":
+                      msym = si
+                  si = si + 1
+                if msym >= 0:
+                  r = ts_set_sym_type(r, msym, tr.type_idx)
+                // Set self param type to the target type
+                if target_ti >= 0:
+                  let self_sym: i64 = find_param_sym(r, meth_idx, "self")
+                  if self_sym >= 0:
+                    r = ts_set_sym_type(r, self_sym, target_ti)
+            mi = mi + 1
+    i = i + 1
+  return r
+
 fn tc_pass1(ts: TS, file_node_idx: i64): TS
   let file_node: Node = ts.tc.nodes.get(file_node_idx)
   match file_node:
@@ -704,6 +781,8 @@ fn tc_pass1(ts: TS, file_node_idx: i64): TS
       r = tc_fill_struct_fields(r, decls)
       r = tc_register_functions(r, decls)
       r = tc_register_methods(r, decls)
+      r = tc_register_concepts(r, decls)
+      r = tc_register_extend_methods(r, decls)
       return r
   return ts
 
@@ -1352,6 +1431,68 @@ fn tc_check_method_body(ts: TS, class_decl_idx: i64, meth_idx: i64, m_name_tidx:
   r = ts_set_return_type(r, old_return_type)
   return r
 
+fn tc_check_extend_method_body(ts: TS, extend_decl_idx: i64, meth_idx: i64, m_name_tidx: i64, m_params_lp: i64, m_ret_type: i64, m_body_lp: i64): TS
+  let r: TS = ts
+  // Get target type name from the extend decl
+  let target_name: string = ""
+  let extend_node: Node = r.tc.nodes.get(extend_decl_idx)
+  match extend_node:
+    Node.ExtendDeclD(target_type_node, cn_tidx, e_mlp):
+      if target_type_node >= 0:
+        let tnode: Node = r.tc.nodes.get(target_type_node)
+        match tnode:
+          Node.NamedT(t_tidx):
+            target_name = ts_tok_name(r, t_tidx)
+  let mname: string = ts_tok_name(r, m_name_tidx)
+  let mangled: string = target_name + "." + mname
+  let fn_ti: i64 = to_i64(-1)
+  let msym: i64 = to_i64(-1)
+  let si: i64 = 0
+  while si < r.tc.symbols.length():
+    let sym: Symbol = r.tc.symbols.get(si)
+    if sym.name == mangled:
+      if symbol_kind_name(sym.kind) == "Function":
+        msym = si
+    si = si + 1
+  if msym >= 0:
+    fn_ti = vec_i64_get(r.sym_types, msym)
+  let old_return_type: i64 = r.return_type
+  if fn_ti >= 0:
+    let fn_type: DaoType = r.types.get(fn_ti)
+    r = ts_set_return_type(r, fn_type.ret_type)
+  // Declare param types — self gets the target type
+  let pairs: Vector<i64> = read_pairs(r.tc.idx_data, m_params_lp)
+  let pi: i64 = 0
+  while pi < pairs.length():
+    let p_tidx: i64 = pairs.get(pi)
+    let p_type_node: i64 = pairs.get(pi + 1)
+    let p_name: string = ts_tok_name(r, p_tidx)
+    let p_sym: i64 = find_param_sym(r, meth_idx, p_name)
+    if p_sym >= 0:
+      if p_name == "self":
+        // Self type is the target type
+        let target_ti: i64 = to_i64(-1)
+        let tsi: i64 = 0
+        while tsi < r.tc.symbols.length():
+          let tsym: Symbol = r.tc.symbols.get(tsi)
+          if tsym.name == target_name:
+            if symbol_kind_name(tsym.kind) == "Type":
+              target_ti = vec_i64_get(r.sym_types, tsi)
+            if symbol_kind_name(tsym.kind) == "Builtin":
+              target_ti = vec_i64_get(r.sym_types, tsi)
+          tsi = tsi + 1
+        if target_ti >= 0:
+          r = ts_set_sym_type(r, p_sym, target_ti)
+      else:
+        let pt_r: TypeR = resolve_ast_type(r, p_type_node)
+        r = pt_r.ts
+        if pt_r.type_idx >= 0:
+          r = ts_set_sym_type(r, p_sym, pt_r.type_idx)
+    pi = pi + 2
+  r = check_body_stmts(r, m_body_lp)
+  r = ts_set_return_type(r, old_return_type)
+  return r
+
 fn tc_pass2(ts: TS, file_node_idx: i64): TS
   let file_node: Node = ts.tc.nodes.get(file_node_idx)
   match file_node:
@@ -1377,6 +1518,17 @@ fn tc_pass2(ts: TS, file_node_idx: i64): TS
                 match meth_node:
                   Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
                     r = tc_check_method_body(r, decl_idx, meth_idx, m_name_tidx, m_params_lp, m_ret_type, m_body_lp)
+                mi = mi + 1
+          Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
+            if methods_lp >= 0:
+              let meths: Vector<i64> = read_list(r.tc.idx_data, methods_lp)
+              let mi: i64 = 0
+              while mi < meths.length():
+                let meth_idx: i64 = meths.get(mi)
+                let meth_node: Node = r.tc.nodes.get(meth_idx)
+                match meth_node:
+                  Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
+                    r = tc_check_extend_method_body(r, decl_idx, meth_idx, m_name_tidx, m_params_lp, m_ret_type, m_body_lp)
                 mi = mi + 1
         i = i + 1
       return r
@@ -1422,7 +1574,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 20
+  let total: i32 = 21
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -1608,7 +1760,16 @@ fn main(): i32
   else:
     print("FAIL generic_fn_parses: TGenericParam not found in types (count: " + i64_to_string(tc_count_types(r19)) + ")")
 
-  // Test 20: self_typecheck_smoke
+  // Test 20: extend method body type-checks
+  let src20e: string = "class Foo:\n  x: i32\n\nconcept Printable:\n  fn to_string(self): string\n\nextend Foo as Printable:\n  fn to_string(self): string\n    return \"Foo\"\n"
+  let r20e: TypeCheckResult = typecheck(src20e)
+  if tc_count_diags(r20e) == 0:
+    print("PASS extend_method_typecheck")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL extend_method_typecheck: expected 0 diagnostics, got " + i64_to_string(tc_count_diags(r20e)))
+
+  // Test 21: self_typecheck_smoke (was test 20)
   let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
   if file_exists(self_path):
     let self_src: string = read_file(self_path)

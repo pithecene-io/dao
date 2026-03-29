@@ -654,6 +654,46 @@ fn resolve_enum_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, var
 fn resolve_type_alias_decl(rs: RS, node_idx: i64, name_tidx: i64, target_type: i64): RS
   return resolve_type_node(rs, target_type)
 
+fn resolve_concept_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, methods_lp: i64): RS
+  // Create scope for type params
+  let sr: ScopeR = rs_push_scope(rs, ScopeKind.BlockScope)
+  let r: RS = sr.rs
+  r = resolve_type_params(r, tparams_lp, node_idx)
+  // Resolve method signature types (ExternFnD nodes — no body)
+  if methods_lp >= 0:
+    let methods: Vector<i64> = read_list(r.idx_data, methods_lp)
+    let mi: i64 = 0
+    while mi < methods.length():
+      let meth_idx: i64 = methods.get(mi)
+      let meth_node: Node = r.nodes.get(meth_idx)
+      match meth_node:
+        Node.ExternFnD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type):
+          r = resolve_extern_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type)
+      mi = mi + 1
+  return rs_pop_scope(r)
+
+fn resolve_extend_decl(rs: RS, node_idx: i64, target_type_node: i64, concept_name_tidx: i64, methods_lp: i64): RS
+  let r: RS = rs
+  // Resolve target type
+  r = resolve_type_node(r, target_type_node)
+  // Resolve concept name as a symbol lookup
+  let concept_name: string = tok_name(r, concept_name_tidx)
+  let csym: i64 = scope_lookup(r, concept_name)
+  if csym >= 0:
+    r = rs_add_use(r, concept_name_tidx, csym)
+  // Resolve each method body
+  if methods_lp >= 0:
+    let methods: Vector<i64> = read_list(r.idx_data, methods_lp)
+    let mi: i64 = 0
+    while mi < methods.length():
+      let meth_idx: i64 = methods.get(mi)
+      let meth_node: Node = r.nodes.get(meth_idx)
+      match meth_node:
+        Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
+          r = resolve_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp)
+      mi = mi + 1
+  return r
+
 fn resolve_decl(rs: RS, node_idx: i64): RS
   if node_idx < 0:
     return rs
@@ -671,6 +711,10 @@ fn resolve_decl(rs: RS, node_idx: i64): RS
       return resolve_enum_decl(rs, node_idx, name_tidx, tparams_lp, variants_lp)
     Node.TypeAliasD(name_tidx, target_type):
       return resolve_type_alias_decl(rs, node_idx, name_tidx, target_type)
+    Node.ConceptDeclD(name_tidx, tparams_lp, methods_lp):
+      return resolve_concept_decl(rs, node_idx, name_tidx, tparams_lp, methods_lp)
+    Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
+      return resolve_extend_decl(rs, node_idx, target_type_node, concept_name_tidx, methods_lp)
     Node.ErrorD(t):
       return rs
   return rs
@@ -728,6 +772,31 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
             let name: string = tok_name(r, name_tidx)
             let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+          Node.ConceptDeclD(name_tidx, tparams_lp, methods_lp):
+            let name: string = tok_name(r, name_tidx)
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
+            r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
+          Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
+            // Register mangled method symbols: TargetTypeName.methodName
+            if methods_lp >= 0:
+              let target_name: string = ""
+              if target_type_node >= 0:
+                let tnode: Node = r.nodes.get(target_type_node)
+                match tnode:
+                  Node.NamedT(t_tidx):
+                    target_name = tok_name(r, t_tidx)
+              let meths: Vector<i64> = read_list(r.idx_data, methods_lp)
+              let mi: i64 = 0
+              while mi < meths.length():
+                let meth_idx: i64 = meths.get(mi)
+                let meth_node: Node = r.nodes.get(meth_idx)
+                match meth_node:
+                  Node.FnDeclD(m_name_tidx, m_tp, m_plp, m_rt, m_blp):
+                    let mname: string = tok_name(r, m_name_tidx)
+                    let mangled: string = target_name + "." + mname
+                    let msr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, mangled, meth_idx, r.current_scope))
+                    r = scope_declare(msr.rs, mangled, msr.sym_idx, m_name_tidx)
+                mi = mi + 1
           Node.ErrorD(t):
             r = r
         i = i + 1
@@ -809,7 +878,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 18
+  let total: i32 = 20
 
   // -----------------------------------------------------------------
   // Test 1: forward_ref — fn calls fn defined later in file; no diagnostic
@@ -1083,6 +1152,42 @@ fn main(): i32
     print("FAIL generic_param: expected >= 1 GenericParam symbol, got " + i64_to_string(r18_gp))
 
   // -----------------------------------------------------------------
+  // Test 19: extend creates mangled symbol — extend Foo as Printable creates Foo.to_string
+  // -----------------------------------------------------------------
+  let src19: string = "class Foo:\n  x: i32\n\nconcept Printable:\n  fn to_string(self): string\n\nextend Foo as Printable:\n  fn to_string(self): string\n    return \"Foo\"\n"
+  let r19: ResolveResult = resolve(src19)
+  let r19_diags: i64 = count_diags(r19)
+  let r19_found_mangled: bool = false
+  let r19_si: i64 = 0
+  while r19_si < r19.symbols.length():
+    let r19_sym: Symbol = r19.symbols.get(r19_si)
+    if r19_sym.name == "Foo.to_string":
+      if symbol_kind_name(r19_sym.kind) == "Function":
+        r19_found_mangled = true
+    r19_si = r19_si + 1
+  if r19_found_mangled:
+    print("PASS extend_mangled_symbol")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL extend_mangled_symbol: Foo.to_string symbol not found (diags: " + i64_to_string(r19_diags) + ")")
+
+  // -----------------------------------------------------------------
+  // Test 20: concept resolves without diagnostics
+  // -----------------------------------------------------------------
+  let src20: string = "concept Showable:\n  fn show(self): string\n"
+  let r20: ResolveResult = resolve(src20)
+  let r20_diags: i64 = count_diags(r20)
+  let r20_type_syms: i64 = count_symbols_of_kind(r20, SymbolKind.Type)
+  if r20_diags == 0:
+    if r20_type_syms >= 1:
+      print("PASS concept_resolve_no_err")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL concept_resolve_no_err: expected >= 1 Type symbol, got " + i64_to_string(r20_type_syms))
+  else:
+    print("FAIL concept_resolve_no_err: expected 0 diagnostics, got " + i64_to_string(r20_diags))
+
+  // -----------------------------------------------------------------
   // Summary
   // -----------------------------------------------------------------
 
@@ -1100,7 +1205,8 @@ fn main(): i32
   //   - Static method calls (Type::method)
   //   - Generic type parameter constraints / where clauses (parsing and
   //     resolution of generic params is implemented in Tier A)
-  //   - Concept / extend resolution
+  //   - Concept / extend conformance validation (parsing and symbol
+  //     registration is implemented; conformance checking is deferred)
   //   - Mode / resource block scoping
   //   - Yield statement resolution
   //   - Match arm destructuring bindings (patterns resolved as
