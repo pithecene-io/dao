@@ -662,7 +662,7 @@ fn resolve_concept_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, 
   let sr: ScopeR = rs_push_scope(rs, ScopeKind.BlockScope)
   let r: RS = sr.rs
   r = resolve_type_params(r, tparams_lp, node_idx)
-  // Resolve method signature types (ExternFnD nodes — no body)
+  // Resolve method types — signature-only (ExternFnD) or with default body
   if methods_lp >= 0:
     let methods: Vector<i64> = read_list(r.rc.idx_data, methods_lp)
     let mi: i64 = 0
@@ -672,6 +672,10 @@ fn resolve_concept_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, 
       match meth_node:
         Node.ExternFnD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type):
           r = resolve_extern_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type)
+        Node.FnDeclD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp):
+          r = resolve_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_lp)
+        Node.ExprFnD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, m_body_expr):
+          r = resolve_fn_decl(r, meth_idx, m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type, to_i64(-1))
       mi = mi + 1
   return rs_pop_scope(r)
 
@@ -788,6 +792,8 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
                 match tnode:
                   Node.NamedT(t_tidx):
                     target_name = tok_name(r, t_tidx)
+                  Node.GenericT(t_name_tidx, t_args_lp, t_arg_count):
+                    target_name = tok_name(r, t_name_tidx)
               let meths: Vector<i64> = read_list(r.rc.idx_data, methods_lp)
               let mi: i64 = 0
               while mi < meths.length():

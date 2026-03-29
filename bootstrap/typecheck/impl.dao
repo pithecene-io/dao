@@ -693,6 +693,18 @@ fn tc_register_methods(ts: TS, decls: Vector<i64>): TS
     i = i + 1
   return r
 
+// Extract a type name from a NamedT or GenericT node.
+fn extract_type_name(ts: TS, type_node_idx: i64): string
+  if type_node_idx < 0:
+    return ""
+  let tnode: Node = ts.tc.nodes.get(type_node_idx)
+  match tnode:
+    Node.NamedT(t_tidx):
+      return ts_tok_name(ts, t_tidx)
+    Node.GenericT(t_name_tidx, t_args_lp, t_arg_count):
+      return ts_tok_name(ts, t_name_tidx)
+  return ""
+
 fn tc_register_concepts(ts: TS, decls: Vector<i64>): TS
   let r: TS = ts
   let i: i64 = 0
@@ -716,13 +728,33 @@ fn tc_register_concepts(ts: TS, decls: Vector<i64>): TS
             while mi < methods.length():
               let meth_idx: i64 = methods.get(mi)
               let meth_node: Node = r.tc.nodes.get(meth_idx)
+              // Handle signature-only (ExternFnD) and default-body methods
+              let cm_name_tidx: i64 = to_i64(-1)
+              let cm_params_lp: i64 = to_i64(-1)
+              let cm_ret_type: i64 = to_i64(-1)
+              let cm_valid: bool = false
               match meth_node:
-                Node.ExternFnD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type):
-                  let mtr: TypeR = tc_register_fn_sig_core(r, meth_idx, m_name_tidx, m_params_lp, m_ret_type)
-                  r = mtr.ts
-                  method_pairs = method_pairs.push(m_name_tidx)
-                  method_pairs = method_pairs.push(mtr.type_idx)
-                  method_count = method_count + 1
+                Node.ExternFnD(mn, mt, mp, mr):
+                  cm_name_tidx = mn
+                  cm_params_lp = mp
+                  cm_ret_type = mr
+                  cm_valid = true
+                Node.FnDeclD(mn, mt, mp, mr, mb):
+                  cm_name_tidx = mn
+                  cm_params_lp = mp
+                  cm_ret_type = mr
+                  cm_valid = true
+                Node.ExprFnD(mn, mt, mp, mr, mb):
+                  cm_name_tidx = mn
+                  cm_params_lp = mp
+                  cm_ret_type = mr
+                  cm_valid = true
+              if cm_valid:
+                let mtr: TypeR = tc_register_fn_sig_core(r, meth_idx, cm_name_tidx, cm_params_lp, cm_ret_type)
+                r = mtr.ts
+                method_pairs = method_pairs.push(cm_name_tidx)
+                method_pairs = method_pairs.push(mtr.type_idx)
+                method_count = method_count + 1
               mi = mi + 1
           // Flush concept method pairs to type_info contiguously.
           let info_start: i64 = r.type_info.length()
@@ -745,13 +777,7 @@ fn tc_register_extend_methods(ts: TS, decls: Vector<i64>): TS
     match node:
       Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
         if methods_lp >= 0:
-          // Get target type name from NamedT node
-          let target_name: string = ""
-          if target_type_node >= 0:
-            let tnode: Node = r.tc.nodes.get(target_type_node)
-            match tnode:
-              Node.NamedT(t_tidx):
-                target_name = ts_tok_name(r, t_tidx)
+          let target_name: string = extract_type_name(r, target_type_node)
           // Find the target type index
           let target_ti: i64 = to_i64(-1)
           let tsi: i64 = 0
@@ -825,13 +851,7 @@ fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
           i = i + 1
         else:
           let concept_type: DaoType = r.types.get(concept_ti)
-          // Get target type name for mangled symbol lookup
-          let target_name: string = ""
-          if target_type_node >= 0:
-            let tnode: Node = r.tc.nodes.get(target_type_node)
-            match tnode:
-              Node.NamedT(t_tidx):
-                target_name = ts_tok_name(r, t_tidx)
+          let target_name: string = extract_type_name(r, target_type_node)
           // Check each required concept method
           let req_mi: i64 = 0
           while req_mi < concept_type.info_count:
@@ -869,25 +889,33 @@ fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
                           let impl_param_ti: i64 = r.type_info.get(impl_type.info_lp + pi)
                           let req_param_ti: i64 = r.type_info.get(req_type.info_lp + pi)
                           if impl_param_ti != req_param_ti:
-                            // Check if req param is a concept self-type (skip comparison)
-                            // Otherwise diagnose the mismatch
+                            // Diagnose mismatch. Unresolved (-1) on either side
+                            // is also a mismatch when the other side resolved.
+                            let sp_p: Span = Span(to_i64(0), to_i64(1))
+                            if concept_name_tidx >= 0:
+                              let tok_p: Token = r.tc.toks.get(concept_name_tidx)
+                              sp_p = Span(tok_p.offset, tok_p.len)
+                            let impl_pname: string = "<unresolved>"
+                            if impl_param_ti >= 0:
+                              impl_pname = type_name(r, impl_param_ti)
+                            let req_pname: string = "<unresolved>"
                             if req_param_ti >= 0:
-                              if impl_param_ti >= 0:
-                                let sp_p: Span = Span(to_i64(0), to_i64(1))
-                                if concept_name_tidx >= 0:
-                                  let tok_p: Token = r.tc.toks.get(concept_name_tidx)
-                                  sp_p = Span(tok_p.offset, tok_p.len)
-                                r = ts_add_diag(r, sp_p, "extend method '" + req_name + "' param " + i64_to_string(pi) + " has type " + type_name(r, impl_param_ti) + ", concept requires " + type_name(r, req_param_ti))
+                              req_pname = type_name(r, req_param_ti)
+                            r = ts_add_diag(r, sp_p, "extend method '" + req_name + "' param " + i64_to_string(pi) + " has type " + impl_pname + ", concept requires " + req_pname)
                           pi = pi + 1
                       // Compare return types
                       if impl_type.ret_type != req_type.ret_type:
+                        let sp2: Span = Span(to_i64(0), to_i64(1))
+                        if concept_name_tidx >= 0:
+                          let tok2: Token = r.tc.toks.get(concept_name_tidx)
+                          sp2 = Span(tok2.offset, tok2.len)
+                        let impl_rname: string = "<unresolved>"
                         if impl_type.ret_type >= 0:
-                          if req_type.ret_type >= 0:
-                            let sp2: Span = Span(to_i64(0), to_i64(1))
-                            if concept_name_tidx >= 0:
-                              let tok2: Token = r.tc.toks.get(concept_name_tidx)
-                              sp2 = Span(tok2.offset, tok2.len)
-                            r = ts_add_diag(r, sp2, "extend method '" + req_name + "' returns " + type_name(r, impl_type.ret_type) + ", concept requires " + type_name(r, req_type.ret_type))
+                          impl_rname = type_name(r, impl_type.ret_type)
+                        let req_rname: string = "<unresolved>"
+                        if req_type.ret_type >= 0:
+                          req_rname = type_name(r, req_type.ret_type)
+                        r = ts_add_diag(r, sp2, "extend method '" + req_name + "' returns " + impl_rname + ", concept requires " + req_rname)
               si = si + 1
             if found_method == false:
               let sp3: Span = Span(to_i64(0), to_i64(1))
@@ -1569,11 +1597,7 @@ fn tc_check_extend_method_body(ts: TS, extend_decl_idx: i64, meth_idx: i64, m_na
   let extend_node: Node = r.tc.nodes.get(extend_decl_idx)
   match extend_node:
     Node.ExtendDeclD(target_type_node, cn_tidx, e_mlp):
-      if target_type_node >= 0:
-        let tnode: Node = r.tc.nodes.get(target_type_node)
-        match tnode:
-          Node.NamedT(t_tidx):
-            target_name = ts_tok_name(r, t_tidx)
+      target_name = extract_type_name(r, target_type_node)
   let mname: string = ts_tok_name(r, m_name_tidx)
   let mangled: string = target_name + "." + mname
   let fn_ti: i64 = to_i64(-1)

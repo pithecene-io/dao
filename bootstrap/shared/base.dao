@@ -2083,10 +2083,44 @@ fn parse_concept_decl(pc: PC, ps: PS): PR
           if sig_ty.node >= 0:
             sig_ret_type = sig_ty.node
           sig_cur = sig_ty.ps
-        sig_cur = match_tok(pc, sig_cur, TK.Newline)
-        let sig_r: PR = ps_add_node(sig_cur, Node.ExternFnD(sig_name_tidx, sig_tparams.node, sig_params.node, sig_ret_type))
-        method_items = method_items.push(sig_r.node)
-        cur = sig_r.ps
+        // Check for default implementation: -> expr or NEWLINE INDENT body
+        if tk_name(peek_kind(pc, sig_cur)) == tk_name(TK.Arrow):
+          // Expression-bodied default: fn name(params): T -> expr
+          sig_cur = ps_advance(pc, sig_cur)
+          let body_expr: PR = parse_expr(pc, sig_cur)
+          if body_expr.node < 0:
+            cur = body_expr.ps
+          else:
+            sig_cur = match_tok(pc, body_expr.ps, TK.Newline)
+            let sig_r: PR = ps_add_node(sig_cur, Node.ExprFnD(sig_name_tidx, sig_tparams.node, sig_params.node, sig_ret_type, body_expr.node))
+            method_items = method_items.push(sig_r.node)
+            cur = sig_r.ps
+        else:
+          if tk_name(peek_kind(pc, sig_cur)) == tk_name(TK.Newline):
+            // Check for block body (NEWLINE followed by INDENT)
+            let next_pos: i64 = sig_cur.pos + 1
+            let has_indent: bool = false
+            if next_pos < pc.toks.length():
+              let next_tok: Token = pc.toks.get(next_pos)
+              if tk_name(next_tok.kind) == tk_name(TK.Indent):
+                has_indent = true
+            if has_indent:
+              // Block-bodied default: parse as full fn decl
+              let body_suite: PR = parse_suite(pc, sig_cur)
+              let sig_r: PR = ps_add_node(body_suite.ps, Node.FnDeclD(sig_name_tidx, sig_tparams.node, sig_params.node, sig_ret_type, body_suite.node))
+              method_items = method_items.push(sig_r.node)
+              cur = sig_r.ps
+            else:
+              // Signature only (no body)
+              sig_cur = match_tok(pc, sig_cur, TK.Newline)
+              let sig_r: PR = ps_add_node(sig_cur, Node.ExternFnD(sig_name_tidx, sig_tparams.node, sig_params.node, sig_ret_type))
+              method_items = method_items.push(sig_r.node)
+              cur = sig_r.ps
+          else:
+            // Signature only (no newline — error recovery)
+            let sig_r: PR = ps_add_node(sig_cur, Node.ExternFnD(sig_name_tidx, sig_tparams.node, sig_params.node, sig_ret_type))
+            method_items = method_items.push(sig_r.node)
+            cur = sig_r.ps
       else:
         // Skip unexpected token
         let sp: Span = tok_span(pc, cur)
