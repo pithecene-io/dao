@@ -8,14 +8,12 @@ File
         Identifier opt
       Arm
         Pattern
-          FieldExpr .Some
-            Identifier Option
+          QualifiedName Option::Some
         ReturnStatement
           Identifier value
       Arm
         Pattern
-          FieldExpr .None
-            Identifier Option
+          QualifiedName Option::None
         ReturnStatement
           Identifier default_val
   FunctionDecl safe_divide
@@ -35,15 +33,13 @@ File
         ReturnStatement
           CallExpr
             Callee
-              FieldExpr .Err
-                Identifier Result
+              QualifiedName Result::Err
             Args
               StringLiteral "division by zero"
     ReturnStatement
       CallExpr
         Callee
-          FieldExpr .Ok
-            Identifier Result
+          QualifiedName Result::Ok
         Args
           BinaryExpr /
             Identifier a
@@ -66,8 +62,7 @@ File
         ReturnStatement
           CallExpr
             Callee
-              FieldExpr .Some
-                Identifier Option
+              QualifiedName Option::Some
             Args
               Identifier a
     IfStatement
@@ -83,8 +78,7 @@ File
         ReturnStatement
           CallExpr
             Callee
-              FieldExpr .Some
-                Identifier Option
+              QualifiedName Option::Some
             Args
               Identifier b
     IfStatement
@@ -100,13 +94,11 @@ File
         ReturnStatement
           CallExpr
             Callee
-              FieldExpr .Some
-                Identifier Option
+              QualifiedName Option::Some
             Args
               Identifier c
     ReturnStatement
-      FieldExpr .None
-        Identifier Option
+      QualifiedName Option::None
   FunctionDecl main
     ReturnType: i32
     ExpressionStatement
@@ -118,8 +110,7 @@ File
     LetStatement some_val: Option<i64>
       CallExpr
         Callee
-          FieldExpr .Some
-            Identifier Option
+          QualifiedName Option::Some
         Args
           CallExpr
             Callee
@@ -127,8 +118,7 @@ File
             Args
               IntLiteral 42
     LetStatement none_val: Option<i64>
-      FieldExpr .None
-        Identifier Option
+      QualifiedName Option::None
     ExpressionStatement
       CallExpr
         Callee
@@ -305,8 +295,7 @@ File
         Identifier ok_result
       Arm
         Pattern
-          FieldExpr .Ok
-            Identifier Result
+          QualifiedName Result::Ok
         ExpressionStatement
           CallExpr
             Callee
@@ -321,8 +310,7 @@ File
                     Identifier value
       Arm
         Pattern
-          FieldExpr .Err
-            Identifier Result
+          QualifiedName Result::Err
         ExpressionStatement
           CallExpr
             Callee
@@ -336,8 +324,7 @@ File
         Identifier err_result
       Arm
         Pattern
-          FieldExpr .Ok
-            Identifier Result
+          QualifiedName Result::Ok
         ExpressionStatement
           CallExpr
             Callee
@@ -352,8 +339,7 @@ File
                     Identifier value
       Arm
         Pattern
-          FieldExpr .Err
-            Identifier Result
+          QualifiedName Result::Err
         ExpressionStatement
           CallExpr
             Callee

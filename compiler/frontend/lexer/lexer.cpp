@@ -102,6 +102,8 @@ auto token_kind_name(TokenKind kind) -> const char* {
     return "Bang";
   case TokenKind::Dot:
     return "Dot";
+  case TokenKind::DotDot:
+    return "DotDot";
   case TokenKind::Comma:
     return "Comma";
   case TokenKind::Pipe:
@@ -343,7 +345,12 @@ private:
       emit(TokenKind::Amp, start, 1);
       return;
     case '.':
-      emit(TokenKind::Dot, start, 1);
+      if (peek() == '.') {
+        ++pos_;
+        emit(TokenKind::DotDot, start, 2);
+      } else {
+        emit(TokenKind::Dot, start, 1);
+      }
       return;
     case ',':
       emit(TokenKind::Comma, start, 1);

@@ -1,0 +1,1609 @@
+File
+  ClassDecl SourceBuffer
+    Field filename: string
+    Field contents: string
+    Field line_offsets: Vector<i64>
+  FunctionDecl make_source_buffer
+    Param filename: string
+    Param contents: string
+    ReturnType: SourceBuffer
+    LetStatement offsets: Vector<i64>
+      CallExpr
+        Callee
+          Identifier Vector.new
+        TypeArgs
+          i64
+    LetStatement zero: i64
+      IntLiteral 0
+    Assignment
+      Target
+        Identifier offsets
+      Value
+        CallExpr
+          Callee
+            FieldExpr .push
+              Identifier offsets
+          Args
+            Identifier zero
+    LetStatement i: i64
+      IntLiteral 0
+    LetStatement len: i64
+      CallExpr
+        Callee
+          Identifier length
+        Args
+          Identifier contents
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          Identifier len
+      IfStatement
+        Condition
+          BinaryExpr ==
+            CallExpr
+              Callee
+                Identifier char_at
+              Args
+                Identifier contents
+                Identifier i
+            IntLiteral 10
+        Then
+          Assignment
+            Target
+              Identifier offsets
+            Value
+              CallExpr
+                Callee
+                  FieldExpr .push
+                    Identifier offsets
+                Args
+                  BinaryExpr +
+                    Identifier i
+                    IntLiteral 1
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier SourceBuffer
+        Args
+          Identifier filename
+          Identifier contents
+          Identifier offsets
+  FunctionDecl sb_text
+    Param buf: SourceBuffer
+    Param span: Span
+    ReturnType: string
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier substring
+        Args
+          FieldExpr .contents
+            Identifier buf
+          FieldExpr .offset
+            Identifier span
+          FieldExpr .length
+            Identifier span
+  FunctionDecl sb_line_col
+    Param buf: SourceBuffer
+    Param offset: i64
+    ReturnType: LineCol
+    LetStatement low: i64
+      IntLiteral 0
+    LetStatement high: i64
+      CallExpr
+        Callee
+          FieldExpr .length
+            FieldExpr .line_offsets
+              Identifier buf
+    WhileStatement
+      Condition
+        BinaryExpr <
+          BinaryExpr +
+            Identifier low
+            IntLiteral 1
+          Identifier high
+      LetStatement mid: i64
+        BinaryExpr +
+          Identifier low
+          BinaryExpr /
+            BinaryExpr -
+              Identifier high
+              Identifier low
+            IntLiteral 2
+      IfStatement
+        Condition
+          BinaryExpr <=
+            CallExpr
+              Callee
+                FieldExpr .get
+                  FieldExpr .line_offsets
+                    Identifier buf
+              Args
+                Identifier mid
+            Identifier offset
+        Then
+          Assignment
+            Target
+              Identifier low
+            Value
+              Identifier mid
+        Else
+          Assignment
+            Target
+              Identifier high
+            Value
+              Identifier mid
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier LineCol
+        Args
+          BinaryExpr +
+            Identifier low
+            IntLiteral 1
+          BinaryExpr +
+            BinaryExpr -
+              Identifier offset
+              CallExpr
+                Callee
+                  FieldExpr .get
+                    FieldExpr .line_offsets
+                      Identifier buf
+                Args
+                  Identifier low
+            IntLiteral 1
+  FunctionDecl sb_line_text
+    Param buf: SourceBuffer
+    Param line: i64
+    ReturnType: string
+    LetStatement idx: i64
+      BinaryExpr -
+        Identifier line
+        IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr <
+          Identifier idx
+          IntLiteral 0
+      Then
+        ReturnStatement
+          StringLiteral ""
+    IfStatement
+      Condition
+        BinaryExpr >=
+          Identifier idx
+          CallExpr
+            Callee
+              FieldExpr .length
+                FieldExpr .line_offsets
+                  Identifier buf
+      Then
+        ReturnStatement
+          StringLiteral ""
+    LetStatement start: i64
+      CallExpr
+        Callee
+          FieldExpr .get
+            FieldExpr .line_offsets
+              Identifier buf
+        Args
+          Identifier idx
+    LetStatement end: i64
+      CallExpr
+        Callee
+          Identifier length
+        Args
+          FieldExpr .contents
+            Identifier buf
+    IfStatement
+      Condition
+        BinaryExpr <
+          BinaryExpr +
+            Identifier idx
+            IntLiteral 1
+          CallExpr
+            Callee
+              FieldExpr .length
+                FieldExpr .line_offsets
+                  Identifier buf
+      Then
+        Assignment
+          Target
+            Identifier end
+          Value
+            CallExpr
+              Callee
+                FieldExpr .get
+                  FieldExpr .line_offsets
+                    Identifier buf
+              Args
+                BinaryExpr +
+                  Identifier idx
+                  IntLiteral 1
+    IfStatement
+      Condition
+        BinaryExpr >
+          Identifier end
+          Identifier start
+      Then
+        IfStatement
+          Condition
+            BinaryExpr ==
+              CallExpr
+                Callee
+                  Identifier char_at
+                Args
+                  FieldExpr .contents
+                    Identifier buf
+                  BinaryExpr -
+                    Identifier end
+                    IntLiteral 1
+              IntLiteral 10
+          Then
+            Assignment
+              Target
+                Identifier end
+              Value
+                BinaryExpr -
+                  Identifier end
+                  IntLiteral 1
+    ReturnStatement
+      CallExpr
+        Callee
+          Identifier substring
+        Args
+          FieldExpr .contents
+            Identifier buf
+          Identifier start
+          BinaryExpr -
+            Identifier end
+            Identifier start
+  FunctionDecl sb_line_count
+    Param buf: SourceBuffer
+    ReturnType: i64
+    ReturnStatement
+      CallExpr
+        Callee
+          FieldExpr .length
+            FieldExpr .line_offsets
+              Identifier buf
+  FunctionDecl severity_label
+    Param sev: Severity
+    ReturnType: string
+    MatchStatement
+      Scrutinee
+        Identifier sev
+      Arm
+        Pattern
+          QualifiedName Severity::Error
+        ReturnStatement
+          StringLiteral "error"
+      Arm
+        Pattern
+          QualifiedName Severity::Warning
+        ReturnStatement
+          StringLiteral "warning"
+      Arm
+        Pattern
+          QualifiedName Severity::Note
+        ReturnStatement
+          StringLiteral "note"
+    ReturnStatement
+      StringLiteral "unknown"
+  FunctionDecl repeat_char
+    Param ch: string
+    Param n: i64
+    ReturnType: string
+    LetStatement result: string
+      StringLiteral ""
+    LetStatement i: i64
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          Identifier n
+      Assignment
+        Target
+          Identifier result
+        Value
+          BinaryExpr +
+            Identifier result
+            Identifier ch
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+    ReturnStatement
+      Identifier result
+  FunctionDecl digit_width
+    Param n: i64
+    ReturnType: i64
+    IfStatement
+      Condition
+        BinaryExpr <=
+          Identifier n
+          IntLiteral 0
+      Then
+        ReturnStatement
+          IntLiteral 1
+    LetStatement w: i64
+      IntLiteral 0
+    LetStatement v: i64
+      Identifier n
+    WhileStatement
+      Condition
+        BinaryExpr >
+          Identifier v
+          IntLiteral 0
+      Assignment
+        Target
+          Identifier w
+        Value
+          BinaryExpr +
+            Identifier w
+            IntLiteral 1
+      Assignment
+        Target
+          Identifier v
+        Value
+          BinaryExpr /
+            Identifier v
+            IntLiteral 10
+    ReturnStatement
+      Identifier w
+  FunctionDecl format_diagnostic
+    Param buf: SourceBuffer
+    Param diag: Diagnostic
+    Param line_offset: i64
+    ReturnType: string
+    LetStatement loc: LineCol
+      CallExpr
+        Callee
+          Identifier sb_line_col
+        Args
+          Identifier buf
+          FieldExpr .offset
+            FieldExpr .span
+              Identifier diag
+    LetStatement display_line: i64
+      BinaryExpr -
+        FieldExpr .line
+          Identifier loc
+        Identifier line_offset
+    IfStatement
+      Condition
+        BinaryExpr <
+          Identifier display_line
+          IntLiteral 1
+      Then
+        Assignment
+          Target
+            Identifier display_line
+          Value
+            FieldExpr .line
+              Identifier loc
+    LetStatement header: string
+      BinaryExpr +
+        BinaryExpr +
+          BinaryExpr +
+            BinaryExpr +
+              BinaryExpr +
+                BinaryExpr +
+                  BinaryExpr +
+                    BinaryExpr +
+                      FieldExpr .filename
+                        Identifier buf
+                      StringLiteral ":"
+                    CallExpr
+                      Callee
+                        Identifier i64_to_string
+                      Args
+                        Identifier display_line
+                  StringLiteral ":"
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    FieldExpr .col
+                      Identifier loc
+              StringLiteral ": "
+            CallExpr
+              Callee
+                Identifier severity_label
+              Args
+                FieldExpr .severity
+                  Identifier diag
+          StringLiteral ": "
+        FieldExpr .message
+          Identifier diag
+    LetStatement context: string
+      CallExpr
+        Callee
+          Identifier sb_line_text
+        Args
+          Identifier buf
+          FieldExpr .line
+            Identifier loc
+    LetStatement gutter_width: i64
+      CallExpr
+        Callee
+          Identifier digit_width
+        Args
+          Identifier display_line
+    LetStatement gutter: string
+      BinaryExpr +
+        CallExpr
+          Callee
+            Identifier repeat_char
+          Args
+            StringLiteral " "
+            Identifier gutter_width
+        StringLiteral " | "
+    LetStatement line_gutter: string
+      BinaryExpr +
+        CallExpr
+          Callee
+            Identifier i64_to_string
+          Args
+            Identifier display_line
+        StringLiteral " | "
+    LetStatement caret_padding: string
+      CallExpr
+        Callee
+          Identifier repeat_char
+        Args
+          StringLiteral " "
+          BinaryExpr -
+            FieldExpr .col
+              Identifier loc
+            IntLiteral 1
+    LetStatement caret_len: i64
+      FieldExpr .length
+        FieldExpr .span
+          Identifier diag
+    IfStatement
+      Condition
+        BinaryExpr <
+          Identifier caret_len
+          IntLiteral 1
+      Then
+        Assignment
+          Target
+            Identifier caret_len
+          Value
+            IntLiteral 1
+    LetStatement caret: string
+      CallExpr
+        Callee
+          Identifier repeat_char
+        Args
+          StringLiteral "^"
+          Identifier caret_len
+    ReturnStatement
+      BinaryExpr +
+        BinaryExpr +
+          BinaryExpr +
+            BinaryExpr +
+              BinaryExpr +
+                BinaryExpr +
+                  BinaryExpr +
+                    BinaryExpr +
+                      BinaryExpr +
+                        Identifier header
+                        StringLiteral "\n"
+                      StringLiteral "  "
+                    Identifier line_gutter
+                  Identifier context
+                StringLiteral "\n"
+              StringLiteral "  "
+            Identifier gutter
+          Identifier caret_padding
+        Identifier caret
+  FunctionDecl format_diagnostics
+    Param buf: SourceBuffer
+    Param diags: Vector<Diagnostic>
+    Param line_offset: i64
+    ReturnType: string
+    LetStatement result: string
+      StringLiteral ""
+    LetStatement i: i64
+      IntLiteral 0
+    WhileStatement
+      Condition
+        BinaryExpr <
+          Identifier i
+          CallExpr
+            Callee
+              FieldExpr .length
+                Identifier diags
+      IfStatement
+        Condition
+          BinaryExpr >
+            Identifier i
+            IntLiteral 0
+        Then
+          Assignment
+            Target
+              Identifier result
+            Value
+              BinaryExpr +
+                Identifier result
+                StringLiteral "\n"
+      Assignment
+        Target
+          Identifier result
+        Value
+          BinaryExpr +
+            Identifier result
+            CallExpr
+              Callee
+                Identifier format_diagnostic
+              Args
+                Identifier buf
+                CallExpr
+                  Callee
+                    FieldExpr .get
+                      Identifier diags
+                  Args
+                    Identifier i
+                Identifier line_offset
+      Assignment
+        Target
+          Identifier i
+        Value
+          BinaryExpr +
+            Identifier i
+            IntLiteral 1
+    ReturnStatement
+      Identifier result
+  FunctionDecl test_contains
+    Param label: string
+    Param haystack: string
+    Param needle: string
+    ReturnType: bool
+    IfStatement
+      Condition
+        BinaryExpr >=
+          CallExpr
+            Callee
+              Identifier index_of
+            Args
+              Identifier haystack
+              Identifier needle
+          IntLiteral 0
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "PASS "
+                Identifier label
+        ReturnStatement
+          BoolLiteral true
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            BinaryExpr +
+              BinaryExpr +
+                BinaryExpr +
+                  StringLiteral "FAIL "
+                  Identifier label
+                StringLiteral ": expected to find '"
+              Identifier needle
+            StringLiteral "'"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "  got: "
+            Identifier haystack
+    ReturnStatement
+      BoolLiteral false
+  FunctionDecl test_eq
+    Param label: string
+    Param actual: string
+    Param expected: string
+    ReturnType: bool
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier actual
+          Identifier expected
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              BinaryExpr +
+                StringLiteral "PASS "
+                Identifier label
+        ReturnStatement
+          BoolLiteral true
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "FAIL "
+            Identifier label
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "  expected: "
+            Identifier expected
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            StringLiteral "  actual:   "
+            Identifier actual
+    ReturnStatement
+      BoolLiteral false
+  FunctionDecl main
+    ReturnType: i32
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "=== diagnostic_formatter: Phase 7 entry leaf ==="
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral ""
+    LetStatement pass_count: i32
+      IntLiteral 0
+    LetStatement src: string
+      StringLiteral "let x = 1\nlet y = x + 1\nlet z = y * 2\n"
+    LetStatement buf: SourceBuffer
+      CallExpr
+        Callee
+          Identifier make_source_buffer
+        Args
+          StringLiteral "test.dao"
+          Identifier src
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "line_count"
+            CallExpr
+              Callee
+                Identifier i64_to_string
+              Args
+                CallExpr
+                  Callee
+                    Identifier sb_line_count
+                  Args
+                    Identifier buf
+            StringLiteral "4"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement loc0: LineCol
+      CallExpr
+        Callee
+          Identifier sb_line_col
+        Args
+          Identifier buf
+          IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "line_col_0"
+            BinaryExpr +
+              BinaryExpr +
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    FieldExpr .line
+                      Identifier loc0
+                StringLiteral ":"
+              CallExpr
+                Callee
+                  Identifier i64_to_string
+                Args
+                  FieldExpr .col
+                    Identifier loc0
+            StringLiteral "1:1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement off10: i64
+      IntLiteral 10
+    LetStatement loc10: LineCol
+      CallExpr
+        Callee
+          Identifier sb_line_col
+        Args
+          Identifier buf
+          Identifier off10
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "line_col_10"
+            BinaryExpr +
+              BinaryExpr +
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    FieldExpr .line
+                      Identifier loc10
+                StringLiteral ":"
+              CallExpr
+                Callee
+                  Identifier i64_to_string
+                Args
+                  FieldExpr .col
+                    Identifier loc10
+            StringLiteral "2:1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement off18: i64
+      IntLiteral 18
+    LetStatement loc18: LineCol
+      CallExpr
+        Callee
+          Identifier sb_line_col
+        Args
+          Identifier buf
+          Identifier off18
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "line_col_18"
+            BinaryExpr +
+              BinaryExpr +
+                CallExpr
+                  Callee
+                    Identifier i64_to_string
+                  Args
+                    FieldExpr .line
+                      Identifier loc18
+                StringLiteral ":"
+              CallExpr
+                Callee
+                  Identifier i64_to_string
+                Args
+                  FieldExpr .col
+                    Identifier loc18
+            StringLiteral "2:9"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement one: i64
+      IntLiteral 1
+    LetStatement two: i64
+      IntLiteral 2
+    LetStatement three: i64
+      IntLiteral 3
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "line_text_1"
+            CallExpr
+              Callee
+                Identifier sb_line_text
+              Args
+                Identifier buf
+                Identifier one
+            StringLiteral "let x = 1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "line_text_2"
+            CallExpr
+              Callee
+                Identifier sb_line_text
+              Args
+                Identifier buf
+                Identifier two
+            StringLiteral "let y = x + 1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "line_text_3"
+            CallExpr
+              Callee
+                Identifier sb_line_text
+              Args
+                Identifier buf
+                Identifier three
+            StringLiteral "let z = y * 2"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement span_x: Span
+      CallExpr
+        Callee
+          Identifier Span
+        Args
+          Identifier off18
+          Identifier one
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "sb_text"
+            CallExpr
+              Callee
+                Identifier sb_text
+              Args
+                Identifier buf
+                Identifier span_x
+            StringLiteral "x"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement diag1: Diagnostic
+      CallExpr
+        Callee
+          Identifier make_error
+        Args
+          CallExpr
+            Callee
+              Identifier Span
+            Args
+              Identifier off18
+              Identifier one
+          StringLiteral "undefined variable 'x'"
+    LetStatement fmt1: string
+      CallExpr
+        Callee
+          Identifier format_diagnostic
+        Args
+          Identifier buf
+          Identifier diag1
+          IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "fmt_header"
+            Identifier fmt1
+            StringLiteral "test.dao:2:9: error: undefined variable 'x'"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "fmt_context"
+            Identifier fmt1
+            StringLiteral "2 | let y = x + 1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "fmt_caret"
+            Identifier fmt1
+            StringLiteral "^"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement zero: i64
+      IntLiteral 0
+    LetStatement diag_warn: Diagnostic
+      CallExpr
+        Callee
+          Identifier make_warning
+        Args
+          CallExpr
+            Callee
+              Identifier Span
+            Args
+              Identifier zero
+              Identifier three
+          StringLiteral "unused variable"
+    LetStatement fmt_warn: string
+      CallExpr
+        Callee
+          Identifier format_diagnostic
+        Args
+          Identifier buf
+          Identifier diag_warn
+          IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "warn_severity"
+            Identifier fmt_warn
+            StringLiteral "warning: unused variable"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "warn_location"
+            Identifier fmt_warn
+            StringLiteral "test.dao:1:1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "warn_caret_width"
+            Identifier fmt_warn
+            StringLiteral "^^^"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement off24: i64
+      IntLiteral 24
+    LetStatement five: i64
+      IntLiteral 5
+    LetStatement diag_wide: Diagnostic
+      CallExpr
+        Callee
+          Identifier make_error
+        Args
+          CallExpr
+            Callee
+              Identifier Span
+            Args
+              Identifier off24
+              Identifier five
+          StringLiteral "type mismatch"
+    LetStatement fmt_wide: string
+      CallExpr
+        Callee
+          Identifier format_diagnostic
+        Args
+          Identifier buf
+          Identifier diag_wide
+          IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "wide_caret"
+            Identifier fmt_wide
+            StringLiteral "^^^^^"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement four: i64
+      IntLiteral 4
+    LetStatement diag_first: Diagnostic
+      CallExpr
+        Callee
+          Identifier make_error
+        Args
+          CallExpr
+            Callee
+              Identifier Span
+            Args
+              Identifier four
+              Identifier one
+          StringLiteral "unexpected token"
+    LetStatement fmt_first: string
+      CallExpr
+        Callee
+          Identifier format_diagnostic
+        Args
+          Identifier buf
+          Identifier diag_first
+          IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "first_line_loc"
+            Identifier fmt_first
+            StringLiteral "test.dao:1:5"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "first_line_ctx"
+            Identifier fmt_first
+            StringLiteral "1 | let x = 1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement diag_last: Diagnostic
+      CallExpr
+        Callee
+          Identifier make_error
+        Args
+          CallExpr
+            Callee
+              Identifier Span
+            Args
+              Identifier off24
+              Identifier one
+          StringLiteral "bad expression"
+    LetStatement fmt_last: string
+      CallExpr
+        Callee
+          Identifier format_diagnostic
+        Args
+          Identifier buf
+          Identifier diag_last
+          IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "last_line_loc"
+            Identifier fmt_last
+            StringLiteral "test.dao:3:1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement diags: Vector<Diagnostic>
+      CallExpr
+        Callee
+          Identifier Vector.new
+        TypeArgs
+          Diagnostic
+    Assignment
+      Target
+        Identifier diags
+      Value
+        CallExpr
+          Callee
+            FieldExpr .push
+              Identifier diags
+          Args
+            CallExpr
+              Callee
+                Identifier make_error
+              Args
+                CallExpr
+                  Callee
+                    Identifier Span
+                  Args
+                    Identifier off18
+                    Identifier one
+                StringLiteral "first error"
+    Assignment
+      Target
+        Identifier diags
+      Value
+        CallExpr
+          Callee
+            FieldExpr .push
+              Identifier diags
+          Args
+            CallExpr
+              Callee
+                Identifier make_warning
+              Args
+                CallExpr
+                  Callee
+                    Identifier Span
+                  Args
+                    Identifier zero
+                    Identifier three
+                StringLiteral "second warning"
+    LetStatement fmt_multi: string
+      CallExpr
+        Callee
+          Identifier format_diagnostics
+        Args
+          Identifier buf
+          Identifier diags
+          IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "multi_first"
+            Identifier fmt_multi
+            StringLiteral "error: first error"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "multi_second"
+            Identifier fmt_multi
+            StringLiteral "warning: second warning"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement diag_offset: Diagnostic
+      CallExpr
+        Callee
+          Identifier make_error
+        Args
+          CallExpr
+            Callee
+              Identifier Span
+            Args
+              Identifier off18
+              Identifier one
+          StringLiteral "offset test"
+    LetStatement fmt_offset: string
+      CallExpr
+        Callee
+          Identifier format_diagnostic
+        Args
+          Identifier buf
+          Identifier diag_offset
+          Identifier one
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "prelude_offset"
+            Identifier fmt_offset
+            StringLiteral "test.dao:1:9"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement empty_buf: SourceBuffer
+      CallExpr
+        Callee
+          Identifier make_source_buffer
+        Args
+          StringLiteral "empty.dao"
+          StringLiteral ""
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "empty_line_count"
+            CallExpr
+              Callee
+                Identifier i64_to_string
+              Args
+                CallExpr
+                  Callee
+                    Identifier sb_line_count
+                  Args
+                    Identifier empty_buf
+            StringLiteral "1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement single_buf: SourceBuffer
+      CallExpr
+        Callee
+          Identifier make_source_buffer
+        Args
+          StringLiteral "single.dao"
+          StringLiteral "hello"
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "single_line_count"
+            CallExpr
+              Callee
+                Identifier i64_to_string
+              Args
+                CallExpr
+                  Callee
+                    Identifier sb_line_count
+                  Args
+                    Identifier single_buf
+            StringLiteral "1"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "single_line_text"
+            CallExpr
+              Callee
+                Identifier sb_line_text
+              Args
+                Identifier single_buf
+                Identifier one
+            StringLiteral "hello"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement hundred: i64
+      IntLiteral 100
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "oob_line_text"
+            CallExpr
+              Callee
+                Identifier sb_line_text
+              Args
+                Identifier buf
+                Identifier hundred
+            StringLiteral ""
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_eq
+          Args
+            StringLiteral "oob_line_zero"
+            CallExpr
+              Callee
+                Identifier sb_line_text
+              Args
+                Identifier buf
+                Identifier zero
+            StringLiteral ""
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement off10b: i64
+      IntLiteral 10
+    LetStatement diags_same: Vector<Diagnostic>
+      CallExpr
+        Callee
+          Identifier Vector.new
+        TypeArgs
+          Diagnostic
+    Assignment
+      Target
+        Identifier diags_same
+      Value
+        CallExpr
+          Callee
+            FieldExpr .push
+              Identifier diags_same
+          Args
+            CallExpr
+              Callee
+                Identifier make_error
+              Args
+                CallExpr
+                  Callee
+                    Identifier Span
+                  Args
+                    Identifier off10b
+                    Identifier three
+                StringLiteral "first"
+    Assignment
+      Target
+        Identifier diags_same
+      Value
+        CallExpr
+          Callee
+            FieldExpr .push
+              Identifier diags_same
+          Args
+            CallExpr
+              Callee
+                Identifier make_error
+              Args
+                CallExpr
+                  Callee
+                    Identifier Span
+                  Args
+                    Identifier off18
+                    Identifier one
+                StringLiteral "second"
+    LetStatement fmt_same: string
+      CallExpr
+        Callee
+          Identifier format_diagnostics
+        Args
+          Identifier buf
+          Identifier diags_same
+          IntLiteral 0
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "same_line_first"
+            Identifier fmt_same
+            StringLiteral "2:1: error: first"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    IfStatement
+      Condition
+        CallExpr
+          Callee
+            Identifier test_contains
+          Args
+            StringLiteral "same_line_second"
+            Identifier fmt_same
+            StringLiteral "2:9: error: second"
+      Then
+        Assignment
+          Target
+            Identifier pass_count
+          Value
+            BinaryExpr +
+              Identifier pass_count
+              IntLiteral 1
+    LetStatement total: i32
+      IntLiteral 28
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral ""
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          StringLiteral "--- results ---"
+    ExpressionStatement
+      CallExpr
+        Callee
+          Identifier print
+        Args
+          BinaryExpr +
+            BinaryExpr +
+              BinaryExpr +
+                CallExpr
+                  Callee
+                    Identifier i32_to_string
+                  Args
+                    Identifier pass_count
+                StringLiteral " / "
+              CallExpr
+                Callee
+                  Identifier i32_to_string
+                Args
+                  Identifier total
+            StringLiteral " passed"
+    IfStatement
+      Condition
+        BinaryExpr ==
+          Identifier pass_count
+          Identifier total
+      Then
+        ExpressionStatement
+          CallExpr
+            Callee
+              Identifier print
+            Args
+              StringLiteral "ALL TESTS PASSED"
+    ReturnStatement
+      IntLiteral 0

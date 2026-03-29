@@ -27,40 +27,40 @@
 //   - Mode / resource blocks
 //   - Yield / generators
 
-enum HirNode:
+enum class HirNode:
   // File
-  HirFile(i64)
+  HirFile(decls_lp: i64)
 
   // Declarations
-  HirFunction(i64, i64, i64, i64, i64, i64, i64)  // name, tparams_lp, params_lp, ret_ti, body_lp, is_extern, class_owner_tidx (-1 for free fns)
-  HirStruct(i64, i64, i64)
-  HirEnum(i64, i64, i64)
-  HirTypeAlias(i64, i64)
+  HirFunction(name: i64, tparams: i64, params: i64, ret: i64, body: i64, is_extern: i64, class_owner: i64)
+  HirStruct(name: i64, tparams: i64, fields: i64)
+  HirEnum(name: i64, tparams: i64, variants: i64)
+  HirTypeAlias(name: i64, typ: i64)
 
   // Statements
-  HirLet(i64, i64, i64)
-  HirAssign(i64, i64)
-  HirIf(i64, i64, i64)
-  HirWhile(i64, i64)
-  HirFor(i64, i64, i64)
-  HirReturn(i64)
-  HirBreak(i64)
-  HirExprStmt(i64)
-  HirErrorStmt(i64)
+  HirLet(name: i64, typ: i64, init: i64)
+  HirAssign(target: i64, value: i64)
+  HirIf(cond: i64, then_lp: i64, else_lp: i64)
+  HirWhile(cond: i64, body_lp: i64)
+  HirFor(var_name: i64, iter: i64, body_lp: i64)
+  HirReturn(value: i64)
+  HirBreak(tok: i64)
+  HirExprStmt(expr: i64)
+  HirErrorStmt(tok: i64)
 
   // Expressions
-  HirIntLit(i64, i64)
-  HirFloatLit(i64, i64)
-  HirStringLit(i64, i64)
-  HirBoolLit(i64, i64)
-  HirIdent(i64, i64, i64)
-  HirBinary(i64, i64, i64, i64)
-  HirUnary(i64, i64, i64)
-  HirCall(i64, i64, i64, i64)
-  HirFieldAccess(i64, i64, i64)
-  HirPipe(i64, i64, i64)
-  HirQualName(i64, i64, i64)
-  HirErrorExpr(i64)
+  HirIntLit(tok: i64, typ: i64)
+  HirFloatLit(tok: i64, typ: i64)
+  HirStringLit(tok: i64, typ: i64)
+  HirBoolLit(tok: i64, typ: i64)
+  HirIdent(sym: i64, typ: i64, tok: i64)
+  HirBinary(op: i64, left: i64, right: i64, typ: i64)
+  HirUnary(op: i64, operand: i64, typ: i64)
+  HirCall(callee: i64, args_lp: i64, arg_count: i64, typ: i64)
+  HirFieldAccess(obj: i64, field: i64, typ: i64)
+  HirPipe(left: i64, right: i64, typ: i64)
+  HirQualName(segs_lp: i64, seg_count: i64, typ: i64)
+  HirErrorExpr(tok: i64)
 
 // =========================================================================
 // Section 50: HIR state and result types
