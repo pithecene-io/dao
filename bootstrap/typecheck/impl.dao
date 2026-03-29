@@ -41,6 +41,7 @@ enum TypeKind:
   TStruct
   TEnum
   TGenericParam
+  TConcept
 
 class DaoType:
   kind: TypeKind
@@ -700,11 +701,36 @@ fn tc_register_concepts(ts: TS, decls: Vector<i64>): TS
     let node: Node = r.tc.nodes.get(decl_idx)
     match node:
       Node.ConceptDeclD(name_tidx, tparams_lp, methods_lp):
-        // Register concept as a Type in sym_types
         let csym: i64 = find_sym_by_decl(r, decl_idx, "Type")
         if csym >= 0:
           let cname: string = ts_tok_name(r, name_tidx)
-          let tr: TypeR = ts_add_type(r, DaoType(TypeKind.TStruct, to_i64(-1), cname, decl_idx, to_i64(-1), to_i64(0), to_i64(-1), to_i64(-1)))
+          // Register concept method signatures. Collect pairs
+          // (name_tidx, fn_type_idx) locally first, then flush to
+          // type_info after all fn registrations are done (since
+          // tc_register_fn_sig_core also pushes to type_info).
+          let method_pairs: Vector<i64> = Vector<i64>::new()
+          let method_count: i64 = 0
+          if methods_lp >= 0:
+            let methods: Vector<i64> = read_list(r.tc.idx_data, methods_lp)
+            let mi: i64 = 0
+            while mi < methods.length():
+              let meth_idx: i64 = methods.get(mi)
+              let meth_node: Node = r.tc.nodes.get(meth_idx)
+              match meth_node:
+                Node.ExternFnD(m_name_tidx, m_tparams_lp, m_params_lp, m_ret_type):
+                  let mtr: TypeR = tc_register_fn_sig_core(r, meth_idx, m_name_tidx, m_params_lp, m_ret_type)
+                  r = mtr.ts
+                  method_pairs = method_pairs.push(m_name_tidx)
+                  method_pairs = method_pairs.push(mtr.type_idx)
+                  method_count = method_count + 1
+              mi = mi + 1
+          // Flush concept method pairs to type_info contiguously.
+          let info_start: i64 = r.type_info.length()
+          let pi: i64 = 0
+          while pi < method_pairs.length():
+            r = ts_push_type_info(r, method_pairs.get(pi))
+            pi = pi + 1
+          let tr: TypeR = ts_add_type(r, DaoType(TypeKind.TConcept, to_i64(-1), cname, decl_idx, info_start, method_count, to_i64(-1), to_i64(-1)))
           r = tr.ts
           r = ts_set_sym_type(r, csym, tr.type_idx)
     i = i + 1
@@ -769,6 +795,91 @@ fn tc_register_extend_methods(ts: TS, decls: Vector<i64>): TS
     i = i + 1
   return r
 
+// Validate that each extend Type as Concept: provides all required
+// methods with matching signatures. Emits diagnostics for missing
+// methods and signature mismatches.
+fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
+  let r: TS = ts
+  let i: i64 = 0
+  while i < decls.length():
+    let decl_idx: i64 = decls.get(i)
+    let node: Node = r.tc.nodes.get(decl_idx)
+    match node:
+      Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
+        // Look up the concept type
+        let concept_name: string = ts_tok_name(r, concept_name_tidx)
+        let concept_ti: i64 = to_i64(-1)
+        let ci: i64 = 0
+        while ci < r.tc.symbols.length():
+          let csym: Symbol = r.tc.symbols.get(ci)
+          if csym.name == concept_name:
+            if symbol_kind_name(csym.kind) == "Type":
+              let cti: i64 = vec_i64_get(r.sym_types, ci)
+              if cti >= 0:
+                let ct: DaoType = r.types.get(cti)
+                match ct.kind:
+                  TypeKind.TConcept:
+                    concept_ti = cti
+          ci = ci + 1
+        if concept_ti < 0:
+          i = i + 1
+        else:
+          let concept_type: DaoType = r.types.get(concept_ti)
+          // Get target type name for mangled symbol lookup
+          let target_name: string = ""
+          if target_type_node >= 0:
+            let tnode: Node = r.tc.nodes.get(target_type_node)
+            match tnode:
+              Node.NamedT(t_tidx):
+                target_name = ts_tok_name(r, t_tidx)
+          // Check each required concept method
+          let req_mi: i64 = 0
+          while req_mi < concept_type.info_count:
+            let req_name_tidx: i64 = r.type_info.get(concept_type.info_lp + req_mi * 2)
+            let req_fn_ti: i64 = r.type_info.get(concept_type.info_lp + req_mi * 2 + 1)
+            let req_name: string = ts_tok_name(r, req_name_tidx)
+            // Look for mangled symbol TargetName.methodName
+            let mangled: string = target_name + "." + req_name
+            let found_method: bool = false
+            let si: i64 = 0
+            while si < r.tc.symbols.length():
+              let sym: Symbol = r.tc.symbols.get(si)
+              if sym.name == mangled:
+                if symbol_kind_name(sym.kind) == "Function":
+                  found_method = true
+                  // Check signature match (compare param count and return type)
+                  let impl_ti: i64 = vec_i64_get(r.sym_types, si)
+                  if impl_ti >= 0:
+                    if req_fn_ti >= 0:
+                      let impl_type: DaoType = r.types.get(impl_ti)
+                      let req_type: DaoType = r.types.get(req_fn_ti)
+                      // Compare param counts (both include self)
+                      if impl_type.info_count != req_type.info_count:
+                        let sp: Span = Span(to_i64(0), to_i64(1))
+                        if concept_name_tidx >= 0:
+                          let tok: Token = r.tc.toks.get(concept_name_tidx)
+                          sp = Span(tok.offset, tok.len)
+                        r = ts_add_diag(r, sp, "extend method '" + req_name + "' has " + i64_to_string(impl_type.info_count) + " param(s), concept requires " + i64_to_string(req_type.info_count))
+                      // Compare return types
+                      if impl_type.ret_type != req_type.ret_type:
+                        if impl_type.ret_type >= 0:
+                          if req_type.ret_type >= 0:
+                            let sp2: Span = Span(to_i64(0), to_i64(1))
+                            if concept_name_tidx >= 0:
+                              let tok2: Token = r.tc.toks.get(concept_name_tidx)
+                              sp2 = Span(tok2.offset, tok2.len)
+                            r = ts_add_diag(r, sp2, "extend method '" + req_name + "' returns " + type_name(r, impl_type.ret_type) + ", concept requires " + type_name(r, req_type.ret_type))
+              si = si + 1
+            if found_method == false:
+              let sp3: Span = Span(to_i64(0), to_i64(1))
+              if concept_name_tidx >= 0:
+                let tok3: Token = r.tc.toks.get(concept_name_tidx)
+                sp3 = Span(tok3.offset, tok3.len)
+              r = ts_add_diag(r, sp3, "extend does not implement required method '" + req_name + "' from concept '" + concept_name + "'")
+            req_mi = req_mi + 1
+    i = i + 1
+  return r
+
 fn tc_pass1(ts: TS, file_node_idx: i64): TS
   let file_node: Node = ts.tc.nodes.get(file_node_idx)
   match file_node:
@@ -783,6 +894,7 @@ fn tc_pass1(ts: TS, file_node_idx: i64): TS
       r = tc_register_methods(r, decls)
       r = tc_register_concepts(r, decls)
       r = tc_register_extend_methods(r, decls)
+      r = tc_check_concept_satisfaction(r, decls)
       return r
   return ts
 
@@ -1574,7 +1686,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 21
+  let total: i32 = 23
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -1769,7 +1881,34 @@ fn main(): i32
   else:
     print("FAIL extend_method_typecheck: expected 0 diagnostics, got " + i64_to_string(tc_count_diags(r20e)))
 
-  // Test 21: self_typecheck_smoke (was test 20)
+  // Test 21: concept_satisfaction — missing method produces diagnostic
+  let src21c: string = "concept Showable:\n  fn show(self): string\n\nclass Foo:\n  x: i32\n\nextend Foo as Showable:\n  fn other(self): i32\n    return self.x\n"
+  let r21c: TypeCheckResult = typecheck(src21c)
+  if tc_count_diags(r21c) >= 1:
+    print("PASS concept_satisfaction_missing_method")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL concept_satisfaction_missing_method: expected diagnostic for missing 'show' method")
+
+  // Test 22: concept_satisfaction — correct extend has no extra diagnostics
+  let src22c: string = "concept Showable:\n  fn show(self): string\n\nclass Bar:\n  name: string\n\nextend Bar as Showable:\n  fn show(self): string\n    return self.name\n"
+  let r22c: TypeCheckResult = typecheck(src22c)
+  // May have some diagnostics from resolution, but should NOT have
+  // "does not implement required method" diagnostic
+  let has_missing: bool = false
+  let di22: i64 = 0
+  while di22 < tc_count_diags(r22c):
+    let d22: Diagnostic = r22c.diags.get(di22)
+    if d22.message == "extend does not implement required method 'show' from concept 'Showable'":
+      has_missing = true
+    di22 = di22 + 1
+  if has_missing == false:
+    print("PASS concept_satisfaction_correct")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL concept_satisfaction_correct: got false missing-method diagnostic")
+
+  // Test 23: self_typecheck_smoke
   let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
   if file_exists(self_path):
     let self_src: string = read_file(self_path)
