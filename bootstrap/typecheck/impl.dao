@@ -1539,19 +1539,19 @@ fn tc_pass2(ts: TS, file_node_idx: i64): TS
 // =========================================================================
 
 fn typecheck(src: string): TypeCheckResult
-  let pr: PR = parse(src)
-  let file_node_idx: i64 = pr.node
+  let po: ParseOutput = parse(src)
+  let file_node_idx: i64 = po.root
   let rr: ResolveResult = resolve(src)
 
   let um: HashMap<i64> = build_uses_map(rr.uses)
-  let tc: TC = TC(pr.ps.nodes, pr.ps.idx, pr.ps.toks, src, rr.symbols, rr.scopes, um)
+  let tc: TC = TC(po.nodes, po.idx, po.toks, src, rr.symbols, rr.scopes, um)
   let ts: TS = TS(tc, Vector<DaoType>::new(), Vector<i64>::new(), Vector<i64>::new(), rr.diags, to_i64(-1), to_i64(0), HashMap<i64>::new())
 
   ts = register_builtins(ts)
   ts = tc_pass1(ts, file_node_idx)
   ts = tc_pass2(ts, file_node_idx)
 
-  return TypeCheckResult(ts.types, ts.type_info, ts.expr_types, ts.sym_types, ts.diags, pr.ps.nodes.length())
+  return TypeCheckResult(ts.types, ts.type_info, ts.expr_types, ts.sym_types, ts.diags, po.nodes.length())
 
 // BEGIN_TYPECHECK_TESTS
 

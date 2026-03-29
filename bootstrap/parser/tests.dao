@@ -2,6 +2,21 @@
 // Section 17: Test infrastructure
 // =========================================================================
 
+fn expect_node_kind_po(label: string, po: ParseOutput, node_idx: i64, expected: string): bool
+  if node_idx < 0:
+    print("FAIL " + label + ": node index is -1 (parse error)")
+    return false
+  if node_idx >= po.nodes.length():
+    print("FAIL " + label + ": node index " + i64_to_string(node_idx) + " out of bounds")
+    return false
+  let n: Node = po.nodes.get(node_idx)
+  let actual: string = node_kind_name(n)
+  if actual == expected:
+    print("PASS " + label)
+    return true
+  print("FAIL " + label + ": expected " + expected + ", got " + actual)
+  return false
+
 fn expect_node_kind(label: string, pr: PR, node_idx: i64, expected: string): bool
   if node_idx < 0:
     print("FAIL " + label + ": node index is -1 (parse error)")
@@ -17,6 +32,13 @@ fn expect_node_kind(label: string, pr: PR, node_idx: i64, expected: string): boo
   print("FAIL " + label + ": expected " + expected + ", got " + actual)
   return false
 
+fn expect_no_parse_errors_po(label: string, po: ParseOutput): bool
+  if po.diags.length() == 0:
+    print("PASS " + label)
+    return true
+  print("FAIL " + label + ": expected no errors, got " + i64_to_string(po.diags.length()))
+  return false
+
 fn expect_no_parse_errors(label: string, pr: PR): bool
   if pr.ps.diags.length() == 0:
     print("PASS " + label)
@@ -24,11 +46,25 @@ fn expect_no_parse_errors(label: string, pr: PR): bool
   print("FAIL " + label + ": expected no errors, got " + i64_to_string(pr.ps.diags.length()))
   return false
 
+fn expect_parse_errors_po(label: string, po: ParseOutput, min_errors: i64): bool
+  if po.diags.length() >= min_errors:
+    print("PASS " + label)
+    return true
+  print("FAIL " + label + ": expected >= " + i64_to_string(min_errors) + " errors, got " + i64_to_string(po.diags.length()))
+  return false
+
 fn expect_parse_errors(label: string, pr: PR, min_errors: i64): bool
   if pr.ps.diags.length() >= min_errors:
     print("PASS " + label)
     return true
   print("FAIL " + label + ": expected >= " + i64_to_string(min_errors) + " errors, got " + i64_to_string(pr.ps.diags.length()))
+  return false
+
+fn expect_node_count_min_po(label: string, po: ParseOutput, min_count: i64): bool
+  if po.nodes.length() >= min_count:
+    print("PASS " + label)
+    return true
+  print("FAIL " + label + ": expected >= " + i64_to_string(min_count) + " nodes, got " + i64_to_string(po.nodes.length()))
   return false
 
 fn expect_node_count_min(label: string, pr: PR, min_count: i64): bool
@@ -41,8 +77,9 @@ fn expect_node_count_min(label: string, pr: PR, min_count: i64): bool
 // Helper to parse an expression snippet
 fn parse_expr_str(src: string): PR
   let lr: LexResult = lex(src)
-  let ps: PS = PS(lr.tokens, src, to_i64(0), Vector<Node>::new(), Vector<i64>::new(), lr.diagnostics)
-  return parse_expr(ps)
+  let pc: PC = PC(lr.tokens, src)
+  let ps: PS = PS(to_i64(0), Vector<Node>::new(), Vector<i64>::new(), lr.diagnostics)
+  return parse_expr(pc, ps)
 
 // =========================================================================
 // Section 18: Golden parse tests
@@ -141,44 +178,44 @@ fn main(): i32
 
   // Test 11: Simple fn declaration
   let src11: string = "fn foo(x: i32): i32\n  return x\n"
-  let r11: PR = parse(src11)
-  if expect_node_kind("decl_fn", r11, r11.node, "FileN"):
+  let r11: ParseOutput = parse(src11)
+  if expect_node_kind_po("decl_fn", r11, r11.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 12: Extern fn declaration
   let src12: string = "extern fn bar(s: string): i32\n"
-  let r12: PR = parse(src12)
-  if expect_node_kind("decl_extern_fn", r12, r12.node, "FileN"):
+  let r12: ParseOutput = parse(src12)
+  if expect_node_kind_po("decl_extern_fn", r12, r12.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 13: Expression-bodied fn
   let src13: string = "fn add(a: i64, b: i64): i64 -> a + b\n"
-  let r13: PR = parse(src13)
-  if expect_node_kind("decl_expr_fn", r13, r13.node, "FileN"):
+  let r13: ParseOutput = parse(src13)
+  if expect_node_kind_po("decl_expr_fn", r13, r13.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 14: Class with fields
   let src14: string = "class Point:\n  x: i64\n  y: i64\n"
-  let r14: PR = parse(src14)
-  if expect_node_kind("decl_class", r14, r14.node, "FileN"):
+  let r14: ParseOutput = parse(src14)
+  if expect_node_kind_po("decl_class", r14, r14.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 15: Enum with variants
   let src15: string = "enum Color:\n  Red\n  Green\n  Blue\n"
-  let r15: PR = parse(src15)
-  if expect_node_kind("decl_enum", r15, r15.node, "FileN"):
+  let r15: ParseOutput = parse(src15)
+  if expect_node_kind_po("decl_enum", r15, r15.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 16: Enum with payload variants
   let src16: string = "enum Expr:\n  IntLit(i64)\n  Binary(TK, i64, i64)\n"
-  let r16: PR = parse(src16)
-  if expect_node_kind("decl_enum_payload", r16, r16.node, "FileN"):
+  let r16: ParseOutput = parse(src16)
+  if expect_node_kind_po("decl_enum_payload", r16, r16.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 17: Type alias
   let src17: string = "type NodeId = i64\n"
-  let r17: PR = parse(src17)
-  if expect_node_kind("decl_type_alias", r17, r17.node, "FileN"):
+  let r17: ParseOutput = parse(src17)
+  if expect_node_kind_po("decl_type_alias", r17, r17.root, "FileN"):
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
@@ -187,48 +224,48 @@ fn main(): i32
 
   // Test 18: Let statement
   let src18: string = "fn test(): i32\n  let x: i32 = 42\n  return x\n"
-  let r18: PR = parse(src18)
-  if expect_node_kind("stmt_let", r18, r18.node, "FileN"):
+  let r18: ParseOutput = parse(src18)
+  if expect_node_kind_po("stmt_let", r18, r18.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 19: If/else
   let src19: string = "fn test(): i32\n  if x > 0:\n    return 1\n  else:\n    return 0\n"
-  let r19: PR = parse(src19)
-  if expect_node_kind("stmt_if_else", r19, r19.node, "FileN"):
+  let r19: ParseOutput = parse(src19)
+  if expect_node_kind_po("stmt_if_else", r19, r19.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 20: While loop
   let src20: string = "fn test(): i32\n  while x > 0:\n    x = x - 1\n  return x\n"
-  let r20: PR = parse(src20)
-  if expect_node_kind("stmt_while", r20, r20.node, "FileN"):
+  let r20: ParseOutput = parse(src20)
+  if expect_node_kind_po("stmt_while", r20, r20.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 21: For loop
   let src21: string = "fn test(): i32\n  for i in items:\n    print(i)\n  return 0\n"
-  let r21: PR = parse(src21)
-  if expect_node_kind("stmt_for", r21, r21.node, "FileN"):
+  let r21: ParseOutput = parse(src21)
+  if expect_node_kind_po("stmt_for", r21, r21.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 22: Return
   let src22: string = "fn test(): i32\n  return 42\n"
-  let r22: PR = parse(src22)
-  if expect_no_parse_errors("stmt_return_no_err", r22):
+  let r22: ParseOutput = parse(src22)
+  if expect_no_parse_errors_po("stmt_return_no_err", r22):
     pass_count = pass_count + 1
 
   // Test 23: Match statement
   let src23: string = "fn test(): i32\n  match x:\n    TK.Plus:\n      return 1\n    TK.Minus:\n      return 2\n"
-  let r23: PR = parse(src23)
-  if expect_node_kind("stmt_match", r23, r23.node, "FileN"):
+  let r23: ParseOutput = parse(src23)
+  if expect_node_kind_po("stmt_match", r23, r23.root, "FileN"):
     pass_count = pass_count + 1
 
   // Test 24: Full program (enum + class + fn + main)
   let src24: string = "enum Color:\n  Red\n  Blue\n\nclass Point:\n  x: i64\n  y: i64\n\nfn add(a: i64, b: i64): i64 -> a + b\n\nfn main(): i32\n  let p: Point = Point(1, 2)\n  return 0\n"
-  let r24: PR = parse(src24)
+  let r24: ParseOutput = parse(src24)
   let r24_ok: bool = true
-  if expect_node_kind("full_program_file", r24, r24.node, "FileN") == false:
+  if expect_node_kind_po("full_program_file", r24, r24.root, "FileN") == false:
     r24_ok = false
   if r24_ok:
-    if expect_node_count_min("full_program_nodes", r24, to_i64(5)):
+    if expect_node_count_min_po("full_program_nodes", r24, to_i64(5)):
       pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
@@ -247,8 +284,8 @@ fn main(): i32
 
   // Test 27: Missing colon after fn params
   let src27: string = "fn test(x: i32) i32\n  return x\n"
-  let r27: PR = parse(src27)
-  if expect_node_kind("err_missing_colon", r27, r27.node, "FileN"):
+  let r27: ParseOutput = parse(src27)
+  if expect_node_kind_po("err_missing_colon", r27, r27.root, "FileN"):
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
@@ -258,20 +295,20 @@ fn main(): i32
   // Test 28: Class with generic field type — verifies field pairs
   // are contiguous in idx despite nested generic type list entries.
   let src28: string = "class Foo:\n  items: Vector<Token>\n  count: i64\n"
-  let r28: PR = parse(src28)
-  if expect_no_parse_errors("class_generic_field_no_err", r28):
+  let r28: ParseOutput = parse(src28)
+  if expect_no_parse_errors_po("class_generic_field_no_err", r28):
     pass_count = pass_count + 1
 
   // Test 29: extern fn without return type produces diagnostic.
   let src29: string = "extern fn bad(x: i32)\n"
-  let r29: PR = parse(src29)
-  if expect_parse_errors("extern_fn_no_ret", r29, to_i64(1)):
+  let r29: ParseOutput = parse(src29)
+  if expect_parse_errors_po("extern_fn_no_ret", r29, to_i64(1)):
     pass_count = pass_count + 1
 
   // Test 30: Empty class body produces diagnostic.
   let src30: string = "class Empty:\n  \n"
-  let r30: PR = parse(src30)
-  if expect_parse_errors("empty_class_body", r30, to_i64(1)):
+  let r30: ParseOutput = parse(src30)
+  if expect_parse_errors_po("empty_class_body", r30, to_i64(1)):
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
@@ -284,20 +321,20 @@ fn main(): i32
   let self_path: string = "examples/bootstrap_probe/expr_parser.dao"
   if file_exists(self_path):
     let self_src: string = read_file(self_path)
-    let self_r: PR = parse(self_src)
-    if expect_node_kind("self_parse_file", self_r, self_r.node, "FileN"):
+    let self_r: ParseOutput = parse(self_src)
+    if expect_node_kind_po("self_parse_file", self_r, self_r.root, "FileN"):
       pass_count = pass_count + 1
-    if expect_node_count_min("self_parse_nodes", self_r, to_i64(20)):
+    if expect_node_count_min_po("self_parse_nodes", self_r, to_i64(20)):
       pass_count = pass_count + 1
-    let err_count: i64 = self_r.ps.diags.length()
+    let err_count: i64 = self_r.diags.length()
     print("  [info] self-parse diagnostics: " + i64_to_string(err_count))
-    print("  [info] self-parse node count: " + i64_to_string(self_r.ps.nodes.length()))
-    print("  [info] self-parse idx list size: " + i64_to_string(self_r.ps.idx.length()))
-    if self_r.ps.nodes.length() > 30:
+    print("  [info] self-parse node count: " + i64_to_string(self_r.nodes.length()))
+    print("  [info] self-parse idx list size: " + i64_to_string(self_r.idx.length()))
+    if self_r.nodes.length() > 30:
       print("PASS self_parse_sanity")
       pass_count = pass_count + 1
     else:
-      print("FAIL self_parse_sanity: too few nodes (" + i64_to_string(self_r.ps.nodes.length()) + ")")
+      print("FAIL self_parse_sanity: too few nodes (" + i64_to_string(self_r.nodes.length()) + ")")
   else:
     print("SKIP self_parse_file: file not found at " + self_path)
     print("SKIP self_parse_nodes: file not found")
@@ -309,14 +346,14 @@ fn main(): i32
 
   // Test 34: Generic fn declaration — fn foo<T>(x: T): T
   let src34: string = "fn foo<T>(x: T): T\n  return x\n"
-  let r34: PR = parse(src34)
-  if expect_no_parse_errors("generic_fn_no_err", r34):
+  let r34: ParseOutput = parse(src34)
+  if expect_no_parse_errors_po("generic_fn_no_err", r34):
     pass_count = pass_count + 1
 
   // Test 35: Generic class declaration — class Box<T>
   let src35: string = "class Box<T>:\n  value: T\n"
-  let r35: PR = parse(src35)
-  if expect_no_parse_errors("generic_class_no_err", r35):
+  let r35: ParseOutput = parse(src35)
+  if expect_no_parse_errors_po("generic_class_no_err", r35):
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
@@ -325,14 +362,14 @@ fn main(): i32
 
   // Test 36: Class with method
   let src36: string = "class Foo:\n  x: i32\n  fn get_x(self): i32\n    return self.x\n"
-  let r36: PR = parse(src36)
-  if expect_no_parse_errors("class_method_no_err", r36):
+  let r36: ParseOutput = parse(src36)
+  if expect_no_parse_errors_po("class_method_no_err", r36):
     pass_count = pass_count + 1
 
   // Test 37: Class with method and multiple params
   let src37: string = "class Bar:\n  val: i64\n  fn add(self, n: i64): i64\n    return self.val + n\n"
-  let r37: PR = parse(src37)
-  if expect_no_parse_errors("class_method_multi_param_no_err", r37):
+  let r37: ParseOutput = parse(src37)
+  if expect_no_parse_errors_po("class_method_multi_param_no_err", r37):
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
@@ -341,20 +378,20 @@ fn main(): i32
 
   // Test 38: concept declaration parses without error
   let src38: string = "concept Printable:\n  fn to_string(self): string\n"
-  let r38: PR = parse(src38)
-  if expect_no_parse_errors("concept_decl_no_err", r38):
+  let r38: ParseOutput = parse(src38)
+  if expect_no_parse_errors_po("concept_decl_no_err", r38):
     pass_count = pass_count + 1
 
   // Test 39: extend declaration parses without error
   let src39: string = "class Foo:\n  x: i32\n\nconcept Printable:\n  fn to_string(self): string\n\nextend Foo as Printable:\n  fn to_string(self): string\n    return \"Foo\"\n"
-  let r39: PR = parse(src39)
-  if expect_no_parse_errors("extend_decl_no_err", r39):
+  let r39: ParseOutput = parse(src39)
+  if expect_no_parse_errors_po("extend_decl_no_err", r39):
     pass_count = pass_count + 1
 
   // Test 40: concept with multiple method signatures
   let src40: string = "concept Showable:\n  fn show(self): string\n  fn size(self): i64\n"
-  let r40: PR = parse(src40)
-  if expect_no_parse_errors("concept_multi_sig_no_err", r40):
+  let r40: ParseOutput = parse(src40)
+  if expect_no_parse_errors_po("concept_multi_sig_no_err", r40):
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------

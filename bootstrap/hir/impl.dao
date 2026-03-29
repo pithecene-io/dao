@@ -888,8 +888,8 @@ fn lower_file(hs: HS, file_node_idx: i64): HirR
 
 fn lower_to_hir(src: string): HirResult
   // Run frontend pipeline
-  let pr: PR = parse(src)
-  let file_node_idx: i64 = pr.node
+  let po: ParseOutput = parse(src)
+  let file_node_idx: i64 = po.root
   let rr: ResolveResult = resolve(src)
   let tcr: TypeCheckResult = typecheck(src)
 
@@ -897,7 +897,7 @@ fn lower_to_hir(src: string): HirResult
   let um: HashMap<i64> = build_uses_map(rr.uses)
 
   // Construct HS
-  let hs: HS = HS(pr.ps.nodes, pr.ps.idx, pr.ps.toks, src, rr.symbols, tcr.types, tcr.type_info, tcr.expr_types, tcr.sym_types, um, Vector<HirNode>::new(), Vector<i64>::new(), tcr.diags)
+  let hs: HS = HS(po.nodes, po.idx, po.toks, src, rr.symbols, tcr.types, tcr.type_info, tcr.expr_types, tcr.sym_types, um, Vector<HirNode>::new(), Vector<i64>::new(), tcr.diags)
 
   // Lower
   let result: HirR = lower_file(hs, file_node_idx)
