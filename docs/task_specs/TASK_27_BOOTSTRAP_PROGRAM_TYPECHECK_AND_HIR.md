@@ -143,7 +143,7 @@ Add:
 
 ```
 HirProgram { module_list_lp: i64 }
-HirModule  { name_tok: i64, decl_list_lp: i64, file_id: i64 }
+HirModule  { name_tok: i64, decl_list_lp: i64, module_id: i64 }
 ```
 
 Preserve the existing `HirFile` internally if it is deeply embedded;
@@ -169,6 +169,24 @@ Each `HirModule` preserves its own declaration list.  Methods
 continue to be emitted as flat top-level `HirFunction` nodes within
 their declaring module.
 
+### 7.5 Token and source ownership model
+
+Tokens and source text are owned **per-module**, not concatenated
+into a single global buffer.  This is a binding design choice:
+
+* Each module retains its own `Vector<Token>` and source string.
+* Token indices (used in HIR nodes for span recovery) are
+  module-local.
+* Diagnostic consumers must carry `module_id` to look up the
+  correct token/source buffer from `ProgramHirResult.sources`.
+
+Rationale: concatenated tokens would require a global offset
+remapping layer and break the existing assumption that token
+indices are dense starting from 0.  Per-module ownership preserves
+the current single-file token model inside each module and keeps
+cross-file diagnostics explicit (Task 26 §13 already requires file
+context in diagnostics).
+
 ## 8. Public API additions
 
 Suggested new APIs:
@@ -189,14 +207,20 @@ class ProgramTypeCheckResult:
   modules: Vector<ModuleCheckResult>
   diags: Vector<Diagnostic>
 
+class ModuleSource:
+  module_id: i64
+  file_id: i64
+  toks: Vector<Token>
+  src: string
+
 class ProgramHirResult:
   hir_nodes: Vector<HirNode>
   hir_idx: Vector<i64>
   types: Vector<DaoType>
   type_info: Vector<i64>
-  toks: Vector<Token>       // concatenated or per-module
+  sources: Vector<ModuleSource>  // per-module, indexed by module_id
   diags: Vector<Diagnostic>
-  root: i64                 // HirProgram node index
+  root: i64                      // HirProgram node index
 ```
 
 Preserve existing single-file helper APIs for tests and bootstrap

@@ -142,7 +142,10 @@ unqualified, exactly as they are now in single-file bootstrap.
 ### 7.1 New symbol kind
 
 Add `Module` to the bootstrap `SymbolKind` enum.  Module symbols
-carry a reference to the target module's ID for export-table lookup.
+carry a `target_module_id` referencing the `module_id` from Task 25's
+`ModuleEntry` table (`ProgramGraph.modules`).  This is the stable
+cross-task identity: export table lookup, type registration, and HIR
+provenance all key on `module_id`, not `file_id`.
 
 ### 7.2 New program-level resolve input
 
@@ -236,24 +239,26 @@ Suggested additions:
 
 ```
 class ResolvedModule:
-  module_id: i64
-  file_id: i64
-  path_segments: Vector<string>
-  exports: HashMap<i64>      // name -> symbol_idx
-  imports: Vector<i64>       // module binding symbol indices
+  module_id: i64              // from Task 25 ModuleEntry.module_id
+  file_id: i64                // from Task 25 SourceFile.file_id
+  exports: HashMap<i64>       // name -> symbol_idx
+  imports: Vector<i64>        // module binding symbol indices
 
 class ModuleBinding:
   local_name: string
-  target_module_id: i64
+  target_module_id: i64       // indexes ProgramGraph.modules
   import_node_idx: i64
 
 class ProgramResolveResult:
-  modules: Vector<ResolvedModule>
+  modules: Vector<ResolvedModule>  // indexed by module_id
   symbols: Vector<Symbol>
   scopes: Vector<Scope>
   uses: Vector<i64>
   diags: Vector<Diagnostic>
 ```
+
+`ResolvedModule` does not duplicate `path_segments` — it references
+`ModuleEntry` via `module_id` for display name and segment data.
 
 The existing `uses` map should now store symbol references with
 file/module provenance where needed.

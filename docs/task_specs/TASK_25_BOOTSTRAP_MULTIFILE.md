@@ -59,10 +59,10 @@ module app::math
 
 Module declarations give a file an explicit module identity.
 
-**Syntax note**: `module` is not currently a reserved keyword in
-`dao.lex`, `token.h`, or the bootstrap lexer.  Task 25 must add
+**Syntax note**: `module` is now a reserved keyword in `dao.lex`
+and frozen in `CONTRACT_SYNTAX_SURFACE.md`.  Task 25 must add
 `KwModule` to the bootstrap lexer keyword table.  The host compiler
-lexer and `dao.lex` should be updated in the same diff or a
+lexer (`token.h`) should be updated in the same diff or a
 coordinated follow-up to keep the token surface consistent.
 
 ### 4.3 Import declarations
@@ -209,27 +209,60 @@ Suggested structures:
 class SourceFile:
   file_id: i64
   path: string
-  module_name: string   // canonical joined form for display
-  module_segs: i64      // segment count
   source_text: string
   ast_root: i64
+  module_id: i64        // index into ProgramGraph.modules; -1 until assigned
+
+class ModuleEntry:
+  module_id: i64        // canonical module identity, stable across tasks
+  file_id: i64          // owning file
+  segments: Vector<string>
+  display_name: string  // cached "a::b::c" form for diagnostics
 
 class ProgramInput:
   files: Vector<SourceFile>
 
 class ProgramGraph:
-  modules: Vector<SourceFile>
-  edges: Vector<i64>        // flat pairs: [from_id, to_id, ...]
-  topo_order: Vector<i64>   // file_ids in dependency order
+  files: Vector<SourceFile>
+  modules: Vector<ModuleEntry>  // indexed by module_id
+  file_to_module: Vector<i64>   // file_id -> module_id
+  edges: Vector<i64>            // flat pairs: [from_module_id, to_module_id, ...]
+  topo_order: Vector<i64>       // module_ids in dependency order
   diags: Vector<Diagnostic>
 ```
 
-### 8.2 Deterministic file identity
+### 8.2 Identity model: file_id vs module_id
+
+`file_id` and `module_id` are distinct concepts:
+
+* `file_id` is a loading/source artifact — assigned in lexical path
+  order after normalization.  It indexes into `ProgramGraph.files`.
+* `module_id` is a semantic identity — assigned when the module
+  table is built from parsed module declarations.  It indexes into
+  `ProgramGraph.modules`.
+
+In v1 the mapping is 1:1 (one file = one module), but they are
+separate indices because:
+
+* file_id is assigned before parsing (load order)
+* module_id is assigned after parsing (declaration order)
+* future partial modules or generated files may break the 1:1 mapping
+
+All downstream tasks (26, 27) use `module_id` for semantic
+operations (export tables, import bindings, topo order, type
+registration).  `file_id` is used only for source lookup and
+diagnostic file context.
+
+### 8.3 Deterministic file identity
 
 Assign stable numeric file IDs in lexical path order after path
 normalization.
 
-### 8.3 Deterministic module identity
+### 8.4 Deterministic module identity
+
+Assign module IDs in the order modules are registered during graph
+construction (deterministic because file processing order is
+deterministic per §8.3).
 
 Store module identity canonically as segment lists, not ad hoc
 joined strings, though a joined display form may be cached for
@@ -431,10 +464,10 @@ loading, module declarations for meaning.
 
 ### 16.4 Keyword introduction
 
-`module` is new syntax surface.  Per AGENTS.md, frozen syntax
-decisions require contract awareness.  The keyword must be added to
-`dao.lex` and the syntax contract in the same changeset that lands
-bootstrap support, or in a coordinated predecessor.
+`module` was added to `dao.lex`, `dao.ebnf`, and
+`CONTRACT_SYNTAX_SURFACE.md` as a normative prerequisite for this
+task.  The bootstrap lexer and host compiler `token.h` still need
+the corresponding `KwModule` token kind added during implementation.
 
 ## 17. Explicit deferrals
 

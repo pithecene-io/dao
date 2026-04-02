@@ -373,6 +373,20 @@ Rules:
 - `resource <kind> <name> =>` introduces a resource-binding context
 - `=>` is reserved for semantic-context entry, not structural blocks
 
+## Module Declarations
+
+```dao
+module app::math
+```
+
+Rules:
+- `module` is a reserved keyword
+- `module` declares the file's module identity using a qualified path
+- a file may contain at most one `module` declaration
+- `module` must appear before `import` and all other top-level
+  declarations
+- module identity comes from the declaration, not from file path
+
 ## Namespace Qualification
 
 ```dao
