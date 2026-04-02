@@ -2654,7 +2654,9 @@ fn build_program(inputs: Vector<SourceInput>): ProgramGraph
   let topo: Vector<i64> = topo_sort(modules, edges, ec)
 
   // Cycle detection: if topo result is shorter than module count,
-  // there is a cycle.  Trace a concrete cycle path for diagnostics.
+  // there is a cycle.  Find actual cycle members (not just Kahn
+  // leftovers, which include acyclic dependents of cycles) and
+  // trace a concrete import path.
   if topo.length() < modules.length():
     // Mark which modules made it into topo order.
     let in_topo: Vector<i64> = Vector<i64>::new()
@@ -2666,50 +2668,123 @@ fn build_program(inputs: Vector<SourceInput>): ProgramGraph
     while ti < topo.length():
       in_topo = in_topo.set(topo.get(ti), to_i64(1))
       ti = ti + 1
-    // Pick the first module in the SCC as the cycle start.
-    let start: i64 = to_i64(-1)
+    // For each unprocessed node, check if it can reach itself
+    // (i.e. it is actually in a cycle, not just downstream of one).
+    // Collect actual cycle members.
+    let on_cycle: Vector<i64> = Vector<i64>::new()
+    ti = 0
+    while ti < modules.length():
+      on_cycle = on_cycle.push(to_i64(0))
+      ti = ti + 1
     ti = 0
     while ti < modules.length():
       if in_topo.get(ti) == 0:
+        if on_cycle.get(ti) == 0:
+          // DFS from ti following import edges within the unprocessed
+          // set.  Track the path; if we revisit ti, everything on the
+          // path from ti onward is a cycle member.
+          // Use a fixed-size path with a depth pointer (no pop needed).
+          let path: Vector<i64> = Vector<i64>::new()
+          path = path.push(ti)
+          let path_depth: i64 = 1
+          let visited: Vector<i64> = Vector<i64>::new()
+          let vi: i64 = 0
+          while vi < modules.length():
+            visited = visited.push(to_i64(0))
+            vi = vi + 1
+          visited = visited.set(ti, to_i64(1))
+          // Track which edges we've tried from each depth to allow backtracking.
+          // edge_cursor[depth] = next edge index to try from path[depth].
+          let edge_cursor: Vector<i64> = Vector<i64>::new()
+          edge_cursor = edge_cursor.push(to_i64(0))
+          let found: bool = false
+          let walk_done: bool = false
+          while walk_done == false:
+            let cur: i64 = path.get(path_depth - 1)
+            let cursor: i64 = edge_cursor.get(path_depth - 1)
+            // Find next unvisited import target from cur.
+            let next: i64 = to_i64(-1)
+            let ei: i64 = cursor
+            while ei < ec:
+              let from: i64 = edges.get(ei * 2 + 1)
+              let to_mod: i64 = edges.get(ei * 2)
+              if from == cur:
+                if in_topo.get(to_mod) == 0:
+                  if to_mod == ti:
+                    found = true
+                    walk_done = true
+                    next = to_mod
+                    ei = ec
+                  else:
+                    if visited.get(to_mod) == 0:
+                      next = to_mod
+                      // Save cursor past this edge for backtracking.
+                      edge_cursor = edge_cursor.set(path_depth - 1, ei + 1)
+                      ei = ec
+              ei = ei + 1
+            if found:
+              let pi: i64 = 0
+              while pi < path_depth:
+                on_cycle = on_cycle.set(path.get(pi), to_i64(1))
+                pi = pi + 1
+            else:
+              if next < 0:
+                // Dead end — backtrack.
+                path_depth = path_depth - 1
+                if path_depth == 0:
+                  walk_done = true
+              else:
+                visited = visited.set(next, to_i64(1))
+                if path_depth < path.length():
+                  path = path.set(path_depth, next)
+                else:
+                  path = path.push(next)
+                path_depth = path_depth + 1
+                // Initialize cursor for new depth.
+                if path_depth - 1 < edge_cursor.length():
+                  edge_cursor = edge_cursor.set(path_depth - 1, to_i64(0))
+                else:
+                  edge_cursor = edge_cursor.push(to_i64(0))
+      ti = ti + 1
+    // Now trace a concrete cycle path from the first cycle member.
+    let start: i64 = to_i64(-1)
+    ti = 0
+    while ti < modules.length():
+      if on_cycle.get(ti) == 1:
         if start < 0:
           start = ti
       ti = ti + 1
-    // Trace a cycle path from start using edges within the SCC.
-    // Simple DFS walk: follow outgoing edges staying within the SCC
-    // until we revisit start.
-    let cycle_path: string = modules.get(start).name
-    let cur_node: i64 = start
-    let trace_done: bool = false
-    let max_steps: i64 = modules.length() + 1
-    let step: i64 = 0
-    while trace_done == false:
-      if step >= max_steps:
-        trace_done = true
-      else:
-        // Find first outgoing edge from cur_node within the SCC.
-        let next: i64 = to_i64(-1)
-        let ei: i64 = 0
-        while ei < ec:
-          // Edges are dependency→dependent, so the importer is at ei*2+1
-          // and the dependency is at ei*2.  For cycle tracing we want
-          // import direction: importer → dependency.
-          let from: i64 = edges.get(ei * 2 + 1)
-          let to_mod: i64 = edges.get(ei * 2)
-          if from == cur_node:
-            if in_topo.get(to_mod) == 0:
-              next = to_mod
-              ei = ec
-          ei = ei + 1
-        if next < 0:
+    if start >= 0:
+      let cycle_path: string = modules.get(start).name
+      let cur_node: i64 = start
+      let trace_done: bool = false
+      let max_steps: i64 = modules.length() + 1
+      let step: i64 = 0
+      while trace_done == false:
+        if step >= max_steps:
           trace_done = true
         else:
-          cycle_path = cycle_path + " -> " + modules.get(next).name
-          if next == start:
+          // Follow import edges staying within actual cycle members.
+          let next: i64 = to_i64(-1)
+          let ei: i64 = 0
+          while ei < ec:
+            let from: i64 = edges.get(ei * 2 + 1)
+            let to_mod: i64 = edges.get(ei * 2)
+            if from == cur_node:
+              if on_cycle.get(to_mod) == 1:
+                next = to_mod
+                ei = ec
+            ei = ei + 1
+          if next < 0:
             trace_done = true
           else:
-            cur_node = next
-        step = step + 1
-    diags = diags.push(FileDiagnostic(to_i64(-1), "", make_error(Span(to_i64(0), to_i64(0)), "import cycle detected: " + cycle_path)))
+            cycle_path = cycle_path + " -> " + modules.get(next).name
+            if next == start:
+              trace_done = true
+            else:
+              cur_node = next
+          step = step + 1
+      diags = diags.push(FileDiagnostic(to_i64(-1), "", make_error(Span(to_i64(0), to_i64(0)), "import cycle detected: " + cycle_path)))
 
   return ProgramGraph(files, modules, edges, ec, topo, diags)
 

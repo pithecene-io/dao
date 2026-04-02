@@ -11,7 +11,7 @@ fn diag_starts_with(msg: string, prefix: string): bool
 
 fn main(): void
   let pass_count: i64 = 0
-  let total: i64 = 11
+  let total: i64 = 12
 
   // -----------------------------------------------------------------
   // Test 1: Two files with one import build correctly
@@ -221,7 +221,43 @@ fn main(): void
     print("FAIL two_file_smoke: unexpected diagnostics (" + i64_to_string(pg10.diags.length()) + ")")
 
   // -----------------------------------------------------------------
-  // Test 11: Diagnostic carries file provenance
+  // Test 11: Acyclic dependent of cycle is not in cycle trace
+  // -----------------------------------------------------------------
+  // c imports a, a imports b, b imports a.  Only a and b form a cycle;
+  // c is an acyclic dependent and must not appear in the cycle trace.
+  let inputs11: Vector<SourceInput> = Vector<SourceInput>::new()
+  inputs11 = inputs11.push(SourceInput("a.dao", "module app::a\nimport app::b\nfn f(): i32 -> 0\n"))
+  inputs11 = inputs11.push(SourceInput("b.dao", "module app::b\nimport app::a\nfn g(): i32 -> 0\n"))
+  inputs11 = inputs11.push(SourceInput("c.dao", "module app::c\nimport app::a\nfn h(): i32 -> 0\n"))
+  let pg11: ProgramGraph = build_program(inputs11)
+  let cycle_msg_11: string = ""
+  let di11a: i64 = 0
+  while di11a < pg11.diags.length():
+    let d11a: FileDiagnostic = pg11.diags.get(di11a)
+    if diag_starts_with(d11a.diag.message, "import cycle"):
+      cycle_msg_11 = d11a.diag.message
+    di11a = di11a + 1
+  // Cycle trace must mention a and b but NOT c.
+  let has_cycle_11: bool = diag_starts_with(cycle_msg_11, "import cycle")
+  let mentions_c: bool = false
+  // Check if "app::c" appears anywhere in the message.
+  let ci: i64 = 0
+  while ci < length(cycle_msg_11):
+    if ci + 6 <= length(cycle_msg_11):
+      if substring(cycle_msg_11, ci, to_i64(6)) == "app::c":
+        mentions_c = true
+    ci = ci + 1
+  if has_cycle_11:
+    if mentions_c == false:
+      print("PASS acyclic_dependent_excluded")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL acyclic_dependent_excluded: cycle trace mentions app::c which is not in cycle: " + cycle_msg_11)
+  else:
+    print("FAIL acyclic_dependent_excluded: no cycle detected")
+
+  // -----------------------------------------------------------------
+  // Test 12: Diagnostic carries file provenance
   // -----------------------------------------------------------------
   // Reuse inputs3 (missing module) — the diagnostic should carry the file path.
   let found_prov: bool = false
