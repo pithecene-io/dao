@@ -210,12 +210,14 @@ Exit criteria:
 
 ## Phase 7 — Bootstrap Compiler
 
-Status: **Tier A frontend + HIR** — Tasks 19–24 complete.  Five
-bootstrap subsystems share a consolidated substrate
-(`bootstrap/shared/base.dao`): lexer (105 tests), parser (36 tests),
-resolver (17 tests), type checker (19 tests), and HIR lowering
-(14 tests).  Together they form a complete Tier A pipeline:
-lex → parse → resolve → typecheck → HIR.
+Status: **Tier A frontend + HIR complete; multi-file substrate next** —
+Tasks 19–24 complete.  Five bootstrap subsystems share a consolidated
+substrate (`bootstrap/shared/base.dao`): lexer (105 tests), parser
+(36 tests), resolver (17 tests), type checker (19 tests), and HIR
+lowering (14 tests).  Together they form a complete Tier A pipeline:
+lex → parse → resolve → typecheck → HIR.  Next: Tasks 25–27 replace
+the assembly/concatenation model with multi-file compilation, cross-
+file resolution, and program-level type checking/HIR.
 
 Goals:
 - begin implementing non-trivial compiler subsystems in Dao itself
