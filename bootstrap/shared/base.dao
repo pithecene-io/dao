@@ -2486,13 +2486,18 @@ class ModuleEntry:
   file_id: i64
   name: string            // canonical "a::b::c" display form
 
+class FileDiagnostic:
+  file_id: i64            // -1 for graph-level diagnostics
+  path: string            // source file path (empty for graph-level)
+  diag: Diagnostic
+
 class ProgramGraph:
   files: Vector<SourceFile>
   modules: Vector<ModuleEntry>
   edges: Vector<i64>      // flat pairs: [from_module_id, to_module_id, ...]
   edge_count: i64
   topo_order: Vector<i64> // module_ids in dependency order
-  diags: Vector<Diagnostic>
+  diags: Vector<FileDiagnostic>
 
 class SourceInput:
   path: string
@@ -2582,15 +2587,15 @@ fn build_program(inputs: Vector<SourceInput>): ProgramGraph
   // Parse each file and extract module declarations.
   let files: Vector<SourceFile> = Vector<SourceFile>::new()
   let modules: Vector<ModuleEntry> = Vector<ModuleEntry>::new()
-  let diags: Vector<Diagnostic> = Vector<Diagnostic>::new()
+  let diags: Vector<FileDiagnostic> = Vector<FileDiagnostic>::new()
   let fi: i64 = 0
   while fi < sorted.length():
     let inp: SourceInput = sorted.get(fi)
     let po: ParseOutput = parse(inp.source_text)
-    // Merge parse diagnostics.
+    // Merge parse diagnostics with file provenance.
     let di: i64 = 0
     while di < po.diags.length():
-      diags = diags.push(po.diags.get(di))
+      diags = diags.push(FileDiagnostic(fi, inp.path, po.diags.get(di)))
       di = di + 1
     // Extract module declaration from FileN root.
     let mod_name: string = ""
@@ -2600,7 +2605,7 @@ fn build_program(inputs: Vector<SourceInput>): ProgramGraph
         if mod_decl >= 0:
           mod_name = extract_module_name(po, mod_decl)
     if mod_name == "":
-      diags = diags.push(make_error(Span(to_i64(0), to_i64(0)), "file '" + inp.path + "' has no module declaration"))
+      diags = diags.push(FileDiagnostic(fi, inp.path, make_error(Span(to_i64(0), to_i64(0)), "file '" + inp.path + "' has no module declaration")))
       files = files.push(SourceFile(fi, inp.path, inp.source_text, po, to_i64(-1)))
     else:
       // Check for duplicate module declarations.
@@ -2608,7 +2613,7 @@ fn build_program(inputs: Vector<SourceInput>): ProgramGraph
       if existing >= 0:
         let dup_entry: ModuleEntry = modules.get(existing)
         let dup_file: SourceFile = files.get(dup_entry.file_id)
-        diags = diags.push(make_error(Span(to_i64(0), to_i64(0)), "duplicate module '" + mod_name + "' declared in '" + dup_file.path + "' and '" + inp.path + "'"))
+        diags = diags.push(FileDiagnostic(fi, inp.path, make_error(Span(to_i64(0), to_i64(0)), "duplicate module '" + mod_name + "' declared in '" + dup_file.path + "' and '" + inp.path + "'")))
         files = files.push(SourceFile(fi, inp.path, inp.source_text, po, to_i64(-1)))
       else:
         let mid: i64 = modules.length()
@@ -2631,11 +2636,12 @@ fn build_program(inputs: Vector<SourceInput>): ProgramGraph
           while ii < imps.length():
             let imp_name: string = extract_import_name(sf.parse_output, imps.get(ii))
             let target: i64 = find_module_by_name(modules, imp_name)
+            let sf_mod_name: string = modules.get(sf.module_id).name
             if target < 0:
-              diags = diags.push(make_error(Span(to_i64(0), to_i64(0)), "imported module '" + imp_name + "' not found in compilation set"))
+              diags = diags.push(FileDiagnostic(sf.file_id, sf.path, make_error(Span(to_i64(0), to_i64(0)), "imported module '" + imp_name + "' not found in compilation set")))
             else:
               if target == sf.module_id:
-                diags = diags.push(make_error(Span(to_i64(0), to_i64(0)), "module '" + sf.parse_output.src + "' imports itself"))
+                diags = diags.push(FileDiagnostic(sf.file_id, sf.path, make_error(Span(to_i64(0), to_i64(0)), "module '" + sf_mod_name + "' imports itself")))
               else:
                 // Edge: dependency → dependent (target must come before importer in topo order)
                 edges = edges.push(target)
@@ -2648,9 +2654,9 @@ fn build_program(inputs: Vector<SourceInput>): ProgramGraph
   let topo: Vector<i64> = topo_sort(modules, edges, ec)
 
   // Cycle detection: if topo result is shorter than module count,
-  // there is a cycle.
+  // there is a cycle.  Trace a concrete cycle path for diagnostics.
   if topo.length() < modules.length():
-    // Find modules not in topo result to build cycle diagnostic.
+    // Mark which modules made it into topo order.
     let in_topo: Vector<i64> = Vector<i64>::new()
     let ti: i64 = 0
     while ti < modules.length():
@@ -2660,16 +2666,50 @@ fn build_program(inputs: Vector<SourceInput>): ProgramGraph
     while ti < topo.length():
       in_topo = in_topo.set(topo.get(ti), to_i64(1))
       ti = ti + 1
-    let cycle_names: string = ""
+    // Pick the first module in the SCC as the cycle start.
+    let start: i64 = to_i64(-1)
     ti = 0
     while ti < modules.length():
       if in_topo.get(ti) == 0:
-        let m: ModuleEntry = modules.get(ti)
-        if cycle_names != "":
-          cycle_names = cycle_names + ", "
-        cycle_names = cycle_names + m.name
+        if start < 0:
+          start = ti
       ti = ti + 1
-    diags = diags.push(make_error(Span(to_i64(0), to_i64(0)), "import cycle detected involving: " + cycle_names))
+    // Trace a cycle path from start using edges within the SCC.
+    // Simple DFS walk: follow outgoing edges staying within the SCC
+    // until we revisit start.
+    let cycle_path: string = modules.get(start).name
+    let cur_node: i64 = start
+    let trace_done: bool = false
+    let max_steps: i64 = modules.length() + 1
+    let step: i64 = 0
+    while trace_done == false:
+      if step >= max_steps:
+        trace_done = true
+      else:
+        // Find first outgoing edge from cur_node within the SCC.
+        let next: i64 = to_i64(-1)
+        let ei: i64 = 0
+        while ei < ec:
+          // Edges are dependency→dependent, so the importer is at ei*2+1
+          // and the dependency is at ei*2.  For cycle tracing we want
+          // import direction: importer → dependency.
+          let from: i64 = edges.get(ei * 2 + 1)
+          let to_mod: i64 = edges.get(ei * 2)
+          if from == cur_node:
+            if in_topo.get(to_mod) == 0:
+              next = to_mod
+              ei = ec
+          ei = ei + 1
+        if next < 0:
+          trace_done = true
+        else:
+          cycle_path = cycle_path + " -> " + modules.get(next).name
+          if next == start:
+            trace_done = true
+          else:
+            cur_node = next
+        step = step + 1
+    diags = diags.push(FileDiagnostic(to_i64(-1), "", make_error(Span(to_i64(0), to_i64(0)), "import cycle detected: " + cycle_path)))
 
   return ProgramGraph(files, modules, edges, ec, topo, diags)
 
