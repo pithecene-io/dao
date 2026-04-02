@@ -309,8 +309,59 @@ substrate consolidated in `bootstrap/shared/base.dao`; assembly
 via `bootstrap/assemble.sh`.
 
 The Tier A bootstrap pipeline (lex → parse → resolve → typecheck →
-HIR) is complete.  Next focus is Tier B expansion in vertical slices
-through all layers, then multi-file compilation.
+HIR) is complete.  Next focus is the multi-file substrate (Tasks
+25–27), then Tier B feature slices on top.
+
+### Task 25 — Bootstrap Multi-file Compilation + Imports (v1)
+
+**Objective**: Replace assembly-only single-file assumptions with a
+deterministic multi-file substrate and first import/module surface.
+
+See `docs/task_specs/TASK_25_BOOTSTRAP_MULTIFILE.md`.
+
+Deliverables:
+
+- `module` keyword added to bootstrap lexer (and `dao.lex`)
+- `ModuleDeclN` and `ImportDeclN` AST nodes
+- `FileN` extended with optional module decl and import list
+- program-level compilation layer above per-file parsing
+- file-to-module mapping with deterministic identity
+- module graph construction with cycle detection
+- diagnostics for missing/duplicate modules and import cycles
+
+### Task 26 — Bootstrap Cross-file Resolution
+
+**Objective**: Extend the bootstrap resolver from single-file scope
+chains to module-aware cross-file name resolution.
+
+See `docs/task_specs/TASK_26_BOOTSTRAP_CROSS_FILE_RESOLUTION.md`.
+
+Deliverables:
+
+- `Module` symbol kind in bootstrap resolver
+- per-module export tables populated in topo order
+- import bindings create Module symbols in importing scope
+- qualified names resolve through module export tables
+- diagnostics for missing exports and duplicate import bindings
+
+### Task 27 — Bootstrap Cross-file Typecheck + HIR Aggregation
+
+**Objective**: Extend bootstrap type checking and HIR lowering to
+operate over multiple resolved modules with canonical type identity.
+
+See `docs/task_specs/TASK_27_BOOTSTRAP_PROGRAM_TYPECHECK_AND_HIR.md`.
+
+Deliverables:
+
+- program-wide canonical type table spanning all modules
+- cross-file function call and nominal type checking
+- `HirProgram` root aggregating per-module `HirModule` nodes
+- deterministic topo-ordered lowering and HIR dump
+- end-to-end multi-file smoke test
+
+After Tasks 25–27, feature-oriented Tier B slices (methods/
+associated items, concepts/extend, richer patterns, deferred
+expressions) have a sane multi-file substrate to sit on.
 
 ### Task 14 — Numeric Type Expansion
 

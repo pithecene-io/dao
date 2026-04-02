@@ -1,6 +1,7 @@
 # Dao lexical surface (early reference)
 
 Reserved keywords:
+- module
 - import
 - extern
 - fn

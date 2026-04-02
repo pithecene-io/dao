@@ -3,7 +3,10 @@
 # docs/contracts/CONTRACT_SYNTAX_SURFACE.md.
 
 file :=
-    import* declaration*
+    module_decl? import* declaration*
+
+module_decl :=
+    "module" module_path NEWLINE
 
 import :=
     "import" module_path NEWLINE
