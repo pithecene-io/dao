@@ -13,6 +13,7 @@ namespace dao::playground {
 inline auto token_category(TokenKind kind) -> std::string_view {
   switch (kind) {
   // Keywords
+  case TokenKind::KwModule:
   case TokenKind::KwImport:
   case TokenKind::KwExtern:
   case TokenKind::KwFn:

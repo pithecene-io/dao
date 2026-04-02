@@ -45,6 +45,8 @@ auto is_builtin_type(std::string_view name) -> bool {
 auto lexical_category(TokenKind kind) -> std::string_view {
   switch (kind) {
   // Keywords — control
+  case TokenKind::KwModule:
+    return "keyword.module";
   case TokenKind::KwImport:
     return "keyword.import";
   case TokenKind::KwExtern:

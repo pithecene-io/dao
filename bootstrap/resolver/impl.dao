@@ -733,7 +733,7 @@ fn resolve_decl(rs: RS, node_idx: i64): RS
 fn collect_top_level(rs: RS, file_node_idx: i64): RS
   let file_node: Node = rs.rc.nodes.get(file_node_idx)
   match file_node:
-    Node.FileN(decls_lp):
+    Node.FileN(module_decl, imports_lp, decls_lp):
       let decls: Vector<i64> = read_list(rs.rc.idx_data, decls_lp)
       let r: RS = rs
       let i: i64 = 0
@@ -819,7 +819,7 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
 fn resolve_bodies(rs: RS, file_node_idx: i64): RS
   let file_node: Node = rs.rc.nodes.get(file_node_idx)
   match file_node:
-    Node.FileN(decls_lp):
+    Node.FileN(module_decl, imports_lp, decls_lp):
       let decls: Vector<i64> = read_list(rs.rc.idx_data, decls_lp)
       let r: RS = rs
       let i: i64 = 0

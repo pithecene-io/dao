@@ -42,6 +42,7 @@ private:
 enum class NodeKind : std::uint8_t {
   // File
   File,
+  ModuleDecl,
   Import,
 
   // Declarations
@@ -158,6 +159,11 @@ enum class UnaryOp : std::uint8_t {
 // File-level nodes — standalone, not part of any variant.
 // ---------------------------------------------------------------------------
 
+struct ModuleNode {
+  Span span;
+  QualifiedPath path;
+};
+
 struct ImportNode {
   Span span;
   QualifiedPath path;
@@ -165,6 +171,7 @@ struct ImportNode {
 
 struct FileNode {
   Span span;
+  ModuleNode* module_decl = nullptr;  // null when absent
   std::vector<ImportNode*> imports;
   std::vector<Decl*> declarations;
 };

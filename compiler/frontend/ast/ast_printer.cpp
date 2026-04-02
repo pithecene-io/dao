@@ -17,6 +17,9 @@ public:
 
   void print(const FileNode& file) {
     out_ << "File\n";
+    if (file.module_decl != nullptr) {
+      print_module_decl(*file.module_decl);
+    }
     for (const auto* imp : file.imports) {
       print_import(*imp);
     }
@@ -52,6 +55,13 @@ private:
   // -----------------------------------------------------------------------
   // Import
   // -----------------------------------------------------------------------
+
+  void print_module_decl(const ModuleNode& node) {
+    indent();
+    out_ << "Module ";
+    print_qualified_path(node.path);
+    out_ << "\n";
+  }
 
   void print_import(const ImportNode& node) {
     indent();

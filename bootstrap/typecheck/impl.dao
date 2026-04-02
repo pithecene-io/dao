@@ -930,7 +930,7 @@ fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
 fn tc_pass1(ts: TS, file_node_idx: i64): TS
   let file_node: Node = ts.tc.nodes.get(file_node_idx)
   match file_node:
-    Node.FileN(decls_lp):
+    Node.FileN(module_decl, imports_lp, decls_lp):
       let decls: Vector<i64> = read_list(ts.tc.idx_data, decls_lp)
       let r: TS = ts
       r = tc_register_type_aliases(r, decls)
@@ -1651,7 +1651,7 @@ fn tc_check_extend_method_body(ts: TS, extend_decl_idx: i64, meth_idx: i64, m_na
 fn tc_pass2(ts: TS, file_node_idx: i64): TS
   let file_node: Node = ts.tc.nodes.get(file_node_idx)
   match file_node:
-    Node.FileN(decls_lp):
+    Node.FileN(module_decl, imports_lp, decls_lp):
       let decls: Vector<i64> = read_list(ts.tc.idx_data, decls_lp)
       let r: TS = ts
       let i: i64 = 0

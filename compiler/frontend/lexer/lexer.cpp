@@ -6,6 +6,8 @@ namespace dao {
 
 auto token_kind_name(TokenKind kind) -> const char* {
   switch (kind) {
+  case TokenKind::KwModule:
+    return "KwModule";
   case TokenKind::KwImport:
     return "KwImport";
   case TokenKind::KwExtern:
@@ -537,6 +539,9 @@ private:
 
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   static auto classify_keyword(std::string_view word) -> TokenKind {
+    if (word == "module") {
+      return TokenKind::KwModule;
+    }
     if (word == "import") {
       return TokenKind::KwImport;
     }

@@ -38,6 +38,7 @@
 
 enum TK:
   // Keywords — control
+  KwModule
   KwImport
   KwExtern
   KwFn
@@ -153,6 +154,8 @@ fn is_alnum(ch: i32): bool
 
 fn classify_keyword(src: string, start: i64, klen: i64): TK
   let text: string = substring(src, start, klen)
+  if text == "module":
+    return TK.KwModule
   if text == "import":
     return TK.KwImport
   if text == "extern":
@@ -218,6 +221,8 @@ fn classify_keyword(src: string, start: i64, klen: i64): TK
 
 fn tk_name(kind: TK): string
   match kind:
+    TK.KwModule:
+      return "KwModule"
     TK.KwImport:
       return "KwImport"
     TK.KwExtern:
@@ -802,8 +807,11 @@ enum class Node:
   ConceptDeclD(name: i64, tparams: i64, methods: i64)
   ExtendDeclD(target: i64, concept_name: i64, methods: i64)
   ErrorD(tok: i64)
+  // --- Module / Import ---
+  ModuleDeclN(path_lp: i64, seg_count: i64)
+  ImportDeclN(path_lp: i64, seg_count: i64)
   // --- File ---
-  FileN(decls_lp: i64)
+  FileN(module_decl: i64, imports_lp: i64, decls_lp: i64)
 
 // =========================================================================
 // Section 7: Parser state and result types
@@ -2187,8 +2195,77 @@ fn parse_extend_decl(pc: PC, ps: PS): PR
 // Section 14: File-level parsing
 // =========================================================================
 
+// Parse a module path: identifier (:: identifier)*
+// Returns a PR whose node is a ModuleDeclN or ImportDeclN (caller wraps).
+// On return, ps.idx contains flushed segment token indices and node is
+// the list_pos.  seg_count is returned via the PR.node field as a
+// negative-encoded pair — callers use parse_module_path_raw instead.
+//
+// parse_module_path_raw: returns (ps_after, list_pos, seg_count) packed
+// into a dedicated result type.
+
+class ModulePathResult:
+  ps: PS
+  list_pos: i64
+  seg_count: i64
+
+fn parse_module_path(pc: PC, ps: PS): ModulePathResult
+  let first_tidx: i64 = ps.pos
+  let cur: PS = expect(pc, ps, TK.Identifier)
+  let seg_toks: Vector<i64> = Vector<i64>::new()
+  seg_toks = seg_toks.push(first_tidx)
+  let done: bool = false
+  while done == false:
+    if tk_name(peek_kind(pc, cur)) == tk_name(TK.ColonColon):
+      cur = ps_advance(pc, cur)
+      let tidx: i64 = cur.pos
+      cur = expect(pc, cur, TK.Identifier)
+      seg_toks = seg_toks.push(tidx)
+    else:
+      done = true
+  let fl: FlushResult = flush_list(cur, seg_toks)
+  return ModulePathResult(fl.ps, fl.list_pos, seg_toks.length())
+
+fn parse_module_decl(pc: PC, ps: PS): PR
+  // consume 'module' keyword
+  let cur: PS = ps_advance(pc, ps)
+  let path: ModulePathResult = parse_module_path(pc, cur)
+  cur = expect(pc, path.ps, TK.Newline)
+  return ps_add_node(cur, Node.ModuleDeclN(path.list_pos, path.seg_count))
+
+fn parse_import_decl(pc: PC, ps: PS): PR
+  // consume 'import' keyword
+  let cur: PS = ps_advance(pc, ps)
+  let path: ModulePathResult = parse_module_path(pc, cur)
+  cur = expect(pc, path.ps, TK.Newline)
+  return ps_add_node(cur, Node.ImportDeclN(path.list_pos, path.seg_count))
+
 fn parse_file(pc: PC, ps: PS): PR
   let cur: PS = skip_newlines(pc, ps)
+
+  // Optional module declaration
+  let mod_node: i64 = to_i64(-1)
+  if tk_name(peek_kind(pc, cur)) == tk_name(TK.KwModule):
+    let md: PR = parse_module_decl(pc, cur)
+    mod_node = md.node
+    cur = md.ps
+    cur = skip_newlines(pc, cur)
+
+  // Import declarations
+  let import_items: Vector<i64> = Vector<i64>::new()
+  let imp_done: bool = false
+  while imp_done == false:
+    cur = skip_newlines(pc, cur)
+    if tk_name(peek_kind(pc, cur)) == tk_name(TK.KwImport):
+      let imp: PR = parse_import_decl(pc, cur)
+      import_items = import_items.push(imp.node)
+      cur = imp.ps
+    else:
+      imp_done = true
+  let imports_fl: FlushResult = flush_list(cur, import_items)
+  cur = imports_fl.ps
+
+  // Top-level declarations
   let decl_items: Vector<i64> = Vector<i64>::new()
   let done: bool = false
   while done == false:
@@ -2196,19 +2273,49 @@ fn parse_file(pc: PC, ps: PS): PR
     if at_end(pc, cur):
       done = true
     else:
-      let decl: PR = parse_declaration(pc, cur)
-      if decl.node >= 0:
-        decl_items = decl_items.push(decl.node)
-        cur = decl.ps
+      // Diagnose misplaced module/import after declarations
+      if tk_name(peek_kind(pc, cur)) == tk_name(TK.KwModule):
+        let sp: Span = tok_span(pc, cur)
+        cur = ps_add_diag(cur, sp, "module declaration must appear before top-level declarations")
+        cur = ps_advance(pc, cur)
+        // skip to newline for recovery
+        let sync_done: bool = false
+        while sync_done == false:
+          if at_end(pc, cur):
+            sync_done = true
+          else:
+            if tk_name(peek_kind(pc, cur)) == tk_name(TK.Newline):
+              sync_done = true
+            else:
+              cur = ps_advance(pc, cur)
       else:
-        cur = sync_to_decl(pc, decl.ps)
-        let err_r: PR = ps_add_node(cur, Node.ErrorD(cur.pos))
-        decl_items = decl_items.push(err_r.node)
-        cur = err_r.ps
+        if tk_name(peek_kind(pc, cur)) == tk_name(TK.KwImport):
+          let sp: Span = tok_span(pc, cur)
+          cur = ps_add_diag(cur, sp, "import declaration must appear before top-level declarations")
+          cur = ps_advance(pc, cur)
+          let sync_done: bool = false
+          while sync_done == false:
+            if at_end(pc, cur):
+              sync_done = true
+            else:
+              if tk_name(peek_kind(pc, cur)) == tk_name(TK.Newline):
+                sync_done = true
+              else:
+                cur = ps_advance(pc, cur)
+        else:
+          let decl: PR = parse_declaration(pc, cur)
+          if decl.node >= 0:
+            decl_items = decl_items.push(decl.node)
+            cur = decl.ps
+          else:
+            cur = sync_to_decl(pc, decl.ps)
+            let err_r: PR = ps_add_node(cur, Node.ErrorD(cur.pos))
+            decl_items = decl_items.push(err_r.node)
+            cur = err_r.ps
     cur = skip_newlines(pc, cur)
 
   let decls_fl: FlushResult = flush_list(cur, decl_items)
-  return ps_add_node(decls_fl.ps, Node.FileN(decls_fl.list_pos))
+  return ps_add_node(decls_fl.ps, Node.FileN(mod_node, imports_fl.list_pos, decls_fl.list_pos))
 
 // =========================================================================
 // Section 15: Public API
@@ -2307,7 +2414,377 @@ fn node_kind_name(n: Node): string
       return "ExtendDeclD"
     Node.ErrorD(a):
       return "ErrorD"
-    Node.FileN(a):
+    Node.ModuleDeclN(a, b):
+      return "ModuleDeclN"
+    Node.ImportDeclN(a, b):
+      return "ImportDeclN"
+    Node.FileN(a, b, c):
       return "FileN"
   return "Unknown"
+
+// =========================================================================
+// Section 17: Module graph — multi-file compilation substrate
+// =========================================================================
+
+// Extract the canonical module name string ("a::b::c") from a
+// ModuleDeclN node's segment token list.
+fn extract_module_name(po: ParseOutput, mod_node_idx: i64): string
+  let node: Node = po.nodes.get(mod_node_idx)
+  match node:
+    Node.ModuleDeclN(path_lp, seg_count):
+      let result: string = ""
+      let i: i64 = 0
+      while i < seg_count:
+        if i > 0:
+          result = result + "::"
+        let tidx: i64 = po.idx.get(path_lp - seg_count + i)
+        let tok: Token = po.toks.get(tidx)
+        result = result + substring(po.src, tok.offset, tok.len)
+        i = i + 1
+      return result
+  return ""
+
+// Extract import module name from an ImportDeclN node.
+fn extract_import_name(po: ParseOutput, imp_node_idx: i64): string
+  let node: Node = po.nodes.get(imp_node_idx)
+  match node:
+    Node.ImportDeclN(path_lp, seg_count):
+      let result: string = ""
+      let i: i64 = 0
+      while i < seg_count:
+        if i > 0:
+          result = result + "::"
+        let tidx: i64 = po.idx.get(path_lp - seg_count + i)
+        let tok: Token = po.toks.get(tidx)
+        result = result + substring(po.src, tok.offset, tok.len)
+        i = i + 1
+      return result
+  return ""
+
+// Read a list from the idx data vector at the given list position.
+// lp points to the count entry; elements are stored contiguously before it.
+fn pg_read_list(idx: Vector<i64>, lp: i64): Vector<i64>
+  let count: i64 = idx.get(lp)
+  let items: Vector<i64> = Vector<i64>::new()
+  let i: i64 = 0
+  while i < count:
+    items = items.push(idx.get(lp - count + i))
+    i = i + 1
+  return items
+
+// --- Data structures ---
+
+class SourceFile:
+  file_id: i64
+  path: string
+  source_text: string
+  parse_output: ParseOutput
+  module_id: i64          // index into ProgramGraph.modules; -1 until assigned
+
+class ModuleEntry:
+  module_id: i64
+  file_id: i64
+  name: string            // canonical "a::b::c" display form
+
+class FileDiagnostic:
+  file_id: i64            // -1 for graph-level diagnostics
+  path: string            // source file path (empty for graph-level)
+  diag: Diagnostic
+
+class ProgramGraph:
+  files: Vector<SourceFile>
+  modules: Vector<ModuleEntry>
+  edges: Vector<i64>      // flat pairs: [from_module_id, to_module_id, ...]
+  edge_count: i64
+  topo_order: Vector<i64> // module_ids in dependency order
+  diags: Vector<FileDiagnostic>
+
+class SourceInput:
+  path: string
+  source_text: string
+
+// --- Graph construction ---
+
+// Find a module by name in the module list.  Returns module_id or -1.
+fn find_module_by_name(modules: Vector<ModuleEntry>, name: string): i64
+  let i: i64 = 0
+  while i < modules.length():
+    let m: ModuleEntry = modules.get(i)
+    if m.name == name:
+      return m.module_id
+    i = i + 1
+  return to_i64(-1)
+
+// Topological sort via Kahn's algorithm.
+// Returns sorted module_ids, or partial result if cycle detected.
+fn topo_sort(modules: Vector<ModuleEntry>, edges: Vector<i64>, edge_count: i64): Vector<i64>
+  let n: i64 = modules.length()
+  // Compute in-degree for each module.
+  let in_deg: Vector<i64> = Vector<i64>::new()
+  let i: i64 = 0
+  while i < n:
+    in_deg = in_deg.push(to_i64(0))
+    i = i + 1
+  // Count in-degrees from edges.
+  let e: i64 = 0
+  while e < edge_count:
+    let to_id: i64 = edges.get(e * 2 + 1)
+    in_deg = in_deg.set(to_id, in_deg.get(to_id) + 1)
+    e = e + 1
+  // Initialize queue with modules that have in-degree 0.
+  let queue: Vector<i64> = Vector<i64>::new()
+  i = 0
+  while i < n:
+    if in_deg.get(i) == 0:
+      queue = queue.push(i)
+    i = i + 1
+  // Process queue.
+  let result: Vector<i64> = Vector<i64>::new()
+  let head: i64 = 0
+  while head < queue.length():
+    let mid: i64 = queue.get(head)
+    head = head + 1
+    result = result.push(mid)
+    // Decrement in-degree for all dependents.
+    e = 0
+    while e < edge_count:
+      if edges.get(e * 2) == mid:
+        let to_id: i64 = edges.get(e * 2 + 1)
+        in_deg = in_deg.set(to_id, in_deg.get(to_id) - 1)
+        if in_deg.get(to_id) == 0:
+          queue = queue.push(to_id)
+      e = e + 1
+  return result
+
+// Build a module graph from source inputs.
+fn build_program(inputs: Vector<SourceInput>): ProgramGraph
+  // Sort inputs by path for deterministic file_id assignment.
+  // (Simple insertion sort — input counts are small for bootstrap.)
+  let sorted: Vector<SourceInput> = Vector<SourceInput>::new()
+  let si: i64 = 0
+  while si < inputs.length():
+    let inp: SourceInput = inputs.get(si)
+    let insert_at: i64 = sorted.length()
+    let j: i64 = 0
+    while j < sorted.length():
+      let existing: SourceInput = sorted.get(j)
+      if str_compare(inp.path, existing.path) < 0:
+        insert_at = j
+        j = sorted.length()
+      j = j + 1
+    // Insert at position by rebuilding (COW vectors, small N).
+    let new_sorted: Vector<SourceInput> = Vector<SourceInput>::new()
+    j = 0
+    while j < sorted.length() + 1:
+      if j == insert_at:
+        new_sorted = new_sorted.push(inp)
+      if j < sorted.length():
+        new_sorted = new_sorted.push(sorted.get(j))
+      j = j + 1
+    sorted = new_sorted
+    si = si + 1
+
+  // Parse each file and extract module declarations.
+  let files: Vector<SourceFile> = Vector<SourceFile>::new()
+  let modules: Vector<ModuleEntry> = Vector<ModuleEntry>::new()
+  let diags: Vector<FileDiagnostic> = Vector<FileDiagnostic>::new()
+  let fi: i64 = 0
+  while fi < sorted.length():
+    let inp: SourceInput = sorted.get(fi)
+    let po: ParseOutput = parse(inp.source_text)
+    // Merge parse diagnostics with file provenance.
+    let di: i64 = 0
+    while di < po.diags.length():
+      diags = diags.push(FileDiagnostic(fi, inp.path, po.diags.get(di)))
+      di = di + 1
+    // Extract module declaration from FileN root.
+    let mod_name: string = ""
+    let root_node: Node = po.nodes.get(po.root)
+    match root_node:
+      Node.FileN(mod_decl, imports_lp, decls_lp):
+        if mod_decl >= 0:
+          mod_name = extract_module_name(po, mod_decl)
+    if mod_name == "":
+      diags = diags.push(FileDiagnostic(fi, inp.path, make_error(Span(to_i64(0), to_i64(0)), "file '" + inp.path + "' has no module declaration")))
+      files = files.push(SourceFile(fi, inp.path, inp.source_text, po, to_i64(-1)))
+    else:
+      // Check for duplicate module declarations.
+      let existing: i64 = find_module_by_name(modules, mod_name)
+      if existing >= 0:
+        let dup_entry: ModuleEntry = modules.get(existing)
+        let dup_file: SourceFile = files.get(dup_entry.file_id)
+        diags = diags.push(FileDiagnostic(fi, inp.path, make_error(Span(to_i64(0), to_i64(0)), "duplicate module '" + mod_name + "' declared in '" + dup_file.path + "' and '" + inp.path + "'")))
+        files = files.push(SourceFile(fi, inp.path, inp.source_text, po, to_i64(-1)))
+      else:
+        let mid: i64 = modules.length()
+        modules = modules.push(ModuleEntry(mid, fi, mod_name))
+        files = files.push(SourceFile(fi, inp.path, inp.source_text, po, mid))
+    fi = fi + 1
+
+  // Build import edges.
+  let edges: Vector<i64> = Vector<i64>::new()
+  let ec: i64 = 0
+  fi = 0
+  while fi < files.length():
+    let sf: SourceFile = files.get(fi)
+    if sf.module_id >= 0:
+      let root_n: Node = sf.parse_output.nodes.get(sf.parse_output.root)
+      match root_n:
+        Node.FileN(mod_decl, imports_lp, decls_lp):
+          let imps: Vector<i64> = pg_read_list(sf.parse_output.idx, imports_lp)
+          let ii: i64 = 0
+          while ii < imps.length():
+            let imp_name: string = extract_import_name(sf.parse_output, imps.get(ii))
+            let target: i64 = find_module_by_name(modules, imp_name)
+            let sf_mod_name: string = modules.get(sf.module_id).name
+            if target < 0:
+              diags = diags.push(FileDiagnostic(sf.file_id, sf.path, make_error(Span(to_i64(0), to_i64(0)), "imported module '" + imp_name + "' not found in compilation set")))
+            else:
+              if target == sf.module_id:
+                diags = diags.push(FileDiagnostic(sf.file_id, sf.path, make_error(Span(to_i64(0), to_i64(0)), "module '" + sf_mod_name + "' imports itself")))
+              else:
+                // Edge: dependency → dependent (target must come before importer in topo order)
+                edges = edges.push(target)
+                edges = edges.push(sf.module_id)
+                ec = ec + 1
+            ii = ii + 1
+    fi = fi + 1
+
+  // Topological sort.
+  let topo: Vector<i64> = topo_sort(modules, edges, ec)
+
+  // Cycle detection: if topo result is shorter than module count,
+  // there is a cycle.  Find actual cycle members (not just Kahn
+  // leftovers, which include acyclic dependents of cycles) and
+  // trace a concrete import path.
+  if topo.length() < modules.length():
+    // Mark which modules made it into topo order.
+    let in_topo: Vector<i64> = Vector<i64>::new()
+    let ti: i64 = 0
+    while ti < modules.length():
+      in_topo = in_topo.push(to_i64(0))
+      ti = ti + 1
+    ti = 0
+    while ti < topo.length():
+      in_topo = in_topo.set(topo.get(ti), to_i64(1))
+      ti = ti + 1
+    // For each unprocessed node, check if it can reach itself
+    // (i.e. it is actually in a cycle, not just downstream of one).
+    // Collect actual cycle members.
+    let on_cycle: Vector<i64> = Vector<i64>::new()
+    ti = 0
+    while ti < modules.length():
+      on_cycle = on_cycle.push(to_i64(0))
+      ti = ti + 1
+    ti = 0
+    while ti < modules.length():
+      if in_topo.get(ti) == 0:
+        if on_cycle.get(ti) == 0:
+          // DFS from ti following import edges within the unprocessed
+          // set.  Track the path; if we revisit ti, everything on the
+          // path from ti onward is a cycle member.
+          // Use a fixed-size path with a depth pointer (no pop needed).
+          let path: Vector<i64> = Vector<i64>::new()
+          path = path.push(ti)
+          let path_depth: i64 = 1
+          let visited: Vector<i64> = Vector<i64>::new()
+          let vi: i64 = 0
+          while vi < modules.length():
+            visited = visited.push(to_i64(0))
+            vi = vi + 1
+          visited = visited.set(ti, to_i64(1))
+          // Track which edges we've tried from each depth to allow backtracking.
+          // edge_cursor[depth] = next edge index to try from path[depth].
+          let edge_cursor: Vector<i64> = Vector<i64>::new()
+          edge_cursor = edge_cursor.push(to_i64(0))
+          let found: bool = false
+          let walk_done: bool = false
+          while walk_done == false:
+            let cur: i64 = path.get(path_depth - 1)
+            let cursor: i64 = edge_cursor.get(path_depth - 1)
+            // Find next unvisited import target from cur.
+            let next: i64 = to_i64(-1)
+            let ei: i64 = cursor
+            while ei < ec:
+              let from: i64 = edges.get(ei * 2 + 1)
+              let to_mod: i64 = edges.get(ei * 2)
+              if from == cur:
+                if in_topo.get(to_mod) == 0:
+                  if to_mod == ti:
+                    found = true
+                    walk_done = true
+                    next = to_mod
+                    ei = ec
+                  else:
+                    if visited.get(to_mod) == 0:
+                      next = to_mod
+                      // Save cursor past this edge for backtracking.
+                      edge_cursor = edge_cursor.set(path_depth - 1, ei + 1)
+                      ei = ec
+              ei = ei + 1
+            if found:
+              let pi: i64 = 0
+              while pi < path_depth:
+                on_cycle = on_cycle.set(path.get(pi), to_i64(1))
+                pi = pi + 1
+            else:
+              if next < 0:
+                // Dead end — backtrack.
+                path_depth = path_depth - 1
+                if path_depth == 0:
+                  walk_done = true
+              else:
+                visited = visited.set(next, to_i64(1))
+                if path_depth < path.length():
+                  path = path.set(path_depth, next)
+                else:
+                  path = path.push(next)
+                path_depth = path_depth + 1
+                // Initialize cursor for new depth.
+                if path_depth - 1 < edge_cursor.length():
+                  edge_cursor = edge_cursor.set(path_depth - 1, to_i64(0))
+                else:
+                  edge_cursor = edge_cursor.push(to_i64(0))
+      ti = ti + 1
+    // Now trace a concrete cycle path from the first cycle member.
+    let start: i64 = to_i64(-1)
+    ti = 0
+    while ti < modules.length():
+      if on_cycle.get(ti) == 1:
+        if start < 0:
+          start = ti
+      ti = ti + 1
+    if start >= 0:
+      let cycle_path: string = modules.get(start).name
+      let cur_node: i64 = start
+      let trace_done: bool = false
+      let max_steps: i64 = modules.length() + 1
+      let step: i64 = 0
+      while trace_done == false:
+        if step >= max_steps:
+          trace_done = true
+        else:
+          // Follow import edges staying within actual cycle members.
+          let next: i64 = to_i64(-1)
+          let ei: i64 = 0
+          while ei < ec:
+            let from: i64 = edges.get(ei * 2 + 1)
+            let to_mod: i64 = edges.get(ei * 2)
+            if from == cur_node:
+              if on_cycle.get(to_mod) == 1:
+                next = to_mod
+                ei = ec
+            ei = ei + 1
+          if next < 0:
+            trace_done = true
+          else:
+            cycle_path = cycle_path + " -> " + modules.get(next).name
+            if next == start:
+              trace_done = true
+            else:
+              cur_node = next
+          step = step + 1
+      diags = diags.push(FileDiagnostic(to_i64(-1), "", make_error(Span(to_i64(0), to_i64(0)), "import cycle detected: " + cycle_path)))
+
+  return ProgramGraph(files, modules, edges, ec, topo, diags)
 

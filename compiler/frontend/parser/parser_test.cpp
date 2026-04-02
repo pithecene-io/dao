@@ -411,6 +411,41 @@ suite<"import_tests"> import_tests = [] {
   };
 };
 
+suite<"module_tests"> module_tests = [] {
+  "simple module declaration"_test = [] {
+    auto output = parse_string("module app\nfn f(): i32 -> 0\n");
+    expect(output.parse_result.diagnostics.empty());
+    expect(output.parse_result.file->module_decl != nullptr);
+    auto* mod = output.parse_result.file->module_decl;
+    expect(mod->path.segments.size() == 1_u);
+    expect(mod->path.segments[0] == "app");
+  };
+
+  "qualified module declaration"_test = [] {
+    auto output = parse_string("module app::math\nfn f(): i32 -> 0\n");
+    expect(output.parse_result.diagnostics.empty());
+    auto* mod = output.parse_result.file->module_decl;
+    expect(mod->path.segments.size() == 2_u);
+    expect(mod->path.segments[0] == "app");
+    expect(mod->path.segments[1] == "math");
+  };
+
+  "module with imports and declarations"_test = [] {
+    auto output = parse_string(
+        "module app::main\nimport core::fmt\nimport app::math\nfn f(): i32 -> 0\n");
+    expect(output.parse_result.diagnostics.empty());
+    expect(output.parse_result.file->module_decl != nullptr);
+    expect(output.parse_result.file->imports.size() == 2_u);
+    expect(output.parse_result.file->declarations.size() == 1_u);
+  };
+
+  "no module declaration"_test = [] {
+    auto output = parse_string("fn f(): i32 -> 0\n");
+    expect(output.parse_result.diagnostics.empty());
+    expect(output.parse_result.file->module_decl == nullptr);
+  };
+};
+
 suite<"assignment_tests"> assignment_tests = [] {
   "simple assignment"_test = [] {
     auto output = parse_string("fn f(): i32\n    x = 42\n");

@@ -119,14 +119,16 @@ Self-hosting compiler subsystems written in Dao.
 
 - `README.md` — scope, parity notes, and subsystem inventory
 - `shared/` — single source of truth for the bootstrap frontend pipeline:
-  token model, lexer, AST, parser (`base.dao`); assembled into `*.gen.dao`
-  files via `assemble.sh`
+  token model, lexer, AST, parser, module graph (`base.dao`); assembled
+  into `*.gen.dao` files via `assemble.sh`
 - `assemble.sh` — concatenates `shared/base.dao` with subsystem sources
   to produce compilable `*.gen.dao` outputs (gitignored build artifacts)
 - `lexer/` — indentation-aware lexer matching the host compiler's token
   surface; tests in `tests.dao` (Task 20)
 - `parser/` — recursive-descent parser producing arena-indexed AST for
   Tier A Dao syntax; tests in `tests.dao` (Task 21)
+- `graph/` — module graph construction, cycle detection, and topological
+  sort for multi-file compilation; tests in `tests.dao` (Task 25)
 - `resolver/` — two-pass name resolver with scope chains, symbol tables,
   and uses map; logic + tests in `impl.dao` (Task 22)
 - `typecheck/` — type checker assigning types to expressions and

@@ -13,6 +13,7 @@ namespace dao {
 // taxonomy in CONTRACT_LANGUAGE_TOOLING.md.
 enum class TokenKind : std::uint8_t {
   // Keywords — control
+  KwModule,
   KwImport,
   KwExtern,
   KwFn,
