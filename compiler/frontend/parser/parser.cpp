@@ -136,6 +136,13 @@ private:
     skip_newlines();
     Span file_span = peek().span;
 
+    // Optional module declaration.
+    ModuleNode* module_decl = nullptr;
+    if (peek_kind() == TokenKind::KwModule) {
+      module_decl = parse_module_decl();
+      skip_newlines();
+    }
+
     std::vector<ImportNode*> imports;
     while (peek_kind() == TokenKind::KwImport) {
       imports.push_back(parse_import());
@@ -162,7 +169,20 @@ private:
     }
 
     Span total = {.offset = file_span.offset, .length = peek().span.offset - file_span.offset};
-    return ctx_.alloc<FileNode>(total, std::move(imports), std::move(declarations));
+    return ctx_.alloc<FileNode>(total, module_decl, std::move(imports), std::move(declarations));
+  }
+
+  // -----------------------------------------------------------------------
+  // Module declaration
+  // -----------------------------------------------------------------------
+
+  auto parse_module_decl() -> ModuleNode* {
+    const auto& kw = consume(TokenKind::KwModule);
+    auto path = parse_module_path();
+    consume(TokenKind::Newline);
+    Span span = {.offset = kw.span.offset,
+                 .length = (path.span.offset + path.span.length) - kw.span.offset};
+    return ctx_.alloc<ModuleNode>(span, std::move(path));
   }
 
   // -----------------------------------------------------------------------

@@ -38,6 +38,7 @@
 
 enum TK:
   // Keywords — control
+  KwModule
   KwImport
   KwExtern
   KwFn
@@ -153,6 +154,8 @@ fn is_alnum(ch: i32): bool
 
 fn classify_keyword(src: string, start: i64, klen: i64): TK
   let text: string = substring(src, start, klen)
+  if text == "module":
+    return TK.KwModule
   if text == "import":
     return TK.KwImport
   if text == "extern":
@@ -218,6 +221,8 @@ fn classify_keyword(src: string, start: i64, klen: i64): TK
 
 fn tk_name(kind: TK): string
   match kind:
+    TK.KwModule:
+      return "KwModule"
     TK.KwImport:
       return "KwImport"
     TK.KwExtern:
@@ -802,8 +807,11 @@ enum class Node:
   ConceptDeclD(name: i64, tparams: i64, methods: i64)
   ExtendDeclD(target: i64, concept_name: i64, methods: i64)
   ErrorD(tok: i64)
+  // --- Module / Import ---
+  ModuleDeclN(path_lp: i64, seg_count: i64)
+  ImportDeclN(path_lp: i64, seg_count: i64)
   // --- File ---
-  FileN(decls_lp: i64)
+  FileN(module_decl: i64, imports_lp: i64, decls_lp: i64)
 
 // =========================================================================
 // Section 7: Parser state and result types
@@ -2187,8 +2195,77 @@ fn parse_extend_decl(pc: PC, ps: PS): PR
 // Section 14: File-level parsing
 // =========================================================================
 
+// Parse a module path: identifier (:: identifier)*
+// Returns a PR whose node is a ModuleDeclN or ImportDeclN (caller wraps).
+// On return, ps.idx contains flushed segment token indices and node is
+// the list_pos.  seg_count is returned via the PR.node field as a
+// negative-encoded pair — callers use parse_module_path_raw instead.
+//
+// parse_module_path_raw: returns (ps_after, list_pos, seg_count) packed
+// into a dedicated result type.
+
+class ModulePathResult:
+  ps: PS
+  list_pos: i64
+  seg_count: i64
+
+fn parse_module_path(pc: PC, ps: PS): ModulePathResult
+  let first_tidx: i64 = ps.pos
+  let cur: PS = expect(pc, ps, TK.Identifier)
+  let seg_toks: Vector<i64> = Vector<i64>::new()
+  seg_toks = seg_toks.push(first_tidx)
+  let done: bool = false
+  while done == false:
+    if tk_name(peek_kind(pc, cur)) == tk_name(TK.ColonColon):
+      cur = ps_advance(pc, cur)
+      let tidx: i64 = cur.pos
+      cur = expect(pc, cur, TK.Identifier)
+      seg_toks = seg_toks.push(tidx)
+    else:
+      done = true
+  let fl: FlushResult = flush_list(cur, seg_toks)
+  return ModulePathResult(fl.ps, fl.list_pos, seg_toks.length())
+
+fn parse_module_decl(pc: PC, ps: PS): PR
+  // consume 'module' keyword
+  let cur: PS = ps_advance(pc, ps)
+  let path: ModulePathResult = parse_module_path(pc, cur)
+  cur = expect(pc, path.ps, TK.Newline)
+  return ps_add_node(cur, Node.ModuleDeclN(path.list_pos, path.seg_count))
+
+fn parse_import_decl(pc: PC, ps: PS): PR
+  // consume 'import' keyword
+  let cur: PS = ps_advance(pc, ps)
+  let path: ModulePathResult = parse_module_path(pc, cur)
+  cur = expect(pc, path.ps, TK.Newline)
+  return ps_add_node(cur, Node.ImportDeclN(path.list_pos, path.seg_count))
+
 fn parse_file(pc: PC, ps: PS): PR
   let cur: PS = skip_newlines(pc, ps)
+
+  // Optional module declaration
+  let mod_node: i64 = to_i64(-1)
+  if tk_name(peek_kind(pc, cur)) == tk_name(TK.KwModule):
+    let md: PR = parse_module_decl(pc, cur)
+    mod_node = md.node
+    cur = md.ps
+    cur = skip_newlines(pc, cur)
+
+  // Import declarations
+  let import_items: Vector<i64> = Vector<i64>::new()
+  let imp_done: bool = false
+  while imp_done == false:
+    cur = skip_newlines(pc, cur)
+    if tk_name(peek_kind(pc, cur)) == tk_name(TK.KwImport):
+      let imp: PR = parse_import_decl(pc, cur)
+      import_items = import_items.push(imp.node)
+      cur = imp.ps
+    else:
+      imp_done = true
+  let imports_fl: FlushResult = flush_list(cur, import_items)
+  cur = imports_fl.ps
+
+  // Top-level declarations
   let decl_items: Vector<i64> = Vector<i64>::new()
   let done: bool = false
   while done == false:
@@ -2196,19 +2273,49 @@ fn parse_file(pc: PC, ps: PS): PR
     if at_end(pc, cur):
       done = true
     else:
-      let decl: PR = parse_declaration(pc, cur)
-      if decl.node >= 0:
-        decl_items = decl_items.push(decl.node)
-        cur = decl.ps
+      // Diagnose misplaced module/import after declarations
+      if tk_name(peek_kind(pc, cur)) == tk_name(TK.KwModule):
+        let sp: Span = tok_span(pc, cur)
+        cur = ps_add_diag(cur, sp, "module declaration must appear before top-level declarations")
+        cur = ps_advance(pc, cur)
+        // skip to newline for recovery
+        let sync_done: bool = false
+        while sync_done == false:
+          if at_end(pc, cur):
+            sync_done = true
+          else:
+            if tk_name(peek_kind(pc, cur)) == tk_name(TK.Newline):
+              sync_done = true
+            else:
+              cur = ps_advance(pc, cur)
       else:
-        cur = sync_to_decl(pc, decl.ps)
-        let err_r: PR = ps_add_node(cur, Node.ErrorD(cur.pos))
-        decl_items = decl_items.push(err_r.node)
-        cur = err_r.ps
+        if tk_name(peek_kind(pc, cur)) == tk_name(TK.KwImport):
+          let sp: Span = tok_span(pc, cur)
+          cur = ps_add_diag(cur, sp, "import declaration must appear before top-level declarations")
+          cur = ps_advance(pc, cur)
+          let sync_done: bool = false
+          while sync_done == false:
+            if at_end(pc, cur):
+              sync_done = true
+            else:
+              if tk_name(peek_kind(pc, cur)) == tk_name(TK.Newline):
+                sync_done = true
+              else:
+                cur = ps_advance(pc, cur)
+        else:
+          let decl: PR = parse_declaration(pc, cur)
+          if decl.node >= 0:
+            decl_items = decl_items.push(decl.node)
+            cur = decl.ps
+          else:
+            cur = sync_to_decl(pc, decl.ps)
+            let err_r: PR = ps_add_node(cur, Node.ErrorD(cur.pos))
+            decl_items = decl_items.push(err_r.node)
+            cur = err_r.ps
     cur = skip_newlines(pc, cur)
 
   let decls_fl: FlushResult = flush_list(cur, decl_items)
-  return ps_add_node(decls_fl.ps, Node.FileN(decls_fl.list_pos))
+  return ps_add_node(decls_fl.ps, Node.FileN(mod_node, imports_fl.list_pos, decls_fl.list_pos))
 
 // =========================================================================
 // Section 15: Public API
@@ -2307,7 +2414,11 @@ fn node_kind_name(n: Node): string
       return "ExtendDeclD"
     Node.ErrorD(a):
       return "ErrorD"
-    Node.FileN(a):
+    Node.ModuleDeclN(a, b):
+      return "ModuleDeclN"
+    Node.ImportDeclN(a, b):
+      return "ImportDeclN"
+    Node.FileN(a, b, c):
       return "FileN"
   return "Unknown"
 
