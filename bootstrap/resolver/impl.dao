@@ -315,6 +315,9 @@ fn resolve_type_node(rs: RS, node_idx: i64): RS
       return r
     Node.PointerT(inner):
       return resolve_type_node(rs, inner)
+    Node.QualNameE(seg_lp, seg_count):
+      // Qualified type name (e.g. types::Point) — resolve same as expression.
+      return resolve_expr(rs, node_idx)
     Node.ErrorT(t):
       return rs
   return rs
@@ -344,25 +347,48 @@ fn resolve_expr(rs: RS, node_idx: i64): RS
         let sym: i64 = scope_lookup(rs, name)
         if sym >= 0:
           let r: RS = rs_add_use(rs, first_tidx, sym)
-          let sym_obj: Symbol = r.symbols.get(sym)
-          // If first segment is a Module symbol and there's a second
-          // segment, resolve through the module's export table.
-          if symbol_kind_name(sym_obj.kind) == symbol_kind_name(SymbolKind.Module):
-            if segs.length() >= 2:
-              let target_mid: i64 = sym_obj.decl_node
-              if target_mid >= 0:
-                if target_mid < r.rc.exports.tables.length():
-                  let export_tbl: ExportTable = r.rc.exports.tables.get(target_mid)
-                  let exports: HashMap<i64> = export_tbl.entries
-                  let second_tidx: i64 = segs.get(1)
-                  let second_name: string = tok_name(r, second_tidx)
-                  let found: Option<i64> = exports.get(second_name)
-                  match found:
-                    Option.Some(exp_sym):
-                      return rs_add_use(r, second_tidx, exp_sym)
-                    Option.None:
-                      let sp2: Span = tok_name_span(r, second_tidx)
-                      return rs_add_diag(r, sp2, "module '" + name + "' has no exported symbol '" + second_name + "'")
+          let cur_sym: Symbol = r.symbols.get(sym)
+          // Resolve remaining segments based on the kind of each resolved symbol.
+          let seg_i: i64 = 1
+          let seg_done: bool = false
+          while seg_i < segs.length():
+            if seg_done:
+              seg_i = segs.length()
+            else:
+              let seg_tidx: i64 = segs.get(seg_i)
+              let seg_name: string = tok_name(r, seg_tidx)
+              // Module symbol: look up in export table.
+              if symbol_kind_name(cur_sym.kind) == symbol_kind_name(SymbolKind.Module):
+                let target_mid: i64 = cur_sym.decl_node
+                if target_mid >= 0:
+                  if target_mid < r.rc.exports.tables.length():
+                    let export_tbl: ExportTable = r.rc.exports.tables.get(target_mid)
+                    let found: Option<i64> = export_tbl.entries.get(seg_name)
+                    match found:
+                      Option.Some(exp_sym):
+                        r = rs_add_use(r, seg_tidx, exp_sym)
+                        cur_sym = r.symbols.get(exp_sym)
+                      Option.None:
+                        let prev_name: string = cur_sym.name
+                        let sp2: Span = tok_name_span(r, seg_tidx)
+                        r = rs_add_diag(r, sp2, "module '" + prev_name + "' has no exported symbol '" + seg_name + "'")
+                        seg_done = true
+                  else:
+                    seg_done = true
+                else:
+                  seg_done = true
+              else:
+                // Type/enum symbol: record the use (for enum variant access
+                // like Color::Red — variant resolution is deferred to typecheck).
+                if symbol_kind_name(cur_sym.kind) == symbol_kind_name(SymbolKind.Type):
+                  // Remaining segments after a Type are enum variants or
+                  // static members — record the use of the type and stop.
+                  // Variant resolution happens in typecheck, not the resolver.
+                  seg_done = true
+                else:
+                  // Non-module, non-type prefix — can't resolve further.
+                  seg_done = true
+              seg_i = seg_i + 1
           return r
         let sp: Span = tok_name_span(rs, first_tidx)
         return rs_add_diag(rs, sp, "unknown name '" + name + "'")
@@ -899,12 +925,45 @@ class ProgramResolveResult:
   diags: Vector<FileDiagnostic>
   module_exports: ExportTables
 
-// Build export table directly from the file scope's declarations HashMap.
-// This avoids scope_lookup (which does HashMap traversal that can
-// overflow the stack with large accumulated state).
-fn build_export_table(rs: RS): HashMap<i64>
-  let scope: Scope = rs.scopes.get(rs.current_scope)
-  return scope.decls
+// Build export table by walking the file's declarations and looking up
+// each declared name in the scope.  This exports only the module's own
+// top-level declarations (Function, Type), not builtins or import bindings.
+fn build_export_table(rs: RS, file_node_idx: i64): HashMap<i64>
+  let exports: HashMap<i64> = HashMap<i64>::new()
+  let file_node: Node = rs.rc.nodes.get(file_node_idx)
+  match file_node:
+    Node.FileN(module_decl, imports_lp, decls_lp):
+      let decls: Vector<i64> = read_list(rs.rc.idx_data, decls_lp)
+      let i: i64 = 0
+      while i < decls.length():
+        let decl_idx: i64 = decls.get(i)
+        let decl_node: Node = rs.rc.nodes.get(decl_idx)
+        // Extract the name token from each declaration kind.
+        let name_tidx: i64 = to_i64(-1)
+        match decl_node:
+          Node.FnDeclD(nt, tp, plp, rt, blp):
+            name_tidx = nt
+          Node.ExprFnD(nt, tp, plp, rt, be):
+            name_tidx = nt
+          Node.ExternFnD(nt, tp, plp, rt):
+            name_tidx = nt
+          Node.ClassDeclD(nt, tp, flp, mlp):
+            name_tidx = nt
+          Node.EnumDeclD(nt, tp, vlp):
+            name_tidx = nt
+          Node.TypeAliasD(nt, tt):
+            name_tidx = nt
+          Node.ConceptDeclD(nt, tp, mlp):
+            name_tidx = nt
+        if name_tidx >= 0:
+          let name: string = tok_name(rs, name_tidx)
+          let scope: Scope = rs.scopes.get(rs.current_scope)
+          let found: Option<i64> = scope.decls.get(name)
+          match found:
+            Option.Some(sym_idx):
+              exports = exports.set(name, sym_idx)
+        i = i + 1
+  return exports
 
 fn resolve_program(pg: ProgramGraph): ProgramResolveResult
   // Shared mutable state across all modules — symbols, scopes, uses
@@ -980,7 +1039,7 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
           ii = ii + 1
 
     // Build export table for this module.
-    let exports: HashMap<i64> = build_export_table(rs)
+    let exports: HashMap<i64> = build_export_table(rs, po.root)
     export_tables = export_tables.set(mid, ExportTable(exports))
 
     // Save accumulated state.
@@ -1053,7 +1112,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 30
+  let total: i32 = 32
 
   // -----------------------------------------------------------------
   // Test 1: forward_ref — fn calls fn defined later in file; no diagnostic
@@ -1482,13 +1541,14 @@ fn main(): i32
   else:
     print("FAIL same_module_unqualified: " + i64_to_string(cf_r6_errs) + " errors")
 
-  // Test 27: imported enum variant resolves via qualified name
+  // Test 27: imported enum variant resolves via full qualified path
   let cf_inputs7: Vector<SourceInput> = Vector<SourceInput>::new()
   cf_inputs7 = cf_inputs7.push(SourceInput("colors.dao", "module app::colors\nenum Color:\n  Red\n  Blue\n"))
-  cf_inputs7 = cf_inputs7.push(SourceInput("main.dao", "module app::main\nimport app::colors\nfn f(): i32\n  let c: i32 = colors::Color\n  return 0\n"))
+  cf_inputs7 = cf_inputs7.push(SourceInput("main.dao", "module app::main\nimport app::colors\nfn f(): i32\n  let c: i32 = colors::Color::Red\n  return 0\n"))
   let cf_pg7: ProgramGraph = build_program(cf_inputs7)
   let cf_r7: ProgramResolveResult = resolve_program(cf_pg7)
-  // colors::Color should resolve — 'colors' as Module, 'Color' through exports.
+  // colors::Color::Red should resolve — 'colors' as Module, 'Color' through
+  // exports, 'Red' deferred to typecheck (variant resolution).
   let cf_r7_errs: i64 = 0
   cfi = 0
   while cfi < cf_r7.diags.length():
@@ -1497,10 +1557,10 @@ fn main(): i32
       cf_r7_errs = cf_r7_errs + 1
     cfi = cfi + 1
   if cf_r7_errs == 0:
-    print("PASS imported_enum_resolves")
+    print("PASS imported_enum_variant")
     pass_count = pass_count + 1
   else:
-    print("FAIL imported_enum_resolves: " + i64_to_string(cf_r7_errs) + " errors")
+    print("FAIL imported_enum_variant: " + i64_to_string(cf_r7_errs) + " errors")
 
   // Test 28: existing single-file resolver tests still pass
   // (This is implicitly verified by tests 1-20 passing above.)
@@ -1544,6 +1604,44 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL three_module_chain: " + i64_to_string(cf_r10_errs) + " errors")
+
+  // Test 31: imported type in annotation position (qualified type)
+  let cf_inputs11: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs11 = cf_inputs11.push(SourceInput("types.dao", "module app::types\nclass Point:\n  x: i32\n  y: i32\n"))
+  cf_inputs11 = cf_inputs11.push(SourceInput("main.dao", "module app::main\nimport app::types\nfn f(): i32\n  let p: types::Point = types::Point(1, 2)\n  return p.x\n"))
+  let cf_pg11: ProgramGraph = build_program(cf_inputs11)
+  let cf_r11: ProgramResolveResult = resolve_program(cf_pg11)
+  let cf_r11_errs: i64 = 0
+  cfi = 0
+  while cfi < cf_r11.diags.length():
+    let fd11: FileDiagnostic = cf_r11.diags.get(cfi)
+    if fd11.diag.severity == Severity.Error:
+      cf_r11_errs = cf_r11_errs + 1
+    cfi = cfi + 1
+  if cf_r11_errs == 0:
+    print("PASS imported_type_annotation")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL imported_type_annotation: " + i64_to_string(cf_r11_errs) + " errors")
+
+  // Test 32: transitive re-export is blocked (i32 from module A not exported)
+  let cf_inputs12: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs12 = cf_inputs12.push(SourceInput("a.dao", "module app::a\nfn f(): i32 -> 0\n"))
+  cf_inputs12 = cf_inputs12.push(SourceInput("b.dao", "module app::b\nimport app::a\nfn g(): i32\n  return a::i32\n"))
+  let cf_pg12: ProgramGraph = build_program(cf_inputs12)
+  let cf_r12: ProgramResolveResult = resolve_program(cf_pg12)
+  let found_no_i32: bool = false
+  cfi = 0
+  while cfi < cf_r12.diags.length():
+    let fd12: FileDiagnostic = cf_r12.diags.get(cfi)
+    if fd12.diag.message == "module 'a' has no exported symbol 'i32'":
+      found_no_i32 = true
+    cfi = cfi + 1
+  if found_no_i32:
+    print("PASS no_transitive_builtin_export")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL no_transitive_builtin_export: builtins should not be exported")
 
   // -----------------------------------------------------------------
   // Summary
