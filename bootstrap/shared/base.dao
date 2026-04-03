@@ -1025,6 +1025,24 @@ fn parse_named_type(pc: PC, ps: PS): PR
   let name_tidx: i64 = ps.pos
   let ps2: PS = ps_advance(pc, ps)
 
+  // Check for qualified type: Name::Name (module::Type)
+  if tk_name(peek_kind(pc, ps2)) == tk_name(TK.ColonColon):
+    // Build a QualNameE node to represent the qualified type path.
+    let seg_toks: Vector<i64> = Vector<i64>::new()
+    seg_toks = seg_toks.push(name_tidx)
+    let cur: PS = ps2
+    let qual_done: bool = false
+    while qual_done == false:
+      if tk_name(peek_kind(pc, cur)) == tk_name(TK.ColonColon):
+        cur = ps_advance(pc, cur)
+        let tidx: i64 = cur.pos
+        cur = expect(pc, cur, TK.Identifier)
+        seg_toks = seg_toks.push(tidx)
+      else:
+        qual_done = true
+    let seg_fl: FlushResult = flush_list(cur, seg_toks)
+    return ps_add_node(seg_fl.ps, Node.QualNameE(seg_fl.list_pos, seg_toks.length()))
+
   // Check for generic: Name<...>
   if tk_name(peek_kind(pc, ps2)) == tk_name(TK.Lt):
     let ps3: PS = ps_advance(pc, ps2)
