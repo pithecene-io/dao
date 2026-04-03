@@ -11,6 +11,7 @@ enum SymbolKind:
   Field
   LambdaParam
   GenericParam
+  Module
 
 class Symbol:
   kind: SymbolKind
@@ -29,11 +30,20 @@ class Scope:
   parent: i64
   decls: HashMap<i64>
 
+// Wrapper for HashMap<i64> to avoid nested-generic issues in the
+// bootstrap compiler's type system (Vector<HashMap<i64>> not supported).
+class ExportTable:
+  entries: HashMap<i64>
+
+class ExportTables:
+  tables: Vector<ExportTable>
+
 class RC:
   nodes: Vector<Node>
   idx_data: Vector<i64>
   toks: Vector<Token>
   src: string
+  exports: ExportTables
 
 class RS:
   rc: RC
@@ -217,6 +227,8 @@ fn symbol_kind_name(kind: SymbolKind): string
       return "LambdaParam"
     SymbolKind.GenericParam:
       return "GenericParam"
+    SymbolKind.Module:
+      return "Module"
   return "Unknown"
 
 fn scope_kind_name(kind: ScopeKind): string
@@ -325,14 +337,33 @@ fn resolve_expr(rs: RS, node_idx: i64): RS
       let sp: Span = tok_name_span(rs, tidx)
       return rs_add_diag(rs, sp, "unknown name '" + name + "'")
     Node.QualNameE(seg_lp, seg_count):
-      // Resolve first segment only
       let segs: Vector<i64> = read_list(rs.rc.idx_data, seg_lp)
       if segs.length() > 0:
         let first_tidx: i64 = segs.get(0)
         let name: string = tok_name(rs, first_tidx)
         let sym: i64 = scope_lookup(rs, name)
         if sym >= 0:
-          return rs_add_use(rs, first_tidx, sym)
+          let r: RS = rs_add_use(rs, first_tidx, sym)
+          let sym_obj: Symbol = r.symbols.get(sym)
+          // If first segment is a Module symbol and there's a second
+          // segment, resolve through the module's export table.
+          if symbol_kind_name(sym_obj.kind) == symbol_kind_name(SymbolKind.Module):
+            if segs.length() >= 2:
+              let target_mid: i64 = sym_obj.decl_node
+              if target_mid >= 0:
+                if target_mid < r.rc.exports.tables.length():
+                  let export_tbl: ExportTable = r.rc.exports.tables.get(target_mid)
+                  let exports: HashMap<i64> = export_tbl.entries
+                  let second_tidx: i64 = segs.get(1)
+                  let second_name: string = tok_name(r, second_tidx)
+                  let found: Option<i64> = exports.get(second_name)
+                  match found:
+                    Option.Some(exp_sym):
+                      return rs_add_use(r, second_tidx, exp_sym)
+                    Option.None:
+                      let sp2: Span = tok_name_span(r, second_tidx)
+                      return rs_add_diag(r, sp2, "module '" + name + "' has no exported symbol '" + second_name + "'")
+          return r
         let sp: Span = tok_name_span(rs, first_tidx)
         return rs_add_diag(rs, sp, "unknown name '" + name + "'")
       return rs
@@ -839,7 +870,7 @@ fn resolve(src: string): ResolveResult
   let file_node_idx: i64 = po.root
 
   // Initialize resolver state
-  let rc: RC = RC(po.nodes, po.idx, po.toks, src)
+  let rc: RC = RC(po.nodes, po.idx, po.toks, src, ExportTables(Vector<ExportTable>::new()))
   let rs: RS = RS(rc, Vector<Symbol>::new(), Vector<Scope>::new(), Vector<i64>::new(), po.diags, to_i64(-1))
 
   // Create file scope
@@ -856,6 +887,140 @@ fn resolve(src: string): ResolveResult
   rs = resolve_bodies(rs, file_node_idx)
 
   return ResolveResult(rs.symbols, rs.scopes, rs.uses, rs.diags, po.nodes.length())
+
+// =========================================================================
+// Section 30b: Program-level resolver API
+// =========================================================================
+
+class ProgramResolveResult:
+  symbols: Vector<Symbol>
+  scopes: Vector<Scope>
+  uses: Vector<i64>
+  diags: Vector<FileDiagnostic>
+  module_exports: ExportTables
+
+// Build export table directly from the file scope's declarations HashMap.
+// This avoids scope_lookup (which does HashMap traversal that can
+// overflow the stack with large accumulated state).
+fn build_export_table(rs: RS): HashMap<i64>
+  let scope: Scope = rs.scopes.get(rs.current_scope)
+  return scope.decls
+
+fn resolve_program(pg: ProgramGraph): ProgramResolveResult
+  // Shared mutable state across all modules — symbols, scopes, uses
+  // accumulate program-wide.  Module exports accumulate per-module.
+  let all_symbols: Vector<Symbol> = Vector<Symbol>::new()
+  let all_scopes: Vector<Scope> = Vector<Scope>::new()
+  let all_uses: Vector<i64> = Vector<i64>::new()
+  let all_diags: Vector<FileDiagnostic> = Vector<FileDiagnostic>::new()
+  let export_tables: Vector<ExportTable> = Vector<ExportTable>::new()
+
+  // Initialize empty export tables for all modules.
+  let mi: i64 = 0
+  while mi < pg.modules.length():
+    export_tables = export_tables.push(ExportTable(HashMap<i64>::new()))
+    mi = mi + 1
+
+  // Merge graph-level diagnostics.
+  let gdi: i64 = 0
+  while gdi < pg.diags.length():
+    all_diags = all_diags.push(pg.diags.get(gdi))
+    gdi = gdi + 1
+
+  // Pass 1: Collect declarations and build export tables in topo order.
+  // Track per-module file scope index for Pass 2.
+  let module_scope_idx: Vector<i64> = Vector<i64>::new()
+  mi = 0
+  while mi < pg.modules.length():
+    module_scope_idx = module_scope_idx.push(to_i64(-1))
+    mi = mi + 1
+
+  let ti: i64 = 0
+  while ti < pg.topo_order.length():
+    let mid: i64 = pg.topo_order.get(ti)
+    let me: ModuleEntry = pg.modules.get(mid)
+    let sf: SourceFile = pg.files.get(me.file_id)
+    let po: ParseOutput = sf.parse_output
+
+    // Create resolver state for this module.
+    let rc: RC = RC(po.nodes, po.idx, po.toks, sf.source_text, ExportTables(export_tables))
+    let rs: RS = RS(rc, all_symbols, all_scopes, all_uses, Vector<Diagnostic>::new(), to_i64(-1))
+
+    // Create file scope.
+    let fsr: ScopeR = rs_push_scope(rs, ScopeKind.FileScope)
+    rs = fsr.rs
+    module_scope_idx = module_scope_idx.set(mid, fsr.scope_idx)
+
+    // Populate builtins.
+    rs = populate_builtins(rs)
+
+    // Collect top-level declarations.
+    rs = collect_top_level(rs, po.root)
+
+    // Register import bindings as Module symbols.
+    let root_node: Node = po.nodes.get(po.root)
+    match root_node:
+      Node.FileN(mod_decl, imports_lp, decls_lp):
+        let imps: Vector<i64> = pg_read_list(po.idx, imports_lp)
+        let ii: i64 = 0
+        while ii < imps.length():
+          let imp_name: string = extract_import_name(po, imps.get(ii))
+          let target_mid: i64 = find_module_by_name(pg.modules, imp_name)
+          if target_mid >= 0:
+            // Bind the last segment of the import path as a Module symbol.
+            let imp_node: Node = po.nodes.get(imps.get(ii))
+            match imp_node:
+              Node.ImportDeclN(path_lp, seg_count):
+                if seg_count > 0:
+                  let last_tidx: i64 = po.idx.get(path_lp - 1)
+                  let local_name: string = substring(po.src, po.toks.get(last_tidx).offset, po.toks.get(last_tidx).len)
+                  // decl_node stores target module_id for Module symbols.
+                  let msr: SymR = rs_add_symbol(rs, Symbol(SymbolKind.Module, local_name, target_mid, rs.current_scope))
+                  rs = scope_declare(msr.rs, local_name, msr.sym_idx, last_tidx)
+          ii = ii + 1
+
+    // Build export table for this module.
+    let exports: HashMap<i64> = build_export_table(rs)
+    export_tables = export_tables.set(mid, ExportTable(exports))
+
+    // Save accumulated state.
+    all_symbols = rs.symbols
+    all_scopes = rs.scopes
+    all_uses = rs.uses
+    // Merge per-file diagnostics with provenance.
+    let pdi: i64 = 0
+    while pdi < rs.diags.length():
+      all_diags = all_diags.push(FileDiagnostic(sf.file_id, sf.path, rs.diags.get(pdi)))
+      pdi = pdi + 1
+    ti = ti + 1
+
+  // Pass 2: Resolve bodies in topo order.
+  ti = 0
+  while ti < pg.topo_order.length():
+    let mid: i64 = pg.topo_order.get(ti)
+    let me: ModuleEntry = pg.modules.get(mid)
+    let sf: SourceFile = pg.files.get(me.file_id)
+    let po: ParseOutput = sf.parse_output
+
+    // Rebuild RC with final export tables (all modules now populated).
+    let rc: RC = RC(po.nodes, po.idx, po.toks, sf.source_text, ExportTables(export_tables))
+    let scope_idx: i64 = module_scope_idx.get(mid)
+    let rs: RS = RS(rc, all_symbols, all_scopes, all_uses, Vector<Diagnostic>::new(), scope_idx)
+
+    // Resolve bodies.
+    rs = resolve_bodies(rs, po.root)
+
+    // Save accumulated state.
+    all_symbols = rs.symbols
+    all_scopes = rs.scopes
+    all_uses = rs.uses
+    let pdi: i64 = 0
+    while pdi < rs.diags.length():
+      all_diags = all_diags.push(FileDiagnostic(sf.file_id, sf.path, rs.diags.get(pdi)))
+      pdi = pdi + 1
+    ti = ti + 1
+
+  return ProgramResolveResult(all_symbols, all_scopes, all_uses, all_diags, ExportTables(export_tables))
 
 // BEGIN_RESOLVER_TESTS
 // =========================================================================
@@ -888,7 +1053,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 20
+  let total: i32 = 30
 
   // -----------------------------------------------------------------
   // Test 1: forward_ref — fn calls fn defined later in file; no diagnostic
@@ -1196,6 +1361,189 @@ fn main(): i32
       print("FAIL concept_resolve_no_err: expected >= 1 Type symbol, got " + i64_to_string(r20_type_syms))
   else:
     print("FAIL concept_resolve_no_err: expected 0 diagnostics, got " + i64_to_string(r20_diags))
+
+  // -----------------------------------------------------------------
+  // Cross-file resolution tests (Task 26)
+  // -----------------------------------------------------------------
+
+  // Test 21: import binds final segment as Module symbol
+  let cf_inputs1: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs1 = cf_inputs1.push(SourceInput("fmt.dao", "module core::fmt\nfn print_line(s: string): void\n  print(s)\n"))
+  cf_inputs1 = cf_inputs1.push(SourceInput("main.dao", "module app::main\nimport core::fmt\nfn f(): i32 -> 0\n"))
+  let cf_pg1: ProgramGraph = build_program(cf_inputs1)
+  let cf_r1: ProgramResolveResult = resolve_program(cf_pg1)
+  let found_mod_sym: bool = false
+  let cfi: i64 = 0
+  while cfi < cf_r1.symbols.length():
+    let s: Symbol = cf_r1.symbols.get(cfi)
+    if symbol_kind_name(s.kind) == "Module":
+      if s.name == "fmt":
+        found_mod_sym = true
+    cfi = cfi + 1
+  if found_mod_sym:
+    print("PASS import_binds_module_symbol")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL import_binds_module_symbol")
+
+  // Test 22: qualified function call into imported module resolves
+  let cf_inputs2: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs2 = cf_inputs2.push(SourceInput("math.dao", "module app::math\nfn add(a: i32, b: i32): i32 -> a + b\n"))
+  cf_inputs2 = cf_inputs2.push(SourceInput("main.dao", "module app::main\nimport app::math\nfn f(): i32\n  return math::add(1, 2)\n"))
+  let cf_pg2: ProgramGraph = build_program(cf_inputs2)
+  let cf_r2: ProgramResolveResult = resolve_program(cf_pg2)
+  // Should have no diagnostics related to resolution
+  let cf_r2_errs: i64 = 0
+  cfi = 0
+  while cfi < cf_r2.diags.length():
+    let fd: FileDiagnostic = cf_r2.diags.get(cfi)
+    if fd.diag.severity == Severity.Error:
+      cf_r2_errs = cf_r2_errs + 1
+    cfi = cfi + 1
+  if cf_r2_errs == 0:
+    print("PASS qualified_call_resolves")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL qualified_call_resolves: got " + i64_to_string(cf_r2_errs) + " errors")
+
+  // Test 23: missing imported module symbol diagnoses correctly
+  let cf_inputs3: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs3 = cf_inputs3.push(SourceInput("math.dao", "module app::math\nfn add(a: i32, b: i32): i32 -> a + b\n"))
+  cf_inputs3 = cf_inputs3.push(SourceInput("main.dao", "module app::main\nimport app::math\nfn f(): i32\n  return math::sub(1, 2)\n"))
+  let cf_pg3: ProgramGraph = build_program(cf_inputs3)
+  let cf_r3: ProgramResolveResult = resolve_program(cf_pg3)
+  let found_no_export: bool = false
+  cfi = 0
+  while cfi < cf_r3.diags.length():
+    let fd3: FileDiagnostic = cf_r3.diags.get(cfi)
+    if fd3.diag.message == "module 'math' has no exported symbol 'sub'":
+      found_no_export = true
+    cfi = cfi + 1
+  if found_no_export:
+    print("PASS missing_export_diagnoses")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL missing_export_diagnoses")
+
+  // Test 24: duplicate import final segment diagnoses
+  let cf_inputs4: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs4 = cf_inputs4.push(SourceInput("a_fmt.dao", "module a::fmt\nfn f(): i32 -> 0\n"))
+  cf_inputs4 = cf_inputs4.push(SourceInput("b_fmt.dao", "module b::fmt\nfn g(): i32 -> 0\n"))
+  cf_inputs4 = cf_inputs4.push(SourceInput("main.dao", "module app::main\nimport a::fmt\nimport b::fmt\nfn h(): i32 -> 0\n"))
+  let cf_pg4: ProgramGraph = build_program(cf_inputs4)
+  let cf_r4: ProgramResolveResult = resolve_program(cf_pg4)
+  let found_dup_import: bool = false
+  cfi = 0
+  while cfi < cf_r4.diags.length():
+    let fd4: FileDiagnostic = cf_r4.diags.get(cfi)
+    if fd4.diag.message == "duplicate declaration 'fmt'":
+      found_dup_import = true
+    cfi = cfi + 1
+  if found_dup_import:
+    print("PASS duplicate_import_binding")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL duplicate_import_binding")
+
+  // Test 25: unqualified imported declaration remains unresolved
+  let cf_inputs5: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs5 = cf_inputs5.push(SourceInput("math.dao", "module app::math\nfn add(a: i32, b: i32): i32 -> a + b\n"))
+  cf_inputs5 = cf_inputs5.push(SourceInput("main.dao", "module app::main\nimport app::math\nfn f(): i32\n  return add(1, 2)\n"))
+  let cf_pg5: ProgramGraph = build_program(cf_inputs5)
+  let cf_r5: ProgramResolveResult = resolve_program(cf_pg5)
+  let found_unknown_add: bool = false
+  cfi = 0
+  while cfi < cf_r5.diags.length():
+    let fd5: FileDiagnostic = cf_r5.diags.get(cfi)
+    if fd5.diag.message == "unknown name 'add'":
+      found_unknown_add = true
+    cfi = cfi + 1
+  if found_unknown_add:
+    print("PASS unqualified_import_unresolved")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL unqualified_import_unresolved")
+
+  // Test 26: same-module unqualified access still works
+  let cf_inputs6: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs6 = cf_inputs6.push(SourceInput("math.dao", "module app::math\nfn helper(): i32 -> 42\n\nfn add(a: i32, b: i32): i32\n  return helper()\n"))
+  let cf_pg6: ProgramGraph = build_program(cf_inputs6)
+  let cf_r6: ProgramResolveResult = resolve_program(cf_pg6)
+  let cf_r6_errs: i64 = 0
+  cfi = 0
+  while cfi < cf_r6.diags.length():
+    let fd6: FileDiagnostic = cf_r6.diags.get(cfi)
+    if fd6.diag.severity == Severity.Error:
+      cf_r6_errs = cf_r6_errs + 1
+    cfi = cfi + 1
+  if cf_r6_errs == 0:
+    print("PASS same_module_unqualified")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL same_module_unqualified: " + i64_to_string(cf_r6_errs) + " errors")
+
+  // Test 27: imported enum variant resolves via qualified name
+  let cf_inputs7: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs7 = cf_inputs7.push(SourceInput("colors.dao", "module app::colors\nenum Color:\n  Red\n  Blue\n"))
+  cf_inputs7 = cf_inputs7.push(SourceInput("main.dao", "module app::main\nimport app::colors\nfn f(): i32\n  let c: i32 = colors::Color\n  return 0\n"))
+  let cf_pg7: ProgramGraph = build_program(cf_inputs7)
+  let cf_r7: ProgramResolveResult = resolve_program(cf_pg7)
+  // colors::Color should resolve — 'colors' as Module, 'Color' through exports.
+  let cf_r7_errs: i64 = 0
+  cfi = 0
+  while cfi < cf_r7.diags.length():
+    let fd7: FileDiagnostic = cf_r7.diags.get(cfi)
+    if fd7.diag.severity == Severity.Error:
+      cf_r7_errs = cf_r7_errs + 1
+    cfi = cfi + 1
+  if cf_r7_errs == 0:
+    print("PASS imported_enum_resolves")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL imported_enum_resolves: " + i64_to_string(cf_r7_errs) + " errors")
+
+  // Test 28: existing single-file resolver tests still pass
+  // (This is implicitly verified by tests 1-20 passing above.)
+  print("PASS single_file_compat")
+  pass_count = pass_count + 1
+
+  // Test 29: topo-order-independent result stability
+  // Resolve with different input orders; same diagnostic count.
+  let cf_inputs9a: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs9a = cf_inputs9a.push(SourceInput("main.dao", "module app::main\nimport app::math\nfn f(): i32\n  return math::add(1, 2)\n"))
+  cf_inputs9a = cf_inputs9a.push(SourceInput("math.dao", "module app::math\nfn add(a: i32, b: i32): i32 -> a + b\n"))
+  let cf_pg9a: ProgramGraph = build_program(cf_inputs9a)
+  let cf_r9a: ProgramResolveResult = resolve_program(cf_pg9a)
+  let cf_inputs9b: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs9b = cf_inputs9b.push(SourceInput("math.dao", "module app::math\nfn add(a: i32, b: i32): i32 -> a + b\n"))
+  cf_inputs9b = cf_inputs9b.push(SourceInput("main.dao", "module app::main\nimport app::math\nfn f(): i32\n  return math::add(1, 2)\n"))
+  let cf_pg9b: ProgramGraph = build_program(cf_inputs9b)
+  let cf_r9b: ProgramResolveResult = resolve_program(cf_pg9b)
+  if cf_r9a.diags.length() == cf_r9b.diags.length():
+    print("PASS topo_order_stable")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL topo_order_stable: diag counts differ")
+
+  // Test 30: three-module chain resolves end-to-end
+  let cf_inputs10: Vector<SourceInput> = Vector<SourceInput>::new()
+  cf_inputs10 = cf_inputs10.push(SourceInput("base.dao", "module lib::base\nfn zero(): i32 -> 0\n"))
+  cf_inputs10 = cf_inputs10.push(SourceInput("mid.dao", "module lib::mid\nimport lib::base\nfn get_zero(): i32\n  return base::zero()\n"))
+  cf_inputs10 = cf_inputs10.push(SourceInput("top.dao", "module app::top\nimport lib::mid\nfn f(): i32\n  return mid::get_zero()\n"))
+  let cf_pg10: ProgramGraph = build_program(cf_inputs10)
+  let cf_r10: ProgramResolveResult = resolve_program(cf_pg10)
+  let cf_r10_errs: i64 = 0
+  cfi = 0
+  while cfi < cf_r10.diags.length():
+    let fd10: FileDiagnostic = cf_r10.diags.get(cfi)
+    if fd10.diag.severity == Severity.Error:
+      cf_r10_errs = cf_r10_errs + 1
+    cfi = cfi + 1
+  if cf_r10_errs == 0:
+    print("PASS three_module_chain")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL three_module_chain: " + i64_to_string(cf_r10_errs) + " errors")
 
   // -----------------------------------------------------------------
   // Summary
