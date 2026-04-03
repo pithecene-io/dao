@@ -918,10 +918,13 @@ fn resolve(src: string): ResolveResult
 // Section 30b: Program-level resolver API
 // =========================================================================
 
+// Program uses store triples: [file_id, tok_idx, sym_idx, ...] so
+// consumers can distinguish which file a token index belongs to.
+// (Single-file ResolveResult.uses keeps the old pair format.)
 class ProgramResolveResult:
   symbols: Vector<Symbol>
   scopes: Vector<Scope>
-  uses: Vector<i64>
+  uses: Vector<i64>       // flat triples: [file_id, tok_idx, sym_idx, ...]
   diags: Vector<FileDiagnostic>
   module_exports: ExportTables
 
@@ -966,11 +969,16 @@ fn build_export_table(rs: RS, file_node_idx: i64): HashMap<i64>
   return exports
 
 fn resolve_program(pg: ProgramGraph): ProgramResolveResult
-  // Shared mutable state across all modules — symbols, scopes, uses
-  // accumulate program-wide.  Module exports accumulate per-module.
+  // Shared mutable state across all modules — symbols and scopes
+  // accumulate program-wide.  Uses are converted from per-module
+  // pairs (tok_idx, sym_idx) to triples (file_id, tok_idx, sym_idx)
+  // with file provenance.  Module exports accumulate per-module.
   let all_symbols: Vector<Symbol> = Vector<Symbol>::new()
   let all_scopes: Vector<Scope> = Vector<Scope>::new()
-  let all_uses: Vector<i64> = Vector<i64>::new()
+  let all_uses_triples: Vector<i64> = Vector<i64>::new()
+  // Internal pair-format uses passed to RS; snapshot length before
+  // each module to extract the per-module delta.
+  let rs_uses: Vector<i64> = Vector<i64>::new()
   let all_diags: Vector<FileDiagnostic> = Vector<FileDiagnostic>::new()
   let export_tables: Vector<ExportTable> = Vector<ExportTable>::new()
 
@@ -1001,9 +1009,12 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
     let sf: SourceFile = pg.files.get(me.file_id)
     let po: ParseOutput = sf.parse_output
 
+    // Snapshot uses length before this module's pass.
+    let uses_before: i64 = rs_uses.length()
+
     // Create resolver state for this module.
     let rc: RC = RC(po.nodes, po.idx, po.toks, sf.source_text, ExportTables(export_tables))
-    let rs: RS = RS(rc, all_symbols, all_scopes, all_uses, Vector<Diagnostic>::new(), to_i64(-1))
+    let rs: RS = RS(rc, all_symbols, all_scopes, rs_uses, Vector<Diagnostic>::new(), to_i64(-1))
 
     // Create file scope.
     let fsr: ScopeR = rs_push_scope(rs, ScopeKind.FileScope)
@@ -1045,7 +1056,14 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
     // Save accumulated state.
     all_symbols = rs.symbols
     all_scopes = rs.scopes
-    all_uses = rs.uses
+    rs_uses = rs.uses
+    // Convert new uses (pairs) to triples with file provenance.
+    let ui: i64 = uses_before
+    while ui < rs_uses.length():
+      all_uses_triples = all_uses_triples.push(sf.file_id)
+      all_uses_triples = all_uses_triples.push(rs_uses.get(ui))
+      all_uses_triples = all_uses_triples.push(rs_uses.get(ui + 1))
+      ui = ui + 2
     // Merge per-file diagnostics with provenance.
     let pdi: i64 = 0
     while pdi < rs.diags.length():
@@ -1061,10 +1079,13 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
     let sf: SourceFile = pg.files.get(me.file_id)
     let po: ParseOutput = sf.parse_output
 
+    // Snapshot uses length before this module's body resolution.
+    let uses_before: i64 = rs_uses.length()
+
     // Rebuild RC with final export tables (all modules now populated).
     let rc: RC = RC(po.nodes, po.idx, po.toks, sf.source_text, ExportTables(export_tables))
     let scope_idx: i64 = module_scope_idx.get(mid)
-    let rs: RS = RS(rc, all_symbols, all_scopes, all_uses, Vector<Diagnostic>::new(), scope_idx)
+    let rs: RS = RS(rc, all_symbols, all_scopes, rs_uses, Vector<Diagnostic>::new(), scope_idx)
 
     // Resolve bodies.
     rs = resolve_bodies(rs, po.root)
@@ -1072,14 +1093,21 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
     // Save accumulated state.
     all_symbols = rs.symbols
     all_scopes = rs.scopes
-    all_uses = rs.uses
+    rs_uses = rs.uses
+    // Convert new uses to triples.
+    let ui: i64 = uses_before
+    while ui < rs_uses.length():
+      all_uses_triples = all_uses_triples.push(sf.file_id)
+      all_uses_triples = all_uses_triples.push(rs_uses.get(ui))
+      all_uses_triples = all_uses_triples.push(rs_uses.get(ui + 1))
+      ui = ui + 2
     let pdi: i64 = 0
     while pdi < rs.diags.length():
       all_diags = all_diags.push(FileDiagnostic(sf.file_id, sf.path, rs.diags.get(pdi)))
       pdi = pdi + 1
     ti = ti + 1
 
-  return ProgramResolveResult(all_symbols, all_scopes, all_uses, all_diags, ExportTables(export_tables))
+  return ProgramResolveResult(all_symbols, all_scopes, all_uses_triples, all_diags, ExportTables(export_tables))
 
 // BEGIN_RESOLVER_TESTS
 // =========================================================================
@@ -1112,7 +1140,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 32
+  let total: i32 = 33
 
   // -----------------------------------------------------------------
   // Test 1: forward_ref — fn calls fn defined later in file; no diagnostic
@@ -1642,6 +1670,34 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL no_transitive_builtin_export: builtins should not be exported")
+
+  // Test 33: uses carry file provenance (triples, not pairs)
+  // Reuse cf_r2 (two-module qualified call) — uses should be triples.
+  let uses_ok: bool = false
+  if cf_r2.uses.length() > 0:
+    // Uses are triples: each entry is 3 elements (file_id, tok_idx, sym_idx).
+    if cf_r2.uses.length() % 3 == 0:
+      // Check that at least one use has file_id matching main.dao's file_id.
+      let main_fid: i64 = to_i64(-1)
+      let mfi: i64 = 0
+      while mfi < cf_pg2.files.length():
+        let mf: SourceFile = cf_pg2.files.get(mfi)
+        if mf.path == "main.dao":
+          main_fid = mf.file_id
+        mfi = mfi + 1
+      let found_main_use: bool = false
+      let uii: i64 = 0
+      while uii < cf_r2.uses.length():
+        if cf_r2.uses.get(uii) == main_fid:
+          found_main_use = true
+        uii = uii + 3
+      if found_main_use:
+        uses_ok = true
+  if uses_ok:
+    print("PASS uses_file_provenance")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL uses_file_provenance: uses not in triple format or missing main.dao file_id")
 
   // -----------------------------------------------------------------
   // Summary
