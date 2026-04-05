@@ -36,10 +36,29 @@ struct ParseOutput {
 // `module` declaration (e.g. the module_tests suite) are passed through
 // unchanged so their own module header remains authoritative.
 auto parse_string(std::string_view src) -> ParseOutput {
+  // Skip whitespace and `//` line comments when detecting an existing
+  // leading `module` declaration, to match the comment-aware skip
+  // used by the strip/blank helpers in the driver and playground
+  // (see compiler/driver/main.cpp and
+  // tools/playground/compiler_service/pipeline.cpp). Dao only has
+  // `//` line comments (see spec/grammar/dao.ebnf).
   auto starts_with_module = [](std::string_view s) {
     size_t i = 0;
-    while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r')) {
-      ++i;
+    while (i < s.size()) {
+      char ch = s[i];
+      if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+        ++i;
+        continue;
+      }
+      if (ch == '/' && i + 1 < s.size() && s[i + 1] == '/') {
+        auto nl = s.find('\n', i);
+        if (nl == std::string_view::npos) {
+          return false;
+        }
+        i = nl + 1;
+        continue;
+      }
+      break;
     }
     if (i + 6 >= s.size() || s.substr(i, 6) != "module") {
       return false;
