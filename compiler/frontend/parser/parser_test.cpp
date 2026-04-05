@@ -26,14 +26,35 @@ struct ParseOutput {
 };
 
 // Test helper: CONTRACT_SYNTAX_SURFACE.md requires every source file to
-// begin with a `module` declaration. Fixtures in this test file focus on
-// parser behavior below the module layer, so we prepend a canonical
+// begin with a `module` declaration. Fixtures in this test file focus
+// on parser behavior below the module layer, so we prepend a canonical
 // `module test` line to the supplied source before lexing. This keeps
-// fixtures focused on what each test is actually exercising while still
-// honoring the parser's leading-declaration requirement.
+// fixtures focused on what each test is actually exercising while
+// still honoring the parser's leading-declaration requirement.
+//
+// The helper is idempotent: fixtures that already begin with a
+// `module` declaration (e.g. the module_tests suite) are passed through
+// unchanged so their own module header remains authoritative.
 auto parse_string(std::string_view src) -> ParseOutput {
-  std::string wrapped = "module test\n";
-  wrapped.append(src);
+  auto starts_with_module = [](std::string_view s) {
+    size_t i = 0;
+    while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r')) {
+      ++i;
+    }
+    if (i + 6 >= s.size() || s.substr(i, 6) != "module") {
+      return false;
+    }
+    char after = s[i + 6];
+    return after == ' ' || after == '\t';
+  };
+
+  std::string wrapped;
+  if (starts_with_module(src)) {
+    wrapped.assign(src);
+  } else {
+    wrapped = "module test\n";
+    wrapped.append(src);
+  }
   auto source = std::make_unique<SourceBuffer>("<test>", std::move(wrapped));
   auto lex_result = lex(*source);
   auto parse_result = parse(lex_result.tokens);
@@ -416,6 +437,56 @@ suite<"import_tests"> import_tests = [] {
     expect(imp->path.segments.size() == 2_u);
     expect(imp->path.segments[0] == "net");
     expect(imp->path.segments[1] == "http");
+  };
+};
+
+suite<"module_tests"> module_tests = [] {
+  "simple module declaration"_test = [] {
+    auto output = parse_string("module app\nfn f(): i32 -> 0\n");
+    expect(output.parse_result.diagnostics.empty());
+    expect(output.parse_result.file->module_decl != nullptr);
+    auto* mod = output.parse_result.file->module_decl;
+    expect(mod->path.segments.size() == 1_u);
+    expect(mod->path.segments[0] == "app");
+  };
+
+  "qualified module declaration"_test = [] {
+    auto output = parse_string("module app::math\nfn f(): i32 -> 0\n");
+    expect(output.parse_result.diagnostics.empty());
+    auto* mod = output.parse_result.file->module_decl;
+    expect(mod->path.segments.size() == 2_u);
+    expect(mod->path.segments[0] == "app");
+    expect(mod->path.segments[1] == "math");
+  };
+
+  "module with imports and declarations"_test = [] {
+    auto output = parse_string(
+        "module app::main\nimport core::fmt\nimport app::math\nfn f(): i32 -> 0\n");
+    expect(output.parse_result.diagnostics.empty());
+    expect(output.parse_result.file->module_decl != nullptr);
+    expect(output.parse_result.file->imports.size() == 2_u);
+    expect(output.parse_result.file->declarations.size() == 1_u);
+  };
+
+  "missing module declaration is reported"_test = [] {
+    // Bypass the parse_string wrapper's auto-prepending of
+    // `module test` so we can exercise the parser's enforcement of
+    // the "every file begins with a module declaration" rule
+    // frozen in CONTRACT_SYNTAX_SURFACE.md.
+    auto source = std::make_unique<SourceBuffer>("<test>", std::string("fn f(): i32 -> 0\n"));
+    auto lex_result = lex(*source);
+    auto parse_result = parse(lex_result.tokens);
+
+    bool has_missing_module = false;
+    for (const auto& diag : parse_result.diagnostics) {
+      if (diag.message.find("module") != std::string::npos) {
+        has_missing_module = true;
+        break;
+      }
+    }
+    expect(has_missing_module) << "expected a diagnostic about the missing module declaration";
+    expect(parse_result.file != nullptr);
+    expect(parse_result.file->module_decl == nullptr);
   };
 };
 

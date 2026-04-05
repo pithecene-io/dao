@@ -140,7 +140,7 @@ private:
     // with exactly one `module` declaration. Emit a diagnostic when
     // it is missing, but continue parsing so downstream tests and
     // tooling can still exercise the rest of the pipeline.
-    ModuleDeclNode* module_decl = nullptr;
+    ModuleNode* module_decl = nullptr;
     if (peek_kind() == TokenKind::KwModule) {
       module_decl = parse_module_decl();
       skip_newlines();
@@ -185,28 +185,20 @@ private:
     }
 
     Span total = {.offset = file_span.offset, .length = peek().span.offset - file_span.offset};
-    auto* file = ctx_.alloc<FileNode>();
-    file->span = total;
-    file->module_decl = module_decl;
-    file->imports = std::move(imports);
-    file->declarations = std::move(declarations);
-    return file;
+    return ctx_.alloc<FileNode>(total, module_decl, std::move(imports), std::move(declarations));
   }
 
   // -----------------------------------------------------------------------
   // Module declaration
   // -----------------------------------------------------------------------
 
-  auto parse_module_decl() -> ModuleDeclNode* {
+  auto parse_module_decl() -> ModuleNode* {
     const auto& kw = consume(TokenKind::KwModule);
     auto path = parse_module_path();
     consume(TokenKind::Newline);
     Span span = {.offset = kw.span.offset,
                  .length = (path.span.offset + path.span.length) - kw.span.offset};
-    auto* node = ctx_.alloc<ModuleDeclNode>();
-    node->span = span;
-    node->path = std::move(path);
-    return node;
+    return ctx_.alloc<ModuleNode>(span, std::move(path));
   }
 
   // -----------------------------------------------------------------------

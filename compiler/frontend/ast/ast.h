@@ -159,7 +159,7 @@ enum class UnaryOp : std::uint8_t {
 // File-level nodes — standalone, not part of any variant.
 // ---------------------------------------------------------------------------
 
-struct ModuleDeclNode {
+struct ModuleNode {
   Span span;
   QualifiedPath path;
 };
@@ -176,7 +176,7 @@ struct FileNode {
   // exactly one `module` declaration. This pointer may be null only
   // when the parser encountered a missing-module error and emitted
   // a diagnostic; downstream passes may treat it as an error file.
-  ModuleDeclNode* module_decl = nullptr;
+  ModuleNode* module_decl = nullptr;
   std::vector<ImportNode*> imports;
   std::vector<Decl*> declarations;
 };

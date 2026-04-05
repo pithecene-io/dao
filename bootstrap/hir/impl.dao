@@ -836,7 +836,7 @@ fn hir_find_field_sym(hs: HS, decl_idx: i64, field_name: string): i64
 fn lower_file(hs: HS, file_node_idx: i64): HirR
   let node: Node = hs.nodes.get(file_node_idx)
   match node:
-    Node.FileN(decls_lp):
+    Node.FileN(module_decl, imports_lp, decls_lp):
       let decls: Vector<i64> = read_list(hs.idx_data, decls_lp)
       let cur: HS = hs
       let hir_decls: Vector<i64> = Vector<i64>::new()

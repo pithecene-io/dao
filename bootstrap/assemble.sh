@@ -64,6 +64,9 @@ assemble bootstrap/lexer/lexer.gen.dao \
 assemble bootstrap/parser/parser.gen.dao \
   bootstrap/parser/tests.dao
 
+assemble bootstrap/graph/graph.gen.dao \
+  bootstrap/graph/tests.dao
+
 assemble bootstrap/resolver/resolver.gen.dao \
   bootstrap/resolver/impl.dao
 
@@ -86,4 +89,4 @@ assemble bootstrap/hir/hir.gen.dao \
   bootstrap/hir/impl.dao
 rm -f "$RESOLVER_LIB2" "$TYPECHECK_LIB"
 
-echo "done — 5 files assembled"
+echo "done — 6 files assembled"

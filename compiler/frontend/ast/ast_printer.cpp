@@ -56,7 +56,7 @@ private:
   // Module declaration
   // -----------------------------------------------------------------------
 
-  void print_module_decl(const ModuleDeclNode& node) {
+  void print_module_decl(const ModuleNode& node) {
     indent();
     out_ << "Module ";
     print_qualified_path(node.path);

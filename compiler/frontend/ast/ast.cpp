@@ -78,6 +78,8 @@ auto node_kind_name(NodeKind kind) -> const char* {
   switch (kind) {
   case NodeKind::File:
     return "File";
+  case NodeKind::ModuleDecl:
+    return "ModuleDecl";
   case NodeKind::Import:
     return "Import";
   case NodeKind::FunctionDecl:

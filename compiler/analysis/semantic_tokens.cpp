@@ -237,7 +237,7 @@ private:
 
   // --- Module declaration ---
 
-  void visit_module_decl(const ModuleDeclNode& node) {
+  void visit_module_decl(const ModuleNode& node) {
     // All segments of the declared module path are binding sites —
     // classify every segment as decl.module, mirroring the import
     // convention where the trailing segment is decl.module.

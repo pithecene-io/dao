@@ -91,7 +91,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 43
+  let total: i32 = 51
 
   // -----------------------------------------------------------------
   // Expression tests
@@ -310,6 +310,74 @@ fn main(): i32
   let src30: string = "class Empty:\n  \n"
   let r30: ParseOutput = parse(src30)
   if expect_parse_errors_po("empty_class_body", r30, to_i64(1)):
+    pass_count = pass_count + 1
+
+  // -----------------------------------------------------------------
+  // Module and import tests
+  // -----------------------------------------------------------------
+
+  // Test 31a: module declaration parses
+  let src31a: string = "module app::math\nfn f(): i32 -> 0\n"
+  let r31a: ParseOutput = parse(src31a)
+  if expect_no_parse_errors_po("module_decl_parses", r31a):
+    pass_count = pass_count + 1
+
+  // Test 31b: single import parses
+  let src31b: string = "import core::fmt\nfn f(): i32 -> 0\n"
+  let r31b: ParseOutput = parse(src31b)
+  if expect_no_parse_errors_po("single_import_parses", r31b):
+    pass_count = pass_count + 1
+
+  // Test 31c: multiple imports parse
+  let src31c: string = "import core::fmt\nimport app::math\nfn f(): i32 -> 0\n"
+  let r31c: ParseOutput = parse(src31c)
+  if expect_no_parse_errors_po("multi_import_parses", r31c):
+    pass_count = pass_count + 1
+
+  // Test 31d: module + imports + declarations parse
+  let src31d: string = "module app::main\nimport core::fmt\nimport app::math\nfn f(): i32 -> 0\n"
+  let r31d: ParseOutput = parse(src31d)
+  if expect_no_parse_errors_po("module_imports_decls", r31d):
+    pass_count = pass_count + 1
+
+  // Test 31e: module decl creates ModuleDeclN node
+  if r31d.root >= 0:
+    let file_n: Node = r31d.nodes.get(r31d.root)
+    let mod_ok: bool = false
+    match file_n:
+      Node.FileN(mod_decl, imp_lp, decl_lp):
+        if mod_decl >= 0:
+          if expect_node_kind_po("module_node_kind", r31d, mod_decl, "ModuleDeclN"):
+            mod_ok = true
+    if mod_ok:
+      pass_count = pass_count + 1
+
+  // Test 31f: imports produce ImportDeclN nodes — check that the
+  // import count stored in the idx list is 2 and first import node is ImportDeclN.
+  if r31d.root >= 0:
+    let file_n2: Node = r31d.nodes.get(r31d.root)
+    let imp_ok: bool = false
+    match file_n2:
+      Node.FileN(mod_decl, imp_lp, decl_lp):
+        // imp_lp points to the count; elements precede it.
+        let imp_count: i64 = r31d.idx.get(imp_lp)
+        if imp_count == 2:
+          let first_imp_idx: i64 = r31d.idx.get(imp_lp - 2)
+          if expect_node_kind_po("import_node_kind", r31d, first_imp_idx, "ImportDeclN"):
+            imp_ok = true
+    if imp_ok:
+      pass_count = pass_count + 1
+
+  // Test 31g: import after function produces diagnostic
+  let src31g: string = "fn f(): i32 -> 0\nimport core::fmt\n"
+  let r31g: ParseOutput = parse(src31g)
+  if expect_parse_errors_po("import_after_fn", r31g, to_i64(1)):
+    pass_count = pass_count + 1
+
+  // Test 31h: module after function produces diagnostic
+  let src31h: string = "fn f(): i32 -> 0\nmodule app::main\n"
+  let r31h: ParseOutput = parse(src31h)
+  if expect_parse_errors_po("module_after_fn", r31h, to_i64(1)):
     pass_count = pass_count + 1
 
   // -----------------------------------------------------------------
