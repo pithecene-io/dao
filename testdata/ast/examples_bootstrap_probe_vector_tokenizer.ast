@@ -1,4 +1,5 @@
 File
+  Module bootstrap_probe::vector_tokenizer
   FunctionDecl TK_KW
     ReturnType: i32
     ExprBody

@@ -1,4 +1,5 @@
 File
+  Module core::result
   EnumClassDecl Result<T, E>
     Variant Ok
     Variant Err

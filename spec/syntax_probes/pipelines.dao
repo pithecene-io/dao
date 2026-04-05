@@ -1,3 +1,4 @@
+module probe::pipelines
 type List = i32
 
 fn filter(pred: i32): i32 -> 0

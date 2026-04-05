@@ -1,4 +1,5 @@
 File
+  Module probe::functions
   FunctionDecl add
     Param a: i32
     Param b: i32

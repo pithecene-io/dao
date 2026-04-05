@@ -1,4 +1,5 @@
 File
+  Module core::printable
   ExternFunctionDecl __dao_conv_i8_to_string
     Param x: i8
     ReturnType: string

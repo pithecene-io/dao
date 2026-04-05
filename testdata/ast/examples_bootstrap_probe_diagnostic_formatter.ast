@@ -1,4 +1,5 @@
 File
+  Module bootstrap_probe::diagnostic_formatter
   ClassDecl SourceBuffer
     Field filename: string
     Field contents: string

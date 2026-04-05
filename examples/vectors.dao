@@ -1,3 +1,4 @@
+module vectors
 // vectors.dao — Vector<T> as an ordinary library type.
 //
 // Demonstrates push, get, set, length, and iteration on a generic

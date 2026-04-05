@@ -1,4 +1,5 @@
 File
+  Module probe::pipelines
   AliasDecl List = i32
   FunctionDecl filter
     Param pred: i32

@@ -1,4 +1,5 @@
 File
+  Module bootstrap_probe::type_checker
   EnumDecl TK
     Variant Int
     Variant True

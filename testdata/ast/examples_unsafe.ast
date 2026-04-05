@@ -1,4 +1,5 @@
 File
+  Module unsafe
   FunctionDecl read_ptr
     Param ptr: *i32
     ReturnType: i32

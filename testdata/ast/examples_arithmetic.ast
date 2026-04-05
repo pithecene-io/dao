@@ -1,4 +1,5 @@
 File
+  Module arithmetic
   FunctionDecl square
     Param x: i32
     ReturnType: i32

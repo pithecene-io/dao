@@ -1,4 +1,5 @@
 File
+  Module strings
   FunctionDecl greet
     Param name: string
     ReturnType: string

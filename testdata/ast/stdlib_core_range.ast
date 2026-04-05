@@ -1,4 +1,5 @@
 File
+  Module core::range
   FunctionDecl range
     Param n: i32
     ReturnType: Generator<i32>

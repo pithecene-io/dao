@@ -171,7 +171,12 @@ struct ImportNode {
 
 struct FileNode {
   Span span;
-  ModuleNode* module_decl = nullptr;  // null when absent
+  // Mandatory leading module declaration. Per
+  // CONTRACT_SYNTAX_SURFACE.md, every source file must begin with
+  // exactly one `module` declaration. This pointer may be null only
+  // when the parser encountered a missing-module error and emitted
+  // a diagnostic; downstream passes may treat it as an error file.
+  ModuleNode* module_decl = nullptr;
   std::vector<ImportNode*> imports;
   std::vector<Decl*> declarations;
 };

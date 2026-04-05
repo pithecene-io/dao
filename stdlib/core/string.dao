@@ -1,3 +1,4 @@
+module core::string
 extern fn __dao_str_concat(a: string, b: string): string
 extern fn __dao_str_length(s: string): i64
 extern fn __dao_str_char_at(s: string, index: i64): i32

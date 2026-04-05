@@ -16,9 +16,19 @@ using namespace dao;
 
 namespace {
 
+// Test helper: CONTRACT_SYNTAX_SURFACE.md requires every source file to
+// begin with a `module` declaration. The inline fixtures in this test
+// file focus on type-checking behavior below the module layer, so we
+// prepend a canonical `module test` line to the source before lexing.
+auto wrap_with_test_module(std::string_view src) -> std::string {
+  std::string wrapped = "module test\n";
+  wrapped.append(src);
+  return wrapped;
+}
+
 /// Parse, resolve, and typecheck a source string. Returns TypeCheckResult.
 auto check_source(const std::string& source) -> TypeCheckResult {
-  SourceBuffer buf("test.dao", std::string(source));
+  SourceBuffer buf("test.dao", wrap_with_test_module(source));
   auto lex_result = lex(buf);
   auto parse_result = parse(lex_result.tokens);
   auto resolve_result = resolve(*parse_result.file);
@@ -31,12 +41,53 @@ auto check_source(const std::string& source) -> TypeCheckResult {
 /// Uses source concatenation (same approach as the driver).
 /// The prelude byte offset is passed to resolve so __dao_ prefixed
 /// names in the prelude are not rejected as user code.
+///
+/// Prelude sources are expected to already carry their own `module`
+/// declarations (they are real stdlib files). For the synthetic
+/// single-file test build used here, we strip each prelude file's
+/// leading `module` line and inject a single `module test` header at
+/// the top of the combined source. See resolve_test.cpp for the same
+/// pattern.
 auto check_with_prelude(const std::string& user_source,
                         std::span<const std::string> prelude_sources)
     -> TypeCheckResult {
-  std::string combined;
+  auto strip_module = [](std::string_view src) -> std::string_view {
+    size_t i = 0;
+    // Skip whitespace and `//` line comments. Dao only has `//` line
+    // comments (see spec/grammar/dao.ebnf).
+    while (i < src.size()) {
+      char ch = src[i];
+      if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+        ++i;
+        continue;
+      }
+      if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+        auto nl = src.find('\n', i);
+        if (nl == std::string_view::npos) {
+          return src.substr(0, 0);
+        }
+        i = nl + 1;
+        continue;
+      }
+      break;
+    }
+    if (i + 6 >= src.size() || src.substr(i, 6) != "module") {
+      return src;
+    }
+    char after = src[i + 6];
+    if (after != ' ' && after != '\t') {
+      return src;
+    }
+    auto nl = src.find('\n', i);
+    if (nl == std::string_view::npos) {
+      return src.substr(0, 0);
+    }
+    return src.substr(nl + 1);
+  };
+
+  std::string combined = "module test\n";
   for (const auto& pre : prelude_sources) {
-    combined += pre;
+    combined.append(strip_module(pre));
     combined += '\n';
   }
   auto prelude_bytes = static_cast<uint32_t>(combined.size());
@@ -83,7 +134,7 @@ struct TypecheckPipeline {
   TypeCheckResult check_result;
 
   explicit TypecheckPipeline(const std::string& src)
-      : source("test.dao", std::string(src)),
+      : source("test.dao", wrap_with_test_module(src)),
         lex_result(lex(source)),
         parse_result(parse(lex_result.tokens)) {
     if (parse_result.file != nullptr) {

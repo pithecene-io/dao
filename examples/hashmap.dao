@@ -1,3 +1,4 @@
+module hashmap
 // hashmap.dao — HashMap<V> smoke test.
 
 class Entry:

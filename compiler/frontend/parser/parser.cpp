@@ -136,11 +136,16 @@ private:
     skip_newlines();
     Span file_span = peek().span;
 
-    // Optional module declaration.
+    // CONTRACT_SYNTAX_SURFACE.md requires every source file to begin
+    // with exactly one `module` declaration. Emit a diagnostic when
+    // it is missing, but continue parsing so downstream tests and
+    // tooling can still exercise the rest of the pipeline.
     ModuleNode* module_decl = nullptr;
     if (peek_kind() == TokenKind::KwModule) {
       module_decl = parse_module_decl();
       skip_newlines();
+    } else {
+      error("expected 'module' declaration at start of file");
     }
 
     std::vector<ImportNode*> imports;
@@ -154,6 +159,17 @@ private:
       skip_newlines();
       if (at_end()) {
         break;
+      }
+      // A stray `module` after the leading position is a hard error per
+      // CONTRACT_SYNTAX_SURFACE.md (exactly one, before everything else).
+      if (peek_kind() == TokenKind::KwModule) {
+        error("'module' declaration must appear only once, at the start of the file");
+        advance(); // skip 'module' token
+        while (peek_kind() == TokenKind::Identifier || peek_kind() == TokenKind::ColonColon) {
+          advance();
+        }
+        skip_newlines();
+        continue;
       }
       Span before = peek().span;
       auto* decl = parse_declaration();

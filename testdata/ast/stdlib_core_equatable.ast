@@ -1,4 +1,5 @@
 File
+  Module core::equatable
   ExternFunctionDecl __dao_eq_i8
     Param a: i8
     Param b: i8

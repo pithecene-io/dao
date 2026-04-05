@@ -1,4 +1,5 @@
 File
+  Module core::memory
   ExternFunctionDecl __dao_mem_alloc
     Param size: i64
     Param align: i64

@@ -28,9 +28,19 @@ struct ClassifiedSource {
   std::vector<SemanticToken> tokens;
 };
 
+// Test helper: every source file must begin with a `module` declaration
+// per CONTRACT_SYNTAX_SURFACE.md. Inline fixtures in this test file
+// focus on semantic-token behavior below the module layer, so we
+// prepend a canonical `module test` line before lexing.
+auto wrap_with_test_module(std::string contents) -> std::string {
+  std::string wrapped = "module test\n";
+  wrapped.append(contents);
+  return wrapped;
+}
+
 // Classify without resolver (structural + lexical only).
 auto classify_source(const std::string& name, std::string contents) -> ClassifiedSource {
-  SourceBuffer source(name, std::move(contents));
+  SourceBuffer source(name, wrap_with_test_module(std::move(contents)));
   auto lex_result = lex(source);
   ParseResult parse_result;
   if (lex_result.diagnostics.empty()) {
@@ -42,7 +52,7 @@ auto classify_source(const std::string& name, std::string contents) -> Classifie
 
 // Classify with resolver (structural + resolve-driven + lexical).
 auto classify_source_resolved(const std::string& name, std::string contents) -> ClassifiedSource {
-  SourceBuffer source(name, std::move(contents));
+  SourceBuffer source(name, wrap_with_test_module(std::move(contents)));
   auto lex_result = lex(source);
   ParseResult parse_result;
   ResolveResult resolve_result;

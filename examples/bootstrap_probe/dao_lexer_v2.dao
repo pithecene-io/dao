@@ -1,3 +1,4 @@
+module bootstrap_probe::dao_lexer_v2
 // DEPRECATED — this probe has been promoted to a bootstrap subsystem.
 // The authoritative Dao bootstrap lexer now lives at:
 //

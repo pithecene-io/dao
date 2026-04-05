@@ -1,3 +1,4 @@
+module core::diagnostic
 // diagnostic.dao — Diagnostic types for compiler error reporting.
 //
 // Severity classifies diagnostic importance. Diagnostic pairs a

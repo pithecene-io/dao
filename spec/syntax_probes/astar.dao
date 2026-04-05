@@ -1,3 +1,4 @@
+module probe::astar
 type NodeId = i32
 type Graph = i32
 type List = i32

@@ -1,3 +1,4 @@
+module core::overflow
 extern fn __dao_wrapping_add_i8(a: i8, b: i8): i8
 extern fn __dao_wrapping_sub_i8(a: i8, b: i8): i8
 extern fn __dao_wrapping_mul_i8(a: i8, b: i8): i8

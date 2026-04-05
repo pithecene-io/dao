@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace dao::playground {
@@ -36,6 +37,19 @@ void collect_diagnostics(nlohmann::json& out, const SourceBuffer& source,
 /// Build a synthetic error diagnostic entry for when a phase fails
 /// with no user-visible diagnostics (possible prelude error).
 auto make_internal_error(const std::string& message) -> nlohmann::json;
+
+/// Blank a leading `module <path>` declaration in place — overwrite
+/// the `module` keyword and its path segments with spaces while
+/// preserving the terminating newline, total byte count, and every
+/// offset past the blanked region. Used by the run/analyze handlers
+/// to fold any user-authored module header into the single synthetic
+/// `module playground` header injected at the top of the combined
+/// compilation unit. Blanking (rather than stripping) is load-bearing
+/// for the playground: frontend editor offsets and backend source
+/// offsets must stay byte-identical so hover/goto/completion/
+/// references/diagnostics positions line up with the editor buffer.
+/// Real multi-file support lands with Task 25+.
+void blank_user_leading_module(std::string& src);
 
 } // namespace dao::playground
 

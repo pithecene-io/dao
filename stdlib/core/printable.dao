@@ -1,3 +1,4 @@
+module core::printable
 extern fn __dao_conv_i8_to_string(x: i8): string
 extern fn __dao_conv_i16_to_string(x: i16): string
 extern fn __dao_conv_i32_to_string(x: i32): string

@@ -1,3 +1,4 @@
+module ffi::callback
 extern fn apply_op(op: fn(i32, i32): i32, a: i32, b: i32): i32
 extern fn transform(f: fn(f64): f64, x: f64): f64
 

@@ -1,3 +1,4 @@
+module structs
 class Point:
   x: i32
   y: i32

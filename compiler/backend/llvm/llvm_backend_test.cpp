@@ -30,6 +30,15 @@ namespace {
 // Sentinel declaration identity for testing.
 const int kDeclSentinel = 1;
 
+// Test helper: every source file must begin with a `module` declaration
+// per CONTRACT_SYNTAX_SURFACE.md. Fixtures focus on backend behavior
+// below the module layer, so we prepend a canonical `module test` line.
+inline auto wrap_with_test_module(std::string_view src) -> std::string {
+  std::string wrapped = "module test\n";
+  wrapped.append(src);
+  return wrapped;
+}
+
 /// Full pipeline: source → MIR → LLVM IR.
 struct LlvmTestPipeline {
   SourceBuffer source;
@@ -47,7 +56,7 @@ struct LlvmTestPipeline {
 
   explicit LlvmTestPipeline(const std::string& src,
                             uint32_t prelude_bytes = 0)
-      : source("test.dao", std::string(src)),
+      : source("test.dao", wrap_with_test_module(src)),
         lex_result(lex(source)),
         parse_result(parse(lex_result.tokens)) {
     if (parse_result.file != nullptr) {

@@ -102,12 +102,29 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
   }
 
   // --- Setup ---
+  // Per CONTRACT_SYNTAX_SURFACE.md every source file must begin with
+  // exactly one `module` declaration. The playground injects a
+  // synthetic `module playground` header; both it and the stdlib
+  // prelude are folded into `prelude_bytes` so user-visible diagnostic
+  // offsets remain zero-based from the user's code. Any `module`
+  // header the user supplied (e.g. by loading one of the migrated
+  // example files) is blanked in place — the bytes become spaces so
+  // the parser ignores them, but the user source's total byte count
+  // and every offset past the blanked region stay identical to the
+  // frontend editor buffer. This keeps semantic token and diagnostic
+  // positions aligned with the editor.
+  const std::string module_header = "module playground\n";
   auto prelude_source = load_prelude(repo_root);
-  auto prelude_bytes = static_cast<uint32_t>(prelude_source.size());
-  auto prelude_lines = count_lines(prelude_source);
+  std::string combined_header;
+  combined_header.reserve(module_header.size() + prelude_source.size());
+  combined_header.append(module_header);
+  combined_header.append(prelude_source);
+  auto prelude_bytes = static_cast<uint32_t>(combined_header.size());
+  auto prelude_lines = count_lines(combined_header);
 
   auto user_source = request["source"].get<std::string>();
-  SourceBuffer source("<playground>",  prelude_source + user_source);
+  blank_user_leading_module(user_source);
+  SourceBuffer source("<playground>", combined_header + user_source);
 
   // --- Response accumulators ---
   nlohmann::json tokens = nlohmann::json::array();
@@ -286,11 +303,24 @@ auto run_light_pipeline(const nlohmann::json& request,
     -> LightPipeline {
   LightPipeline pipe{SourceBuffer("", ""), {}, {}, {}, {}, {}, 0, false};
 
+  // See the `handle_analyze` comment above for the synthetic
+  // `module playground` injection rationale. User-authored module
+  // headers are blanked (not stripped) so editor offsets and backend
+  // offsets stay byte-identical — the offset rebasing used by hover,
+  // goto-definition, references, and completions (pipe.prelude_bytes
+  // + user_offset) relies on this invariant.
+  const std::string module_header = "module playground\n";
   auto prelude_source = load_prelude(repo_root);
-  pipe.prelude_bytes = static_cast<uint32_t>(prelude_source.size());
+  std::string combined_header;
+  combined_header.reserve(module_header.size() + prelude_source.size());
+  combined_header.append(module_header);
+  combined_header.append(prelude_source);
+  pipe.prelude_bytes = static_cast<uint32_t>(combined_header.size());
 
   auto user_source = request["source"].get<std::string>();
-  pipe.source = SourceBuffer("<playground>", prelude_source + user_source);
+  blank_user_leading_module(user_source);
+  pipe.source =
+      SourceBuffer("<playground>", combined_header + user_source);
   pipe.lex_result = lex(pipe.source);
 
   if (!pipe.lex_result.diagnostics.empty()) {

@@ -1,3 +1,4 @@
+module iteration
 fn squares(n: i32): Generator<i32>
   let i: i32 = 0
   while i < n:

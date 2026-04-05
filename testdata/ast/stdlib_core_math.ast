@@ -1,4 +1,5 @@
 File
+  Module core::math
   FunctionDecl min<T: Numeric>
     Param a: T
     Param b: T

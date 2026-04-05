@@ -1,4 +1,5 @@
 File
+  Module core::builtins
   FunctionDecl size_of<T>
     ReturnType: i64
     LetStatement r: i64

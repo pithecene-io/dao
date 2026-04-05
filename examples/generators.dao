@@ -1,3 +1,4 @@
+module generators
 fn countdown(from: i32): Generator<i32>
   let i: i32 = from
   while i > 0:

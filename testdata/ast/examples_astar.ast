@@ -1,4 +1,5 @@
 File
+  Module astar
   AliasDecl NodeId = i32
   FunctionDecl heuristic
     Param a: NodeId

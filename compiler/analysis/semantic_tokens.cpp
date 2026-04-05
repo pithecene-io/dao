@@ -188,6 +188,9 @@ public:
   }
 
   void visit_file(const FileNode& file) {
+    if (file.module_decl != nullptr) {
+      visit_module_decl(*file.module_decl);
+    }
     for (const auto* imp : file.imports) {
       visit_import(*imp);
     }
@@ -229,6 +232,18 @@ private:
       } else {
         classify(spans[i].second, tail_category);
       }
+    }
+  }
+
+  // --- Module declaration ---
+
+  void visit_module_decl(const ModuleNode& node) {
+    // All segments of the declared module path are binding sites —
+    // classify every segment as decl.module, mirroring the import
+    // convention where the trailing segment is decl.module.
+    auto spans = segment_spans(node.path);
+    for (const auto& entry : spans) {
+      classify(entry.second, "decl.module");
     }
   }
 

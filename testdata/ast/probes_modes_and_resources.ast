@@ -1,4 +1,5 @@
 File
+  Module probe::modes_and_resources
   AliasDecl NodeId = i32
   AliasDecl List = i32
   AliasDecl PriorityQueue = i32

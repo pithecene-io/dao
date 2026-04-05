@@ -1,3 +1,4 @@
+module bootstrap_probe::type_checker
 // type_checker.dao — Bootstrap probe 6: resolver and type checker.
 //
 // Extends the expression parser probe with variable declarations,

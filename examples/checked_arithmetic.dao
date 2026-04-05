@@ -1,3 +1,4 @@
+module checked_arithmetic
 // checked_arithmetic.dao — checked overflow operations returning Option<T>.
 //
 // Demonstrates checked_add, checked_sub, checked_mul for i32 and i64.

@@ -1,3 +1,4 @@
+module core::numeric
 concept Numeric:
   fn less_than(self, other: Numeric): bool
 

@@ -1,4 +1,5 @@
 File
+  Module bootstrap_probe::expr_parser
   EnumDecl TK
     Variant Int
     Variant Plus

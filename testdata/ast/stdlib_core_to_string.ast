@@ -1,4 +1,5 @@
 File
+  Module core::to_string
   FunctionDecl i32_to_string
     Param x: i32
     ReturnType: string

@@ -1,3 +1,4 @@
+module core::math
 fn min<T: Numeric>(a: T, b: T): T
   if a.less_than(b):
     return a

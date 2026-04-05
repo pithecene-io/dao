@@ -1,4 +1,5 @@
 File
+  Module core::option
   EnumClassDecl Option<T>
     Variant Some
     Variant None

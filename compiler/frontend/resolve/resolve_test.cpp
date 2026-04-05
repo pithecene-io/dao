@@ -18,6 +18,48 @@ auto read_file(const std::filesystem::path& path) -> std::string {
   return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
+// Strip a leading `module <path>\n` line from the supplied source, if
+// present. Used when concatenating multiple real Dao files into a
+// single synthetic test compilation unit — each real file declares its
+// own module per CONTRACT_SYNTAX_SURFACE.md, but the concatenation is
+// treated as one synthetic module for resolver corpus testing.
+auto strip_leading_module(std::string_view src) -> std::string_view {
+  size_t i = 0;
+  // Skip whitespace and `//` line comments until we reach either the
+  // leading `module` keyword or the first non-comment token. Dao only
+  // has `//` line comments (see spec/grammar/dao.ebnf).
+  while (i < src.size()) {
+    char ch = src[i];
+    if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+      ++i;
+      continue;
+    }
+    if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+      auto nl = src.find('\n', i);
+      if (nl == std::string_view::npos) {
+        return src.substr(0, 0);
+      }
+      i = nl + 1;
+      continue;
+    }
+    break;
+  }
+  if (i + 6 >= src.size() || src.substr(i, 6) != "module") {
+    return src;
+  }
+  // Require `module` to be followed by whitespace (not part of an
+  // identifier).
+  char after = src[i + 6];
+  if (after != ' ' && after != '\t') {
+    return src;
+  }
+  auto nl = src.find('\n', i);
+  if (nl == std::string_view::npos) {
+    return src.substr(0, 0);
+  }
+  return src.substr(nl + 1);
+}
+
 struct ResolvedSource {
   SourceBuffer source;
   LexResult lex_result;
@@ -25,8 +67,20 @@ struct ResolvedSource {
   ResolveResult resolve_result;
 };
 
+// Test helper: CONTRACT_SYNTAX_SURFACE.md requires every source file to
+// begin with a `module` declaration. Inline test fixtures focus on
+// resolver behavior below the module layer, so we prepend a canonical
+// `module test` line before lexing. Callers that already supply a
+// leading `module ...` line (e.g. the corpus tests below) pass
+// `synthetic_module = false`.
 auto resolve_source(const std::string& name, std::string contents,
-                    uint32_t prelude_bytes = 0) -> ResolvedSource {
+                    uint32_t prelude_bytes = 0,
+                    bool synthetic_module = true) -> ResolvedSource {
+  if (synthetic_module) {
+    std::string wrapped = "module test\n";
+    wrapped.append(contents);
+    contents = std::move(wrapped);
+  }
   SourceBuffer source(name, std::move(contents));
   auto lex_result = lex(source);
   ParseResult parse_result;
@@ -45,6 +99,11 @@ auto resolve_source(const std::string& name, std::string contents,
           std::move(resolve_result)};
 }
 
+// Load stdlib/core/*.dao as a single synthetic prelude compilation
+// unit. Per-file `module` headers are stripped; the caller is
+// responsible for prepending its own `module` line to the combined
+// source before passing it to the parser. Real multi-file resolution
+// is exercised by Task 25+ infrastructure, not this corpus test.
 auto load_prelude() -> std::string {
   std::filesystem::path root(DAO_SOURCE_DIR);
   auto stdlib_core = root / "stdlib" / "core";
@@ -56,7 +115,9 @@ auto load_prelude() -> std::string {
     if (entry.path().extension() != ".dao") {
       continue;
     }
-    prelude += read_file(entry.path());
+    auto contents = read_file(entry.path());
+    auto stripped = strip_leading_module(contents);
+    prelude.append(stripped);
     prelude += '\n';
   }
   return prelude;
@@ -367,17 +428,27 @@ suite<"resolve_corpus"> resolve_corpus = [] {
   "all examples resolve without spurious diagnostics"_test = [] {
     std::filesystem::path root(DAO_SOURCE_DIR);
     auto examples_dir = root / "examples";
-    auto prelude = load_prelude();
-    auto prelude_bytes = static_cast<uint32_t>(prelude.size());
+    // Synthetic combined source: single leading `module test` line,
+    // followed by the stripped prelude, followed by each example with
+    // its own `module` line stripped. The whole thing is treated as
+    // one file for corpus resolution.
+    auto prelude_body = load_prelude();
 
     for (const auto& entry : std::filesystem::directory_iterator(examples_dir)) {
       if (entry.path().extension() != ".dao") {
         continue;
       }
 
-      auto contents = prelude + read_file(entry.path());
-      auto result = resolve_source(entry.path().filename().string(),
-                                   std::move(contents), prelude_bytes);
+      std::string contents = "module test\n";
+      contents.append(prelude_body);
+      auto example = read_file(entry.path());
+      auto example_body = strip_leading_module(example);
+      auto prelude_bytes = static_cast<uint32_t>(contents.size());
+      contents.append(example_body);
+
+      auto result =
+          resolve_source(entry.path().filename().string(),
+                         std::move(contents), prelude_bytes, /*synthetic_module=*/false);
 
       // No value-position diagnostics should fire on example files.
       // Skip prelude-origin diagnostics.
@@ -399,8 +470,14 @@ suite<"resolve_corpus"> resolve_corpus = [] {
         continue;
       }
 
+      // Syntax probes already declare their own `module` per the
+      // contract, so they parse as standalone single-file units with
+      // no synthetic wrapper needed.
       auto contents = read_file(entry.path());
-      auto result = resolve_source(entry.path().filename().string(), std::move(contents));
+      auto result =
+          resolve_source(entry.path().filename().string(),
+                         std::move(contents), /*prelude_bytes=*/0,
+                         /*synthetic_module=*/false);
 
       for (const auto& diag : result.resolve_result.diagnostics) {
         expect(false) << entry.path().filename().string() << ": " << diag.message;

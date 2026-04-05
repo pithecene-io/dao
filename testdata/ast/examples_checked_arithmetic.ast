@@ -1,4 +1,5 @@
 File
+  Module checked_arithmetic
   FunctionDecl show_i32
     Param label: string
     Param result: Option<i32>

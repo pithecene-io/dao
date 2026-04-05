@@ -1,3 +1,4 @@
+module enums_payload
 // enums_payload.dao — payload-bearing enum variants with match destructuring.
 
 enum class Token:

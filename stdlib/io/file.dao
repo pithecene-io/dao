@@ -1,3 +1,4 @@
+module io::file
 extern fn __dao_io_write_stderr(msg: string): void
 extern fn __dao_io_read_file(path: string): string
 extern fn __dao_io_write_file(path: string, content: string): bool

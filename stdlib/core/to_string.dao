@@ -1,3 +1,4 @@
+module core::to_string
 fn i32_to_string(x: i32): string -> __dao_conv_i32_to_string(x)
 fn i64_to_string(x: i64): string -> __dao_conv_i64_to_string(x)
 fn f64_to_string(x: f64): string -> __dao_conv_f64_to_string(x)

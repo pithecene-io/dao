@@ -1,3 +1,4 @@
+module core::vector
 // vector.dao — Generic dynamic array.
 //
 // Vector<T> uses COW (copy-on-write) via a generation counter.

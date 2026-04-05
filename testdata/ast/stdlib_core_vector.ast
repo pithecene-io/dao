@@ -1,4 +1,5 @@
 File
+  Module core::vector
   ClassDecl Vector<T>
     Field data: *T
     Field len: i64

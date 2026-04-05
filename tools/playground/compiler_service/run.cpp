@@ -70,12 +70,33 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
 
   nlohmann::json diagnostics = nlohmann::json::array();
 
-  // Load prelude and prepend to user source.
+  // Per CONTRACT_SYNTAX_SURFACE.md every source file must begin with
+  // exactly one `module` declaration. The playground wraps the
+  // combined (prelude + user) source with a single synthetic
+  // `module playground` declaration. Both the synthetic module line
+  // and the stdlib prelude are folded into `prelude_bytes` so that
+  // user-visible diagnostic offsets remain zero-based from the user's
+  // code. Any `module` header the user supplied (e.g. by loading one
+  // of the migrated example files) is blanked in place — the bytes
+  // become spaces so the parser ignores them, but the user source's
+  // total byte count and every offset past the blanked region stay
+  // identical to the frontend editor buffer. This keeps hover,
+  // go-to-definition, completions, references, semantic tokens, and
+  // diagnostic positions aligned with the editor. Real multi-file
+  // compilation lands with Task 25+.
+  const std::string module_header = "module playground\n";
   auto prelude_source = load_prelude(repo_root);
-  auto prelude_bytes = static_cast<uint32_t>(prelude_source.size());
-  auto prelude_lines = count_lines(prelude_source);
   auto user_source = request["source"].get<std::string>();
-  auto combined = prelude_source + user_source;
+  blank_user_leading_module(user_source);
+
+  std::string combined;
+  combined.reserve(module_header.size() + prelude_source.size() +
+                   user_source.size());
+  combined.append(module_header);
+  combined.append(prelude_source);
+  auto prelude_bytes = static_cast<uint32_t>(combined.size());
+  auto prelude_lines = count_lines(combined);
+  combined.append(user_source);
 
   SourceBuffer source("<playground>", std::move(combined));
   auto lex_result = lex(source);

@@ -1,3 +1,4 @@
+module bootstrap_probe::expr_parser
 // expr_parser.dao — Bootstrap probe 4: recursive-descent expression parser.
 //
 // Consumes Vector<Token> from a simple arithmetic lexer, produces a

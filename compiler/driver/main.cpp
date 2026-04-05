@@ -128,6 +128,52 @@ auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
 // so prelude symbols are available without explicit import.
 // ---------------------------------------------------------------------------
 
+// Blank a leading `module <path>` line in place — overwrite the
+// `module` keyword and its path segments with spaces, preserving the
+// terminating newline and total byte count. The transitional driver
+// concatenates stdlib and user sources into a single synthetic
+// compilation unit and injects one top-level `module` declaration of
+// its own; per-file module headers on the inputs would otherwise
+// violate the "exactly one module declaration at the start" rule in
+// CONTRACT_SYNTAX_SURFACE.md. Blanking (rather than stripping)
+// preserves all downstream byte offsets, which keeps spans in error
+// messages pointing at the original source positions. Real
+// multi-file compilation lands with Task 25+.
+void blank_leading_module(std::string& src) {
+  size_t i = 0;
+  // Skip whitespace and `//` line comments until we reach either the
+  // leading `module` keyword or the first non-comment token. Dao only
+  // has `//` line comments (see spec/grammar/dao.ebnf).
+  while (i < src.size()) {
+    char ch = src[i];
+    if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+      ++i;
+      continue;
+    }
+    if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+      auto nl = src.find('\n', i);
+      if (nl == std::string::npos) {
+        return;
+      }
+      i = nl + 1;
+      continue;
+    }
+    break;
+  }
+  if (i + 6 >= src.size() || src.compare(i, 6, "module") != 0) {
+    return;
+  }
+  char after = src[i + 6];
+  if (after != ' ' && after != '\t') {
+    return;
+  }
+  auto nl = src.find('\n', i);
+  auto end = (nl == std::string::npos) ? src.size() : nl;
+  for (size_t j = i; j < end; ++j) {
+    src[j] = ' ';
+  }
+}
+
 auto load_prelude_source() -> std::string {
   std::filesystem::path root(DAO_SOURCE_DIR);
   std::string prelude;
@@ -153,7 +199,9 @@ auto load_prelude_source() -> std::string {
     }
     std::sort(paths.begin(), paths.end());
     for (const auto& p : paths) {
-      prelude += read_file(p);
+      auto contents = read_file(p);
+      blank_leading_module(contents);
+      prelude.append(contents);
       prelude += '\n';
     }
   }
@@ -170,16 +218,34 @@ auto lex_and_parse_with_prelude(const std::filesystem::path& path)
     -> PreludeParsedFile {
   auto prelude_source = load_prelude_source();
   auto user_source = read_file(path);
+  // Blank the user file's own `module` header in place; the driver
+  // injects a single synthetic `module main` at the top of the
+  // combined source. Blanking (rather than stripping) preserves user
+  // source byte offsets so diagnostic spans still point at the
+  // original file positions. This is transitional until Task 25+
+  // introduces real multi-file compilation where each file keeps its
+  // own module identity.
+  blank_leading_module(user_source);
+
+  // Synthetic leading module declaration for the combined compilation
+  // unit. Per CONTRACT_SYNTAX_SURFACE.md every source file must begin
+  // with exactly one `module` declaration.
+  const std::string module_header = "module main\n";
+
+  std::string combined;
+  combined.reserve(module_header.size() + prelude_source.size() + user_source.size());
+  combined.append(module_header);
+  combined.append(prelude_source);
 
   uint32_t prelude_lines = 0;
-  for (char chr : prelude_source) {
+  for (char chr : combined) {
     if (chr == '\n') {
       ++prelude_lines;
     }
   }
-  auto prelude_bytes = static_cast<uint32_t>(prelude_source.size());
+  auto prelude_bytes = static_cast<uint32_t>(combined.size());
 
-  auto combined = prelude_source + user_source;
+  combined.append(user_source);
   dao::SourceBuffer source(path.filename().string(), std::move(combined));
   auto lex_result = dao::lex(source);
 

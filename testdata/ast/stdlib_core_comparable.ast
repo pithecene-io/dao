@@ -1,4 +1,5 @@
 File
+  Module core::comparable
   DerivedConceptDecl Comparable
     FunctionDecl lt
       Param self

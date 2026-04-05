@@ -1,3 +1,4 @@
+module control_flow
 fn factorial(n: i32): i32
   let result: i32 = 1
   let i: i32 = 1

@@ -1,4 +1,5 @@
 File
+  Module core::convert
   ExternFunctionDecl __dao_conv_i32_to_f64
     Param x: i32
     ReturnType: f64
