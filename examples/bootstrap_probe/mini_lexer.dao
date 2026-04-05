@@ -1,3 +1,4 @@
+module bootstrap_probe::mini_lexer
 fn is_digit(ch: i32): bool
   return ch >= 48 and ch <= 57
 

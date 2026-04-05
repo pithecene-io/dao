@@ -42,6 +42,7 @@ private:
 enum class NodeKind : std::uint8_t {
   // File
   File,
+  ModuleDecl,
   Import,
 
   // Declarations
@@ -158,6 +159,11 @@ enum class UnaryOp : std::uint8_t {
 // File-level nodes — standalone, not part of any variant.
 // ---------------------------------------------------------------------------
 
+struct ModuleDeclNode {
+  Span span;
+  QualifiedPath path;
+};
+
 struct ImportNode {
   Span span;
   QualifiedPath path;
@@ -165,6 +171,12 @@ struct ImportNode {
 
 struct FileNode {
   Span span;
+  // Mandatory leading module declaration. Per
+  // CONTRACT_SYNTAX_SURFACE.md, every source file must begin with
+  // exactly one `module` declaration. This pointer may be null only
+  // when the parser encountered a missing-module error and emitted
+  // a diagnostic; downstream passes may treat it as an error file.
+  ModuleDeclNode* module_decl = nullptr;
   std::vector<ImportNode*> imports;
   std::vector<Decl*> declarations;
 };

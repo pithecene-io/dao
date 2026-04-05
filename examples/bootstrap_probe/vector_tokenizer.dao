@@ -1,3 +1,4 @@
+module bootstrap_probe::vector_tokenizer
 // vector_tokenizer.dao — Bootstrap probe 3: structured tokenizer.
 //
 // Unlike earlier probes that print tokens inline, this lexer

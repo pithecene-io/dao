@@ -1,4 +1,5 @@
 File
+  Module core::span
   ClassDecl Span
     Field offset: i64
     Field length: i64

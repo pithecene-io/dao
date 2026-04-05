@@ -1,3 +1,4 @@
+module enums
 // enums.dao — Payload-free enum types.
 //
 // Demonstrates enum declaration, qualified variant access,

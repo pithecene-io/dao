@@ -40,6 +40,7 @@ The initial compiler-produced semantic token taxonomy must be able to
 classify at least the following categories:
 
 ### Keywords and control
+- `keyword.module`
 - `keyword.import`
 - `keyword.type`
 - `keyword.extern`

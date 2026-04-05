@@ -1,3 +1,4 @@
+module bootstrap_probe::token_stats
 fn is_digit(ch: i32): bool
   return ch >= 48 and ch <= 57
 

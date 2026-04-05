@@ -382,10 +382,14 @@ module app::math
 Rules:
 - `module` is a reserved keyword
 - `module` declares the file's module identity using a qualified path
-- a file may contain at most one `module` declaration
+- every source file must begin with exactly one `module` declaration
 - `module` must appear before `import` and all other top-level
-  declarations
+  declarations; no tokens other than comments and blank lines may
+  precede it
 - module identity comes from the declaration, not from file path
+- module paths may be single-segment (`module hello`) or
+  multi-segment (`module core::math`); nesting is explicit in the
+  declaration and is never inferred from directory layout
 
 ## Namespace Qualification
 

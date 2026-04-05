@@ -59,11 +59,13 @@ module app::math
 
 Module declarations give a file an explicit module identity.
 
-**Syntax note**: `module` is now a reserved keyword in `dao.lex`
-and frozen in `CONTRACT_SYNTAX_SURFACE.md`.  Task 25 must add
-`KwModule` to the bootstrap lexer keyword table.  The host compiler
-lexer (`token.h`) should be updated in the same diff or a
-coordinated follow-up to keep the token surface consistent.
+**Syntax note**: `module` is a reserved keyword in `dao.lex` and
+`CONTRACT_SYNTAX_SURFACE.md` requires every source file to begin
+with exactly one `module` declaration.  The host compiler lexer
+and parser already recognize `KwModule` and enforce the
+leading-declaration rule; Task 25 must add `KwModule` to the
+bootstrap lexer keyword table and parse the mandatory leading
+declaration in the bootstrap parser.
 
 ### 4.3 Import declarations
 

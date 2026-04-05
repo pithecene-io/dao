@@ -1,3 +1,4 @@
+module core::result
 enum class Result<T, E>:
   Ok(value: T)
   Err(error: E)

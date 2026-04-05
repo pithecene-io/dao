@@ -1,4 +1,5 @@
 File
+  Module core::panic
   ExternFunctionDecl __dao_panic
     Param msg: string
     ReturnType: void

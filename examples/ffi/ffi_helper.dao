@@ -1,3 +1,4 @@
+module ffi::helper
 extern fn add_i64(a: i64, b: i64): i64
 extern fn scale(x: f64, factor: i32): f64
 

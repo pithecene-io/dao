@@ -1,4 +1,5 @@
 File
+  Module core::overflow
   ExternFunctionDecl __dao_wrapping_add_i8
     Param a: i8
     Param b: i8

@@ -1,4 +1,5 @@
 File
+  Module bootstrap_probe::dao_lexer_v2
   FunctionDecl main
     ReturnType: i32
     ExpressionStatement

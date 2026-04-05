@@ -1,4 +1,5 @@
 File
+  Module enums_payload
   EnumClassDecl Token
     Variant Int
     Variant Plus

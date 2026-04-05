@@ -45,33 +45,35 @@ auto count_kind(const std::vector<Token>& tokens, TokenKind kind) -> int {
 
 suite<"keyword_tests"> keyword_tests = [] {
   "all keywords recognized"_test = [] {
-    auto output = lex_string("import fn class type let if else while for in return yield "
-                             "mode resource true false and or\n");
+    auto output =
+        lex_string("module import fn class type let if else while for in return yield "
+                   "mode resource true false and or\n");
     auto kinds = std::vector<TokenKind>{};
     for (const auto& tok : output.result.tokens) {
       if (tok.kind != TokenKind::Newline && tok.kind != TokenKind::Eof) {
         kinds.push_back(tok.kind);
       }
     }
-    expect(kinds.size() == 18_u);
-    expect(kinds[0] == TokenKind::KwImport);
-    expect(kinds[1] == TokenKind::KwFn);
-    expect(kinds[2] == TokenKind::KwClass);
-    expect(kinds[3] == TokenKind::KwType);
-    expect(kinds[4] == TokenKind::KwLet);
-    expect(kinds[5] == TokenKind::KwIf);
-    expect(kinds[6] == TokenKind::KwElse);
-    expect(kinds[7] == TokenKind::KwWhile);
-    expect(kinds[8] == TokenKind::KwFor);
-    expect(kinds[9] == TokenKind::KwIn);
-    expect(kinds[10] == TokenKind::KwReturn);
-    expect(kinds[11] == TokenKind::KwYield);
-    expect(kinds[12] == TokenKind::KwMode);
-    expect(kinds[13] == TokenKind::KwResource);
-    expect(kinds[14] == TokenKind::KwTrue);
-    expect(kinds[15] == TokenKind::KwFalse);
-    expect(kinds[16] == TokenKind::KwAnd);
-    expect(kinds[17] == TokenKind::KwOr);
+    expect(kinds.size() == 19_u);
+    expect(kinds[0] == TokenKind::KwModule);
+    expect(kinds[1] == TokenKind::KwImport);
+    expect(kinds[2] == TokenKind::KwFn);
+    expect(kinds[3] == TokenKind::KwClass);
+    expect(kinds[4] == TokenKind::KwType);
+    expect(kinds[5] == TokenKind::KwLet);
+    expect(kinds[6] == TokenKind::KwIf);
+    expect(kinds[7] == TokenKind::KwElse);
+    expect(kinds[8] == TokenKind::KwWhile);
+    expect(kinds[9] == TokenKind::KwFor);
+    expect(kinds[10] == TokenKind::KwIn);
+    expect(kinds[11] == TokenKind::KwReturn);
+    expect(kinds[12] == TokenKind::KwYield);
+    expect(kinds[13] == TokenKind::KwMode);
+    expect(kinds[14] == TokenKind::KwResource);
+    expect(kinds[15] == TokenKind::KwTrue);
+    expect(kinds[16] == TokenKind::KwFalse);
+    expect(kinds[17] == TokenKind::KwAnd);
+    expect(kinds[18] == TokenKind::KwOr);
   };
 };
 

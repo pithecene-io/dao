@@ -1,3 +1,4 @@
+module core::span
 // span.dao — Source span and location types.
 //
 // Span represents a byte range in source text (offset + length).

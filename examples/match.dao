@@ -1,3 +1,4 @@
+module match_demo
 // match.dao — Match statements and else-if chains.
 //
 // Demonstrates match over enum variants and else-if as

@@ -20,6 +20,16 @@ using namespace dao;
 
 namespace {
 
+// Test helper: every source file must begin with a `module` declaration
+// per CONTRACT_SYNTAX_SURFACE.md. Fixtures in this test file focus on
+// HIR behavior below the module layer, so we prepend a canonical
+// `module test` line before lexing.
+inline auto wrap_with_test_module(std::string_view src) -> std::string {
+  std::string wrapped = "module test\n";
+  wrapped.append(src);
+  return wrapped;
+}
+
 /// Owns all pipeline state so HIR nodes remain valid.
 struct HirTestPipeline {
   SourceBuffer source;
@@ -32,7 +42,7 @@ struct HirTestPipeline {
   HirBuildResult hir_result;
 
   explicit HirTestPipeline(const std::string& src)
-      : source("test.dao", std::string(src)),
+      : source("test.dao", wrap_with_test_module(src)),
         lex_result(lex(source)),
         parse_result(parse(lex_result.tokens)) {
     if (parse_result.file != nullptr) {

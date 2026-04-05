@@ -1,3 +1,4 @@
+module raw_memory
 // raw_memory.dao — Low-level memory substrate proof of concept.
 //
 // Demonstrates: alloc, ptr_cast, ptr_offset, store through pointer,

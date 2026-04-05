@@ -1,4 +1,5 @@
 File
+  Module math
   FunctionDecl main
     ReturnType: i32
     ExpressionStatement

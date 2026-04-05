@@ -1,3 +1,4 @@
+module ffi::libm
 extern fn sqrt(x: f64): f64
 extern fn pow(base: f64, exp: f64): f64
 

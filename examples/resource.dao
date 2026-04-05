@@ -1,3 +1,4 @@
+module resource_demo
 fn compute_in_pool(): i32
   let result: i32 = 0
   resource memory pool =>

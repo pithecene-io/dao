@@ -1,3 +1,4 @@
+module bootstrap::base
 // =========================================================================
 // Bootstrap Shared Substrate — Dao compiler self-hosting infrastructure
 // =========================================================================

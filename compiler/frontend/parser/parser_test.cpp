@@ -25,8 +25,16 @@ struct ParseOutput {
   ParseResult parse_result;
 };
 
+// Test helper: CONTRACT_SYNTAX_SURFACE.md requires every source file to
+// begin with a `module` declaration. Fixtures in this test file focus on
+// parser behavior below the module layer, so we prepend a canonical
+// `module test` line to the supplied source before lexing. This keeps
+// fixtures focused on what each test is actually exercising while still
+// honoring the parser's leading-declaration requirement.
 auto parse_string(std::string_view src) -> ParseOutput {
-  auto source = std::make_unique<SourceBuffer>("<test>", std::string(src));
+  std::string wrapped = "module test\n";
+  wrapped.append(src);
+  auto source = std::make_unique<SourceBuffer>("<test>", std::move(wrapped));
   auto lex_result = lex(*source);
   auto parse_result = parse(lex_result.tokens);
   return {.source = std::move(source),

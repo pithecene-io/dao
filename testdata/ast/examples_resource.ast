@@ -1,4 +1,5 @@
 File
+  Module resource_demo
   FunctionDecl compute_in_pool
     ReturnType: i32
     LetStatement result: i32

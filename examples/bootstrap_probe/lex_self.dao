@@ -1,3 +1,4 @@
+module bootstrap_probe::lex_self
 fn is_digit(ch: i32): bool
   return ch >= 48 and ch <= 57
 

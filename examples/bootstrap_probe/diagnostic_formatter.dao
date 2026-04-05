@@ -1,3 +1,4 @@
+module bootstrap_probe::diagnostic_formatter
 // diagnostic_formatter.dao — Phase 7 entry leaf: diagnostic formatter.
 //
 // This is the first real compiler subsystem extracted into pure Dao.

@@ -1,3 +1,4 @@
+module bootstrap_probe::dao_lexer
 // dao_lexer.dao -- Bootstrap probe 2: a real Dao-subset tokenizer.
 //
 // Tests: comments, to_string, indirect calls, string ops, file IO.

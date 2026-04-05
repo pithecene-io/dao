@@ -46,8 +46,10 @@ directly declared symbols.
 
 ### 4.2 Export model
 
-In v1, every top-level declaration in a module is exported by
-default.  No explicit `pub` syntax yet.
+In v1, every named top-level declaration in a module is exported
+by default.  Named top-level declarations are functions, classes,
+enums, type aliases, and concepts.  `extend` blocks are unnamed
+and are covered separately in §6.5.  No explicit `pub` syntax yet.
 
 ### 4.3 Import binding rule
 
@@ -107,12 +109,24 @@ would make the first segment ambiguous.
 
 ### 6.1 Module namespace
 
-Each module has a namespace containing:
+Each module has a namespace containing its named top-level
+declarations:
 
 * functions
 * structs/classes
 * enums
 * type aliases
+* concepts
+
+Concepts are first-class named top-level declarations and
+participate in cross-module qualified resolution exactly like
+functions and types.  A module may reference a concept declared
+in another module via its imported module binding
+(e.g. `core::Printable`) for use in generic bounds, `as Concept`
+clauses, and concept-typed parameters.  Concept *satisfaction*
+checking still runs at the definition site of the `as` block,
+which has lexical access to the implementing type's methods; no
+cross-module method-set lookup is introduced.
 
 ### 6.2 Imported module exposure
 
@@ -136,6 +150,26 @@ in v1.
 
 Inside a module, its own top-level declarations are visible
 unqualified, exactly as they are now in single-file bootstrap.
+
+### 6.5 `extend` block scope
+
+`extend` blocks are unnamed and do not appear in the module
+namespace defined in §6.1.  Instead, they attach methods to their
+target type at **module granularity**:
+
+* within the declaring module, methods introduced by an `extend`
+  block participate in method-set lookup on the target type
+  regardless of which file inside that module the lookup occurs
+  in
+* across module boundaries, imported modules do **not** contribute
+  their `extend` methods to method-set lookup in the importing
+  module; this is an explicit non-goal per §5 (method-set lookup
+  across modules)
+
+Rationale: file boundaries must not affect semantics.  Method-set
+visibility is keyed on module identity, not file identity.
+Cross-module extension method visibility (orphan impl rules,
+coherence) is deferred to a later deliberate design.
 
 ## 7. Resolver architecture changes
 

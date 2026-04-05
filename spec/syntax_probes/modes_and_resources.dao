@@ -1,3 +1,4 @@
+module probe::modes_and_resources
 type NodeId = i32
 type List = i32
 type PriorityQueue = i32

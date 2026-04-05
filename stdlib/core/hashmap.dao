@@ -1,3 +1,4 @@
+module core::hashmap
 // hashmap.dao — String-keyed hash map.
 //
 // HashMap<V> is an open-addressing hash table with linear probing.

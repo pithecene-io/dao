@@ -5,6 +5,34 @@
 
 namespace dao::playground {
 
+namespace {
+
+// Strip a leading `module <path>\n` line from a source snippet. The
+// transitional playground pipeline concatenates stdlib files and user
+// source into a single synthetic compilation unit with exactly one
+// `module` declaration at the top, per CONTRACT_SYNTAX_SURFACE.md.
+// Real multi-file compilation lands with Task 25+.
+auto strip_leading_module(std::string_view src) -> std::string_view {
+  size_t i = 0;
+  while (i < src.size() && (src[i] == ' ' || src[i] == '\t' || src[i] == '\n')) {
+    ++i;
+  }
+  if (i + 6 >= src.size() || src.substr(i, 6) != "module") {
+    return src;
+  }
+  char after = src[i + 6];
+  if (after != ' ' && after != '\t') {
+    return src;
+  }
+  auto nl = src.find('\n', i);
+  if (nl == std::string_view::npos) {
+    return src.substr(0, 0);
+  }
+  return src.substr(nl + 1);
+}
+
+} // namespace
+
 auto load_prelude(const std::filesystem::path& repo_root) -> std::string {
   auto stdlib_core = repo_root / "stdlib" / "core";
   std::string prelude;
@@ -26,8 +54,9 @@ auto load_prelude(const std::filesystem::path& repo_root) -> std::string {
     if (!file) {
       continue;
     }
-    prelude.append(std::istreambuf_iterator<char>(file),
-                   std::istreambuf_iterator<char>());
+    std::string contents{std::istreambuf_iterator<char>(file),
+                         std::istreambuf_iterator<char>()};
+    prelude.append(strip_leading_module(contents));
     prelude += '\n';
   }
   return prelude;

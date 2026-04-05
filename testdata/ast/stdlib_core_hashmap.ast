@@ -1,4 +1,5 @@
 File
+  Module core::hashmap
   ExternFunctionDecl __dao_str_hash
     Param s: string
     ReturnType: i64

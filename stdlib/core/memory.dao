@@ -1,3 +1,4 @@
+module core::memory
 // memory.dao — Low-level allocation hooks.
 //
 // Authority: docs/contracts/CONTRACT_RUNTIME_ABI.md

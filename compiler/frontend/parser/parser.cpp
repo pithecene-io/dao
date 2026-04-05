@@ -136,6 +136,18 @@ private:
     skip_newlines();
     Span file_span = peek().span;
 
+    // CONTRACT_SYNTAX_SURFACE.md requires every source file to begin
+    // with exactly one `module` declaration. Emit a diagnostic when
+    // it is missing, but continue parsing so downstream tests and
+    // tooling can still exercise the rest of the pipeline.
+    ModuleDeclNode* module_decl = nullptr;
+    if (peek_kind() == TokenKind::KwModule) {
+      module_decl = parse_module_decl();
+      skip_newlines();
+    } else {
+      error("expected 'module' declaration at start of file");
+    }
+
     std::vector<ImportNode*> imports;
     while (peek_kind() == TokenKind::KwImport) {
       imports.push_back(parse_import());
@@ -147,6 +159,17 @@ private:
       skip_newlines();
       if (at_end()) {
         break;
+      }
+      // A stray `module` after the leading position is a hard error per
+      // CONTRACT_SYNTAX_SURFACE.md (exactly one, before everything else).
+      if (peek_kind() == TokenKind::KwModule) {
+        error("'module' declaration must appear only once, at the start of the file");
+        advance(); // skip 'module' token
+        while (peek_kind() == TokenKind::Identifier || peek_kind() == TokenKind::ColonColon) {
+          advance();
+        }
+        skip_newlines();
+        continue;
       }
       Span before = peek().span;
       auto* decl = parse_declaration();
@@ -162,7 +185,28 @@ private:
     }
 
     Span total = {.offset = file_span.offset, .length = peek().span.offset - file_span.offset};
-    return ctx_.alloc<FileNode>(total, std::move(imports), std::move(declarations));
+    auto* file = ctx_.alloc<FileNode>();
+    file->span = total;
+    file->module_decl = module_decl;
+    file->imports = std::move(imports);
+    file->declarations = std::move(declarations);
+    return file;
+  }
+
+  // -----------------------------------------------------------------------
+  // Module declaration
+  // -----------------------------------------------------------------------
+
+  auto parse_module_decl() -> ModuleDeclNode* {
+    const auto& kw = consume(TokenKind::KwModule);
+    auto path = parse_module_path();
+    consume(TokenKind::Newline);
+    Span span = {.offset = kw.span.offset,
+                 .length = (path.span.offset + path.span.length) - kw.span.offset};
+    auto* node = ctx_.alloc<ModuleDeclNode>();
+    node->span = span;
+    node->path = std::move(path);
+    return node;
   }
 
   // -----------------------------------------------------------------------

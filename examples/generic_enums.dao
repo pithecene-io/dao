@@ -1,3 +1,4 @@
+module generic_enums
 // generic_enums.dao — generic payload-bearing enums.
 //
 // Demonstrates Option<T> and Result<T, E> from the prelude.

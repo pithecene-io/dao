@@ -1,4 +1,5 @@
 File
+  Module vectors
   FunctionDecl main
     ReturnType: i32
     LetStatement v

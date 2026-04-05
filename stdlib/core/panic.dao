@@ -1,3 +1,4 @@
+module core::panic
 // panic.dao — Program abort primitive.
 //
 // Authority: docs/contracts/CONTRACT_RUNTIME_ABI.md

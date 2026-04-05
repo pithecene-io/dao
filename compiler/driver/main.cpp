@@ -128,6 +128,33 @@ auto lex_and_parse(const std::filesystem::path& path) -> ParsedFile {
 // so prelude symbols are available without explicit import.
 // ---------------------------------------------------------------------------
 
+// Strip a leading `module <path>\n` line (and any preceding blank or
+// comment lines) from a source snippet. The transitional driver
+// concatenates stdlib and user sources into a single synthetic
+// compilation unit and injects one top-level `module` declaration of
+// its own; per-file module headers on the inputs would otherwise
+// violate the "exactly one module declaration at the start" rule in
+// CONTRACT_SYNTAX_SURFACE.md. Real multi-file compilation lands with
+// Task 25+.
+auto strip_leading_module(std::string_view src) -> std::string_view {
+  size_t i = 0;
+  while (i < src.size() && (src[i] == ' ' || src[i] == '\t' || src[i] == '\n')) {
+    ++i;
+  }
+  if (i + 6 >= src.size() || src.substr(i, 6) != "module") {
+    return src;
+  }
+  char after = src[i + 6];
+  if (after != ' ' && after != '\t') {
+    return src;
+  }
+  auto nl = src.find('\n', i);
+  if (nl == std::string_view::npos) {
+    return src.substr(0, 0);
+  }
+  return src.substr(nl + 1);
+}
+
 auto load_prelude_source() -> std::string {
   std::filesystem::path root(DAO_SOURCE_DIR);
   std::string prelude;
@@ -153,7 +180,8 @@ auto load_prelude_source() -> std::string {
     }
     std::sort(paths.begin(), paths.end());
     for (const auto& p : paths) {
-      prelude += read_file(p);
+      auto contents = read_file(p);
+      prelude.append(strip_leading_module(contents));
       prelude += '\n';
     }
   }
@@ -169,17 +197,32 @@ struct PreludeParsedFile {
 auto lex_and_parse_with_prelude(const std::filesystem::path& path)
     -> PreludeParsedFile {
   auto prelude_source = load_prelude_source();
-  auto user_source = read_file(path);
+  auto raw_user_source = read_file(path);
+  // Strip the user file's own `module` header; the driver injects a
+  // single synthetic `module main` at the top of the combined source.
+  // This is transitional until Task 25+ introduces real multi-file
+  // compilation where each file keeps its own module identity.
+  auto user_source = std::string(strip_leading_module(raw_user_source));
+
+  // Synthetic leading module declaration for the combined compilation
+  // unit. Per CONTRACT_SYNTAX_SURFACE.md every source file must begin
+  // with exactly one `module` declaration.
+  const std::string module_header = "module main\n";
+
+  std::string combined;
+  combined.reserve(module_header.size() + prelude_source.size() + user_source.size());
+  combined.append(module_header);
+  combined.append(prelude_source);
 
   uint32_t prelude_lines = 0;
-  for (char chr : prelude_source) {
+  for (char chr : combined) {
     if (chr == '\n') {
       ++prelude_lines;
     }
   }
-  auto prelude_bytes = static_cast<uint32_t>(prelude_source.size());
+  auto prelude_bytes = static_cast<uint32_t>(combined.size());
 
-  auto combined = prelude_source + user_source;
+  combined.append(user_source);
   dao::SourceBuffer source(path.filename().string(), std::move(combined));
   auto lex_result = dao::lex(source);
 

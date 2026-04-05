@@ -1,4 +1,5 @@
 File
+  Module i64
   FunctionDecl factorial_i64
     Param n: i64
     ReturnType: i64

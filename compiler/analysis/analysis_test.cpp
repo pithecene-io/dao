@@ -15,6 +15,24 @@ using namespace dao;
 
 namespace {
 
+// Test helper: every source file must begin with a `module` declaration
+// per CONTRACT_SYNTAX_SURFACE.md. Fixtures focus on analysis behavior
+// below the module layer, so we prepend a canonical `module test` line
+// and expose a `pipe.at(raw)` helper that rebases raw fixture offsets
+// to the wrapped source. Raw offsets in the fixtures are written as if
+// no wrapper existed; all offset-bearing query calls pass through
+// `pipe.at(...)`.
+inline constexpr const char* kModulePrefix = "module test\n";
+inline constexpr uint32_t kModulePrefixBytes = 12;
+static_assert(kModulePrefixBytes == sizeof("module test\n") - 1,
+              "kModulePrefixBytes must match strlen(kModulePrefix)");
+
+inline auto wrap_with_test_module(std::string_view src) -> std::string {
+  std::string wrapped = kModulePrefix;
+  wrapped.append(src);
+  return wrapped;
+}
+
 struct AnalysisPipeline {
   SourceBuffer source;
   LexResult lex_result;
@@ -24,7 +42,7 @@ struct AnalysisPipeline {
   TypeCheckResult check_result;
 
   explicit AnalysisPipeline(const std::string& src)
-      : source("test.dao", std::string(src)),
+      : source("test.dao", wrap_with_test_module(src)),
         lex_result(lex(source)),
         parse_result(parse(lex_result.tokens)) {
     if (parse_result.file != nullptr) {
@@ -32,6 +50,11 @@ struct AnalysisPipeline {
       check_result =
           typecheck(*parse_result.file, resolve_result, types);
     }
+  }
+
+  /// Rebase a raw fixture-relative offset to the wrapped source.
+  [[nodiscard]] static auto at(uint32_t raw) -> uint32_t {
+    return raw + kModulePrefixBytes;
   }
 };
 
@@ -86,8 +109,10 @@ suite<"document_symbols"> document_symbols = [] {
     AnalysisPipeline pipe(
         "fn prelude_fn(): i32 -> 0\n"
         "fn user_fn(): i32 -> 1\n");
-    // Treat first 26 bytes as prelude.
-    auto symbols = query_document_symbols(*pipe.parse_result.file, 26);
+    // Treat first 26 bytes of the raw fixture as prelude (rebased for
+    // the synthetic `module test` header via AnalysisPipeline::at).
+    auto symbols =
+        query_document_symbols(*pipe.parse_result.file, AnalysisPipeline::at(26));
     expect(symbols.size() == 1_ul);
     expect(symbols[0].name == "user_fn");
   };
@@ -119,8 +144,9 @@ suite<"references"> references = [] {
         "fn add(a: i32, b: i32): i32 -> a + b\n"
         "fn main(): i32\n"
         "  return add(1, 2)\n");
-    // Offset 3 = "add" declaration.
-    auto refs = query_references(3, pipe.resolve_result);
+    // Raw offset 3 = "add" declaration (rebased for synthetic module
+    // header).
+    auto refs = query_references(AnalysisPipeline::at(3), pipe.resolve_result);
     expect(refs.size() >= 2_ul) << "should find definition + at least one use";
 
     bool has_def = false;
@@ -141,17 +167,14 @@ suite<"references"> references = [] {
         "fn foo(): i32 -> 42\n"
         "fn main(): i32\n"
         "  return foo()\n");
-    // Find the offset of `foo()` in the call — "return foo()" starts
-    // at some offset. The use of foo in `return foo()` should resolve.
-    // Offset of "foo" in line 3: "fn foo..." is 20 bytes,
-    // "fn main..." is ~15 bytes, "  return " is ~9 bytes = ~44.
-    // Use the declaration offset (3) which should also work.
-    auto refs = query_references(3, pipe.resolve_result);
+    // Use the declaration offset (raw 3, rebased via at()).
+    auto refs = query_references(AnalysisPipeline::at(3), pipe.resolve_result);
     expect(refs.size() >= 2_ul) << "definition + use";
   };
 
   "no references for unknown offset"_test = [] {
     AnalysisPipeline pipe("fn main(): i32 -> 0\n");
+    // Sentinel out-of-range offset; not rebased.
     auto refs = query_references(9999, pipe.resolve_result);
     expect(refs.empty()) << "should return empty for unknown offset";
   };
@@ -176,13 +199,16 @@ auto has_completion(const std::vector<CompletionItem>& items,
 } // namespace
 
 suite<"completion"> completion = [] {
+  // Raw offsets below are written as if the fixture started at byte 0.
+  // AnalysisPipeline::at(raw) rebases them for the synthetic `module
+  // test` header injected by the pipeline.
   "top-level functions are offered"_test = [] {
     AnalysisPipeline pipe(
         "fn add(a: i32, b: i32): i32 -> a + b\n"
         "fn main(): i32\n"
         "  return 0\n");
     // Offset inside main body (after "  return ").
-    auto items = query_completions(55, pipe.resolve_result,
+    auto items = query_completions(AnalysisPipeline::at(55), pipe.resolve_result,
                                    pipe.check_result);
     expect(has_completion(items, "add")) << "should offer add";
     expect(has_completion(items, "main")) << "should offer main";
@@ -196,7 +222,7 @@ suite<"completion"> completion = [] {
         "fn main(): i32\n"
         "  let x: i32 = 42\n"
         "  return x\n");
-    auto items = query_completions(40, pipe.resolve_result,
+    auto items = query_completions(AnalysisPipeline::at(40), pipe.resolve_result,
                                    pipe.check_result);
     expect(has_completion(items, "x")) << "should offer local x";
   };
@@ -208,7 +234,7 @@ suite<"completion"> completion = [] {
     AnalysisPipeline pipe(
         "fn add(a: i32, b: i32): i32\n"
         "  return a + b\n");
-    auto items = query_completions(38, pipe.resolve_result,
+    auto items = query_completions(AnalysisPipeline::at(38), pipe.resolve_result,
                                    pipe.check_result);
     expect(has_completion(items, "a")) << "should offer param a";
     expect(has_completion(items, "b")) << "should offer param b";
@@ -223,7 +249,7 @@ suite<"completion"> completion = [] {
         "  let x: i32 = 1\n"
         "  let y: i32 = 2\n"
         "  return x\n");
-    auto items = query_completions(33, pipe.resolve_result,
+    auto items = query_completions(AnalysisPipeline::at(33), pipe.resolve_result,
                                    pipe.check_result);
     expect(has_completion(items, "x")) << "x declared before cursor";
     expect(!has_completion(items, "y")) << "y declared after cursor";
@@ -233,7 +259,7 @@ suite<"completion"> completion = [] {
     AnalysisPipeline pipe(
         "fn main(): i32\n"
         "  return 0\n");
-    auto items = query_completions(20, pipe.resolve_result,
+    auto items = query_completions(AnalysisPipeline::at(20), pipe.resolve_result,
                                    pipe.check_result);
     expect(has_completion(items, "i32")) << "should offer i32";
     expect(has_completion(items, "f64")) << "should offer f64";
@@ -244,7 +270,7 @@ suite<"completion"> completion = [] {
     AnalysisPipeline pipe(
         "fn main(): i32\n"
         "  return 0\n");
-    auto items = query_completions(20, pipe.resolve_result,
+    auto items = query_completions(AnalysisPipeline::at(20), pipe.resolve_result,
                                    pipe.check_result);
     for (const auto& item : items) {
       expect(!item.label.starts_with("__"))
@@ -257,7 +283,7 @@ suite<"completion"> completion = [] {
         "fn add(a: i32, b: i32): i32 -> a + b\n"
         "fn main(): i32\n"
         "  return 0\n");
-    auto items = query_completions(55, pipe.resolve_result,
+    auto items = query_completions(AnalysisPipeline::at(55), pipe.resolve_result,
                                    pipe.check_result);
     for (const auto& item : items) {
       if (item.label == "add") {
@@ -281,7 +307,7 @@ suite<"completion"> completion = [] {
         "  return 0\n");
     // Inside else branch — "let b" is at ~61, "return b" at ~79.
     // Offset 82 should be inside else scope.
-    auto items = query_completions(82, pipe.resolve_result,
+    auto items = query_completions(AnalysisPipeline::at(82), pipe.resolve_result,
                                    pipe.check_result);
     expect(has_completion(items, "b")) << "b should be visible in else";
     expect(!has_completion(items, "a")) << "a should NOT be visible in else";
@@ -293,7 +319,7 @@ suite<"completion"> completion = [] {
         "  let x: i32 = 99\n"
         "  return x\n");
     // Offset inside body, after let x shadows param x.
-    auto items = query_completions(40, pipe.resolve_result,
+    auto items = query_completions(AnalysisPipeline::at(40), pipe.resolve_result,
                                    pipe.check_result);
     // Should have exactly one "x", not two.
     int x_count = 0;
@@ -311,10 +337,11 @@ suite<"completion"> completion = [] {
         "fn main(): i32\n"
         "  return 0\n";
     AnalysisPipeline pipe(src);
-    // Cursor at source.size() — one past the last character.
+    // Cursor at raw src.size() — one past the last character of the
+    // raw fixture (rebased onto the wrapped source).
     auto items = query_completions(
-        static_cast<uint32_t>(src.size()), pipe.resolve_result,
-        pipe.check_result);
+        AnalysisPipeline::at(static_cast<uint32_t>(src.size())),
+        pipe.resolve_result, pipe.check_result);
     expect(!items.empty()) << "should offer completions at end of file";
     expect(has_completion(items, "add")) << "add should be visible at EOF";
   };

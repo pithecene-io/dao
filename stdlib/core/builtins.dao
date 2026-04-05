@@ -1,3 +1,4 @@
+module core::builtins
 // builtins.dao — Compiler-recognized builtin functions.
 //
 // These are generic functions whose bodies are replaced by the

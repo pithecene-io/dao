@@ -1,4 +1,5 @@
 File
+  Module probe::astar
   AliasDecl NodeId = i32
   AliasDecl Graph = i32
   AliasDecl List = i32

@@ -1,4 +1,5 @@
 File
+  Module generic_enums
   FunctionDecl unwrap_i64_or
     Param opt: Option<i64>
     Param default_val: i64

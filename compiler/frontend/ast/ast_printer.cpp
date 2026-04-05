@@ -17,6 +17,9 @@ public:
 
   void print(const FileNode& file) {
     out_ << "File\n";
+    if (file.module_decl != nullptr) {
+      print_module_decl(*file.module_decl);
+    }
     for (const auto* imp : file.imports) {
       print_import(*imp);
     }
@@ -48,6 +51,17 @@ private:
     Scope(Scope&&) = delete;
     auto operator=(Scope&&) -> Scope& = delete;
   };
+
+  // -----------------------------------------------------------------------
+  // Module declaration
+  // -----------------------------------------------------------------------
+
+  void print_module_decl(const ModuleDeclNode& node) {
+    indent();
+    out_ << "Module ";
+    print_qualified_path(node.path);
+    out_ << "\n";
+  }
 
   // -----------------------------------------------------------------------
   // Import

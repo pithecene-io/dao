@@ -1,4 +1,5 @@
 File
+  Module bootstrap_probe::lex_self
   FunctionDecl is_digit
     Param ch: i32
     ReturnType: bool

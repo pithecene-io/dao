@@ -1,3 +1,4 @@
+module astar
 type NodeId = i32
 
 fn heuristic(a: NodeId, b: NodeId): i32 -> a + b

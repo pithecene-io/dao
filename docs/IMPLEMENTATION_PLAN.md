@@ -323,7 +323,9 @@ Deliverables:
 
 - `module` keyword added to bootstrap lexer (and `dao.lex`)
 - `ModuleDeclN` and `ImportDeclN` AST nodes
-- `FileN` extended with optional module decl and import list
+- `FileN` extended with a mandatory leading module decl and
+  import list (per `CONTRACT_SYNTAX_SURFACE.md`: every source file
+  must begin with exactly one `module` declaration)
 - program-level compilation layer above per-file parsing
 - file-to-module mapping with deterministic identity
 - module graph construction with cycle detection
@@ -359,9 +361,18 @@ Deliverables:
 - deterministic topo-ordered lowering and HIR dump
 - end-to-end multi-file smoke test
 
-After Tasks 25–27, feature-oriented Tier B slices (methods/
-associated items, concepts/extend, richer patterns, deferred
-expressions) have a sane multi-file substrate to sit on.
+After Tasks 25–27, the remaining feature-oriented Tier B slices
+(richer patterns, deferred expressions) have a sane multi-file
+substrate to sit on.
+
+Note: methods/associated items and concepts/extend were
+originally sequenced as Tier B slices behind Tasks 25–27, but
+landed earlier in the bootstrap vertical slice work and are
+already present in `bootstrap/typecheck/impl.dao` and
+`bootstrap/hir/impl.dao`.  They will need to be revisited in the
+multi-file substrate only to verify cross-file concept resolution
+and the `extend`-block module-granularity rule frozen in
+`TASK_26_BOOTSTRAP_CROSS_FILE_RESOLUTION.md §6.5`.
 
 ### Task 14 — Numeric Type Expansion
 

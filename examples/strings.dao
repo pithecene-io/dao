@@ -1,3 +1,4 @@
+module strings
 fn greet(name: string): string
   return concat("Hello, ", name)
 

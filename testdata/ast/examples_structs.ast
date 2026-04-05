@@ -1,4 +1,5 @@
 File
+  Module structs
   ClassDecl Point
     Field x: i32
     Field y: i32

@@ -18,16 +18,42 @@ fi
 
 SHARED=bootstrap/shared/base.dao
 
+# Strip a leading `module <path>` line (plus blank/comment lines before
+# it) from a file on stdout. Used when concatenating real Dao files
+# that each carry their own module declaration — the generated output
+# file gets exactly one synthetic module declaration at the top.
+strip_module() {
+  awk '
+    BEGIN { found = 0 }
+    {
+      if (!found) {
+        if ($0 ~ /^[[:space:]]*$/) { next }
+        if ($0 ~ /^[[:space:]]*\/\//) { next }
+        if ($0 ~ /^[[:space:]]*#/) { next }
+        if ($0 ~ /^[[:space:]]*module[[:space:]]/) { found = 1; next }
+        found = 1
+      }
+      print
+    }
+  ' "$1"
+}
+
 assemble() {
   local out="$1"
   shift
-  echo "// GENERATED — do not edit. Edit bootstrap/shared/base.dao or" > "$out"
+  local gen_module="${out##*/}"
+  gen_module="${gen_module%.gen.dao}"
+  # Generated files declare a single synthetic module identity
+  # (`bootstrap::<name>::gen`). Per-file module declarations from the
+  # concatenated inputs are stripped by strip_module.
+  echo "module bootstrap::${gen_module}::gen" > "$out"
+  echo "// GENERATED — do not edit. Edit bootstrap/shared/base.dao or" >> "$out"
   echo "// the subsystem source instead, then run: bash bootstrap/assemble.sh" >> "$out"
   echo "" >> "$out"
-  cat "$SHARED" >> "$out"
+  strip_module "$SHARED" >> "$out"
   for src in "$@"; do
     echo "" >> "$out"
-    cat "$src" >> "$out"
+    strip_module "$src" >> "$out"
   done
   echo "  assembled $out"
 }

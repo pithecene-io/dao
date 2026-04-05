@@ -1,4 +1,5 @@
 File
+  Module hashmap
   ClassDecl Entry
     Field name: string
     Field value: i32

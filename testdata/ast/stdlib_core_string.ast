@@ -1,4 +1,5 @@
 File
+  Module core::string
   ExternFunctionDecl __dao_str_concat
     Param a: string
     Param b: string
