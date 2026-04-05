@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace dao::playground {
@@ -36,6 +37,14 @@ void collect_diagnostics(nlohmann::json& out, const SourceBuffer& source,
 /// Build a synthetic error diagnostic entry for when a phase fails
 /// with no user-visible diagnostics (possible prelude error).
 auto make_internal_error(const std::string& message) -> nlohmann::json;
+
+/// Strip a leading `module <path>` declaration (including any preceding
+/// blank lines and `//` line comments) from a user-provided source
+/// snippet. Used by the run/analyze handlers to fold user-authored
+/// module headers into the single synthetic `module playground` header
+/// injected at the top of the combined compilation unit. Real
+/// multi-file support lands with Task 25+.
+auto strip_user_leading_module(std::string_view src) -> std::string_view;
 
 } // namespace dao::playground
 

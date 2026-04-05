@@ -106,7 +106,10 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
   // exactly one `module` declaration. The playground injects a
   // synthetic `module playground` header; both it and the stdlib
   // prelude are folded into `prelude_bytes` so user-visible diagnostic
-  // offsets remain zero-based from the user's code.
+  // offsets remain zero-based from the user's code. Any `module`
+  // header the user supplied (e.g. by loading one of the migrated
+  // example files) is stripped first so we don't produce two module
+  // declarations.
   const std::string module_header = "module playground\n";
   auto prelude_source = load_prelude(repo_root);
   std::string combined_header;
@@ -116,7 +119,8 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
   auto prelude_bytes = static_cast<uint32_t>(combined_header.size());
   auto prelude_lines = count_lines(combined_header);
 
-  auto user_source = request["source"].get<std::string>();
+  auto raw_user_source = request["source"].get<std::string>();
+  auto user_source = std::string(strip_user_leading_module(raw_user_source));
   SourceBuffer source("<playground>", combined_header + user_source);
 
   // --- Response accumulators ---
@@ -297,7 +301,8 @@ auto run_light_pipeline(const nlohmann::json& request,
   LightPipeline pipe{SourceBuffer("", ""), {}, {}, {}, {}, {}, 0, false};
 
   // See the `handle_analyze` comment above for the synthetic
-  // `module playground` injection rationale.
+  // `module playground` injection rationale. User-authored module
+  // headers are stripped before concatenation.
   const std::string module_header = "module playground\n";
   auto prelude_source = load_prelude(repo_root);
   std::string combined_header;
@@ -306,7 +311,8 @@ auto run_light_pipeline(const nlohmann::json& request,
   combined_header.append(prelude_source);
   pipe.prelude_bytes = static_cast<uint32_t>(combined_header.size());
 
-  auto user_source = request["source"].get<std::string>();
+  auto raw_user_source = request["source"].get<std::string>();
+  auto user_source = std::string(strip_user_leading_module(raw_user_source));
   pipe.source =
       SourceBuffer("<playground>", combined_header + user_source);
   pipe.lex_result = lex(pipe.source);

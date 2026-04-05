@@ -76,17 +76,22 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
   // `module playground` declaration. Both the synthetic module line
   // and the stdlib prelude are folded into `prelude_bytes` so that
   // user-visible diagnostic offsets remain zero-based from the user's
-  // code. Real multi-file compilation lands with Task 25+.
+  // code. Any `module` header the user supplied (e.g. by loading one
+  // of the migrated example files) is stripped first so we don't
+  // produce two module declarations. Real multi-file compilation
+  // lands with Task 25+.
   const std::string module_header = "module playground\n";
   auto prelude_source = load_prelude(repo_root);
+  auto raw_user_source = request["source"].get<std::string>();
+  auto user_source = std::string(strip_user_leading_module(raw_user_source));
+
   std::string combined;
   combined.reserve(module_header.size() + prelude_source.size() +
-                   request["source"].get<std::string>().size());
+                   user_source.size());
   combined.append(module_header);
   combined.append(prelude_source);
   auto prelude_bytes = static_cast<uint32_t>(combined.size());
   auto prelude_lines = count_lines(combined);
-  auto user_source = request["source"].get<std::string>();
   combined.append(user_source);
 
   SourceBuffer source("<playground>", std::move(combined));

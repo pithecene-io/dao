@@ -14,8 +14,24 @@ namespace {
 // Real multi-file compilation lands with Task 25+.
 auto strip_leading_module(std::string_view src) -> std::string_view {
   size_t i = 0;
-  while (i < src.size() && (src[i] == ' ' || src[i] == '\t' || src[i] == '\n')) {
-    ++i;
+  // Skip whitespace and `//` line comments until we reach either the
+  // leading `module` keyword or the first non-comment token. Dao only
+  // has `//` line comments (see spec/grammar/dao.ebnf).
+  while (i < src.size()) {
+    char ch = src[i];
+    if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+      ++i;
+      continue;
+    }
+    if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+      auto nl = src.find('\n', i);
+      if (nl == std::string_view::npos) {
+        return src.substr(0, 0);
+      }
+      i = nl + 1;
+      continue;
+    }
+    break;
   }
   if (i + 6 >= src.size() || src.substr(i, 6) != "module") {
     return src;
@@ -32,6 +48,12 @@ auto strip_leading_module(std::string_view src) -> std::string_view {
 }
 
 } // namespace
+
+// Exposed to run.cpp / analyze.cpp so request handlers can strip a
+// user-provided leading `module` header before concatenation.
+auto strip_user_leading_module(std::string_view src) -> std::string_view {
+  return strip_leading_module(src);
+}
 
 auto load_prelude(const std::filesystem::path& repo_root) -> std::string {
   auto stdlib_core = repo_root / "stdlib" / "core";

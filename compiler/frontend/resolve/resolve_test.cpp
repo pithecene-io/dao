@@ -25,9 +25,24 @@ auto read_file(const std::filesystem::path& path) -> std::string {
 // treated as one synthetic module for resolver corpus testing.
 auto strip_leading_module(std::string_view src) -> std::string_view {
   size_t i = 0;
-  // Skip whitespace-only lines and comments up to the module keyword.
-  while (i < src.size() && (src[i] == ' ' || src[i] == '\t' || src[i] == '\n')) {
-    ++i;
+  // Skip whitespace and `//` line comments until we reach either the
+  // leading `module` keyword or the first non-comment token. Dao only
+  // has `//` line comments (see spec/grammar/dao.ebnf).
+  while (i < src.size()) {
+    char ch = src[i];
+    if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+      ++i;
+      continue;
+    }
+    if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+      auto nl = src.find('\n', i);
+      if (nl == std::string_view::npos) {
+        return src.substr(0, 0);
+      }
+      i = nl + 1;
+      continue;
+    }
+    break;
   }
   if (i + 6 >= src.size() || src.substr(i, 6) != "module") {
     return src;
