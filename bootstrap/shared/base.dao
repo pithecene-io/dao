@@ -2522,6 +2522,20 @@ class SourceInput:
   path: string
   source_text: string
 
+// --- Task 27: Program-level pass payloads ---
+//
+// `TypeCheckData` and `HirData` are stub classes that live in
+// `shared/base.dao` so the `Program` value (defined in
+// `bootstrap/resolver/impl.dao` because of linear assembly order)
+// can reference them without depending on the typecheck or HIR
+// subsystem files.  D1a (typecheck substrate) and D7 (HIR
+// substrate) fill these in place with their real fields.
+class TypeCheckData:
+  initialized: bool
+
+class HirData:
+  initialized: bool
+
 // --- Graph construction ---
 
 // Find a module by name in the module list.  Returns module_id or -1.
