@@ -10,7 +10,7 @@ fn diag_starts_with(msg: string, prefix: string): bool
     return false
   return substring(msg, to_i64(0), plen) == prefix
 
-fn main(): void
+fn main(): i32
   let pass_count: i64 = 0
   let total: i64 = 12
 
@@ -285,3 +285,4 @@ fn main(): void
   if pass_count == total:
     print("ALL TESTS PASSED")
   print("")
+  return 0
