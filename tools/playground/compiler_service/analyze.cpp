@@ -108,8 +108,11 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
   // prelude are folded into `prelude_bytes` so user-visible diagnostic
   // offsets remain zero-based from the user's code. Any `module`
   // header the user supplied (e.g. by loading one of the migrated
-  // example files) is stripped first so we don't produce two module
-  // declarations.
+  // example files) is blanked in place — the bytes become spaces so
+  // the parser ignores them, but the user source's total byte count
+  // and every offset past the blanked region stay identical to the
+  // frontend editor buffer. This keeps semantic token and diagnostic
+  // positions aligned with the editor.
   const std::string module_header = "module playground\n";
   auto prelude_source = load_prelude(repo_root);
   std::string combined_header;
@@ -119,8 +122,8 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
   auto prelude_bytes = static_cast<uint32_t>(combined_header.size());
   auto prelude_lines = count_lines(combined_header);
 
-  auto raw_user_source = request["source"].get<std::string>();
-  auto user_source = std::string(strip_user_leading_module(raw_user_source));
+  auto user_source = request["source"].get<std::string>();
+  blank_user_leading_module(user_source);
   SourceBuffer source("<playground>", combined_header + user_source);
 
   // --- Response accumulators ---
@@ -302,7 +305,10 @@ auto run_light_pipeline(const nlohmann::json& request,
 
   // See the `handle_analyze` comment above for the synthetic
   // `module playground` injection rationale. User-authored module
-  // headers are stripped before concatenation.
+  // headers are blanked (not stripped) so editor offsets and backend
+  // offsets stay byte-identical — the offset rebasing used by hover,
+  // goto-definition, references, and completions (pipe.prelude_bytes
+  // + user_offset) relies on this invariant.
   const std::string module_header = "module playground\n";
   auto prelude_source = load_prelude(repo_root);
   std::string combined_header;
@@ -311,8 +317,8 @@ auto run_light_pipeline(const nlohmann::json& request,
   combined_header.append(prelude_source);
   pipe.prelude_bytes = static_cast<uint32_t>(combined_header.size());
 
-  auto raw_user_source = request["source"].get<std::string>();
-  auto user_source = std::string(strip_user_leading_module(raw_user_source));
+  auto user_source = request["source"].get<std::string>();
+  blank_user_leading_module(user_source);
   pipe.source =
       SourceBuffer("<playground>", combined_header + user_source);
   pipe.lex_result = lex(pipe.source);

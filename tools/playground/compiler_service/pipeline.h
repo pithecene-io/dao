@@ -38,13 +38,18 @@ void collect_diagnostics(nlohmann::json& out, const SourceBuffer& source,
 /// with no user-visible diagnostics (possible prelude error).
 auto make_internal_error(const std::string& message) -> nlohmann::json;
 
-/// Strip a leading `module <path>` declaration (including any preceding
-/// blank lines and `//` line comments) from a user-provided source
-/// snippet. Used by the run/analyze handlers to fold user-authored
-/// module headers into the single synthetic `module playground` header
-/// injected at the top of the combined compilation unit. Real
-/// multi-file support lands with Task 25+.
-auto strip_user_leading_module(std::string_view src) -> std::string_view;
+/// Blank a leading `module <path>` declaration in place — overwrite
+/// the `module` keyword and its path segments with spaces while
+/// preserving the terminating newline, total byte count, and every
+/// offset past the blanked region. Used by the run/analyze handlers
+/// to fold any user-authored module header into the single synthetic
+/// `module playground` header injected at the top of the combined
+/// compilation unit. Blanking (rather than stripping) is load-bearing
+/// for the playground: frontend editor offsets and backend source
+/// offsets must stay byte-identical so hover/goto/completion/
+/// references/diagnostics positions line up with the editor buffer.
+/// Real multi-file support lands with Task 25+.
+void blank_user_leading_module(std::string& src);
 
 } // namespace dao::playground
 

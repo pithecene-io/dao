@@ -7,12 +7,19 @@ namespace dao::playground {
 
 namespace {
 
-// Strip a leading `module <path>\n` line from a source snippet. The
-// transitional playground pipeline concatenates stdlib files and user
-// source into a single synthetic compilation unit with exactly one
-// `module` declaration at the top, per CONTRACT_SYNTAX_SURFACE.md.
-// Real multi-file compilation lands with Task 25+.
-auto strip_leading_module(std::string_view src) -> std::string_view {
+// Blank a leading `module <path>` line in place — overwrite the
+// `module` keyword and its path segments with spaces, preserving the
+// terminating newline, total byte count, and all offsets past the
+// blanked region. The transitional playground/driver pipelines
+// concatenate stdlib files and user source into a single synthetic
+// compilation unit with exactly one `module` declaration at the top
+// (the injected header), per CONTRACT_SYNTAX_SURFACE.md. Blanking
+// (rather than stripping) is load-bearing for the playground: frontend
+// editor offsets and backend source offsets must stay byte-identical
+// so hover/goto/completion/references/diagnostics positions line up
+// with the editor buffer the user sees. Real multi-file compilation
+// lands with Task 25+.
+void blank_leading_module(std::string& src) {
   size_t i = 0;
   // Skip whitespace and `//` line comments until we reach either the
   // leading `module` keyword or the first non-comment token. Dao only
@@ -25,34 +32,37 @@ auto strip_leading_module(std::string_view src) -> std::string_view {
     }
     if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
       auto nl = src.find('\n', i);
-      if (nl == std::string_view::npos) {
-        return src.substr(0, 0);
+      if (nl == std::string::npos) {
+        return;
       }
       i = nl + 1;
       continue;
     }
     break;
   }
-  if (i + 6 >= src.size() || src.substr(i, 6) != "module") {
-    return src;
+  if (i + 6 >= src.size() || src.compare(i, 6, "module") != 0) {
+    return;
   }
   char after = src[i + 6];
   if (after != ' ' && after != '\t') {
-    return src;
+    return;
   }
   auto nl = src.find('\n', i);
-  if (nl == std::string_view::npos) {
-    return src.substr(0, 0);
+  auto end = (nl == std::string::npos) ? src.size() : nl;
+  for (size_t j = i; j < end; ++j) {
+    src[j] = ' ';
   }
-  return src.substr(nl + 1);
 }
 
 } // namespace
 
-// Exposed to run.cpp / analyze.cpp so request handlers can strip a
-// user-provided leading `module` header before concatenation.
-auto strip_user_leading_module(std::string_view src) -> std::string_view {
-  return strip_leading_module(src);
+// Exposed to run.cpp / analyze.cpp so request handlers can blank a
+// user-provided leading `module` header before concatenation without
+// shifting any byte offsets. See the blank_leading_module rationale
+// above for why blanking (not stripping) is required for editor/
+// backend offset alignment.
+void blank_user_leading_module(std::string& src) {
+  blank_leading_module(src);
 }
 
 auto load_prelude(const std::filesystem::path& repo_root) -> std::string {
@@ -78,7 +88,8 @@ auto load_prelude(const std::filesystem::path& repo_root) -> std::string {
     }
     std::string contents{std::istreambuf_iterator<char>(file),
                          std::istreambuf_iterator<char>()};
-    prelude.append(strip_leading_module(contents));
+    blank_leading_module(contents);
+    prelude.append(contents);
     prelude += '\n';
   }
   return prelude;

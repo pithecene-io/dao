@@ -77,13 +77,17 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
   // and the stdlib prelude are folded into `prelude_bytes` so that
   // user-visible diagnostic offsets remain zero-based from the user's
   // code. Any `module` header the user supplied (e.g. by loading one
-  // of the migrated example files) is stripped first so we don't
-  // produce two module declarations. Real multi-file compilation
-  // lands with Task 25+.
+  // of the migrated example files) is blanked in place — the bytes
+  // become spaces so the parser ignores them, but the user source's
+  // total byte count and every offset past the blanked region stay
+  // identical to the frontend editor buffer. This keeps hover,
+  // go-to-definition, completions, references, semantic tokens, and
+  // diagnostic positions aligned with the editor. Real multi-file
+  // compilation lands with Task 25+.
   const std::string module_header = "module playground\n";
   auto prelude_source = load_prelude(repo_root);
-  auto raw_user_source = request["source"].get<std::string>();
-  auto user_source = std::string(strip_user_leading_module(raw_user_source));
+  auto user_source = request["source"].get<std::string>();
+  blank_user_leading_module(user_source);
 
   std::string combined;
   combined.reserve(module_header.size() + prelude_source.size() +
