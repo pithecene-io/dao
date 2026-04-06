@@ -1220,6 +1220,22 @@ fn program_resolved_use(p: Program, file_id: i64, tok_idx: i64): i64
     i = i + 3
   return to_i64(-1)
 
+// Build a per-module uses_map (HashMap<i64> keyed by tok_idx →
+// sym_idx) from the program's triple stream, filtered to the given
+// file_id. This is the bridge between the program-level resolve
+// output (triple format) and the per-file TC (pair-format uses_map).
+// Typecheck constructs TC.uses_map through this helper; no pass
+// should scan the raw uses triples directly.
+fn program_module_uses_map(p: Program, file_id: i64): HashMap<i64>
+  let um: HashMap<i64> = HashMap<i64>::new()
+  let uses: Vector<i64> = p.resolve.uses
+  let i: i64 = 0
+  while i + 2 < uses.length():
+    if uses.get(i) == file_id:
+      um = um.set(i64_to_string(uses.get(i + 1)), uses.get(i + 2))
+    i = i + 3
+  return um
+
 // Look up the concept sym_idx bound to an `extend T as C:` block.
 // Returns -1 until D3 populates the binding table (D0 is the
 // placeholder step).
