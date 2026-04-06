@@ -245,6 +245,13 @@ fn register_builtins(ts: TS): TS
 // (indices 0–12 are i8, i16, i32, i64, u8, u16, u32, u64, f32, f64,
 // bool, void, string) so all modules share a canonical type table.
 fn program_init_typecheck(p: Program): Program
+  // Guard: if TypeCheckData is already initialized (builtins seeded),
+  // return unchanged.  A second call must not discard accumulated
+  // canonical types, type_info, sym_types, or expr_types — the
+  // program-level type table is shared and accumulates across modules
+  // per Task 27 §4.1.
+  if p.typecheck.initialized:
+    return p
   // Build a throwaway TC/TS just to drive register_builtins, then
   // harvest the resulting types/type_info/sym_types into
   // TypeCheckData.  This avoids duplicating the builtin registration
@@ -1753,7 +1760,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 26
+  let total: i32 = 27
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -2043,6 +2050,24 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL d1a_program_init_typecheck")
+
+  // Test d1a_1b: double-init is a no-op (preserves accumulated state).
+  let td_with_expr: TypeCheckData = tc_set_expr_type(p_tc.typecheck, to_i64(0), to_i64(7), to_i64(2))
+  let p_tc_with_expr: Program = Program(p_tc.graph, p_tc.resolve, td_with_expr, p_tc.hir, p_tc.diags)
+  let p_tc2: Program = program_init_typecheck(p_tc_with_expr)
+  let d1a_1b_ok: bool = true
+  // expr_types entry should survive the second init call.
+  let preserved: i64 = tc_get_expr_type(p_tc2.typecheck, to_i64(0), to_i64(7))
+  if preserved != 2:
+    d1a_1b_ok = false
+  // types count should still be 13 (not doubled).
+  if p_tc2.typecheck.types.length() != 13:
+    d1a_1b_ok = false
+  if d1a_1b_ok:
+    print("PASS d1a_double_init_noop")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL d1a_double_init_noop")
 
   // Test d1a_2: expr_id_key and tc_get/set_expr_type round-trip.
   let td0: TypeCheckData = p_tc.typecheck
