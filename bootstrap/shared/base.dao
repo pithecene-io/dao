@@ -2522,19 +2522,77 @@ class SourceInput:
   path: string
   source_text: string
 
+// --- Task 27: Type universe (shared across passes) ---
+//
+// `TypeKind` and `DaoType` were originally in `typecheck/impl.dao`.
+// Promoted to `shared/base.dao` in D1a so that `TypeCheckData` can
+// carry `types: Vector<DaoType>` and every pass assembled after
+// `shared/base.dao` can reference the type universe without depending
+// on the typecheck subsystem file.  These types are self-contained —
+// they depend only on primitives.
+
+enum TypeKind:
+  TBuiltin
+  TVoid
+  TString
+  TPointer
+  TFunction
+  TStruct
+  TEnum
+  TGenericParam
+  TConcept
+
+class DaoType:
+  kind: TypeKind
+  builtin_id: i64
+  name: string
+  decl_node: i64
+  info_lp: i64
+  info_count: i64
+  ret_type: i64
+  pointee: i64
+
 // --- Task 27: Program-level pass payloads ---
 //
-// `TypeCheckData` and `HirData` are stub classes that live in
-// `shared/base.dao` so the `Program` value (defined in
-// `bootstrap/resolver/impl.dao` because of linear assembly order)
-// can reference them without depending on the typecheck or HIR
-// subsystem files.  D1a (typecheck substrate) and D7 (HIR
-// substrate) fill these in place with their real fields.
+// `TypeCheckData` lives here so the `Program` value (in
+// `bootstrap/resolver/impl.dao`) can reference it.  `HirData` is
+// still a stub; D7 fills it with real fields.
+
 class TypeCheckData:
   initialized: bool
+  types: Vector<DaoType>
+  type_info: Vector<i64>
+  sym_types: Vector<i64>
+  expr_types: HashMap<i64>       // key: expr_id_key(module_id, node_idx)
 
 class HirData:
   initialized: bool
+
+// --- Task 27: ExprId keying ---
+//
+// Typed composite key for program-wide expression identity. Bootstrap
+// uses stringified keys in HashMaps (the standard bootstrap pattern).
+// Both the typecheck write side and any downstream read side
+// (HIR, future MIR) go through this helper so the key format stays
+// in one place.
+
+fn expr_id_key(module_id: i64, node_idx: i64): string
+  return i64_to_string(module_id) + ":" + i64_to_string(node_idx)
+
+// Read helpers for TypeCheckData.expr_types.
+
+fn tc_get_expr_type(td: TypeCheckData, module_id: i64, node_idx: i64): i64
+  let key: string = expr_id_key(module_id, node_idx)
+  let found: Option<i64> = td.expr_types.get(key)
+  match found:
+    Option.Some(ty):
+      return ty
+    Option.None:
+      return to_i64(-1)
+
+fn tc_set_expr_type(td: TypeCheckData, module_id: i64, node_idx: i64, ty: i64): TypeCheckData
+  let key: string = expr_id_key(module_id, node_idx)
+  return TypeCheckData(td.initialized, td.types, td.type_info, td.sym_types, td.expr_types.set(key, ty))
 
 // --- Graph construction ---
 

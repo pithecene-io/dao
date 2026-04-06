@@ -33,26 +33,9 @@ module bootstrap::typecheck
 // and TS (mutable type checker state, 8 fields) to stay under the Dao
 // compiler's limit for reliable class field access in function arguments.
 
-enum TypeKind:
-  TBuiltin
-  TVoid
-  TString
-  TPointer
-  TFunction
-  TStruct
-  TEnum
-  TGenericParam
-  TConcept
-
-class DaoType:
-  kind: TypeKind
-  builtin_id: i64
-  name: string
-  decl_node: i64
-  info_lp: i64
-  info_count: i64
-  ret_type: i64
-  pointee: i64
+// TypeKind and DaoType promoted to shared/base.dao in D1a so that
+// TypeCheckData can carry `types: Vector<DaoType>` and every pass
+// can reference the type universe.  See the comment in shared/base.dao.
 
 // =========================================================================
 // Section 34: Type checker state
@@ -251,6 +234,53 @@ fn register_builtins(ts: TS): TS
   let r11: TypeR = ts_add_type(r10.ts, DaoType(TypeKind.TVoid, to_i64(-1), "void", to_i64(-1), to_i64(-1), to_i64(0), to_i64(-1), to_i64(-1)))
   let r12: TypeR = ts_add_type(r11.ts, DaoType(TypeKind.TString, to_i64(-1), "string", to_i64(-1), to_i64(-1), to_i64(0), to_i64(-1), to_i64(-1)))
   return r12.ts
+
+// =========================================================================
+// Section 34a: Program-level typecheck initialization (Task 27 D1a)
+// =========================================================================
+
+// Seed the program's `TypeCheckData` with canonical builtin types.
+// Called exactly once per `Program` before any per-module pass runs.
+// Produces the same builtin layout as single-file `register_builtins`
+// (indices 0–12 are i8, i16, i32, i64, u8, u16, u32, u64, f32, f64,
+// bool, void, string) so all modules share a canonical type table.
+fn program_init_typecheck(p: Program): Program
+  // Guard: if TypeCheckData is already initialized (builtins seeded),
+  // return unchanged.  A second call must not discard accumulated
+  // canonical types, type_info, sym_types, or expr_types — the
+  // program-level type table is shared and accumulates across modules
+  // per Task 27 §4.1.
+  if p.typecheck.initialized:
+    return p
+  // Build a throwaway TC/TS just to drive register_builtins, then
+  // harvest the resulting types/type_info/sym_types into
+  // TypeCheckData.  This avoids duplicating the builtin registration
+  // logic — register_builtins is the single source of truth.
+  let dummy_tc: TC = TC(
+    Vector<Node>::new(),
+    Vector<i64>::new(),
+    Vector<Token>::new(),
+    "",
+    Vector<Symbol>::new(),
+    Vector<Scope>::new(),
+    HashMap<i64>::new())
+  let dummy_ts: TS = TS(
+    dummy_tc,
+    Vector<DaoType>::new(),
+    Vector<i64>::new(),
+    Vector<i64>::new(),
+    Vector<Diagnostic>::new(),
+    to_i64(-1),
+    to_i64(0),
+    HashMap<i64>::new())
+  let seeded: TS = register_builtins(dummy_ts)
+  let td: TypeCheckData = TypeCheckData(
+    true,
+    seeded.types,
+    seeded.type_info,
+    seeded.sym_types,
+    HashMap<i64>::new())
+  return Program(p.graph, p.resolve, td, p.hir, p.diags)
 
 // =========================================================================
 // Section 39: Type query helpers
@@ -1730,7 +1760,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 24
+  let total: i32 = 27
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -1988,6 +2018,83 @@ fn main(): i32
     print("SKIP self_typecheck_smoke: file not found at " + self_path)
 
   print("")
+  // -----------------------------------------------------------------
+  // Task 27 D1a: Program-level typecheck substrate
+  // -----------------------------------------------------------------
+
+  // Test d1a_1: program_init_typecheck seeds canonical builtins.
+  let p_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+  p_inputs = p_inputs.push(SourceInput("a.dao", "module a\nfn f(): i32 -> 0\n"))
+  let p_pg: ProgramGraph = build_program(p_inputs)
+  let p_val: Program = program_from_graph(p_pg)
+  let p_r: Program = program_run_resolve(p_val)
+  let p_tc: Program = program_init_typecheck(p_r)
+  let d1a_1_ok: bool = true
+  // Builtins: 13 types (i8..u64, f32, f64, bool, void, string).
+  if p_tc.typecheck.types.length() != 13:
+    d1a_1_ok = false
+  if p_tc.typecheck.initialized != true:
+    d1a_1_ok = false
+  // i32 should be at index 2 with name "i32".
+  if p_tc.typecheck.types.length() > 2:
+    let i32_type: DaoType = p_tc.typecheck.types.get(2)
+    if i32_type.name != "i32":
+      d1a_1_ok = false
+  // void at index 11.
+  if p_tc.typecheck.types.length() > 11:
+    let void_type: DaoType = p_tc.typecheck.types.get(11)
+    if void_type.name != "void":
+      d1a_1_ok = false
+  if d1a_1_ok:
+    print("PASS d1a_program_init_typecheck")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL d1a_program_init_typecheck")
+
+  // Test d1a_1b: double-init is a no-op (preserves accumulated state).
+  let td_with_expr: TypeCheckData = tc_set_expr_type(p_tc.typecheck, to_i64(0), to_i64(7), to_i64(2))
+  let p_tc_with_expr: Program = Program(p_tc.graph, p_tc.resolve, td_with_expr, p_tc.hir, p_tc.diags)
+  let p_tc2: Program = program_init_typecheck(p_tc_with_expr)
+  let d1a_1b_ok: bool = true
+  // expr_types entry should survive the second init call.
+  let preserved: i64 = tc_get_expr_type(p_tc2.typecheck, to_i64(0), to_i64(7))
+  if preserved != 2:
+    d1a_1b_ok = false
+  // types count should still be 13 (not doubled).
+  if p_tc2.typecheck.types.length() != 13:
+    d1a_1b_ok = false
+  if d1a_1b_ok:
+    print("PASS d1a_double_init_noop")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL d1a_double_init_noop")
+
+  // Test d1a_2: expr_id_key and tc_get/set_expr_type round-trip.
+  let td0: TypeCheckData = p_tc.typecheck
+  let td1: TypeCheckData = tc_set_expr_type(td0, to_i64(0), to_i64(42), to_i64(2))
+  let td2: TypeCheckData = tc_set_expr_type(td1, to_i64(1), to_i64(42), to_i64(11))
+  let d1a_2_ok: bool = true
+  // Same node_idx 42 in two different modules should be distinct.
+  let ty0: i64 = tc_get_expr_type(td2, to_i64(0), to_i64(42))
+  let ty1: i64 = tc_get_expr_type(td2, to_i64(1), to_i64(42))
+  if ty0 != 2:
+    d1a_2_ok = false
+  if ty1 != 11:
+    d1a_2_ok = false
+  // Missing entry returns -1.
+  let ty_miss: i64 = tc_get_expr_type(td2, to_i64(99), to_i64(99))
+  if ty_miss != to_i64(-1):
+    d1a_2_ok = false
+  if d1a_2_ok:
+    print("PASS d1a_expr_id_round_trip")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL d1a_expr_id_round_trip")
+
+  // -----------------------------------------------------------------
+  // Summary
+  // -----------------------------------------------------------------
+
   print("--- results ---")
   print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " passed")
   print("")

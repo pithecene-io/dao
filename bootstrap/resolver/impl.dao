@@ -1162,7 +1162,7 @@ fn program_from_graph(pg: ProgramGraph): Program
     Vector<FileDiagnostic>::new(),
     ExportTables(Vector<ExportTable>::new()),
     HashMap<i64>::new())
-  let empty_tc: TypeCheckData = TypeCheckData(false)
+  let empty_tc: TypeCheckData = TypeCheckData(false, Vector<DaoType>::new(), Vector<i64>::new(), Vector<i64>::new(), HashMap<i64>::new())
   let empty_hir: HirData = HirData(false)
   return Program(pg, empty_resolve, empty_tc, empty_hir, Vector<FileDiagnostic>::new())
 
