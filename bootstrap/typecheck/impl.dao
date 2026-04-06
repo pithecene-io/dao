@@ -50,6 +50,8 @@ class TC:
   symbols: Vector<Symbol>
   scopes: Vector<Scope>
   uses_map: HashMap<i64>
+  file_id: i64                   // module-level file provenance (-1 for dummy)
+  concept_bindings: HashMap<i64> // extend decl node_idx → concept sym_idx (D3)
 
 // Mutable type checker state — threaded through all operations.
 class TS:
@@ -263,6 +265,8 @@ fn program_init_typecheck(p: Program): Program
     "",
     Vector<Symbol>::new(),
     Vector<Scope>::new(),
+    HashMap<i64>::new(),
+    to_i64(-1),
     HashMap<i64>::new())
   let dummy_ts: TS = TS(
     dummy_tc,
@@ -863,21 +867,23 @@ fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
     let node: Node = r.tc.nodes.get(decl_idx)
     match node:
       Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
-        // Look up the concept type
+        // Look up the concept type via the resolver-bound identity in
+        // TC.concept_bindings (D3), NOT by scanning symbols by name.
+        // The resolver already bound the concept name to its sym_idx
+        // during resolution; the binding was extracted into
+        // TC.concept_bindings by build_module_concept_bindings.
         let concept_name: string = ts_tok_name(r, concept_name_tidx)
         let concept_ti: i64 = to_i64(-1)
-        let ci: i64 = 0
-        while ci < r.tc.symbols.length():
-          let csym: Symbol = r.tc.symbols.get(ci)
-          if csym.name == concept_name:
-            if symbol_kind_name(csym.kind) == "Type":
-              let cti: i64 = vec_i64_get(r.sym_types, ci)
-              if cti >= 0:
-                let ct: DaoType = r.types.get(cti)
-                match ct.kind:
-                  TypeKind.TConcept:
-                    concept_ti = cti
-          ci = ci + 1
+        let cb_key: string = i64_to_string(decl_idx)
+        let cb_found: Option<i64> = r.tc.concept_bindings.get(cb_key)
+        match cb_found:
+          Option.Some(concept_sym_idx):
+            let cti: i64 = vec_i64_get(r.sym_types, concept_sym_idx)
+            if cti >= 0:
+              let ct: DaoType = r.types.get(cti)
+              match ct.kind:
+                TypeKind.TConcept:
+                  concept_ti = cti
         if concept_ti < 0:
           i = i + 1
         else:
@@ -1721,6 +1727,33 @@ fn tc_pass2(ts: TS, file_node_idx: i64): TS
   return ts
 
 // =========================================================================
+// Section 45a: Per-module concept binding extraction (Task 27 D3)
+// =========================================================================
+
+// Build a per-module concept bindings map from the program's
+// extend_concept_bindings side table.  For each ExtendDeclD in the
+// module's top-level declarations, look up the resolver-bound concept
+// sym_idx via program_extend_concept_sym.  Returns a HashMap<i64>
+// keyed by i64_to_string(extend_decl_node_idx) → concept sym_idx.
+fn build_module_concept_bindings(p: Program, file_id: i64, po: ParseOutput): HashMap<i64>
+  let cb: HashMap<i64> = HashMap<i64>::new()
+  let root_node: Node = po.nodes.get(po.root)
+  match root_node:
+    Node.FileN(mod_decl, imports_lp, decls_lp):
+      let decls: Vector<i64> = read_list(po.idx, decls_lp)
+      let di: i64 = 0
+      while di < decls.length():
+        let decl_idx: i64 = decls.get(di)
+        let node: Node = po.nodes.get(decl_idx)
+        match node:
+          Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
+            let sym: i64 = program_extend_concept_sym(p, file_id, decl_idx)
+            if sym >= 0:
+              cb = cb.set(i64_to_string(decl_idx), sym)
+        di = di + 1
+  return cb
+
+// =========================================================================
 // Section 46: Public type checker API
 // =========================================================================
 
@@ -1745,6 +1778,11 @@ fn typecheck(src: string): TypeCheckResult
   let po: ParseOutput = sf.parse_output
   let um: HashMap<i64> = program_module_uses_map(p, sf.file_id)
 
+  // Build per-module concept bindings from the program side table.
+  // For each ExtendDeclD in this module's declarations, look up the
+  // resolver-bound concept sym_idx via program_extend_concept_sym.
+  let cb: HashMap<i64> = build_module_concept_bindings(p, sf.file_id, po)
+
   // Collect resolve diagnostics as flat Diagnostic vector.  In
   // single-module mode all diags belong to our file; include
   // graph-level diags (file_id = -1) too for completeness.
@@ -1754,7 +1792,7 @@ fn typecheck(src: string): TypeCheckResult
     resolve_diags = resolve_diags.push(p.resolve.diags.get(rdi).diag)
     rdi = rdi + 1
 
-  let tc: TC = TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, um)
+  let tc: TC = TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, um, sf.file_id, cb)
   let ts: TS = TS(tc, p.typecheck.types, p.typecheck.type_info, p.typecheck.sym_types, resolve_diags, to_i64(-1), to_i64(0), HashMap<i64>::new())
 
   ts = tc_pass1(ts, po.root)
@@ -1783,7 +1821,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 27
+  let total: i32 = 28
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -2113,6 +2151,72 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL d1a_expr_id_round_trip")
+
+  // -----------------------------------------------------------------
+  // Task 27 D3: Resolver-bound concept identity
+  // -----------------------------------------------------------------
+
+  // Verify the concept binding flows from resolver → program side table
+  // → TC.concept_bindings → tc_check_concept_satisfaction. The concept
+  // should be found via its resolved sym_idx (not by name scan), and
+  // satisfaction checking should still produce the expected diagnostic
+  // when a required method is missing.
+  let d3_src: string = "concept Showable:\n  fn show(self): string\n\nclass Msg:\n  text: string\n\nextend Msg as Showable:\n  fn display(self): string -> self.text\n"
+  let d3_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+  d3_inputs = d3_inputs.push(SourceInput("d3.dao", "module d3\n" + d3_src))
+  let d3_pg: ProgramGraph = build_program(d3_inputs)
+  let d3_p: Program = program_from_graph(d3_pg)
+  d3_p = program_run_resolve(d3_p)
+  d3_p = program_init_typecheck(d3_p)
+
+  let d3_ok: bool = true
+
+  // The binding side table should have an entry for the extend decl.
+  let d3_sf: SourceFile = program_file_of_module(d3_p, to_i64(0))
+  let d3_po: ParseOutput = d3_sf.parse_output
+  let d3_cb: HashMap<i64> = build_module_concept_bindings(d3_p, d3_sf.file_id, d3_po)
+  // There should be at least one concept binding (for the extend Msg as Showable:).
+  // Look for any entry in the map by scanning extend decl nodes.
+  let d3_found_binding: bool = false
+  let d3_root: Node = d3_po.nodes.get(d3_po.root)
+  match d3_root:
+    Node.FileN(md3, il3, dl3):
+      let d3_decls: Vector<i64> = read_list(d3_po.idx, dl3)
+      let d3i: i64 = 0
+      while d3i < d3_decls.length():
+        let d3_didx: i64 = d3_decls.get(d3i)
+        let d3_node: Node = d3_po.nodes.get(d3_didx)
+        match d3_node:
+          Node.ExtendDeclD(t, c, m):
+            let d3_check: Option<i64> = d3_cb.get(i64_to_string(d3_didx))
+            match d3_check:
+              Option.Some(sym):
+                if sym >= 0:
+                  d3_found_binding = true
+        d3i = d3i + 1
+  if d3_found_binding == false:
+    d3_ok = false
+
+  // Now run typecheck through the adapter — the extend declares
+  // `display` but Showable requires `show`. Should produce a
+  // "does not implement required method 'show'" diagnostic, proving
+  // concept_satisfaction used the resolver-bound identity.
+  let d3_r: TypeCheckResult = typecheck(d3_src)
+  let d3_found_diag: bool = false
+  let d3_di: i64 = 0
+  while d3_di < d3_r.diags.length():
+    let d3_d: Diagnostic = d3_r.diags.get(d3_di)
+    if d3_d.message == "extend does not implement required method 'show' from concept 'Showable'":
+      d3_found_diag = true
+    d3_di = d3_di + 1
+  if d3_found_diag == false:
+    d3_ok = false
+
+  if d3_ok:
+    print("PASS d3_concept_binding_identity")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL d3_concept_binding_identity")
 
   // -----------------------------------------------------------------
   // Summary
