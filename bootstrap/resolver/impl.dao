@@ -990,6 +990,8 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
   let rs_uses: Vector<i64> = Vector<i64>::new()
   let all_diags: Vector<FileDiagnostic> = Vector<FileDiagnostic>::new()
   let export_tables: Vector<ExportTable> = Vector<ExportTable>::new()
+  // D3: concept bindings accumulated during Pass 2 body resolution.
+  let all_extend_bindings: HashMap<i64> = HashMap<i64>::new()
 
   // Initialize empty export tables for all modules.
   let mi: i64 = 0
@@ -1110,16 +1112,44 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
       all_uses_triples = all_uses_triples.push(rs_uses.get(ui))
       all_uses_triples = all_uses_triples.push(rs_uses.get(ui + 1))
       ui = ui + 2
+
+    // D3: Extract concept bindings for this module's extend decls.
+    // For each ExtendDeclD, the resolver recorded a use for the
+    // concept name token during resolve_extend_decl.  Find that use
+    // in the delta (pair format from uses_before) and record the
+    // binding as extend_binding_key(file_id, decl_node_idx) →
+    // concept_sym_idx.
+    let root_node_p2: Node = po.nodes.get(po.root)
+    match root_node_p2:
+      Node.FileN(md, imp_lp, dec_lp):
+        let ext_decls: Vector<i64> = pg_read_list(po.idx, dec_lp)
+        let edi: i64 = 0
+        while edi < ext_decls.length():
+          let ext_idx: i64 = ext_decls.get(edi)
+          let ext_node: Node = po.nodes.get(ext_idx)
+          match ext_node:
+            Node.ExtendDeclD(target_type_node, concept_name_tidx, ext_methods_lp):
+              if concept_name_tidx >= 0:
+                // Scan this module's uses delta for the concept
+                // token's binding.
+                let ubi: i64 = uses_before
+                while ubi < rs_uses.length():
+                  if rs_uses.get(ubi) == concept_name_tidx:
+                    let concept_sym: i64 = rs_uses.get(ubi + 1)
+                    let bkey: string = extend_binding_key(sf.file_id, ext_idx)
+                    all_extend_bindings = all_extend_bindings.set(bkey, concept_sym)
+                    ubi = rs_uses.length()
+                  else:
+                    ubi = ubi + 2
+          edi = edi + 1
+
     let pdi: i64 = 0
     while pdi < rs.diags.length():
       all_diags = all_diags.push(FileDiagnostic(sf.file_id, sf.path, rs.diags.get(pdi)))
       pdi = pdi + 1
     ti = ti + 1
 
-  // D3 populates `extend_concept_bindings` with resolver-bound
-  // concept identities for each `extend T as C:` block.  Empty until
-  // D3 lands.
-  return ProgramResolveResult(all_symbols, all_scopes, all_uses_triples, all_diags, ExportTables(export_tables), HashMap<i64>::new())
+  return ProgramResolveResult(all_symbols, all_scopes, all_uses_triples, all_diags, ExportTables(export_tables), all_extend_bindings)
 
 // =========================================================================
 // Section 30: Task 27 — Program wrapper and service helpers (D0)
