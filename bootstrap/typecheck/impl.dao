@@ -1105,6 +1105,15 @@ fn check_qualname_expr(ts: TS, node_idx: i64, seg_lp: i64, seg_count: i64): TS
           match exp_type.kind:
             TypeKind.TEnum:
               // mod::Enum::Variant — expression type is the enum type.
+              // NOTE: Variant existence is NOT validated here because
+              // enum variant names are stored as token indices into the
+              // originating module's token vector, and TC only has the
+              // current module's tokens. Cross-module variant validation
+              // requires multi-module token access (available in D5's
+              // program orchestrator via ModuleSource). Until then,
+              // mod::Color::NotAVariant silently types as Color.
+              // This is the same gap as single-file Enum::Variant
+              // checking (which also defers to match exhaustiveness).
               return ts_set_expr_type(ts, node_idx, exp_ti)
             TypeKind.TStruct:
               let sp: Span = ts_tok_span(ts, segs.get(2))
