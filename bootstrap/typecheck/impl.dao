@@ -2607,15 +2607,13 @@ fn main(): i32
   d5_p1 = program_run_resolve(d5_p1)
   d5_p1 = program_run_typecheck(d5_p1)
   let d5_1_ok: bool = true
-  // Should have no type errors from typecheck (resolve diags OK).
-  let d5_1_tc_errs: i64 = 0
-  let d5_1di: i64 = 0
-  while d5_1di < d5_p1.diags.length():
-    let d5_1d: FileDiagnostic = d5_p1.diags.get(d5_1di)
-    // Skip resolve-origin diags; count only typecheck-origin diags.
-    // Typecheck diags come after resolve diags in the accumulated stream.
-    d5_1_tc_errs = d5_1_tc_errs + 1
-    d5_1di = d5_1di + 1
+  // Count typecheck-origin diagnostics. Resolve diagnostics are the
+  // baseline in p.resolve.diags; anything in p.diags beyond that
+  // count is from typecheck. A well-typed cross-module call should
+  // produce zero typecheck diagnostics.
+  let d5_1_resolve_count: i64 = d5_p1.resolve.diags.length()
+  if d5_p1.diags.length() > d5_1_resolve_count:
+    d5_1_ok = false
   // Check: types should include builtins (13) plus at least the
   // function types for add and f.
   if d5_p1.typecheck.types.length() <= 13:
