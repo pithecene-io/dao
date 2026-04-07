@@ -2735,8 +2735,18 @@ fn main(): i32
     else:
       print("SKIP d10_cross_module_enum: fixtures not found at " + enum_base)
 
-  // Test d10_3: Extend isolation — extend methods in module A are not
-  // visible from module B's type checking (Task 26 §6.5).
+  // Test d10_3: Cross-module import with class export.
+  // Verifies that importing a module with a class declaration
+  // completes the program typecheck pipeline cleanly.
+  //
+  // NOTE: This does NOT yet test extend-method isolation (Task 26
+  // §6.5) because verifying that extend methods are NOT visible
+  // across modules requires dot-call semantics (e.g.
+  // some_value.extended_method() producing an "unknown method"
+  // diagnostic in the importing module). Dot-call method dispatch
+  // is Task 28 scope. The D2 owner_module_id filter enforces
+  // isolation at the symbol-table level — it was verified via
+  // inline tests in D2 and D4.
   let ext_base: string = "testdata/bootstrap/multifile/extend_isolation/"
   let ext_ok: bool = false
   if file_exists(ext_base + "provider.dao"):
@@ -2747,21 +2757,17 @@ fn main(): i32
     let ext_p: Program = program_from_graph(ext_pg)
     ext_p = program_run_resolve(ext_p)
     ext_p = program_run_typecheck(ext_p)
-    // Verify: 2 modules, pipeline completes cleanly. The consumer
-    // imports lib::ext but only uses local code — proving the
-    // cross-module import doesn't inject provider-internal symbols
-    // into the consumer's scope.
     if ext_p.graph.topo_order.length() == 2:
       if ext_p.diags.length() <= ext_p.resolve.diags.length():
         ext_ok = true
   if ext_ok:
-    print("PASS d10_extend_isolation")
+    print("PASS d10_cross_module_class_export")
     pass_count = pass_count + 1
   else:
     if file_exists(ext_base + "provider.dao"):
-      print("FAIL d10_extend_isolation")
+      print("FAIL d10_cross_module_class_export")
     else:
-      print("SKIP d10_extend_isolation: fixtures not found at " + ext_base)
+      print("SKIP d10_cross_module_class_export: fixtures not found at " + ext_base)
 
   // -----------------------------------------------------------------
   // Summary
