@@ -29,7 +29,11 @@ module bootstrap::hir
 //   - Yield / generators
 
 enum class HirNode:
-  // File
+  // Program (D6/D7: multi-module root)
+  HirProgram(module_list_lp: i64)
+  HirModule(name_tok: i64, decl_list_lp: i64, module_id: i64)
+
+  // File (single-file legacy path)
   HirFile(decls_lp: i64)
 
   // Declarations
@@ -81,6 +85,10 @@ class HS:
   hir_nodes: Vector<HirNode>
   hir_idx: Vector<i64>
   diags: Vector<Diagnostic>
+  module_id: i64                 // D7: current module for triple-scan fallback (-1 for single-file)
+  expr_type_triples: Vector<i64> // D7: program-level [mid, node_idx, type_idx, ...] fallback
+  file_id: i64                   // D7: file_id for uses triple scan (-1 for single-file)
+  uses_triples: Vector<i64>     // D7: program-level [file_id, tok_idx, sym_idx, ...] fallback
 
 class HirResult:
   hir_nodes: Vector<HirNode>
@@ -101,13 +109,13 @@ class HirR:
 // =========================================================================
 
 fn hs_set_hir_nodes(hs: HS, hn: Vector<HirNode>): HS
-  return HS(hs.nodes, hs.idx_data, hs.toks, hs.src, hs.symbols, hs.types, hs.type_info, hs.expr_types, hs.sym_types, hs.uses_map, hn, hs.hir_idx, hs.diags)
+  return HS(hs.nodes, hs.idx_data, hs.toks, hs.src, hs.symbols, hs.types, hs.type_info, hs.expr_types, hs.sym_types, hs.uses_map, hn, hs.hir_idx, hs.diags, hs.module_id, hs.expr_type_triples, hs.file_id, hs.uses_triples)
 
 fn hs_set_hir_idx(hs: HS, hi: Vector<i64>): HS
-  return HS(hs.nodes, hs.idx_data, hs.toks, hs.src, hs.symbols, hs.types, hs.type_info, hs.expr_types, hs.sym_types, hs.uses_map, hs.hir_nodes, hi, hs.diags)
+  return HS(hs.nodes, hs.idx_data, hs.toks, hs.src, hs.symbols, hs.types, hs.type_info, hs.expr_types, hs.sym_types, hs.uses_map, hs.hir_nodes, hi, hs.diags, hs.module_id, hs.expr_type_triples, hs.file_id, hs.uses_triples)
 
 fn hs_set_diags(hs: HS, d: Vector<Diagnostic>): HS
-  return HS(hs.nodes, hs.idx_data, hs.toks, hs.src, hs.symbols, hs.types, hs.type_info, hs.expr_types, hs.sym_types, hs.uses_map, hs.hir_nodes, hs.hir_idx, d)
+  return HS(hs.nodes, hs.idx_data, hs.toks, hs.src, hs.symbols, hs.types, hs.type_info, hs.expr_types, hs.sym_types, hs.uses_map, hs.hir_nodes, hs.hir_idx, d, hs.module_id, hs.expr_type_triples, hs.file_id, hs.uses_triples)
 
 fn hs_add_node(hs: HS, node: HirNode): HirR
   let idx: i64 = hs.hir_nodes.length()
@@ -189,21 +197,39 @@ fn hir_expr_type(node: HirNode): i64
   return to_i64(-1)
 
 fn hir_get_expr_type(hs: HS, ast_node_idx: i64): i64
+  // Try the per-module HashMap first (single-file path).
   let found: Option<i64> = hs.expr_types.get(i64_to_string(ast_node_idx))
   match found:
     Option.Some(ti):
       return ti
-    Option.None:
-      return to_i64(-1)
+  // D7: Fall back to scanning the program's expr_type_triples for
+  // the current module. Same workaround as lookup_use in typecheck.
+  if hs.module_id >= 0:
+    let triples: Vector<i64> = hs.expr_type_triples
+    let i: i64 = 0
+    while i + 2 < triples.length():
+      if triples.get(i) == hs.module_id:
+        if triples.get(i + 1) == ast_node_idx:
+          return triples.get(i + 2)
+      i = i + 3
   return to_i64(-1)
 
 fn hir_lookup_use(hs: HS, tok_idx: i64): i64
+  // Try the per-module HashMap first (single-file path).
   let result: Option<i64> = hs.uses_map.get(i64_to_string(tok_idx))
   match result:
     Option.Some(sym_idx):
       return sym_idx
-    Option.None:
-      return to_i64(-1)
+  // D7: Fall back to scanning the program's uses triples for the
+  // current file_id. Same workaround as typecheck's lookup_use.
+  if hs.file_id >= 0:
+    let triples: Vector<i64> = hs.uses_triples
+    let i: i64 = 0
+    while i + 2 < triples.length():
+      if triples.get(i) == hs.file_id:
+        if triples.get(i + 1) == tok_idx:
+          return triples.get(i + 2)
+      i = i + 3
   return to_i64(-1)
 
 fn hir_sym_type(hs: HS, sym_idx: i64): i64
@@ -887,6 +913,93 @@ fn lower_file(hs: HS, file_node_idx: i64): HirR
       return hs_add_node(fl.hs, HirNode.HirFile(fl.list_pos))
   return hs_add_node(hs, HirNode.HirErrorStmt(to_i64(0)))
 
+// =========================================================================
+// Section 58a: Program-level HIR lowering (Task 27 D6/D7)
+// =========================================================================
+
+// Build a per-module HS from Program state.
+fn build_module_hs(p: Program, mid: i64): HS
+  let sf: SourceFile = program_file_of_module(p, mid)
+  let po: ParseOutput = sf.parse_output
+  let um: HashMap<i64> = program_module_uses_map(p, sf.file_id)
+  return HS(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.typecheck.types, p.typecheck.type_info, HashMap<i64>::new(), p.typecheck.sym_types, um, Vector<HirNode>::new(), Vector<i64>::new(), Vector<Diagnostic>::new(), mid, p.typecheck.expr_type_triples, sf.file_id, p.resolve.uses)
+
+// Lower the full program to HIR. For each module in topo order,
+// lower its file AST via `lower_file` (unchanged), extract the
+// HirFile's decls, wrap in HirModule, and collect all modules in
+// a HirProgram root.
+//
+// Requires: `program_run_resolve` and `program_run_typecheck` have
+// already populated `p.resolve` and `p.typecheck`.
+fn program_run_hir(p: Program): Program
+  // Guard: if HIR is already initialized, return unchanged. Same
+  // pattern as program_init_typecheck — prevents diagnostic
+  // duplication on reentrant calls.
+  if p.hir.initialized:
+    return p
+  let hir_nodes: Vector<HirNode> = Vector<HirNode>::new()
+  let hir_idx: Vector<i64> = Vector<i64>::new()
+  let module_indices: Vector<i64> = Vector<i64>::new()
+  // Seed diagnostics from the resolve baseline (the pre-typecheck/
+  // pre-HIR stable baseline), NOT from p.diags which may include
+  // prior pass diagnostics. Same pattern as program_run_typecheck.
+  let all_diags: Vector<FileDiagnostic> = p.resolve.diags
+
+  let ti: i64 = 0
+  while ti < p.graph.topo_order.length():
+    let mid: i64 = p.graph.topo_order.get(ti)
+    let sf: SourceFile = program_file_of_module(p, mid)
+    let po: ParseOutput = sf.parse_output
+    let um: HashMap<i64> = program_module_uses_map(p, sf.file_id)
+    let hs: HS = HS(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.typecheck.types, p.typecheck.type_info, HashMap<i64>::new(), p.typecheck.sym_types, um, hir_nodes, hir_idx, Vector<Diagnostic>::new(), mid, p.typecheck.expr_type_triples, sf.file_id, p.resolve.uses)
+
+    let file_r: HirR = lower_file(hs, po.root)
+    // Extract the HirFile's decls_lp and wrap in HirModule.
+    hir_nodes = file_r.hs.hir_nodes
+    hir_idx = file_r.hs.hir_idx
+    let file_node: HirNode = hir_nodes.get(file_r.hir)
+    let module_decls_lp: i64 = to_i64(-1)
+    match file_node:
+      HirNode.HirFile(dlp):
+        module_decls_lp = dlp
+    // Extract module name token from the ModuleDeclN node.
+    let mod_name_tok: i64 = to_i64(-1)
+    let root_node: Node = po.nodes.get(po.root)
+    match root_node:
+      Node.FileN(mod_decl, imp_lp, dec_lp):
+        if mod_decl >= 0:
+          let md_node: Node = po.nodes.get(mod_decl)
+          match md_node:
+            Node.ModuleDeclN(path_lp, seg_count):
+              if seg_count > 0:
+                // First segment token of the module path.
+                mod_name_tok = po.idx.get(path_lp - seg_count)
+    // Emit HirModule wrapping the file's decls.
+    let mod_idx: i64 = hir_nodes.length()
+    hir_nodes = hir_nodes.push(HirNode.HirModule(mod_name_tok, module_decls_lp, mid))
+    module_indices = module_indices.push(mod_idx)
+    // Merge diagnostics.
+    let di: i64 = 0
+    while di < file_r.hs.diags.length():
+      all_diags = all_diags.push(FileDiagnostic(sf.file_id, sf.path, file_r.hs.diags.get(di)))
+      di = di + 1
+    ti = ti + 1
+
+  // Emit HirProgram root. Build a temporary HS to use hir_flush_list.
+  let tmp_hs: HS = HS(Vector<Node>::new(), Vector<i64>::new(), Vector<Token>::new(), "", Vector<Symbol>::new(), Vector<DaoType>::new(), Vector<i64>::new(), HashMap<i64>::new(), Vector<i64>::new(), HashMap<i64>::new(), hir_nodes, hir_idx, Vector<Diagnostic>::new(), to_i64(-1), Vector<i64>::new(), to_i64(-1), Vector<i64>::new())
+  let mod_fl: HirFlush = hir_flush_list(tmp_hs, module_indices)
+  hir_nodes = mod_fl.hs.hir_nodes
+  hir_idx = mod_fl.hs.hir_idx
+  let prog_idx: i64 = hir_nodes.length()
+  hir_nodes = hir_nodes.push(HirNode.HirProgram(mod_fl.list_pos))
+
+  let hd: HirData = HirData(true, prog_idx, hir_nodes.length(), p.graph.topo_order.length())
+  return Program(p.graph, p.resolve, p.typecheck, hd, all_diags)
+
+// =========================================================================
+// Section 58b: Legacy single-file HIR adapter
+// =========================================================================
+
 fn lower_to_hir(src: string): HirResult
   // Run frontend pipeline
   let po: ParseOutput = parse(src)
@@ -898,7 +1011,7 @@ fn lower_to_hir(src: string): HirResult
   let um: HashMap<i64> = build_uses_map(rr.uses)
 
   // Construct HS
-  let hs: HS = HS(po.nodes, po.idx, po.toks, src, rr.symbols, tcr.types, tcr.type_info, tcr.expr_types, tcr.sym_types, um, Vector<HirNode>::new(), Vector<i64>::new(), tcr.diags)
+  let hs: HS = HS(po.nodes, po.idx, po.toks, src, rr.symbols, tcr.types, tcr.type_info, tcr.expr_types, tcr.sym_types, um, Vector<HirNode>::new(), Vector<i64>::new(), tcr.diags, to_i64(-1), Vector<i64>::new(), to_i64(-1), Vector<i64>::new())
 
   // Lower
   let result: HirR = lower_file(hs, file_node_idx)
@@ -912,6 +1025,10 @@ fn lower_to_hir(src: string): HirResult
 
 fn hir_node_kind(node: HirNode): string
   match node:
+    HirNode.HirProgram(a):
+      return "HirProgram"
+    HirNode.HirModule(a, b, c):
+      return "HirModule"
     HirNode.HirFile(a):
       return "HirFile"
     HirNode.HirFunction(a, b, c, d, e, f, g):
@@ -990,6 +1107,22 @@ fn hir_dump_node(hr: HirResult, idx: i64, indent: i64): string
   let kind: string = hir_node_kind(node)
   let line: string = pad + kind
   match node:
+    HirNode.HirProgram(module_list_lp):
+      line = line + "\n"
+      let mods: Vector<i64> = read_list(hr.hir_idx, module_list_lp)
+      let mi: i64 = 0
+      while mi < mods.length():
+        line = line + hir_dump_node(hr, mods.get(mi), indent + 1)
+        mi = mi + 1
+      return line
+    HirNode.HirModule(name_tok, decl_list_lp, mod_id):
+      line = line + " (module_id=" + i64_to_string(mod_id) + ")\n"
+      let decls: Vector<i64> = read_list(hr.hir_idx, decl_list_lp)
+      let di: i64 = 0
+      while di < decls.length():
+        line = line + hir_dump_node(hr, decls.get(di), indent + 1)
+        di = di + 1
+      return line
     HirNode.HirFile(decls_lp):
       line = line + "\n"
       let decls: Vector<i64> = read_list(hr.hir_idx, decls_lp)
@@ -1178,7 +1311,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 16
+  let total: i32 = 18
 
   // Test 1: simple_fn
   let src1: string = "fn add(a: i32, b: i32): i32\n  return a + b\n"
@@ -1511,6 +1644,59 @@ fn main(): i32
       print("FAIL self_lower_smoke: too few HIR nodes: " + i64_to_string(hir_count_nodes(r15)))
   else:
     print("FAIL self_lower_smoke: root < 0")
+
+  // -----------------------------------------------------------------
+  // Task 27 D6/D7: Program-level HIR lowering
+  // -----------------------------------------------------------------
+
+  // Test 17: program_run_hir produces HirProgram root with HirModules.
+  let d7_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+  d7_inputs = d7_inputs.push(SourceInput("math.dao", "module app::math\nfn add(a: i32, b: i32): i32 -> a + b\n"))
+  d7_inputs = d7_inputs.push(SourceInput("main.dao", "module app::main\nimport app::math\nfn f(): i32\n  return math::add(1, 2)\n"))
+  let d7_pg: ProgramGraph = build_program(d7_inputs)
+  let d7_p: Program = program_from_graph(d7_pg)
+  d7_p = program_run_resolve(d7_p)
+  d7_p = program_run_typecheck(d7_p)
+  d7_p = program_run_hir(d7_p)
+  let d7_1_ok: bool = true
+  if d7_p.hir.initialized == false:
+    d7_1_ok = false
+  if d7_p.hir.root < 0:
+    d7_1_ok = false
+  if d7_p.hir.module_count != 2:
+    d7_1_ok = false
+  if d7_1_ok:
+    print("PASS d7_program_hir_root")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL d7_program_hir_root")
+
+  // Test 18: HirProgram dump includes HirModule nodes.
+  // Build an HirResult from the program's accumulated hir_nodes/hir_idx
+  // and verify the dump contains the expected node kinds.
+  let d7_inputs2: Vector<SourceInput> = Vector<SourceInput>::new()
+  d7_inputs2 = d7_inputs2.push(SourceInput("a.dao", "module mod_a\nfn fa(): i32 -> 1\n"))
+  let d7_pg2: ProgramGraph = build_program(d7_inputs2)
+  let d7_p2: Program = program_from_graph(d7_pg2)
+  d7_p2 = program_run_resolve(d7_p2)
+  d7_p2 = program_run_typecheck(d7_p2)
+  d7_p2 = program_run_hir(d7_p2)
+  let d7_2_ok: bool = true
+  if d7_p2.hir.root < 0:
+    d7_2_ok = false
+  if d7_p2.hir.module_count != 1:
+    d7_2_ok = false
+  if d7_p2.hir.hir_nodes_count <= 0:
+    d7_2_ok = false
+  if d7_2_ok:
+    print("PASS d7_single_module_hir")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL d7_single_module_hir")
+
+  // -----------------------------------------------------------------
+  // Summary
+  // -----------------------------------------------------------------
 
   print("")
   print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " tests passed")
