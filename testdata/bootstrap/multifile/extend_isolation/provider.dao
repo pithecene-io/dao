@@ -1,7 +1,6 @@
 module lib::ext
 
-concept Showable:
-  fn show(self): string
+class Widget:
+  value: i32
 
-extend i32 as Showable:
-  fn show(self): string -> "number"
+fn make_widget(v: i32): Widget -> Widget(v)

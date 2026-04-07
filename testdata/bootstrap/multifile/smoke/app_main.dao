@@ -1,5 +1,8 @@
 module app::main
+import core::fmt
 import app::math
 
 fn main(): i32
-  return math::add(1, 2)
+  let result: i32 = math::add(1, 2)
+  let z: i32 = fmt::zero()
+  return result

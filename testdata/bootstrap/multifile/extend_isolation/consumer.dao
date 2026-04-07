@@ -1,5 +1,5 @@
 module app::consumer
 import lib::ext
 
-fn use_int(): i32
+fn use_widget(): i32
   return 0

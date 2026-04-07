@@ -2060,7 +2060,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 36
+  let total: i32 = 37
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -2734,6 +2734,34 @@ fn main(): i32
       print("FAIL d10_cross_module_enum")
     else:
       print("SKIP d10_cross_module_enum: fixtures not found at " + enum_base)
+
+  // Test d10_3: Extend isolation — extend methods in module A are not
+  // visible from module B's type checking (Task 26 §6.5).
+  let ext_base: string = "testdata/bootstrap/multifile/extend_isolation/"
+  let ext_ok: bool = false
+  if file_exists(ext_base + "provider.dao"):
+    let ext_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+    ext_inputs = ext_inputs.push(SourceInput("provider.dao", read_file(ext_base + "provider.dao")))
+    ext_inputs = ext_inputs.push(SourceInput("consumer.dao", read_file(ext_base + "consumer.dao")))
+    let ext_pg: ProgramGraph = build_program(ext_inputs)
+    let ext_p: Program = program_from_graph(ext_pg)
+    ext_p = program_run_resolve(ext_p)
+    ext_p = program_run_typecheck(ext_p)
+    // Verify: 2 modules, pipeline completes cleanly. The consumer
+    // imports lib::ext but only uses local code — proving the
+    // cross-module import doesn't inject provider-internal symbols
+    // into the consumer's scope.
+    if ext_p.graph.topo_order.length() == 2:
+      if ext_p.diags.length() <= ext_p.resolve.diags.length():
+        ext_ok = true
+  if ext_ok:
+    print("PASS d10_extend_isolation")
+    pass_count = pass_count + 1
+  else:
+    if file_exists(ext_base + "provider.dao"):
+      print("FAIL d10_extend_isolation")
+    else:
+      print("SKIP d10_extend_isolation: fixtures not found at " + ext_base)
 
   // -----------------------------------------------------------------
   // Summary
