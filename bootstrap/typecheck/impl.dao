@@ -823,17 +823,20 @@ fn tc_register_extend_methods(ts: TS, decls: Vector<i64>): TS
       Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
         if methods_lp >= 0:
           let target_name: string = extract_type_name(r, target_type_node)
-          // Find the target type index
+          // Find the target type index. The target type may be imported
+          // from another module or be a builtin, so this scan is NOT
+          // filtered by owner_module_id — the orphan rule allows
+          // extending foreign types with local concepts. Only the
+          // extend METHOD symbols (below) are module-scoped.
           let target_ti: i64 = to_i64(-1)
           let tsi: i64 = 0
           while tsi < r.tc.symbols.length():
             let tsym: Symbol = r.tc.symbols.get(tsi)
-            if sym_visible_in_module(tsym, r.tc.module_id):
-              if tsym.name == target_name:
-                if symbol_kind_name(tsym.kind) == "Type":
-                  target_ti = vec_i64_get(r.sym_types, tsi)
-                if symbol_kind_name(tsym.kind) == "Builtin":
-                  target_ti = vec_i64_get(r.sym_types, tsi)
+            if tsym.name == target_name:
+              if symbol_kind_name(tsym.kind) == "Type":
+                target_ti = vec_i64_get(r.sym_types, tsi)
+              if symbol_kind_name(tsym.kind) == "Builtin":
+                target_ti = vec_i64_get(r.sym_types, tsi)
             tsi = tsi + 1
           let methods: Vector<i64> = read_list(r.tc.idx_data, methods_lp)
           let mi: i64 = 0
