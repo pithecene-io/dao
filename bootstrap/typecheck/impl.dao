@@ -1126,8 +1126,13 @@ fn check_qualname_expr(ts: TS, node_idx: i64, seg_lp: i64, seg_count: i64): TS
     let second_name: string = ts_tok_name(ts, second_tidx)
     // Explicit rejection of unsupported deeper qualification.
     if segs.length() > 2:
-      // Could be mod::Enum::Variant (allowed) or mod::Type::method (rejected).
-      // Check if second segment is an exported enum.
+      // Could be mod::Enum::Variant (exactly 3 segments) or
+      // mod::Type::method (rejected). Anything deeper than 3
+      // segments is always rejected per the D4 case table.
+      if segs.length() > 3:
+        let sp_deep: Span = ts_tok_span(ts, segs.get(3))
+        return ts_add_diag(ts, sp_deep, "nested module access not supported in this release")
+      // Exactly 3 segments: check if second segment is an exported enum.
       let exp_sym: i64 = tc_export_lookup(ts, target_mid, second_name)
       if exp_sym >= 0:
         let exp_ti: i64 = vec_i64_get(ts.sym_types, exp_sym)
