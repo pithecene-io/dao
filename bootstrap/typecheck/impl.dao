@@ -52,6 +52,7 @@ class TC:
   uses_map: HashMap<i64>
   file_id: i64                   // module-level file provenance (-1 for dummy)
   concept_bindings: HashMap<i64> // extend decl node_idx → concept sym_idx (D3)
+  module_id: i64                 // module identity for owner_module_id filtering (D2)
 
 // Mutable type checker state — threaded through all operations.
 class TS:
@@ -267,7 +268,8 @@ fn program_init_typecheck(p: Program): Program
     Vector<Scope>::new(),
     HashMap<i64>::new(),
     to_i64(-1),
-    HashMap<i64>::new())
+    HashMap<i64>::new(),
+    to_i64(-1))
   let dummy_ts: TS = TS(
     dummy_tc,
     Vector<DaoType>::new(),
@@ -710,9 +712,10 @@ fn tc_register_methods(ts: TS, decls: Vector<i64>): TS
                 let si: i64 = 0
                 while si < r.tc.symbols.length():
                   let sym: Symbol = r.tc.symbols.get(si)
-                  if sym.name == mangled:
-                    if symbol_kind_name(sym.kind) == "Function":
-                      msym = si
+                  if sym_visible_in_module(sym, r.tc.module_id):
+                    if sym.name == mangled:
+                      if symbol_kind_name(sym.kind) == "Function":
+                        msym = si
                   si = si + 1
                 if msym >= 0:
                   r = ts_set_sym_type(r, msym, tr.type_idx)
@@ -803,6 +806,13 @@ fn tc_register_concepts(ts: TS, decls: Vector<i64>): TS
     i = i + 1
   return r
 
+// D2: Returns true if a symbol is visible from the current module.
+// Visible = builtin (owner_module_id == -1) OR same module.
+fn sym_visible_in_module(sym: Symbol, module_id: i64): bool
+  if sym.owner_module_id < 0:
+    return true
+  return sym.owner_module_id == module_id
+
 fn tc_register_extend_methods(ts: TS, decls: Vector<i64>): TS
   let r: TS = ts
   let i: i64 = 0
@@ -813,7 +823,11 @@ fn tc_register_extend_methods(ts: TS, decls: Vector<i64>): TS
       Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
         if methods_lp >= 0:
           let target_name: string = extract_type_name(r, target_type_node)
-          // Find the target type index
+          // Find the target type index. The target type may be imported
+          // from another module or be a builtin, so this scan is NOT
+          // filtered by owner_module_id — the orphan rule allows
+          // extending foreign types with local concepts. Only the
+          // extend METHOD symbols (below) are module-scoped.
           let target_ti: i64 = to_i64(-1)
           let tsi: i64 = 0
           while tsi < r.tc.symbols.length():
@@ -841,9 +855,10 @@ fn tc_register_extend_methods(ts: TS, decls: Vector<i64>): TS
                 let si: i64 = 0
                 while si < r.tc.symbols.length():
                   let sym: Symbol = r.tc.symbols.get(si)
-                  if sym.name == mangled:
-                    if symbol_kind_name(sym.kind) == "Function":
-                      msym = si
+                  if sym_visible_in_module(sym, r.tc.module_id):
+                    if sym.name == mangled:
+                      if symbol_kind_name(sym.kind) == "Function":
+                        msym = si
                   si = si + 1
                 if msym >= 0:
                   r = ts_set_sym_type(r, msym, tr.type_idx)
@@ -901,9 +916,10 @@ fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
             let si: i64 = 0
             while si < r.tc.symbols.length():
               let sym: Symbol = r.tc.symbols.get(si)
-              if sym.name == mangled:
-                if symbol_kind_name(sym.kind) == "Function":
-                  found_method = true
+              if sym_visible_in_module(sym, r.tc.module_id):
+                if sym.name == mangled:
+                  if symbol_kind_name(sym.kind) == "Function":
+                    found_method = true
                   // Check full signature match: param count, each param type, return type.
                   let impl_ti: i64 = vec_i64_get(r.sym_types, si)
                   if impl_ti >= 0:
@@ -1792,7 +1808,7 @@ fn typecheck(src: string): TypeCheckResult
     resolve_diags = resolve_diags.push(p.resolve.diags.get(rdi).diag)
     rdi = rdi + 1
 
-  let tc: TC = TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, um, sf.file_id, cb)
+  let tc: TC = TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, um, sf.file_id, cb, sf.module_id)
   let ts: TS = TS(tc, p.typecheck.types, p.typecheck.type_info, p.typecheck.sym_types, resolve_diags, to_i64(-1), to_i64(0), HashMap<i64>::new())
 
   ts = tc_pass1(ts, po.root)
