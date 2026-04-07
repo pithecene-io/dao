@@ -1258,13 +1258,29 @@ fn program_resolved_use(p: Program, file_id: i64, tok_idx: i64): i64
 // output (triple format) and the per-file TC (pair-format uses_map).
 // Typecheck constructs TC.uses_map through this helper; no pass
 // should scan the raw uses triples directly.
+//
+// NOTE: The two-pass structure (collect matching pairs into a Vector,
+// then build the HashMap) works around a bootstrap compiler scoping
+// issue where HashMap reassignment inside a `while + if` conditional
+// branch does not propagate to the outer loop scope. By building the
+// HashMap in a separate unconditional loop, every `.set()` call
+// properly updates the accumulator.
+// Helper for program_module_uses_map: conditionally add a triple to a
+// HashMap. The `if` branch is inside this function body (not inside
+// the caller's while loop) to work around a bootstrap compiler scoping
+// issue where mutable variable reassignment inside `while + if` does
+// not propagate to the outer loop scope.
+fn uses_map_maybe_add(um: HashMap<i64>, file_id: i64, tri_file: i64, tri_tok: i64, tri_sym: i64): HashMap<i64>
+  if tri_file == file_id:
+    return um.set(i64_to_string(tri_tok), tri_sym)
+  return um
+
 fn program_module_uses_map(p: Program, file_id: i64): HashMap<i64>
   let um: HashMap<i64> = HashMap<i64>::new()
   let uses: Vector<i64> = p.resolve.uses
   let i: i64 = 0
   while i + 2 < uses.length():
-    if uses.get(i) == file_id:
-      um = um.set(i64_to_string(uses.get(i + 1)), uses.get(i + 2))
+    um = uses_map_maybe_add(um, file_id, uses.get(i), uses.get(i + 1), uses.get(i + 2))
     i = i + 3
   return um
 

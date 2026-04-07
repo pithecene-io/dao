@@ -49,7 +49,8 @@ class TC:
   src: string
   symbols: Vector<Symbol>
   scopes: Vector<Scope>
-  uses_map: HashMap<i64>
+  uses_map: HashMap<i64>         // per-module uses (single-file legacy path)
+  uses_triples: Vector<i64>     // program-level uses triples (D4 multi-module path)
   file_id: i64                   // module-level file provenance (-1 for dummy)
   concept_bindings: HashMap<i64> // extend decl node_idx → concept sym_idx (D3)
   module_id: i64                 // module identity for owner_module_id filtering (D2)
@@ -65,6 +66,7 @@ class TS:
   return_type: i64
   loop_depth: i64
   expr_types: HashMap<i64>
+  variant_set: HashMap<i64>  // D4: "{type_idx}:{variant_name}" → 1
 
 class TypeR:
   ts: TS
@@ -83,19 +85,19 @@ class TypeCheckResult:
 // =========================================================================
 
 fn ts_set_types(ts: TS, t: Vector<DaoType>): TS
-  return TS(ts.tc, t, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types)
+  return TS(ts.tc, t, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_set_type_info(ts: TS, ti: Vector<i64>): TS
-  return TS(ts.tc, ts.types, ti, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types)
+  return TS(ts.tc, ts.types, ti, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_set_diags_tc(ts: TS, d: Vector<Diagnostic>): TS
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, d, ts.return_type, ts.loop_depth, ts.expr_types)
+  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, d, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_set_return_type(ts: TS, rt: i64): TS
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, rt, ts.loop_depth, ts.expr_types)
+  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, rt, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_set_loop_depth(ts: TS, ld: i64): TS
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ld, ts.expr_types)
+  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ld, ts.expr_types, ts.variant_set)
 
 fn ts_add_type(ts: TS, t: DaoType): TypeR
   let idx: i64 = ts.types.length()
@@ -108,7 +110,7 @@ fn ts_add_diag(ts: TS, span: Span, msg: string): TS
 
 fn ts_set_expr_type(ts: TS, node_idx: i64, type_idx: i64): TS
   let new_et: HashMap<i64> = ts.expr_types.set(i64_to_string(node_idx), type_idx)
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, new_et)
+  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, new_et, ts.variant_set)
 
 fn vec_i64_set(v: Vector<i64>, idx: i64, val: i64): Vector<i64>
   // Extend vector if needed
@@ -135,7 +137,7 @@ fn vec_i64_get(v: Vector<i64>, idx: i64): i64
 
 fn ts_set_sym_type(ts: TS, sym_idx: i64, type_idx: i64): TS
   let new_st: Vector<i64> = vec_i64_set(ts.sym_types, sym_idx, type_idx)
-  return TS(ts.tc, ts.types, ts.type_info, new_st, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types)
+  return TS(ts.tc, ts.types, ts.type_info, new_st, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_inc_loop_depth(ts: TS): TS
   return ts_set_loop_depth(ts, ts.loop_depth + 1)
@@ -211,6 +213,18 @@ fn build_uses_map(uses: Vector<i64>): HashMap<i64>
   return m
 
 fn lookup_use(ts: TS, tok_idx: i64): i64
+  // D4: Try the program-level triple stream first (works for
+  // multi-module). Falls back to the per-module HashMap for the
+  // single-file legacy path.
+  let triples: Vector<i64> = ts.tc.uses_triples
+  if triples.length() > 0:
+    let file_id: i64 = ts.tc.file_id
+    let i: i64 = 0
+    while i + 2 < triples.length():
+      if triples.get(i) == file_id:
+        if triples.get(i + 1) == tok_idx:
+          return triples.get(i + 2)
+      i = i + 3
   let result: Option<i64> = ts.tc.uses_map.get(i64_to_string(tok_idx))
   match result:
     Option.Some(sym_idx):
@@ -268,6 +282,7 @@ fn program_init_typecheck(p: Program): Program
     Vector<Symbol>::new(),
     Vector<Scope>::new(),
     HashMap<i64>::new(),
+    Vector<i64>::new(),
     to_i64(-1),
     HashMap<i64>::new(),
     to_i64(-1),
@@ -280,6 +295,7 @@ fn program_init_typecheck(p: Program): Program
     Vector<Diagnostic>::new(),
     to_i64(-1),
     to_i64(0),
+    HashMap<i64>::new(),
     HashMap<i64>::new())
   let seeded: TS = register_builtins(dummy_ts)
   let td: TypeCheckData = TypeCheckData(
@@ -561,6 +577,21 @@ fn tc_register_enums(ts: TS, decls: Vector<i64>): TS
         let sym_idx: i64 = find_sym_by_decl(r, decl_idx, "Type")
         if sym_idx >= 0:
           r = ts_set_sym_type(r, sym_idx, tr.type_idx)
+        // D4: Register variant names in variant_set for cross-module
+        // validation. Key: "{type_idx}:{variant_name}". We have access
+        // to the originating module's tokens here (via TC.toks) because
+        // this runs during pass1 of the declaring module.
+        let vr: i64 = 0
+        let v_offset: i64 = info_start
+        while vr < variant_count:
+          let vname_tidx: i64 = r.type_info.get(v_offset)
+          let vname: string = ts_tok_name(r, vname_tidx)
+          let vkey: string = i64_to_string(tr.type_idx) + ":" + vname
+          let new_vs: HashMap<i64> = r.variant_set.set(vkey, to_i64(1))
+          r = TS(r.tc, r.types, r.type_info, r.sym_types, r.diags, r.return_type, r.loop_depth, r.expr_types, new_vs)
+          let payload_count: i64 = r.type_info.get(v_offset + 1)
+          v_offset = v_offset + 2 + payload_count
+          vr = vr + 1
     i = i + 1
   return r
 
@@ -685,7 +716,7 @@ fn tc_register_functions(ts: TS, decls: Vector<i64>): TS
     if sym >= 0:
       st = vec_i64_set(st, sym, tidx)
     j = j + 1
-  return TS(r.tc, r.types, r.type_info, st, r.diags, r.return_type, r.loop_depth, r.expr_types)
+  return TS(r.tc, r.types, r.type_info, st, r.diags, r.return_type, r.loop_depth, r.expr_types, r.variant_set)
 
 fn tc_register_methods(ts: TS, decls: Vector<i64>): TS
   let r: TS = ts
@@ -1104,17 +1135,19 @@ fn check_qualname_expr(ts: TS, node_idx: i64, seg_lp: i64, seg_count: i64): TS
           let exp_type: DaoType = ts.types.get(exp_ti)
           match exp_type.kind:
             TypeKind.TEnum:
-              // mod::Enum::Variant — expression type is the enum type.
-              // NOTE: Variant existence is NOT validated here because
-              // enum variant names are stored as token indices into the
-              // originating module's token vector, and TC only has the
-              // current module's tokens. Cross-module variant validation
-              // requires multi-module token access (available in D5's
-              // program orchestrator via ModuleSource). Until then,
-              // mod::Color::NotAVariant silently types as Color.
-              // This is the same gap as single-file Enum::Variant
-              // checking (which also defers to match exhaustiveness).
-              return ts_set_expr_type(ts, node_idx, exp_ti)
+              // mod::Enum::Variant — validate the variant exists via
+              // variant_set (populated during pass1 of the declaring
+              // module) then type as the enum type.
+              let variant_tidx: i64 = segs.get(2)
+              let variant_name: string = ts_tok_name(ts, variant_tidx)
+              let vcheck_key: string = i64_to_string(exp_ti) + ":" + variant_name
+              let vcheck: Option<i64> = ts.variant_set.get(vcheck_key)
+              match vcheck:
+                Option.Some(v):
+                  return ts_set_expr_type(ts, node_idx, exp_ti)
+                Option.None:
+                  let vsp: Span = ts_tok_span(ts, variant_tidx)
+                  return ts_add_diag(ts, vsp, "'" + variant_name + "' is not a variant of enum '" + second_name + "'")
             TypeKind.TStruct:
               let sp: Span = ts_tok_span(ts, segs.get(2))
               return ts_add_diag(ts, sp, "associated items on imported types are not supported in this release (Task 28)")
@@ -1882,8 +1915,8 @@ fn typecheck(src: string): TypeCheckResult
     resolve_diags = resolve_diags.push(p.resolve.diags.get(rdi).diag)
     rdi = rdi + 1
 
-  let tc: TC = TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, um, sf.file_id, cb, sf.module_id, p.resolve.module_exports)
-  let ts: TS = TS(tc, p.typecheck.types, p.typecheck.type_info, p.typecheck.sym_types, resolve_diags, to_i64(-1), to_i64(0), HashMap<i64>::new())
+  let tc: TC = TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, um, p.resolve.uses, sf.file_id, cb, sf.module_id, p.resolve.module_exports)
+  let ts: TS = TS(tc, p.typecheck.types, p.typecheck.type_info, p.typecheck.sym_types, resolve_diags, to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new())
 
   ts = tc_pass1(ts, po.root)
   ts = tc_pass2(ts, po.root)
@@ -1911,7 +1944,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 30
+  let total: i32 = 31
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -2328,19 +2361,19 @@ fn main(): i32
   let d4_po: ParseOutput = d4_sf.parse_output
   let d4_um: HashMap<i64> = program_module_uses_map(d4_p1, d4_sf.file_id)
   let d4_cb: HashMap<i64> = build_module_concept_bindings(d4_p1, d4_sf.file_id, d4_po)
-  let d4_tc: TC = TC(d4_po.nodes, d4_po.idx, d4_po.toks, d4_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_um, d4_sf.file_id, d4_cb, d4_main_mid, d4_p1.resolve.module_exports)
-  let d4_ts: TS = TS(d4_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new())
+  let d4_tc: TC = TC(d4_po.nodes, d4_po.idx, d4_po.toks, d4_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_um, d4_p1.resolve.uses, d4_sf.file_id, d4_cb, d4_main_mid, d4_p1.resolve.module_exports)
+  let d4_ts: TS = TS(d4_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new())
   // Run pass1 on math first (to register the exported function type).
   let d4_math_mid: i64 = find_module_by_name(d4_p1.graph.modules, "app::math")
   let d4_math_sf: SourceFile = program_file_of_module(d4_p1, d4_math_mid)
   let d4_math_po: ParseOutput = d4_math_sf.parse_output
   let d4_math_um: HashMap<i64> = program_module_uses_map(d4_p1, d4_math_sf.file_id)
   let d4_math_cb: HashMap<i64> = build_module_concept_bindings(d4_p1, d4_math_sf.file_id, d4_math_po)
-  let d4_math_tc: TC = TC(d4_math_po.nodes, d4_math_po.idx, d4_math_po.toks, d4_math_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_math_um, d4_math_sf.file_id, d4_math_cb, d4_math_mid, d4_p1.resolve.module_exports)
-  let d4_math_ts: TS = TS(d4_math_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new())
+  let d4_math_tc: TC = TC(d4_math_po.nodes, d4_math_po.idx, d4_math_po.toks, d4_math_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_math_um, d4_p1.resolve.uses, d4_math_sf.file_id, d4_math_cb, d4_math_mid, d4_p1.resolve.module_exports)
+  let d4_math_ts: TS = TS(d4_math_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new())
   d4_math_ts = tc_pass1(d4_math_ts, d4_math_po.root)
   // Now run both passes on main using math's accumulated types/sym_types.
-  d4_ts = TS(d4_tc, d4_math_ts.types, d4_math_ts.type_info, d4_math_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new())
+  d4_ts = TS(d4_tc, d4_math_ts.types, d4_math_ts.type_info, d4_math_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_math_ts.variant_set)
   d4_ts = tc_pass1(d4_ts, d4_po.root)
   d4_ts = tc_pass2(d4_ts, d4_po.root)
 
@@ -2372,18 +2405,18 @@ fn main(): i32
   let d4_b_po: ParseOutput = d4_b_sf.parse_output
   let d4_b_um: HashMap<i64> = program_module_uses_map(d4_p2, d4_b_sf.file_id)
   let d4_b_cb: HashMap<i64> = build_module_concept_bindings(d4_p2, d4_b_sf.file_id, d4_b_po)
-  let d4_b_tc: TC = TC(d4_b_po.nodes, d4_b_po.idx, d4_b_po.toks, d4_b_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_b_um, d4_b_sf.file_id, d4_b_cb, d4_b_mid, d4_p2.resolve.module_exports)
+  let d4_b_tc: TC = TC(d4_b_po.nodes, d4_b_po.idx, d4_b_po.toks, d4_b_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_b_um, d4_p2.resolve.uses, d4_b_sf.file_id, d4_b_cb, d4_b_mid, d4_p2.resolve.module_exports)
   // Run pass1 on lib::a first.
   let d4_a_mid: i64 = find_module_by_name(d4_p2.graph.modules, "lib::a")
   let d4_a_sf: SourceFile = program_file_of_module(d4_p2, d4_a_mid)
   let d4_a_po: ParseOutput = d4_a_sf.parse_output
   let d4_a_um: HashMap<i64> = program_module_uses_map(d4_p2, d4_a_sf.file_id)
   let d4_a_cb: HashMap<i64> = build_module_concept_bindings(d4_p2, d4_a_sf.file_id, d4_a_po)
-  let d4_a_tc: TC = TC(d4_a_po.nodes, d4_a_po.idx, d4_a_po.toks, d4_a_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_a_um, d4_a_sf.file_id, d4_a_cb, d4_a_mid, d4_p2.resolve.module_exports)
-  let d4_a_ts: TS = TS(d4_a_tc, d4_p2.typecheck.types, d4_p2.typecheck.type_info, d4_p2.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new())
+  let d4_a_tc: TC = TC(d4_a_po.nodes, d4_a_po.idx, d4_a_po.toks, d4_a_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_a_um, d4_p2.resolve.uses, d4_a_sf.file_id, d4_a_cb, d4_a_mid, d4_p2.resolve.module_exports)
+  let d4_a_ts: TS = TS(d4_a_tc, d4_p2.typecheck.types, d4_p2.typecheck.type_info, d4_p2.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new())
   d4_a_ts = tc_pass1(d4_a_ts, d4_a_po.root)
   // Now typecheck app::b.
-  let d4_b_ts: TS = TS(d4_b_tc, d4_a_ts.types, d4_a_ts.type_info, d4_a_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new())
+  let d4_b_ts: TS = TS(d4_b_tc, d4_a_ts.types, d4_a_ts.type_info, d4_a_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_a_ts.variant_set)
   d4_b_ts = tc_pass1(d4_b_ts, d4_b_po.root)
   d4_b_ts = tc_pass2(d4_b_ts, d4_b_po.root)
 
@@ -2399,6 +2432,46 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL d4_missing_export_diagnostic")
+
+  // Test d4_3: mod::Enum::NotAVariant produces a variant-not-found diagnostic.
+  let d4_inputs3: Vector<SourceInput> = Vector<SourceInput>::new()
+  d4_inputs3 = d4_inputs3.push(SourceInput("c.dao", "module lib::colors\nenum Color:\n  Red\n  Blue\n"))
+  d4_inputs3 = d4_inputs3.push(SourceInput("d.dao", "module app::d\nimport lib::colors\nfn f(): i32\n  let x: i32 = colors::Color::NotAColor\n  return 0\n"))
+  let d4_pg3: ProgramGraph = build_program(d4_inputs3)
+  let d4_p3: Program = program_from_graph(d4_pg3)
+  d4_p3 = program_run_resolve(d4_p3)
+  d4_p3 = program_init_typecheck(d4_p3)
+  // Run pass1 on lib::colors (registers enum + variants).
+  let d4_c_mid: i64 = find_module_by_name(d4_p3.graph.modules, "lib::colors")
+  let d4_c_sf: SourceFile = program_file_of_module(d4_p3, d4_c_mid)
+  let d4_c_po: ParseOutput = d4_c_sf.parse_output
+  let d4_c_um: HashMap<i64> = program_module_uses_map(d4_p3, d4_c_sf.file_id)
+  let d4_c_cb: HashMap<i64> = build_module_concept_bindings(d4_p3, d4_c_sf.file_id, d4_c_po)
+  let d4_c_tc: TC = TC(d4_c_po.nodes, d4_c_po.idx, d4_c_po.toks, d4_c_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_c_um, d4_p3.resolve.uses, d4_c_sf.file_id, d4_c_cb, d4_c_mid, d4_p3.resolve.module_exports)
+  let d4_c_ts: TS = TS(d4_c_tc, d4_p3.typecheck.types, d4_p3.typecheck.type_info, d4_p3.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new())
+  d4_c_ts = tc_pass1(d4_c_ts, d4_c_po.root)
+  // Run pass1+pass2 on app::d with colors' variant_set.
+  let d4_d_mid: i64 = find_module_by_name(d4_p3.graph.modules, "app::d")
+  let d4_d_sf: SourceFile = program_file_of_module(d4_p3, d4_d_mid)
+  let d4_d_po: ParseOutput = d4_d_sf.parse_output
+  let d4_d_um: HashMap<i64> = program_module_uses_map(d4_p3, d4_d_sf.file_id)
+  let d4_d_cb: HashMap<i64> = build_module_concept_bindings(d4_p3, d4_d_sf.file_id, d4_d_po)
+  let d4_d_tc: TC = TC(d4_d_po.nodes, d4_d_po.idx, d4_d_po.toks, d4_d_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_d_um, d4_p3.resolve.uses, d4_d_sf.file_id, d4_d_cb, d4_d_mid, d4_p3.resolve.module_exports)
+  let d4_d_ts: TS = TS(d4_d_tc, d4_c_ts.types, d4_c_ts.type_info, d4_c_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_c_ts.variant_set)
+  d4_d_ts = tc_pass1(d4_d_ts, d4_d_po.root)
+  d4_d_ts = tc_pass2(d4_d_ts, d4_d_po.root)
+  let d4_3_ok: bool = false
+  let d4_3di: i64 = 0
+  while d4_3di < d4_d_ts.diags.length():
+    let d4_3d: Diagnostic = d4_d_ts.diags.get(d4_3di)
+    if d4_3d.message == "'NotAColor' is not a variant of enum 'Color'":
+      d4_3_ok = true
+    d4_3di = d4_3di + 1
+  if d4_3_ok:
+    print("PASS d4_invalid_variant_diagnostic")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL d4_invalid_variant_diagnostic")
 
   // -----------------------------------------------------------------
   // Summary
