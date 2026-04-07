@@ -2570,6 +2570,9 @@ class TypeCheckData:
 
 class HirData:
   initialized: bool
+  root: i64                   // HirProgram node index (-1 until populated)
+  hir_nodes_count: i64        // total HIR nodes across all modules
+  module_count: i64           // number of modules lowered
 
 // --- Task 27: ExprId keying ---
 //
