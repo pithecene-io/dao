@@ -1,0 +1,2 @@
+module core::fmt
+fn zero(): i32 -> 0

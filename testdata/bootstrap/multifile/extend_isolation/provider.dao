@@ -1,0 +1,6 @@
+module lib::ext
+
+class Widget:
+  value: i32
+
+fn make_widget(v: i32): Widget -> Widget(v)

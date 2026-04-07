@@ -1311,7 +1311,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 18
+  let total: i32 = 19
 
   // Test 1: simple_fn
   let src1: string = "fn add(a: i32, b: i32): i32\n  return a + b\n"
@@ -1693,6 +1693,36 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL d7_single_module_hir")
+
+  // -----------------------------------------------------------------
+  // Task 27 D9/D10: On-disk multi-file HIR smoke test
+  // -----------------------------------------------------------------
+
+  // Test 19: Three-file smoke through full pipeline including HIR.
+  let hir_smoke_base: string = "testdata/bootstrap/multifile/smoke/"
+  let hir_smoke_ok: bool = false
+  if file_exists(hir_smoke_base + "core_fmt.dao"):
+    let hs_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+    hs_inputs = hs_inputs.push(SourceInput("core_fmt.dao", read_file(hir_smoke_base + "core_fmt.dao")))
+    hs_inputs = hs_inputs.push(SourceInput("app_math.dao", read_file(hir_smoke_base + "app_math.dao")))
+    hs_inputs = hs_inputs.push(SourceInput("app_main.dao", read_file(hir_smoke_base + "app_main.dao")))
+    let hs_pg: ProgramGraph = build_program(hs_inputs)
+    let hs_p: Program = program_from_graph(hs_pg)
+    hs_p = program_run_resolve(hs_p)
+    hs_p = program_run_typecheck(hs_p)
+    hs_p = program_run_hir(hs_p)
+    if hs_p.hir.initialized:
+      if hs_p.hir.root >= 0:
+        if hs_p.hir.module_count == 3:
+          hir_smoke_ok = true
+  if hir_smoke_ok:
+    print("PASS d10_hir_three_file_smoke")
+    pass_count = pass_count + 1
+  else:
+    if file_exists(hir_smoke_base + "core_fmt.dao"):
+      print("FAIL d10_hir_three_file_smoke")
+    else:
+      print("SKIP d10_hir_three_file_smoke: fixtures not found at " + hir_smoke_base)
 
   // -----------------------------------------------------------------
   // Summary

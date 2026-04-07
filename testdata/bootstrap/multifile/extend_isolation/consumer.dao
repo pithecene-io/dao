@@ -1,0 +1,5 @@
+module app::consumer
+import lib::ext
+
+fn use_widget(): i32
+  return 0
