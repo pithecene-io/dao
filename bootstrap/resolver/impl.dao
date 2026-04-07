@@ -19,6 +19,7 @@ class Symbol:
   name: string
   decl_node: i64
   scope_id: i64
+  owner_module_id: i64  // -1 for builtins; >= 0 = module_id from ProgramGraph
 
 enum ScopeKind:
   FileScope
@@ -53,6 +54,7 @@ class RS:
   uses: Vector<i64>
   diags: Vector<Diagnostic>
   current_scope: i64
+  owner_module_id: i64  // threaded to every Symbol created during this resolve
 
 class ResolveResult:
   symbols: Vector<Symbol>
@@ -76,20 +78,20 @@ class ScopeR:
 fn rs_add_symbol(rs: RS, sym: Symbol): SymR
   let idx: i64 = rs.symbols.length()
   let new_syms: Vector<Symbol> = rs.symbols.push(sym)
-  let new_rs: RS = RS(rs.rc, new_syms, rs.scopes, rs.uses, rs.diags, rs.current_scope)
+  let new_rs: RS = RS(rs.rc, new_syms, rs.scopes, rs.uses, rs.diags, rs.current_scope, rs.owner_module_id)
   return SymR(new_rs, idx)
 
 fn rs_set_scopes(rs: RS, scopes: Vector<Scope>): RS
-  return RS(rs.rc, rs.symbols, scopes, rs.uses, rs.diags, rs.current_scope)
+  return RS(rs.rc, rs.symbols, scopes, rs.uses, rs.diags, rs.current_scope, rs.owner_module_id)
 
 fn rs_set_current_scope(rs: RS, scope_idx: i64): RS
-  return RS(rs.rc, rs.symbols, rs.scopes, rs.uses, rs.diags, scope_idx)
+  return RS(rs.rc, rs.symbols, rs.scopes, rs.uses, rs.diags, scope_idx, rs.owner_module_id)
 
 fn rs_set_uses(rs: RS, uses: Vector<i64>): RS
-  return RS(rs.rc, rs.symbols, rs.scopes, uses, rs.diags, rs.current_scope)
+  return RS(rs.rc, rs.symbols, rs.scopes, uses, rs.diags, rs.current_scope, rs.owner_module_id)
 
 fn rs_set_diags(rs: RS, diags: Vector<Diagnostic>): RS
-  return RS(rs.rc, rs.symbols, rs.scopes, rs.uses, diags, rs.current_scope)
+  return RS(rs.rc, rs.symbols, rs.scopes, rs.uses, diags, rs.current_scope, rs.owner_module_id)
 
 fn rs_push_scope(rs: RS, kind: ScopeKind): ScopeR
   let idx: i64 = rs.scopes.length()
@@ -249,7 +251,7 @@ fn scope_kind_name(kind: ScopeKind): string
 // =========================================================================
 
 fn declare_builtin(rs: RS, name: string): RS
-  let sr: SymR = rs_add_symbol(rs, Symbol(SymbolKind.Builtin, name, to_i64(-1), rs.current_scope))
+  let sr: SymR = rs_add_symbol(rs, Symbol(SymbolKind.Builtin, name, to_i64(-1), rs.current_scope, to_i64(-1)))
   return scope_declare(sr.rs, name, sr.sym_idx, to_i64(-1))
 
 fn populate_builtins(rs: RS): RS
@@ -428,7 +430,7 @@ fn resolve_expr(rs: RS, node_idx: i64): RS
       while i < param_toks.length():
         let ptidx: i64 = param_toks.get(i)
         let pname: string = tok_name(r, ptidx)
-        let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.LambdaParam, pname, node_idx, r.current_scope))
+        let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.LambdaParam, pname, node_idx, r.current_scope, r.owner_module_id))
         r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, ptidx)
         i = i + 1
       // Resolve body expression
@@ -487,7 +489,7 @@ fn resolve_stmt(rs: RS, node_idx: i64): RS
       r = resolve_expr(r, init_node)
       // Declare local
       let name: string = tok_name(r, name_tidx)
-      let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Local, name, node_idx, r.current_scope))
+      let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Local, name, node_idx, r.current_scope, r.owner_module_id))
       return scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
     Node.AssignS(target, value):
       let r: RS = resolve_expr(rs, target)
@@ -508,7 +510,7 @@ fn resolve_stmt(rs: RS, node_idx: i64): RS
       let sr: ScopeR = rs_push_scope(r, ScopeKind.BlockScope)
       r = sr.rs
       let var_name: string = tok_name(r, var_tidx)
-      let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Local, var_name, node_idx, r.current_scope))
+      let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Local, var_name, node_idx, r.current_scope, r.owner_module_id))
       r = scope_declare(sym_r.rs, var_name, sym_r.sym_idx, var_tidx)
       r = resolve_body_stmts(r, body_lp)
       return rs_pop_scope(r)
@@ -554,7 +556,7 @@ fn resolve_type_params(rs: RS, tparams_lp: i64, node_idx: i64): RS
     match tp_node:
       Node.GenericParamT(tidx):
         let tname: string = tok_name(r, tidx)
-        let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.GenericParam, tname, node_idx, r.current_scope))
+        let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.GenericParam, tname, node_idx, r.current_scope, r.owner_module_id))
         r = scope_declare(sym_r.rs, tname, sym_r.sym_idx, tidx)
     i = i + 1
   return r
@@ -574,7 +576,7 @@ fn resolve_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, param
     let p_tidx: i64 = pairs.get(i)
     let p_type: i64 = pairs.get(i + 1)
     let pname: string = tok_name(r, p_tidx)
-    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope))
+    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope, r.owner_module_id))
     r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, p_tidx)
     // Resolve parameter type
     r = resolve_type_node(r, p_type)
@@ -606,7 +608,7 @@ fn resolve_expr_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, 
     let p_tidx: i64 = pairs.get(i)
     let p_type: i64 = pairs.get(i + 1)
     let pname: string = tok_name(r, p_tidx)
-    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope))
+    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope, r.owner_module_id))
     r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, p_tidx)
     r = resolve_type_node(r, p_type)
     i = i + 2
@@ -637,7 +639,7 @@ fn resolve_extern_fn_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64
     let p_tidx: i64 = pairs.get(i)
     let p_type: i64 = pairs.get(i + 1)
     let pname: string = tok_name(r, p_tidx)
-    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope))
+    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Param, pname, node_idx, r.current_scope, r.owner_module_id))
     r = scope_declare(sym_r.rs, pname, sym_r.sym_idx, p_tidx)
     r = resolve_type_node(r, p_type)
     i = i + 2
@@ -663,7 +665,7 @@ fn resolve_class_decl(rs: RS, node_idx: i64, name_tidx: i64, tparams_lp: i64, fi
     let f_tidx: i64 = pairs.get(i)
     let f_type: i64 = pairs.get(i + 1)
     let fname: string = tok_name(r, f_tidx)
-    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Field, fname, node_idx, r.current_scope))
+    let sym_r: SymR = rs_add_symbol(r, Symbol(SymbolKind.Field, fname, node_idx, r.current_scope, r.owner_module_id))
     r = scope_declare(sym_r.rs, fname, sym_r.sym_idx, f_tidx)
     // Resolve field type
     r = resolve_type_node(r, f_type)
@@ -801,19 +803,19 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
         match decl_node:
           Node.FnDeclD(name_tidx, tparams_lp, params_lp, ret_type, body_lp):
             let name: string = tok_name(r, name_tidx)
-            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope, r.owner_module_id))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.ExprFnD(name_tidx, tparams_lp, params_lp, ret_type, body_expr):
             let name: string = tok_name(r, name_tidx)
-            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope, r.owner_module_id))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.ExternFnD(name_tidx, tparams_lp, params_lp, ret_type):
             let name: string = tok_name(r, name_tidx)
-            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope))
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, name, decl_idx, r.current_scope, r.owner_module_id))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.ClassDeclD(name_tidx, tparams_lp, fields_lp, methods_lp):
             let name: string = tok_name(r, name_tidx)
-            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope, r.owner_module_id))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
             // Register mangled method symbols in file scope
             if methods_lp >= 0:
@@ -826,20 +828,20 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
                   Node.FnDeclD(m_name_tidx, m_tp, m_plp, m_rt, m_blp):
                     let mname: string = tok_name(r, m_name_tidx)
                     let mangled: string = name + "." + mname
-                    let msr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, mangled, meth_idx, r.current_scope))
+                    let msr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, mangled, meth_idx, r.current_scope, r.owner_module_id))
                     r = scope_declare(msr.rs, mangled, msr.sym_idx, m_name_tidx)
                 mi = mi + 1
           Node.EnumDeclD(name_tidx, tparams_lp, variants_lp):
             let name: string = tok_name(r, name_tidx)
-            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope, r.owner_module_id))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.TypeAliasD(name_tidx, target_type):
             let name: string = tok_name(r, name_tidx)
-            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope, r.owner_module_id))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.ConceptDeclD(name_tidx, tparams_lp, methods_lp):
             let name: string = tok_name(r, name_tidx)
-            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope))
+            let sr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Type, name, decl_idx, r.current_scope, r.owner_module_id))
             r = scope_declare(sr.rs, name, sr.sym_idx, name_tidx)
           Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
             // Register mangled method symbols: TargetTypeName.methodName
@@ -861,7 +863,7 @@ fn collect_top_level(rs: RS, file_node_idx: i64): RS
                   Node.FnDeclD(m_name_tidx, m_tp, m_plp, m_rt, m_blp):
                     let mname: string = tok_name(r, m_name_tidx)
                     let mangled: string = target_name + "." + mname
-                    let msr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, mangled, meth_idx, r.current_scope))
+                    let msr: SymR = rs_add_symbol(r, Symbol(SymbolKind.Function, mangled, meth_idx, r.current_scope, r.owner_module_id))
                     r = scope_declare(msr.rs, mangled, msr.sym_idx, m_name_tidx)
                 mi = mi + 1
           Node.ErrorD(t):
@@ -898,7 +900,7 @@ fn resolve(src: string): ResolveResult
 
   // Initialize resolver state
   let rc: RC = RC(po.nodes, po.idx, po.toks, src, ExportTables(Vector<ExportTable>::new()))
-  let rs: RS = RS(rc, Vector<Symbol>::new(), Vector<Scope>::new(), Vector<i64>::new(), po.diags, to_i64(-1))
+  let rs: RS = RS(rc, Vector<Symbol>::new(), Vector<Scope>::new(), Vector<i64>::new(), po.diags, to_i64(-1), to_i64(0))
 
   // Create file scope
   let file_sr: ScopeR = rs_push_scope(rs, ScopeKind.FileScope)
@@ -1025,7 +1027,7 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
 
     // Create resolver state for this module.
     let rc: RC = RC(po.nodes, po.idx, po.toks, sf.source_text, ExportTables(export_tables))
-    let rs: RS = RS(rc, all_symbols, all_scopes, rs_uses, Vector<Diagnostic>::new(), to_i64(-1))
+    let rs: RS = RS(rc, all_symbols, all_scopes, rs_uses, Vector<Diagnostic>::new(), to_i64(-1), mid)
 
     // Create file scope.
     let fsr: ScopeR = rs_push_scope(rs, ScopeKind.FileScope)
@@ -1056,7 +1058,7 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
                   let last_tidx: i64 = po.idx.get(path_lp - 1)
                   let local_name: string = substring(po.src, po.toks.get(last_tidx).offset, po.toks.get(last_tidx).len)
                   // decl_node stores target module_id for Module symbols.
-                  let msr: SymR = rs_add_symbol(rs, Symbol(SymbolKind.Module, local_name, target_mid, rs.current_scope))
+                  let msr: SymR = rs_add_symbol(rs, Symbol(SymbolKind.Module, local_name, target_mid, rs.current_scope, rs.owner_module_id))
                   rs = scope_declare(msr.rs, local_name, msr.sym_idx, last_tidx)
           ii = ii + 1
 
@@ -1096,7 +1098,7 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
     // Rebuild RC with final export tables (all modules now populated).
     let rc: RC = RC(po.nodes, po.idx, po.toks, sf.source_text, ExportTables(export_tables))
     let scope_idx: i64 = module_scope_idx.get(mid)
-    let rs: RS = RS(rc, all_symbols, all_scopes, rs_uses, Vector<Diagnostic>::new(), scope_idx)
+    let rs: RS = RS(rc, all_symbols, all_scopes, rs_uses, Vector<Diagnostic>::new(), scope_idx, mid)
 
     // Resolve bodies.
     rs = resolve_bodies(rs, po.root)
