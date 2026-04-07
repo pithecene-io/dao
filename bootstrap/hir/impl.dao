@@ -31,7 +31,7 @@ module bootstrap::hir
 enum class HirNode:
   // Program (D6/D7: multi-module root)
   HirProgram(module_list_lp: i64)
-  HirModule(module_id: i64, decl_list_lp: i64)
+  HirModule(name_tok: i64, decl_list_lp: i64, module_id: i64)
 
   // File (single-file legacy path)
   HirFile(decls_lp: i64)
@@ -962,9 +962,21 @@ fn program_run_hir(p: Program): Program
     match file_node:
       HirNode.HirFile(dlp):
         module_decls_lp = dlp
+    // Extract module name token from the ModuleDeclN node.
+    let mod_name_tok: i64 = to_i64(-1)
+    let root_node: Node = po.nodes.get(po.root)
+    match root_node:
+      Node.FileN(mod_decl, imp_lp, dec_lp):
+        if mod_decl >= 0:
+          let md_node: Node = po.nodes.get(mod_decl)
+          match md_node:
+            Node.ModuleDeclN(path_lp, seg_count):
+              if seg_count > 0:
+                // First segment token of the module path.
+                mod_name_tok = po.idx.get(path_lp - seg_count)
     // Emit HirModule wrapping the file's decls.
     let mod_idx: i64 = hir_nodes.length()
-    hir_nodes = hir_nodes.push(HirNode.HirModule(mid, module_decls_lp))
+    hir_nodes = hir_nodes.push(HirNode.HirModule(mod_name_tok, module_decls_lp, mid))
     module_indices = module_indices.push(mod_idx)
     // Merge diagnostics.
     let di: i64 = 0
@@ -1015,7 +1027,7 @@ fn hir_node_kind(node: HirNode): string
   match node:
     HirNode.HirProgram(a):
       return "HirProgram"
-    HirNode.HirModule(a, b):
+    HirNode.HirModule(a, b, c):
       return "HirModule"
     HirNode.HirFile(a):
       return "HirFile"
@@ -1103,7 +1115,7 @@ fn hir_dump_node(hr: HirResult, idx: i64, indent: i64): string
         line = line + hir_dump_node(hr, mods.get(mi), indent + 1)
         mi = mi + 1
       return line
-    HirNode.HirModule(mod_id, decl_list_lp):
+    HirNode.HirModule(name_tok, decl_list_lp, mod_id):
       line = line + " (module_id=" + i64_to_string(mod_id) + ")\n"
       let decls: Vector<i64> = read_list(hr.hir_idx, decl_list_lp)
       let di: i64 = 0
