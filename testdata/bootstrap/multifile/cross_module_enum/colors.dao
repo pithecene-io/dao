@@ -1,0 +1,5 @@
+module lib::colors
+enum Color:
+  Red
+  Green
+  Blue

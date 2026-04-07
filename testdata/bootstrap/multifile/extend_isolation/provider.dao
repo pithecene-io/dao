@@ -1,0 +1,7 @@
+module lib::ext
+
+concept Showable:
+  fn show(self): string
+
+extend i32 as Showable:
+  fn show(self): string -> "number"

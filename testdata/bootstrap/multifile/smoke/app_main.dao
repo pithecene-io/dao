@@ -1,0 +1,5 @@
+module app::main
+import app::math
+
+fn main(): i32
+  return math::add(1, 2)

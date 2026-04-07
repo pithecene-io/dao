@@ -2060,7 +2060,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 34
+  let total: i32 = 36
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -2674,6 +2674,66 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL d5_program_expr_types_populated")
+
+  // -----------------------------------------------------------------
+  // Task 27 D9/D10: On-disk multi-file test corpus
+  // -----------------------------------------------------------------
+
+  // Test d10_1: Three-file smoke test loaded from testdata.
+  let smoke_base: string = "testdata/bootstrap/multifile/smoke/"
+  let smoke_ok: bool = false
+  if file_exists(smoke_base + "core_fmt.dao"):
+    let smoke_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+    smoke_inputs = smoke_inputs.push(SourceInput("core_fmt.dao", read_file(smoke_base + "core_fmt.dao")))
+    smoke_inputs = smoke_inputs.push(SourceInput("app_math.dao", read_file(smoke_base + "app_math.dao")))
+    smoke_inputs = smoke_inputs.push(SourceInput("app_main.dao", read_file(smoke_base + "app_main.dao")))
+    let smoke_pg: ProgramGraph = build_program(smoke_inputs)
+    let smoke_p: Program = program_from_graph(smoke_pg)
+    smoke_p = program_run_resolve(smoke_p)
+    smoke_p = program_run_typecheck(smoke_p)
+    // Verify: 3 modules in topo order, types registered beyond builtins,
+    // no typecheck-origin diagnostics beyond the resolve baseline.
+    let smoke_tc_ok: bool = true
+    if smoke_p.graph.topo_order.length() != 3:
+      smoke_tc_ok = false
+    if smoke_p.typecheck.types.length() <= 13:
+      smoke_tc_ok = false
+    if smoke_p.diags.length() > smoke_p.resolve.diags.length():
+      smoke_tc_ok = false
+    if smoke_tc_ok:
+      smoke_ok = true
+  if smoke_ok:
+    print("PASS d10_three_file_smoke")
+    pass_count = pass_count + 1
+  else:
+    if file_exists(smoke_base + "core_fmt.dao"):
+      print("FAIL d10_three_file_smoke")
+    else:
+      print("SKIP d10_three_file_smoke: fixtures not found at " + smoke_base)
+
+  // Test d10_2: Cross-module enum variant from on-disk fixtures.
+  let enum_base: string = "testdata/bootstrap/multifile/cross_module_enum/"
+  let enum_ok: bool = false
+  if file_exists(enum_base + "colors.dao"):
+    let enum_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+    enum_inputs = enum_inputs.push(SourceInput("colors.dao", read_file(enum_base + "colors.dao")))
+    enum_inputs = enum_inputs.push(SourceInput("user.dao", read_file(enum_base + "user.dao")))
+    let enum_pg: ProgramGraph = build_program(enum_inputs)
+    let enum_p: Program = program_from_graph(enum_pg)
+    enum_p = program_run_resolve(enum_p)
+    enum_p = program_run_typecheck(enum_p)
+    // Verify: 2 modules, no typecheck errors beyond resolve baseline.
+    if enum_p.graph.topo_order.length() == 2:
+      if enum_p.diags.length() <= enum_p.resolve.diags.length():
+        enum_ok = true
+  if enum_ok:
+    print("PASS d10_cross_module_enum")
+    pass_count = pass_count + 1
+  else:
+    if file_exists(enum_base + "colors.dao"):
+      print("FAIL d10_cross_module_enum")
+    else:
+      print("SKIP d10_cross_module_enum: fixtures not found at " + enum_base)
 
   // -----------------------------------------------------------------
   // Summary

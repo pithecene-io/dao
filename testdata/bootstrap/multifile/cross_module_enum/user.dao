@@ -1,0 +1,6 @@
+module app::user
+import lib::colors
+
+fn get_color(): i32
+  let c = colors::Color::Red
+  return 0
