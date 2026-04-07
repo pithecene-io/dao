@@ -1932,7 +1932,12 @@ fn program_run_typecheck(p: Program): Program
   let type_info: Vector<i64> = p.typecheck.type_info
   let sym_types: Vector<i64> = p.typecheck.sym_types
   let variant_set: HashMap<i64> = HashMap<i64>::new()
-  let all_diags: Vector<FileDiagnostic> = p.diags
+  // Seed diagnostics from the resolve pass only (the pre-typecheck
+  // baseline), NOT from p.diags which may already include typecheck
+  // diagnostics from a prior run. This prevents diagnostic
+  // duplication on reentrant calls — same guard pattern as
+  // program_init_typecheck's initialized flag.
+  let all_diags: Vector<FileDiagnostic> = p.resolve.diags
 
   // --- Program Pass 1: register declarations in topo order ---
   let ti: i64 = 0
