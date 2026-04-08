@@ -2,7 +2,6 @@
 #define DAO_SUPPORT_ARENA_H
 
 #include <cstddef>
-#include <functional>
 #include <ranges>
 #include <type_traits>
 #include <utility>
@@ -32,9 +31,11 @@ public:
   auto operator=(const Arena&) -> Arena& = delete;
 
   Arena(Arena&& other) noexcept
-      : blocks_(std::move(other.blocks_)), offset_(other.offset_),
+      : blocks_(std::move(other.blocks_)),
+        oversized_(std::move(other.oversized_)), offset_(other.offset_),
         dtors_(std::move(other.dtors_)) {
     other.blocks_.clear();
+    other.oversized_.clear();
     other.offset_ = kBlockSize;
     other.dtors_.clear();
   }
@@ -43,25 +44,27 @@ public:
     if (this != &other) {
       destroy();
       blocks_ = std::move(other.blocks_);
+      oversized_ = std::move(other.oversized_);
       offset_ = other.offset_;
       dtors_ = std::move(other.dtors_);
       other.blocks_.clear();
+      other.oversized_.clear();
       other.offset_ = kBlockSize;
       other.dtors_.clear();
     }
     return *this;
   }
 
-  // Construct a T in arena-owned memory. The returned pointer is stable
-  // for the lifetime of the arena. If T is non-trivially destructible,
-  // its destructor is called (in reverse allocation order) when the
-  // arena is destroyed.
+  /// Construct a T in arena-owned memory. The returned pointer is stable
+  /// for the lifetime of the arena. If T is non-trivially destructible,
+  /// its destructor is called (in reverse allocation order) when the
+  /// arena is destroyed.
   template <typename T, typename... Args>
   auto alloc(Args&&... args) -> T* {
     void* mem = allocate(sizeof(T), alignof(T));
     auto* ptr = new (mem) T(std::forward<Args>(args)...);
     if constexpr (!std::is_trivially_destructible_v<T>) {
-      dtors_.push_back([ptr]() { ptr->~T(); }); // NOLINT(modernize-use-trailing-return-type)
+      dtors_.push_back({&invoke_dtor<T>, ptr});
     }
     return ptr;
   }
@@ -69,26 +72,44 @@ public:
 private:
   static constexpr size_t kBlockSize = 4096;
 
-  struct Block {
+  // Block data is max-aligned so that bump-pointer arithmetic within
+  // the block can satisfy any fundamental alignment requirement.
+  struct alignas(std::max_align_t) Block {
     char data[kBlockSize]; // NOLINT(modernize-avoid-c-arrays)
   };
 
+  // Type-erased destructor — avoids std::function heap allocation.
+  struct Dtor {
+    void (*invoke)(void*);
+    void* obj;
+  };
+
+  template <typename T>
+  static void invoke_dtor(void* obj) {
+    static_cast<T*>(obj)->~T();
+  }
+
   std::vector<Block*> blocks_;
-  size_t offset_ = kBlockSize; // Force first allocation to create a block.
-  std::vector<std::function<void()>> dtors_;
+  std::vector<void*> oversized_; // Separate tracking for oversized allocations.
+  size_t offset_ = kBlockSize;   // Force first allocation to create a block.
+  std::vector<Dtor> dtors_;
 
   auto allocate(size_t size, size_t align) -> void* {
-    // Align up.
+    // Align the bump pointer up to the requested alignment.
     offset_ = (offset_ + align - 1) & ~(align - 1);
     if (offset_ + size > kBlockSize) {
       if (size > kBlockSize) {
-        // Oversized allocation — give it its own block.
-        auto* mem = ::operator new(size);
-        blocks_.push_back(static_cast<Block*>(mem));
+        // Oversized allocation — give it its own raw memory region.
+        // Tracked separately from blocks to avoid type-punning UB.
+        auto* mem = ::operator new(size, std::align_val_t(align));
+        oversized_.push_back(mem);
         return mem;
       }
       blocks_.push_back(new Block);
       offset_ = 0;
+      // Re-align within the fresh block (block base is max-aligned,
+      // so this is a no-op for alignments ≤ alignof(max_align_t)).
+      offset_ = (offset_ + align - 1) & ~(align - 1);
     }
     void* ptr =
         blocks_.back()->data + offset_; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
@@ -98,12 +119,16 @@ private:
 
   void destroy() {
     for (auto& dtor : std::ranges::reverse_view(dtors_)) {
-      dtor();
+      dtor.invoke(dtor.obj);
     }
     for (auto* block : blocks_) {
-      ::operator delete(block);
+      delete block;
+    }
+    for (auto* mem : oversized_) {
+      ::operator delete(mem);
     }
     blocks_.clear();
+    oversized_.clear();
     offset_ = kBlockSize;
     dtors_.clear();
   }
