@@ -98,15 +98,33 @@ private:
   // conforming type).
   std::unordered_map<std::string_view, const Type*> concept_self_map_;
 
-  // RAII guard for concept_self_map_ save/restore.
+  // RAII guard that saves and restores a single key in concept_self_map_.
+  // Each guard scope inserts exactly one concept→type binding; on
+  // destruction the prior state of that key is restored. O(1) instead
+  // of copying the entire map.
   struct ConceptSelfMapGuard {
-    std::unordered_map<std::string_view, const Type*>& map;
-    std::unordered_map<std::string_view, const Type*> saved;
-    ConceptSelfMapGuard(std::unordered_map<std::string_view, const Type*>& m) : map(m), saved(m) {
+    using Map = std::unordered_map<std::string_view, const Type*>;
+    Map& map;
+    std::string_view key;
+    const Type* old_value = nullptr;
+    bool had_key = false;
+
+    ConceptSelfMapGuard(Map& m, std::string_view k) : map(m), key(k) { // NOLINT(readability-identifier-length)
+      auto iter = map.find(key);
+      if (iter != map.end()) {
+        had_key = true;
+        old_value = iter->second;
+      }
     }
     ~ConceptSelfMapGuard() {
-      map = saved;
+      if (had_key) {
+        map[key] = old_value;
+      } else {
+        map.erase(key);
+      }
     }
+    ConceptSelfMapGuard(const ConceptSelfMapGuard&) = delete;
+    auto operator=(const ConceptSelfMapGuard&) -> ConceptSelfMapGuard& = delete;
   };
 
   // Pre-built method lookup table: (type*, method_name) -> {fn_type, decl}.
