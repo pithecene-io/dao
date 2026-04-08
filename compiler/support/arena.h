@@ -89,9 +89,17 @@ private:
     static_cast<T*>(obj)->~T();
   }
 
+  // Oversized allocation record — stores both the pointer and the
+  // alignment used for allocation, so destroy() can pass the matching
+  // alignment to operator delete (mismatched new/delete alignment is UB).
+  struct Oversized {
+    void* ptr;
+    std::align_val_t align;
+  };
+
   std::vector<Block*> blocks_;
-  std::vector<void*> oversized_; // Separate tracking for oversized allocations.
-  size_t offset_ = kBlockSize;   // Force first allocation to create a block.
+  std::vector<Oversized> oversized_;
+  size_t offset_ = kBlockSize; // Force first allocation to create a block.
   std::vector<Dtor> dtors_;
 
   auto allocate(size_t size, size_t align) -> void* {
@@ -101,8 +109,9 @@ private:
       if (size > kBlockSize) {
         // Oversized allocation — give it its own raw memory region.
         // Tracked separately from blocks to avoid type-punning UB.
-        auto* mem = ::operator new(size, std::align_val_t(align));
-        oversized_.push_back(mem);
+        auto al = std::align_val_t(align);
+        auto* mem = ::operator new(size, al);
+        oversized_.push_back({mem, al});
         return mem;
       }
       blocks_.push_back(new Block);
@@ -124,8 +133,8 @@ private:
     for (auto* block : blocks_) {
       delete block;
     }
-    for (auto* mem : oversized_) {
-      ::operator delete(mem);
+    for (auto& [ptr, align] : oversized_) {
+      ::operator delete(ptr, align);
     }
     blocks_.clear();
     oversized_.clear();
