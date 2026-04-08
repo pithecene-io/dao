@@ -514,9 +514,12 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
       },
       [&](const HirField& field) -> MirValueId {
         auto obj = lower_expr_value(*field.object);
+        auto field_idx = resolve_field_index(field.object->type, field.field_name);
+        if (!field_idx) {
+          error(expr.span, "unresolved field '" + std::string(field.field_name) + "'");
+        }
         return emit_value(expr, MirFieldAccess{
-            obj, field.field_name,
-            resolve_field_index(field.object->type, field.field_name).value_or(0)});
+            obj, field.field_name, field_idx.value_or(0)});
       },
       [&](const HirIndex& idx) -> MirValueId {
         auto obj = lower_expr_value(*idx.object);
@@ -595,12 +598,14 @@ auto MirBuilder::lower_expr_place(const HirExpr& expr) -> MirPlace {
       },
       [&](const HirField& field) -> MirPlace {
         auto base = lower_expr_place(*field.object);
+        auto field_idx = resolve_field_index(field.object->type, field.field_name);
+        if (!field_idx) {
+          error(field.object->span, "unresolved field '" + std::string(field.field_name) + "'");
+        }
         base.projections.push_back(
             {.kind = MirProjectionKind::Field,
              .field_name = field.field_name,
-             .field_index = resolve_field_index(field.object->type,
-                                                field.field_name)
-                               .value_or(0),
+             .field_index = field_idx.value_or(0),
              .index_value = {}});
         return base;
       },
