@@ -131,12 +131,24 @@ private:
 
   std::unordered_map<MethodKey, MethodEntry, MethodKeyHash> method_table_;
 
+  // Pending class shells awaiting field resolution (populated by
+  // register_type_names, consumed by register_struct_fields).
+  struct PendingClass {
+    const ClassDecl* class_decl;
+    const Decl* decl;
+    TypeStruct* shell;
+  };
+  std::vector<PendingClass> pending_classes_;
+
   void build_method_table(const FileNode& file);
   auto build_method_fn_type(const FunctionDecl& method) -> const Type*;
 
   // --- TypeNode -> Type* bridge ---
 
   auto resolve_type_node(const TypeNode* node) -> const Type*;
+  auto instantiate_generic(const Type* base_type, std::string_view name,
+                           const std::vector<GenericParam>& type_params,
+                           const std::vector<TypeNode*>& type_args, Span span) -> const Type*;
 
   // --- Symbol -> Type* bridge ---
 
@@ -146,6 +158,10 @@ private:
   // --- Declaration checking ---
 
   void register_declarations(const FileNode& file);
+  void register_type_names(const FileNode& file);
+  void register_struct_fields(const FileNode& file);
+  void register_enum_variants(const FileNode& file);
+  void register_signatures(const FileNode& file);
   void compute_derived_conformances(const FileNode& file);
   auto type_conforms_to(const Type* type, const Decl* concept_decl) -> bool;
   void check_declaration(const Decl* decl);

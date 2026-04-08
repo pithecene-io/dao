@@ -54,6 +54,44 @@ auto TypeChecker::check(const FileNode& file) -> TypeCheckResult {
 // TypeNode -> Type* bridge
 // ---------------------------------------------------------------------------
 
+auto TypeChecker::instantiate_generic(const Type* base_type, std::string_view name,
+                                      const std::vector<GenericParam>& type_params,
+                                      const std::vector<TypeNode*>& type_args, Span span)
+    -> const Type* {
+  if (type_params.empty()) {
+    if (!type_args.empty()) {
+      error(span, "'" + std::string(name) + "' is not generic but was given type arguments");
+      return nullptr;
+    }
+    return base_type;
+  }
+
+  if (type_args.empty()) {
+    error(span, "generic type '" + std::string(name) + "' requires " +
+                    std::to_string(type_params.size()) + " type argument(s)");
+    return nullptr;
+  }
+  if (type_args.size() != type_params.size()) {
+    error(span, "'" + std::string(name) + "' expects " + std::to_string(type_params.size()) +
+                    " type argument(s), got " + std::to_string(type_args.size()));
+    return nullptr;
+  }
+  std::unordered_map<uint32_t, const Type*> bindings;
+  bool valid = true;
+  for (size_t i = 0; i < type_args.size(); ++i) {
+    const auto* arg_type = resolve_type_node(type_args[i]);
+    if (arg_type == nullptr) {
+      valid = false;
+    } else {
+      bindings[static_cast<uint32_t>(i)] = arg_type;
+    }
+  }
+  if (valid) {
+    return substitute_generics(base_type, bindings);
+  }
+  return nullptr;
+}
+
 auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
   if (node == nullptr) {
     return nullptr;
@@ -128,41 +166,8 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
           type_params = &decl_node->as<ClassDecl>().type_params;
         }
 
-        // Diagnose generic arity mismatches.
-        if (type_params != nullptr && !type_params->empty()) {
-          if (named.type_args.empty()) {
-            error(node->span,
-                  "generic type '" + std::string(name) + "' requires " +
-                      std::to_string(type_params->size()) + " type argument(s)");
-            return nullptr;
-          }
-          if (named.type_args.size() != type_params->size()) {
-            error(node->span,
-                  "'" + std::string(name) + "' expects " + std::to_string(type_params->size()) +
-                      " type argument(s), got " + std::to_string(named.type_args.size()));
-            return nullptr;
-          }
-          std::unordered_map<uint32_t, const Type*> bindings;
-          bool valid = true;
-          for (size_t i = 0; i < named.type_args.size(); ++i) {
-            const auto* arg_type = resolve_type_node(named.type_args[i]);
-            if (arg_type == nullptr) {
-              valid = false;
-            } else {
-              bindings[static_cast<uint32_t>(i)] = arg_type;
-            }
-          }
-          if (valid) {
-            return substitute_generics(base_type, bindings);
-          }
-          return nullptr;
-        }
-
-        // Non-generic class used with type arguments.
-        if (type_params != nullptr && type_params->empty() && !named.type_args.empty()) {
-          error(node->span,
-                "'" + std::string(name) + "' is not generic but was given type arguments");
-          return nullptr;
+        if (type_params != nullptr) {
+          return instantiate_generic(base_type, name, *type_params, named.type_args, node->span);
         }
       }
 
@@ -174,39 +179,8 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
           type_params = &decl_node->as<EnumDeclNode>().type_params;
         }
 
-        if (type_params != nullptr && !type_params->empty()) {
-          if (named.type_args.empty()) {
-            error(node->span,
-                  "generic type '" + std::string(name) + "' requires " +
-                      std::to_string(type_params->size()) + " type argument(s)");
-            return nullptr;
-          }
-          if (named.type_args.size() != type_params->size()) {
-            error(node->span,
-                  "'" + std::string(name) + "' expects " + std::to_string(type_params->size()) +
-                      " type argument(s), got " + std::to_string(named.type_args.size()));
-            return nullptr;
-          }
-          std::unordered_map<uint32_t, const Type*> bindings;
-          bool valid = true;
-          for (size_t i = 0; i < named.type_args.size(); ++i) {
-            const auto* arg_type = resolve_type_node(named.type_args[i]);
-            if (arg_type == nullptr) {
-              valid = false;
-            } else {
-              bindings[static_cast<uint32_t>(i)] = arg_type;
-            }
-          }
-          if (valid) {
-            return substitute_generics(base_type, bindings);
-          }
-          return nullptr;
-        }
-
-        if (type_params != nullptr && type_params->empty() && !named.type_args.empty()) {
-          error(node->span,
-                "'" + std::string(name) + "' is not generic but was given type arguments");
-          return nullptr;
+        if (type_params != nullptr) {
+          return instantiate_generic(base_type, name, *type_params, named.type_args, node->span);
         }
       }
 
@@ -385,6 +359,14 @@ auto TypeChecker::resolve_symbol_type_for_type_decl(const Symbol* sym) -> const 
 // ---------------------------------------------------------------------------
 
 void TypeChecker::register_declarations(const FileNode& file) {
+  pending_classes_.clear(); // Reset pass-local state for this file.
+  register_type_names(file);
+  register_enum_variants(file);
+  register_struct_fields(file);
+  register_signatures(file);
+}
+
+void TypeChecker::register_type_names(const FileNode& file) {
   // Pass 1a: register type aliases first so that functions and structs
   // can reference them regardless of source order.
   for (const auto* decl : file.declarations) {
@@ -416,13 +398,6 @@ void TypeChecker::register_declarations(const FileNode& file) {
   // before any field types are resolved, enabling forward references
   // between classes (e.g. class Diagnostic with a Span field where
   // Span is defined later in the source).
-  struct PendingClass {
-    const ClassDecl* class_decl;
-    const Decl* decl;
-    TypeStruct* shell;
-  };
-  std::vector<PendingClass> pending_classes;
-
   for (const auto* decl : file.declarations) {
     if (decl->kind() == NodeKind::ClassDecl) {
       const auto& st = decl->as<ClassDecl>();
@@ -435,47 +410,56 @@ void TypeChecker::register_declarations(const FileNode& file) {
       auto* shell = types_.make_struct_shell(sym, st.name);
       symbol_types_[sym] = shell;
       typed_.set_decl_type(decl, shell);
-      pending_classes.push_back({&st, decl, shell});
-    } else if (decl->kind() == NodeKind::EnumDecl) {
-      const auto& en = decl->as<EnumDeclNode>();
-      auto decl_it = decl_symbols_.find(en.name_span.offset);
-      if (decl_it == decl_symbols_.end()) {
-        continue;
-      }
-      const auto* sym = decl_it->second;
+      pending_classes_.push_back({&st, decl, shell});
+    }
+  }
+}
 
-      // Build enum type from variant specifiers, resolving payload types.
-      // Unresolved types are kept as nullptr to preserve arity — the
-      // primary diagnostic comes from resolve_type_node; dropping the
-      // slot would silently mutate the variant shape and produce
-      // misleading secondary errors.
-      std::vector<EnumVariant> variants;
-      for (const auto& variant : en.variants) {
-        std::vector<const Type*> payload_types;
-        for (size_t i = 0; i < variant.payload_types.size(); ++i) {
-          const auto* resolved = resolve_type_node(variant.payload_types[i]);
-          payload_types.push_back(resolved);
-          if (resolved == nullptr) {
-            if (variant.payload_types[i]->is<NamedType>()) {
-              const auto& named = variant.payload_types[i]->as<NamedType>();
-              if (named.name.segments.size() == 1 && named.name.segments[0] == en.name) {
-                error(variant.payload_types[i]->span,
-                      "enum '" + std::string(en.name) +
-                          "' cannot contain itself by value in variant '" +
-                          std::string(variant.name) + "'; use a pointer (*" + std::string(en.name) +
-                          ") for recursive types");
-              }
+void TypeChecker::register_enum_variants(const FileNode& file) {
+  // Register enum types with resolved variant payload types.
+  // Unresolved types are kept as nullptr to preserve arity — the
+  // primary diagnostic comes from resolve_type_node; dropping the
+  // slot would silently mutate the variant shape and produce
+  // misleading secondary errors.
+  for (const auto* decl : file.declarations) {
+    if (decl->kind() != NodeKind::EnumDecl) {
+      continue;
+    }
+    const auto& en = decl->as<EnumDeclNode>();
+    auto decl_it = decl_symbols_.find(en.name_span.offset);
+    if (decl_it == decl_symbols_.end()) {
+      continue;
+    }
+    const auto* sym = decl_it->second;
+
+    std::vector<EnumVariant> variants;
+    for (const auto& variant : en.variants) {
+      std::vector<const Type*> payload_types;
+      for (size_t i = 0; i < variant.payload_types.size(); ++i) {
+        const auto* resolved = resolve_type_node(variant.payload_types[i]);
+        payload_types.push_back(resolved);
+        if (resolved == nullptr) {
+          if (variant.payload_types[i]->is<NamedType>()) {
+            const auto& named = variant.payload_types[i]->as<NamedType>();
+            if (named.name.segments.size() == 1 && named.name.segments[0] == en.name) {
+              error(variant.payload_types[i]->span,
+                    "enum '" + std::string(en.name) +
+                        "' cannot contain itself by value in variant '" +
+                        std::string(variant.name) + "'; use a pointer (*" + std::string(en.name) +
+                        ") for recursive types");
             }
           }
         }
-        variants.push_back({variant.name, std::move(payload_types), variant.field_names});
       }
-      const auto* enum_type = types_.make_enum(sym, en.name, std::move(variants));
-      symbol_types_[sym] = enum_type;
-      typed_.set_decl_type(decl, enum_type);
+      variants.push_back({variant.name, std::move(payload_types), variant.field_names});
     }
+    const auto* enum_type = types_.make_enum(sym, en.name, std::move(variants));
+    symbol_types_[sym] = enum_type;
+    typed_.set_decl_type(decl, enum_type);
   }
+}
 
+void TypeChecker::register_struct_fields(const FileNode& /*file*/) {
   // Sub-pass 1b-ii: resolve class field types now that all type
   // shells (classes and enums) are registered in symbol_types_.
   // Unresolved types are kept as nullptr to preserve arity — same
@@ -483,7 +467,7 @@ void TypeChecker::register_declarations(const FileNode& file) {
   // mutates the struct shape and produces misleading secondary
   // constructor-arity errors instead of the real type-resolution
   // failure.
-  for (auto& pending : pending_classes) {
+  for (auto& pending : pending_classes_) {
     std::vector<StructField> fields;
     for (const auto* field : pending.class_decl->fields) {
       const auto* field_type = resolve_type_node(field->type);
@@ -491,7 +475,9 @@ void TypeChecker::register_declarations(const FileNode& file) {
     }
     pending.shell->set_fields(std::move(fields));
   }
+}
 
+void TypeChecker::register_signatures(const FileNode& file) {
   // Pass 1c: register function signatures, class method signatures,
   // and extend method signatures. All type shells from pass 1b are
   // available, so return types like Option<V> resolve correctly.
