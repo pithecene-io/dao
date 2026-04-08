@@ -4,11 +4,25 @@
 
 #include "dao_abi.h"
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+
+// Convert a dao_string to a null-terminated C string on the heap.
+// Caller must free() the returned pointer. Returns NULL on allocation
+// failure (does not abort — callers decide their own failure policy).
+static char *dao_string_to_cstr(const struct dao_string *str) {
+  char *cstr = (char *)malloc((size_t)str->len + 1);
+  if (cstr == NULL) {
+    return NULL;
+  }
+  memcpy(cstr, str->ptr, (size_t)str->len);
+  cstr[str->len] = '\0';
+  return cstr;
+}
 
 void __dao_io_write_stdout(const struct dao_string *msg) {
   if (msg == NULL || msg->ptr == NULL || msg->len <= 0) {
@@ -37,14 +51,11 @@ struct dao_string __dao_io_read_file(const struct dao_string *path) {
     abort();
   }
 
-  // Null-terminate the path for fopen.
-  char *cpath = (char *)malloc((size_t)path->len + 1);
+  char *cpath = dao_string_to_cstr(path);
   if (cpath == NULL) {
     fprintf(stderr, "dao: read_file: allocation failed\n");
     abort();
   }
-  memcpy(cpath, path->ptr, (size_t)path->len);
-  cpath[path->len] = '\0';
 
   FILE *file = fopen(cpath, "rb");
   if (file == NULL) {
@@ -53,10 +64,16 @@ struct dao_string __dao_io_read_file(const struct dao_string *path) {
     abort();
   }
 
-  // Get file size.
-  fseek(file, 0, SEEK_END);
-  long size = ftell(file);
-  fseek(file, 0, SEEK_SET);
+  // Get file size via stat (works for files > 2GB, unlike fseek/ftell
+  // which use long and fail on 32-bit platforms).
+  struct stat file_stat;
+  if (fstat(fileno(file), &file_stat) != 0) {
+    fprintf(stderr, "dao: read_file: cannot stat '%s'\n", cpath);
+    fclose(file);
+    free(cpath);
+    abort();
+  }
+  int64_t size = (int64_t)file_stat.st_size;
 
   if (size < 0) {
     fprintf(stderr, "dao: read_file: cannot determine size of '%s'\n", cpath);
@@ -85,7 +102,7 @@ struct dao_string __dao_io_read_file(const struct dao_string *path) {
 
   if (read_err || read_bytes != (size_t)size) {
     fprintf(stderr, "dao: read_file: read error for '%s' "
-            "(expected %ld bytes, got %zu)\n",
+            "(expected %" PRId64 " bytes, got %zu)\n",
             cpath, size, read_bytes);
     free(buf);
     free(cpath);
@@ -103,12 +120,10 @@ bool __dao_io_write_file(const struct dao_string *path,
     return false;
   }
 
-  char *cpath = (char *)malloc((size_t)path->len + 1);
+  char *cpath = dao_string_to_cstr(path);
   if (cpath == NULL) {
     return false;
   }
-  memcpy(cpath, path->ptr, (size_t)path->len);
-  cpath[path->len] = '\0';
 
   FILE *file = fopen(cpath, "wb");
   if (file == NULL) {
@@ -139,12 +154,10 @@ bool __dao_io_file_exists(const struct dao_string *path) {
     return false;
   }
 
-  char *cpath = (char *)malloc((size_t)path->len + 1);
+  char *cpath = dao_string_to_cstr(path);
   if (cpath == NULL) {
     return false;
   }
-  memcpy(cpath, path->ptr, (size_t)path->len);
-  cpath[path->len] = '\0';
 
   struct stat st;
   bool exists = (stat(cpath, &st) == 0);
