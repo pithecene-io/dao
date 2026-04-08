@@ -2,11 +2,11 @@
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser.h"
 #include "frontend/resolve/resolve.h"
+#include "support/test_utils.h"
 
 #include <boost/ut.hpp>
 
 #include <filesystem>
-#include <fstream>
 #include <string>
 #include <unordered_set>
 
@@ -14,11 +14,6 @@ using namespace boost::ut;
 using namespace dao;
 
 namespace {
-
-auto read_file(const std::filesystem::path& path) -> std::string {
-  std::ifstream file(path);
-  return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-}
 
 struct ClassifiedSource {
   SourceBuffer source;
