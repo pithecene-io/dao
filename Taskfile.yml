@@ -36,7 +36,7 @@ tasks:
     desc: Build all targets
     deps: [configure]
     cmds:
-      - cmake --build {{.BUILD_DIR}}
+      - cmake --build {{.BUILD_DIR}} -- -j${DAO_BUILD_JOBS:-4}
 
   test:
     desc: Run all tests
