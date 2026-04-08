@@ -6,6 +6,7 @@
 #include "frontend/resolve/resolve.h"
 #include "frontend/typecheck/type_checker.h"
 #include "frontend/types/type_context.h"
+#include "support/test_utils.h"
 
 #include <boost/ut.hpp>
 #include <string>
@@ -14,24 +15,6 @@ using namespace boost::ut;
 using namespace dao;
 
 namespace {
-
-// Test helper: every source file must begin with a `module` declaration
-// per CONTRACT_SYNTAX_SURFACE.md. Fixtures focus on analysis behavior
-// below the module layer, so we prepend a canonical `module test` line
-// and expose a `pipe.at(raw)` helper that rebases raw fixture offsets
-// to the wrapped source. Raw offsets in the fixtures are written as if
-// no wrapper existed; all offset-bearing query calls pass through
-// `pipe.at(...)`.
-inline constexpr const char* kModulePrefix = "module test\n";
-inline constexpr uint32_t kModulePrefixBytes = 12;
-static_assert(kModulePrefixBytes == sizeof("module test\n") - 1,
-              "kModulePrefixBytes must match strlen(kModulePrefix)");
-
-inline auto wrap_with_test_module(std::string_view src) -> std::string {
-  std::string wrapped = kModulePrefix;
-  wrapped.append(src);
-  return wrapped;
-}
 
 struct AnalysisPipeline {
   SourceBuffer source;
@@ -54,7 +37,7 @@ struct AnalysisPipeline {
 
   /// Rebase a raw fixture-relative offset to the wrapped source.
   [[nodiscard]] static auto at(uint32_t raw) -> uint32_t {
-    return raw + kModulePrefixBytes;
+    return raw + kTestModulePrefixBytes;
   }
 };
 

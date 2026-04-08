@@ -11,6 +11,7 @@
 #include "ir/hir/hir_context.h"
 #include "ir/mir/mir_builder.h"
 #include "ir/mir/mir_context.h"
+#include "support/test_utils.h"
 
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -29,15 +30,6 @@ namespace {
 
 // Sentinel declaration identity for testing.
 const int kDeclSentinel = 1;
-
-// Test helper: every source file must begin with a `module` declaration
-// per CONTRACT_SYNTAX_SURFACE.md. Fixtures focus on backend behavior
-// below the module layer, so we prepend a canonical `module test` line.
-inline auto wrap_with_test_module(std::string_view src) -> std::string {
-  std::string wrapped = "module test\n";
-  wrapped.append(src);
-  return wrapped;
-}
 
 /// Full pipeline: source → MIR → LLVM IR.
 struct LlvmTestPipeline {

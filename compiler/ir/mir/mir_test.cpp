@@ -9,6 +9,7 @@
 #include "ir/mir/mir_builder.h"
 #include "ir/mir/mir_context.h"
 #include "ir/mir/mir_printer.h"
+#include "support/test_utils.h"
 
 #include <boost/ut.hpp>
 #include <sstream>
@@ -20,15 +21,6 @@ using namespace dao;
 // NOLINTBEGIN(readability-magic-numbers)
 
 namespace {
-
-// Test helper: every source file must begin with a `module` declaration
-// per CONTRACT_SYNTAX_SURFACE.md. Fixtures focus on MIR behavior below
-// the module layer, so we prepend a canonical `module test` line.
-inline auto wrap_with_test_module(std::string_view src) -> std::string {
-  std::string wrapped = "module test\n";
-  wrapped.append(src);
-  return wrapped;
-}
 
 /// Owns all pipeline state so MIR nodes remain valid.
 struct MirTestPipeline {

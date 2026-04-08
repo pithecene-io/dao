@@ -5,6 +5,7 @@
 #include "frontend/typecheck/type_checker.h"
 #include "frontend/types/type_context.h"
 #include "frontend/types/type_printer.h"
+#include "support/test_utils.h"
 
 #include <boost/ut.hpp>
 #include <string>
@@ -15,16 +16,6 @@ using namespace dao;
 // NOLINTBEGIN(readability-magic-numbers)
 
 namespace {
-
-// Test helper: CONTRACT_SYNTAX_SURFACE.md requires every source file to
-// begin with a `module` declaration. The inline fixtures in this test
-// file focus on type-checking behavior below the module layer, so we
-// prepend a canonical `module test` line to the source before lexing.
-auto wrap_with_test_module(std::string_view src) -> std::string {
-  std::string wrapped = "module test\n";
-  wrapped.append(src);
-  return wrapped;
-}
 
 /// Parse, resolve, and typecheck a source string. Returns TypeCheckResult.
 auto check_source(const std::string& source) -> TypeCheckResult {
@@ -51,43 +42,9 @@ auto check_source(const std::string& source) -> TypeCheckResult {
 auto check_with_prelude(const std::string& user_source,
                         std::span<const std::string> prelude_sources)
     -> TypeCheckResult {
-  auto strip_module = [](std::string_view src) -> std::string_view {
-    size_t i = 0;
-    // Skip whitespace and `//` line comments. Dao only has `//` line
-    // comments (see spec/grammar/dao.ebnf).
-    while (i < src.size()) {
-      char ch = src[i];
-      if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
-        ++i;
-        continue;
-      }
-      if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
-        auto nl = src.find('\n', i);
-        if (nl == std::string_view::npos) {
-          return src.substr(0, 0);
-        }
-        i = nl + 1;
-        continue;
-      }
-      break;
-    }
-    if (i + 6 >= src.size() || src.substr(i, 6) != "module") {
-      return src;
-    }
-    char after = src[i + 6];
-    if (after != ' ' && after != '\t') {
-      return src;
-    }
-    auto nl = src.find('\n', i);
-    if (nl == std::string_view::npos) {
-      return src.substr(0, 0);
-    }
-    return src.substr(nl + 1);
-  };
-
   std::string combined = "module test\n";
   for (const auto& pre : prelude_sources) {
-    combined.append(strip_module(pre));
+    combined.append(strip_leading_module(pre));
     combined += '\n';
   }
   auto prelude_bytes = static_cast<uint32_t>(combined.size());

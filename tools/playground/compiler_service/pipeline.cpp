@@ -1,66 +1,11 @@
 #include "pipeline.h"
+#include "support/module_utils.h"
 
 #include <algorithm>
 #include <fstream>
 
 namespace dao::playground {
 
-namespace {
-
-// Blank a leading `module <path>` line in place — overwrite the
-// `module` keyword and its path segments with spaces, preserving the
-// terminating newline, total byte count, and all offsets past the
-// blanked region. The transitional playground/driver pipelines
-// concatenate stdlib files and user source into a single synthetic
-// compilation unit with exactly one `module` declaration at the top
-// (the injected header), per CONTRACT_SYNTAX_SURFACE.md. Blanking
-// (rather than stripping) is load-bearing for the playground: frontend
-// editor offsets and backend source offsets must stay byte-identical
-// so hover/goto/completion/references/diagnostics positions line up
-// with the editor buffer the user sees. Real multi-file compilation
-// lands with Task 25+.
-void blank_leading_module(std::string& src) {
-  size_t i = 0;
-  // Skip whitespace and `//` line comments until we reach either the
-  // leading `module` keyword or the first non-comment token. Dao only
-  // has `//` line comments (see spec/grammar/dao.ebnf).
-  while (i < src.size()) {
-    char ch = src[i];
-    if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
-      ++i;
-      continue;
-    }
-    if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
-      auto nl = src.find('\n', i);
-      if (nl == std::string::npos) {
-        return;
-      }
-      i = nl + 1;
-      continue;
-    }
-    break;
-  }
-  if (i + 6 >= src.size() || src.compare(i, 6, "module") != 0) {
-    return;
-  }
-  char after = src[i + 6];
-  if (after != ' ' && after != '\t') {
-    return;
-  }
-  auto nl = src.find('\n', i);
-  auto end = (nl == std::string::npos) ? src.size() : nl;
-  for (size_t j = i; j < end; ++j) {
-    src[j] = ' ';
-  }
-}
-
-} // namespace
-
-// Exposed to run.cpp / analyze.cpp so request handlers can blank a
-// user-provided leading `module` header before concatenation without
-// shifting any byte offsets. See the blank_leading_module rationale
-// above for why blanking (not stripping) is required for editor/
-// backend offset alignment.
 void blank_user_leading_module(std::string& src) {
   blank_leading_module(src);
 }

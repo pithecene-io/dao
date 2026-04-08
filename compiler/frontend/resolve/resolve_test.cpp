@@ -13,48 +13,6 @@ using namespace dao;
 
 namespace {
 
-// Strip a leading `module <path>\n` line from the supplied source, if
-// present. Used when concatenating multiple real Dao files into a
-// single synthetic test compilation unit — each real file declares its
-// own module per CONTRACT_SYNTAX_SURFACE.md, but the concatenation is
-// treated as one synthetic module for resolver corpus testing.
-auto strip_leading_module(std::string_view src) -> std::string_view {
-  size_t i = 0;
-  // Skip whitespace and `//` line comments until we reach either the
-  // leading `module` keyword or the first non-comment token. Dao only
-  // has `//` line comments (see spec/grammar/dao.ebnf).
-  while (i < src.size()) {
-    char ch = src[i];
-    if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
-      ++i;
-      continue;
-    }
-    if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
-      auto nl = src.find('\n', i);
-      if (nl == std::string_view::npos) {
-        return src.substr(0, 0);
-      }
-      i = nl + 1;
-      continue;
-    }
-    break;
-  }
-  if (i + 6 >= src.size() || src.substr(i, 6) != "module") {
-    return src;
-  }
-  // Require `module` to be followed by whitespace (not part of an
-  // identifier).
-  char after = src[i + 6];
-  if (after != ' ' && after != '\t') {
-    return src;
-  }
-  auto nl = src.find('\n', i);
-  if (nl == std::string_view::npos) {
-    return src.substr(0, 0);
-  }
-  return src.substr(nl + 1);
-}
-
 struct ResolvedSource {
   SourceBuffer source;
   LexResult lex_result;
