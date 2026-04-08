@@ -1,10 +1,10 @@
 #include "frontend/lexer/lexer.h"
+#include "support/test_utils.h"
 
 #define BOOST_UT_DISABLE_MODULE
 #include <boost/ut.hpp>
 
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 
@@ -12,11 +12,6 @@ namespace {
 
 using namespace boost::ut;
 using namespace dao;
-
-auto read_file(const std::filesystem::path& path) -> std::string {
-  std::ifstream file(path);
-  return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-}
 
 // Holds both the source buffer and lex result so string_view tokens
 // remain valid for the lifetime of the returned object.
