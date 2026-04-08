@@ -122,7 +122,6 @@ void LlvmBackend::declare_functions(const MirModule& mir_module,
     }
 
     std::vector<llvm::Type*> param_types;
-    bool needs_abi_coercion = false;
     for (const auto& local : mir_fn->locals) {
       if (!local.is_param) {
         break; // params come first
@@ -158,7 +157,7 @@ void LlvmBackend::declare_functions(const MirModule& mir_module,
             param_types.push_back(coerced);
           }
         }
-        needs_abi_coercion = true;
+
       } else {
         param_types.push_back(lowered_param);
       }
@@ -187,10 +186,7 @@ void LlvmBackend::declare_functions(const MirModule& mir_module,
         // Multiple coerced types: wrap in a struct for the return value.
         lowered_ret = llvm::StructType::get(ctx_, coercion.coerced_types);
       }
-      needs_abi_coercion = true;
     }
-    (void)needs_abi_coercion;
-
     auto* fn_type =
         llvm::FunctionType::get(lowered_ret, param_types, /*isVarArg=*/false);
     auto* llvm_fn = llvm::Function::Create(
