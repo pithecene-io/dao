@@ -6,7 +6,6 @@ namespace dao {
 
 namespace {
 
-// NOLINTBEGIN(readability-identifier-length)
 class ParserImpl {
 public:
   explicit ParserImpl(const std::vector<Token>& tokens) : tokens_(tokens) {
@@ -193,7 +192,7 @@ private:
   // -----------------------------------------------------------------------
 
   auto parse_module_decl() -> ModuleNode* {
-    const auto& kw = consume(TokenKind::KwModule);
+    const auto& kw = consume(TokenKind::KwModule); // NOLINT(readability-identifier-length)
     auto path = parse_module_path();
     consume(TokenKind::Newline);
     Span span = {.offset = kw.span.offset,
@@ -206,7 +205,7 @@ private:
   // -----------------------------------------------------------------------
 
   auto parse_import() -> ImportNode* {
-    const auto& kw = consume(TokenKind::KwImport);
+    const auto& kw = consume(TokenKind::KwImport); // NOLINT(readability-identifier-length)
     auto path = parse_module_path();
     consume(TokenKind::Newline);
     Span span = {.offset = kw.span.offset,
@@ -316,7 +315,7 @@ private:
   }
 
   auto parse_function_decl(bool is_extern) -> Decl* {
-    const auto& kw = consume(TokenKind::KwFn);
+    const auto& kw = consume(TokenKind::KwFn); // NOLINT(readability-identifier-length)
     const auto& name_tok = consume(TokenKind::Identifier);
 
     auto type_params = parse_type_params();
@@ -406,7 +405,7 @@ private:
   }
 
   auto parse_class_decl() -> Decl* {
-    const auto& kw = consume(TokenKind::KwClass);
+    const auto& kw = consume(TokenKind::KwClass); // NOLINT(readability-identifier-length)
     const auto& name_tok = consume(TokenKind::Identifier);
     auto type_params = parse_type_params();
     consume(TokenKind::Colon);
@@ -453,7 +452,7 @@ private:
   }
 
   auto parse_enum_decl() -> Decl* {
-    const auto& kw = consume(TokenKind::KwEnum);
+    const auto& kw = consume(TokenKind::KwEnum); // NOLINT(readability-identifier-length)
 
     // Check for 'class' keyword after 'enum' -> enum class
     bool is_enum_class = false;
@@ -569,7 +568,7 @@ private:
 
   auto parse_method_decl() -> Decl* {
     // Like parse_function_decl but allows bare signatures (no body).
-    const auto& kw = consume(TokenKind::KwFn);
+    const auto& kw = consume(TokenKind::KwFn); // NOLINT(readability-identifier-length)
     const auto& name_tok = consume(TokenKind::Identifier);
 
     auto method_type_params = parse_type_params();
@@ -639,7 +638,7 @@ private:
   }
 
   auto parse_alias_decl() -> Decl* {
-    const auto& kw = consume(TokenKind::KwType);
+    const auto& kw = consume(TokenKind::KwType); // NOLINT(readability-identifier-length)
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::Eq);
     auto* type = parse_type();
@@ -650,7 +649,7 @@ private:
   }
 
   auto parse_concept_decl(bool is_derived) -> Decl* {
-    const auto& kw = is_derived ? advance() : peek(); // consume 'derived' if present
+    const auto kw = is_derived ? advance() : peek(); // NOLINT(readability-identifier-length)
     if (is_derived) {
       consume(TokenKind::KwConcept);
     } else {
@@ -670,7 +669,7 @@ private:
   }
 
   auto parse_extend_decl() -> Decl* {
-    const auto& kw = advance(); // consume 'extend'
+    const auto& kw = advance(); // NOLINT(readability-identifier-length) consume 'extend'
     auto* target_type = parse_type();
     consume(TokenKind::KwAs);
     const auto& concept_tok = consume(TokenKind::Identifier);
@@ -739,7 +738,7 @@ private:
     case TokenKind::KwYield:
       return parse_yield_statement();
     case TokenKind::KwBreak: {
-      const auto& kw = advance();
+      const auto& kw = advance(); // NOLINT(readability-identifier-length)
       return ctx_.alloc<Stmt>(kw.span, BreakStmtNode{});
     }
     default:
@@ -760,7 +759,7 @@ private:
                           expr->kind() == NodeKind::IndexExpr;
       // Dereference (*ptr) is a valid assignment target for store-through-pointer.
       if (!valid_target && expr->kind() == NodeKind::UnaryExpr) {
-        const auto& un = expr->as<UnaryExpr>();
+        const auto& un = expr->as<UnaryExpr>(); // NOLINT(readability-identifier-length)
         valid_target = un.op == UnaryOp::Deref;
       }
       if (!valid_target) {
@@ -785,7 +784,7 @@ private:
   }
 
   auto parse_let_statement() -> Stmt* {
-    const auto& kw = consume(TokenKind::KwLet);
+    const auto& kw = consume(TokenKind::KwLet); // NOLINT(readability-identifier-length)
     const auto& name_tok = consume(TokenKind::Identifier);
 
     TypeNode* type = nullptr;
@@ -824,7 +823,7 @@ private:
   }
 
   auto parse_if_statement() -> Stmt* {
-    const auto& kw = consume(TokenKind::KwIf);
+    const auto& kw = consume(TokenKind::KwIf); // NOLINT(readability-identifier-length)
     auto* condition = parse_expression();
     if (is_error_expr(condition)) {
       synchronize_to_statement();
@@ -853,7 +852,7 @@ private:
   }
 
   auto parse_match_statement() -> Stmt* {
-    const auto& kw = consume(TokenKind::KwMatch);
+    const auto& kw = consume(TokenKind::KwMatch); // NOLINT(readability-identifier-length)
     auto* scrutinee = parse_expression();
     if (is_error_expr(scrutinee)) {
       synchronize_to_statement();
@@ -938,7 +937,7 @@ private:
   }
 
   auto parse_while_statement() -> Stmt* {
-    const auto& kw = consume(TokenKind::KwWhile);
+    const auto& kw = consume(TokenKind::KwWhile); // NOLINT(readability-identifier-length)
     auto* condition = parse_expression();
     if (is_error_expr(condition)) {
       synchronize_to_statement();
@@ -951,7 +950,7 @@ private:
   }
 
   auto parse_for_statement() -> Stmt* {
-    const auto& kw = consume(TokenKind::KwFor);
+    const auto& kw = consume(TokenKind::KwFor); // NOLINT(readability-identifier-length)
     const auto& var_tok = consume(TokenKind::Identifier);
     consume(TokenKind::KwIn);
     auto* iterable = parse_expression();
@@ -970,7 +969,7 @@ private:
   }
 
   auto parse_mode_block() -> Stmt* {
-    const auto& kw = consume(TokenKind::KwMode);
+    const auto& kw = consume(TokenKind::KwMode); // NOLINT(readability-identifier-length)
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::FatArrow);
     auto body = parse_suite();
@@ -981,7 +980,7 @@ private:
   }
 
   auto parse_resource_block() -> Stmt* {
-    const auto& kw = consume(TokenKind::KwResource);
+    const auto& kw = consume(TokenKind::KwResource); // NOLINT(readability-identifier-length)
     const auto& kind_tok = consume(TokenKind::Identifier);
     const auto& name_tok = consume(TokenKind::Identifier);
     consume(TokenKind::FatArrow);
@@ -996,7 +995,7 @@ private:
   }
 
   auto parse_yield_statement() -> Stmt* {
-    const auto& kw = consume(TokenKind::KwYield);
+    const auto& kw = consume(TokenKind::KwYield); // NOLINT(readability-identifier-length)
     auto* value = parse_expression();
     if (is_error_expr(value)) {
       match(TokenKind::Newline);
@@ -1008,7 +1007,7 @@ private:
   }
 
   auto parse_return_statement() -> Stmt* {
-    const auto& kw = consume(TokenKind::KwReturn);
+    const auto& kw = consume(TokenKind::KwReturn); // NOLINT(readability-identifier-length)
     Expr* value = nullptr;
     if (peek_kind() != TokenKind::Newline && peek_kind() != TokenKind::Dedent &&
         peek_kind() != TokenKind::Eof) {
@@ -1116,7 +1115,7 @@ private:
   auto parse_equality() -> Expr* {
     auto* left = parse_relational();
     while (peek_kind() == TokenKind::EqEq || peek_kind() == TokenKind::BangEq) {
-      auto op = peek_kind() == TokenKind::EqEq ? BinaryOp::EqEq : BinaryOp::BangEq;
+      auto op = peek_kind() == TokenKind::EqEq ? BinaryOp::EqEq : BinaryOp::BangEq; // NOLINT(readability-identifier-length)
       advance();
       auto* right = parse_relational();
       left = make_binary(op, left, right);
@@ -1155,7 +1154,7 @@ private:
   auto parse_additive() -> Expr* {
     auto* left = parse_multiplicative();
     while (peek_kind() == TokenKind::Plus || peek_kind() == TokenKind::Minus) {
-      auto op = peek_kind() == TokenKind::Plus ? BinaryOp::Add : BinaryOp::Sub;
+      auto op = peek_kind() == TokenKind::Plus ? BinaryOp::Add : BinaryOp::Sub; // NOLINT(readability-identifier-length)
       advance();
       auto* right = parse_multiplicative();
       left = make_binary(op, left, right);
@@ -1610,7 +1609,7 @@ private:
         advance();
         type_args.push_back(parse_type());
       }
-      const auto& gt = consume(TokenKind::Gt);
+      const auto& gt = consume(TokenKind::Gt); // NOLINT(readability-identifier-length)
       path.span.length = (gt.span.offset + gt.span.length) - path.span.offset;
     }
 
@@ -1654,7 +1653,6 @@ private:
     return start;
   }
 };
-// NOLINTEND(readability-identifier-length)
 
 } // namespace
 
