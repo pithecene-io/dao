@@ -7,6 +7,7 @@
 #include "ir/mir/mir.h"
 #include "ir/mir/mir_context.h"
 
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -88,7 +89,7 @@ private:
   void emit_region_exits(Span span);
 
   auto resolve_field_index(const Type* obj_type, std::string_view field_name)
-      -> uint32_t;
+      -> std::optional<uint32_t>;
 
   void error(Span span, std::string message);
 };
