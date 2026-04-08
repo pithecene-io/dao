@@ -45,11 +45,6 @@ public:
   [[nodiscard]] auto builtin() const -> BuiltinKind {
     return builtin_;
   }
-
-  static auto classof(const Type* t) -> bool {
-    return t->kind() == TypeKind::Builtin;
-  }
-
 private:
   BuiltinKind builtin_;
 };
@@ -61,9 +56,6 @@ public:
   TypeVoid() : Type(TypeKind::Void) {
   }
 
-  static auto classof(const Type* t) -> bool {
-    return t->kind() == TypeKind::Void;
-  }
 };
 
 class TypePointer : public Type {
@@ -74,11 +66,6 @@ public:
   [[nodiscard]] auto pointee() const -> const Type* {
     return pointee_;
   }
-
-  static auto classof(const Type* t) -> bool {
-    return t->kind() == TypeKind::Pointer;
-  }
-
 private:
   const Type* pointee_;
 };
@@ -95,11 +82,6 @@ public:
   [[nodiscard]] auto return_type() const -> const Type* {
     return return_type_;
   }
-
-  static auto classof(const Type* t) -> bool {
-    return t->kind() == TypeKind::Function;
-  }
-
 private:
   std::vector<const Type*> param_types_;
   const Type* return_type_;
@@ -120,11 +102,6 @@ public:
   [[nodiscard]] auto type_args() const -> const std::vector<const Type*>& {
     return type_args_;
   }
-
-  static auto classof(const Type* t) -> bool {
-    return t->kind() == TypeKind::Named;
-  }
-
 private:
   const void* decl_id_;
   std::string_view name_;
@@ -147,11 +124,6 @@ public:
   [[nodiscard]] auto index() const -> uint32_t {
     return index_;
   }
-
-  static auto classof(const Type* t) -> bool {
-    return t->kind() == TypeKind::GenericParam;
-  }
-
 private:
   const void* binder_;
   std::string_view name_;
@@ -185,11 +157,6 @@ public:
   void set_fields(std::vector<StructField> fields) {
     fields_ = std::move(fields);
   }
-
-  static auto classof(const Type* t) -> bool {
-    return t->kind() == TypeKind::Struct;
-  }
-
 private:
   const void* decl_id_;
   std::string_view name_;
@@ -217,11 +184,6 @@ public:
   [[nodiscard]] auto variants() const -> const std::vector<EnumVariant>& {
     return variants_;
   }
-
-  static auto classof(const Type* t) -> bool {
-    return t->kind() == TypeKind::Enum;
-  }
-
 private:
   const void* decl_id_;
   std::string_view name_;
@@ -239,11 +201,6 @@ public:
   [[nodiscard]] auto yield_type() const -> const Type* {
     return yield_type_;
   }
-
-  static auto classof(const Type* t) -> bool {
-    return t->kind() == TypeKind::Generator;
-  }
-
 private:
   const Type* yield_type_;
 };
