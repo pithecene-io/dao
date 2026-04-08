@@ -8,6 +8,7 @@
 #include "ir/hir/hir_builder.h"
 #include "ir/hir/hir_context.h"
 #include "ir/hir/hir_printer.h"
+#include "support/test_utils.h"
 
 #include <boost/ut.hpp>
 #include <sstream>
@@ -19,16 +20,6 @@ using namespace dao;
 // NOLINTBEGIN(readability-magic-numbers)
 
 namespace {
-
-// Test helper: every source file must begin with a `module` declaration
-// per CONTRACT_SYNTAX_SURFACE.md. Fixtures in this test file focus on
-// HIR behavior below the module layer, so we prepend a canonical
-// `module test` line before lexing.
-inline auto wrap_with_test_module(std::string_view src) -> std::string {
-  std::string wrapped = "module test\n";
-  wrapped.append(src);
-  return wrapped;
-}
 
 /// Owns all pipeline state so HIR nodes remain valid.
 struct HirTestPipeline {
