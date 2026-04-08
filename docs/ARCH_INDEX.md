@@ -143,7 +143,14 @@ Also serves as a playground corpus and early regression corpus.
 
 ## `testdata/`
 
-Fixtures and golden inputs/outputs for future parser/compiler tests.
+Fixtures and golden inputs/outputs for parser/compiler tests.
+
+- `ast/` — golden AST printer output for examples, stdlib, and syntax probes
+- `bootstrap/multifile/` — on-disk multi-file test fixtures for the
+  bootstrap program pipeline (Task 27 D9/D10)
+  - `smoke/` — three-module import graph (core::fmt, app::math, app::main)
+  - `cross_module_enum/` — imported enum variant access
+  - `extend_isolation/` — cross-module import with class export
 
 ## `tools/`
 

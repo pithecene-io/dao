@@ -301,78 +301,81 @@ Task 21 (bootstrap parser extraction) is complete — the parser is
 promoted to `bootstrap/parser/parser.dao` with Tier A syntax coverage,
 arena-indexed AST, 36 golden tests, and self-parse of real Dao source.
 Task 22 (bootstrap resolver) is complete — two-pass name resolution
-with scope chains, symbol tables, uses map, 17 tests.
+with scope chains, symbol tables, uses map, 34 tests (including
+cross-file resolution and program wrapper tests).
 Task 23 (bootstrap type checker) is complete — expression/statement
-type checking with 19 tests.  Task 24 (bootstrap HIR) is complete —
-typed AST lowered to compiler-owned HIR with 14 tests.  Shared
-substrate consolidated in `bootstrap/shared/base.dao`; assembly
-via `bootstrap/assemble.sh`.
+type checking with 37 tests (including cross-module calls, concept
+binding identity, variant validation, and on-disk multi-file fixtures).
+Task 24 (bootstrap HIR) is complete — typed AST lowered to
+compiler-owned HIR with 19 tests (including program-level lowering
+and on-disk multi-file smoke test).  Shared substrate consolidated
+in `bootstrap/shared/base.dao`; assembly via `bootstrap/assemble.sh`.
 
 The Tier A bootstrap pipeline (lex → parse → resolve → typecheck →
-HIR) is complete.  Next focus is the multi-file substrate (Tasks
-25–27), then Tier B feature slices on top.
+HIR) is complete.  Tasks 25–27 (multi-file substrate) are complete —
+the `Program` value threads through resolve → typecheck → HIR with
+canonical type identity, cross-module qualified name typing, and
+program-level HIR aggregation.  Next focus is Tier B feature slices
+(associated items, method dispatch) and bootstrap MIR lowering.
 
 ### Task 25 — Bootstrap Multi-file Compilation + Imports (v1)
 
-**Objective**: Replace assembly-only single-file assumptions with a
-deterministic multi-file substrate and first import/module surface.
+Status: **complete**
 
 See `docs/task_specs/TASK_25_BOOTSTRAP_MULTIFILE.md`.
 
-Deliverables:
-
-- `module` keyword added to bootstrap lexer (and `dao.lex`)
-- `ModuleDeclN` and `ImportDeclN` AST nodes
-- `FileN` extended with a mandatory leading module decl and
-  import list (per `CONTRACT_SYNTAX_SURFACE.md`: every source file
-  must begin with exactly one `module` declaration)
-- program-level compilation layer above per-file parsing
-- file-to-module mapping with deterministic identity
-- module graph construction with cycle detection
-- diagnostics for missing/duplicate modules and import cycles
+- ✓ `module` keyword in bootstrap lexer and `dao.lex`
+- ✓ `ModuleDeclN` and `ImportDeclN` AST nodes
+- ✓ `FileN` with mandatory leading module decl
+- ✓ `ProgramGraph` with deterministic topo sort and cycle detection
+- ✓ diagnostics for missing/duplicate modules and import cycles
 
 ### Task 26 — Bootstrap Cross-file Resolution
 
-**Objective**: Extend the bootstrap resolver from single-file scope
-chains to module-aware cross-file name resolution.
+Status: **complete**
 
 See `docs/task_specs/TASK_26_BOOTSTRAP_CROSS_FILE_RESOLUTION.md`.
 
-Deliverables:
-
-- `Module` symbol kind in bootstrap resolver
-- per-module export tables populated in topo order
-- import bindings create Module symbols in importing scope
-- qualified names resolve through module export tables
-- diagnostics for missing exports and duplicate import bindings
+- ✓ `Module` symbol kind with per-module export tables
+- ✓ import bindings as Module symbols in importing scope
+- ✓ qualified names resolve through module export tables
+- ✓ concepts in module namespace (§6.1)
+- ✓ `extend` blocks scoped at module granularity (§6.5)
 
 ### Task 27 — Bootstrap Cross-file Typecheck + HIR Aggregation
 
-**Objective**: Extend bootstrap type checking and HIR lowering to
-operate over multiple resolved modules with canonical type identity.
+Status: **complete** (#207–#215)
 
 See `docs/task_specs/TASK_27_BOOTSTRAP_PROGRAM_TYPECHECK_AND_HIR.md`.
 
-Deliverables:
+- ✓ `Program` value threaded through resolve → typecheck → HIR
+- ✓ program-wide canonical type table (builtins seeded once)
+- ✓ `ExprId` composite keying (`module_id:node_idx`)
+- ✓ resolver-bound concept identity (D3: no name-based scans)
+- ✓ `owner_module_id` on every symbol (D2: extend-method scoping)
+- ✓ cross-module qualified name typing (D4: `mod::fn`, `mod::Type`,
+  `mod::Enum::Variant` with variant validation)
+- ✓ `program_run_typecheck` — two-pass architecture
+  (pass1 all modules → pass2 all modules)
+- ✓ `HirProgram(module_list_lp)` / `HirModule(name_tok, decls, mid)`
+- ✓ `program_run_hir` — program-level HIR lowering
+- ✓ on-disk multi-file test fixtures under
+  `testdata/bootstrap/multifile/`
+- ✓ Taskfile updated: HIR included in `bootstrap-test`
 
-- program-wide canonical type table spanning all modules
-- cross-file function call and nominal type checking
-- `HirProgram` root aggregating per-module `HirModule` nodes
-- deterministic topo-ordered lowering and HIR dump
-- end-to-end multi-file smoke test
+Known gaps (documented, not blocking):
+- concept satisfaction for extend blocks on builtin types in
+  program mode produces a spurious diagnostic
+- qualified concept references in extend blocks (`as mod::C:`)
+  not supported — parser only accepts unqualified names
+- extend-method isolation only verifiable via dot-call dispatch
+  (Task 28 scope)
+- bootstrap HashMap-in-while codegen bug: worked around via
+  triple-scan fallback in `lookup_use` and `hir_lookup_use`
 
 After Tasks 25–27, the remaining feature-oriented Tier B slices
-(richer patterns, deferred expressions) have a sane multi-file
-substrate to sit on.
-
-Note: methods/associated items and concepts/extend were
-originally sequenced as Tier B slices behind Tasks 25–27, but
-landed earlier in the bootstrap vertical slice work and are
-already present in `bootstrap/typecheck/impl.dao` and
-`bootstrap/hir/impl.dao`.  They will need to be revisited in the
-multi-file substrate only to verify cross-file concept resolution
-and the `extend`-block module-granularity rule frozen in
-`TASK_26_BOOTSTRAP_CROSS_FILE_RESOLUTION.md §6.5`.
+(associated items, method dispatch, richer patterns) have a sane
+multi-file substrate to sit on.
 
 ### Task 14 — Numeric Type Expansion
 
