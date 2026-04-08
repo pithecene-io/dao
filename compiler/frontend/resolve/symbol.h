@@ -36,7 +36,7 @@ struct Symbol {
   SymbolKind kind;
   std::string_view name;
   Span decl_span;            // where the symbol was declared (zero for builtins)
-  const void* decl;          // declaration node (nullptr for builtins)
+  const Decl* decl;           // declaration node (nullptr for builtins)
 
   // --- Typed accessors --------------------------------------------------
   // Each accessor asserts the SymbolKind matches the expected pointer type,
@@ -46,31 +46,31 @@ struct Symbol {
     assert((kind == SymbolKind::Function || kind == SymbolKind::Type ||
             kind == SymbolKind::Param) &&
            "decl_as_decl requires Function, Type, or Param symbol");
-    return static_cast<const Decl*>(decl);
+    return decl;
   }
 
   [[nodiscard]] auto decl_as_stmt() const -> const Stmt* {
     assert(kind == SymbolKind::Local &&
            "decl_as_stmt requires Local symbol");
-    return static_cast<const Stmt*>(decl);
+    return reinterpret_cast<const Stmt*>(decl);
   }
 
   [[nodiscard]] auto decl_as_expr() const -> const Expr* {
     assert(kind == SymbolKind::LambdaParam &&
            "decl_as_expr requires LambdaParam symbol");
-    return static_cast<const Expr*>(decl);
+    return reinterpret_cast<const Expr*>(decl);
   }
 
   [[nodiscard]] auto decl_as_import() const -> const ImportNode* {
     assert(kind == SymbolKind::Module &&
            "decl_as_import requires Module symbol");
-    return static_cast<const ImportNode*>(decl);
+    return reinterpret_cast<const ImportNode*>(decl);
   }
 
   [[nodiscard]] auto decl_as_field() const -> const FieldSpec* {
     assert(kind == SymbolKind::Field &&
            "decl_as_field requires Field symbol");
-    return static_cast<const FieldSpec*>(decl);
+    return reinterpret_cast<const FieldSpec*>(decl);
   }
 };
 

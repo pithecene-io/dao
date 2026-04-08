@@ -17,7 +17,7 @@ auto hash_combine(size_t seed, size_t value) -> size_t {
 }
 
 auto hash_type_ptr(const Type* t) -> size_t {
-  return std::hash<const void*>{}(t);
+  return std::hash<const Type*>{}(t);
 }
 
 } // namespace
@@ -31,7 +31,7 @@ auto TypeContext::FnKeyHash::operator()(const FnKey& key) const -> size_t {
 }
 
 auto TypeContext::NamedKeyHash::operator()(const NamedKey& key) const -> size_t {
-  size_t h = std::hash<const void*>{}(key.decl_id);
+  size_t h = std::hash<const Decl*>{}(key.decl_id);
   for (const auto* a : key.type_args) {
     h = hash_combine(h, hash_type_ptr(a));
   }
@@ -39,7 +39,7 @@ auto TypeContext::NamedKeyHash::operator()(const NamedKey& key) const -> size_t 
 }
 
 auto TypeContext::GenericParamKeyHash::operator()(const GenericParamKey& key) const -> size_t {
-  size_t h = std::hash<const void*>{}(key.binder);
+  size_t h = std::hash<const Decl*>{}(key.binder);
   return hash_combine(h, std::hash<uint32_t>{}(key.index));
 }
 
@@ -96,7 +96,7 @@ auto TypeContext::function_type(std::vector<const Type*> params, const Type* ret
   return it->second;
 }
 
-auto TypeContext::named_type(const void* decl_id,
+auto TypeContext::named_type(const Decl* decl_id,
                              std::string_view name,
                              std::vector<const Type*> type_args) -> const TypeNamed* {
   NamedKey key{decl_id, type_args};
@@ -107,7 +107,7 @@ auto TypeContext::named_type(const void* decl_id,
   return it->second;
 }
 
-auto TypeContext::generic_param(const void* binder, std::string_view name, uint32_t index)
+auto TypeContext::generic_param(const Decl* binder, std::string_view name, uint32_t index)
     -> const TypeGenericParam* {
   GenericParamKey key{binder, index};
   auto [it, inserted] = generic_param_map_.try_emplace(key, nullptr);
@@ -129,17 +129,17 @@ auto TypeContext::generator_type(const Type* yield_type) -> const TypeGenerator*
 // Nominal constructors
 // ---------------------------------------------------------------------------
 
-auto TypeContext::make_struct(const void* decl_id,
+auto TypeContext::make_struct(const Decl* decl_id,
                               std::string_view name,
                               std::vector<StructField> fields) -> const TypeStruct* {
   return arena_.alloc<TypeStruct>(decl_id, name, std::move(fields));
 }
 
-auto TypeContext::make_struct_shell(const void* decl_id, std::string_view name) -> TypeStruct* {
+auto TypeContext::make_struct_shell(const Decl* decl_id, std::string_view name) -> TypeStruct* {
   return arena_.alloc<TypeStruct>(decl_id, name, std::vector<StructField>{});
 }
 
-auto TypeContext::make_enum(const void* decl_id,
+auto TypeContext::make_enum(const Decl* decl_id,
                             std::string_view name,
                             std::vector<EnumVariant> variants) -> const TypeEnum* {
   return arena_.alloc<TypeEnum>(decl_id, name, std::move(variants));

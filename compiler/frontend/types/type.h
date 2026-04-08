@@ -10,6 +10,9 @@
 
 namespace dao {
 
+// Forward declaration — types reference Decl* without depending on ast.h.
+struct Decl;
+
 // ---------------------------------------------------------------------------
 // Base class — all semantic types derive from this.
 // ---------------------------------------------------------------------------
@@ -89,11 +92,11 @@ private:
 
 class TypeNamed : public Type {
 public:
-  TypeNamed(const void* decl_id, std::string_view name, std::vector<const Type*> type_args)
+  TypeNamed(const Decl* decl_id, std::string_view name, std::vector<const Type*> type_args)
       : Type(TypeKind::Named), decl_id_(decl_id), name_(name), type_args_(std::move(type_args)) {
   }
 
-  [[nodiscard]] auto decl_id() const -> const void* {
+  [[nodiscard]] auto decl_id() const -> const Decl* {
     return decl_id_;
   }
   [[nodiscard]] auto name() const -> std::string_view {
@@ -103,19 +106,19 @@ public:
     return type_args_;
   }
 private:
-  const void* decl_id_;
+  const Decl* decl_id_;
   std::string_view name_;
   std::vector<const Type*> type_args_;
 };
 
 class TypeGenericParam : public Type {
 public:
-  TypeGenericParam(const void* binder, std::string_view name, uint32_t index)
+  TypeGenericParam(const Decl* binder, std::string_view name, uint32_t index)
       : Type(TypeKind::GenericParam), binder_(binder), name_(name), index_(index) {
   }
 
   /// The declaration (Decl*) that introduces this type parameter.
-  [[nodiscard]] auto binder() const -> const void* {
+  [[nodiscard]] auto binder() const -> const Decl* {
     return binder_;
   }
   [[nodiscard]] auto name() const -> std::string_view {
@@ -125,7 +128,7 @@ public:
     return index_;
   }
 private:
-  const void* binder_;
+  const Decl* binder_;
   std::string_view name_;
   uint32_t index_;
 };
@@ -137,11 +140,11 @@ struct StructField {
 
 class TypeStruct : public Type {
 public:
-  TypeStruct(const void* decl_id, std::string_view name, std::vector<StructField> fields)
+  TypeStruct(const Decl* decl_id, std::string_view name, std::vector<StructField> fields)
       : Type(TypeKind::Struct), decl_id_(decl_id), name_(name), fields_(std::move(fields)) {
   }
 
-  [[nodiscard]] auto decl_id() const -> const void* {
+  [[nodiscard]] auto decl_id() const -> const Decl* {
     return decl_id_;
   }
   [[nodiscard]] auto name() const -> std::string_view {
@@ -158,7 +161,7 @@ public:
     fields_ = std::move(fields);
   }
 private:
-  const void* decl_id_;
+  const Decl* decl_id_;
   std::string_view name_;
   std::vector<StructField> fields_;
 };
@@ -171,11 +174,11 @@ struct EnumVariant {
 
 class TypeEnum : public Type {
 public:
-  TypeEnum(const void* decl_id, std::string_view name, std::vector<EnumVariant> variants)
+  TypeEnum(const Decl* decl_id, std::string_view name, std::vector<EnumVariant> variants)
       : Type(TypeKind::Enum), decl_id_(decl_id), name_(name), variants_(std::move(variants)) {
   }
 
-  [[nodiscard]] auto decl_id() const -> const void* {
+  [[nodiscard]] auto decl_id() const -> const Decl* {
     return decl_id_;
   }
   [[nodiscard]] auto name() const -> std::string_view {
@@ -185,7 +188,7 @@ public:
     return variants_;
   }
 private:
-  const void* decl_id_;
+  const Decl* decl_id_;
   std::string_view name_;
   std::vector<EnumVariant> variants_;
 };

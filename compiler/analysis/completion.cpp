@@ -31,8 +31,7 @@ auto resolve_symbol_type(const Symbol* sym, const TypeCheckResult& typed)
       (sym->kind == SymbolKind::Function ||
        sym->kind == SymbolKind::Type ||
        sym->kind == SymbolKind::Concept)) {
-    const auto* decl = static_cast<const Decl*>(sym->decl);
-    const auto* decl_type = typed.typed.decl_type(decl);
+    const auto* decl_type = typed.typed.decl_type(sym->decl);
     if (decl_type != nullptr) {
       return print_type(decl_type);
     }
@@ -40,7 +39,7 @@ auto resolve_symbol_type(const Symbol* sym, const TypeCheckResult& typed)
 
   // Parameters — extract from enclosing function type.
   if (sym->kind == SymbolKind::Param && sym->decl != nullptr) {
-    const auto* fn_decl = static_cast<const Decl*>(sym->decl);
+    const auto* fn_decl = sym->decl;
     const auto* fn_type = typed.typed.decl_type(fn_decl);
     if (fn_type != nullptr && fn_type->kind() == TypeKind::Function) {
       const auto* func_type = static_cast<const TypeFunction*>(fn_type);
@@ -58,7 +57,7 @@ auto resolve_symbol_type(const Symbol* sym, const TypeCheckResult& typed)
 
   // Local variables — stmt type.
   if (sym->kind == SymbolKind::Local && sym->decl != nullptr) {
-    const auto* stmt = static_cast<const Stmt*>(sym->decl);
+    const auto* stmt = reinterpret_cast<const Stmt*>(sym->decl);
     const auto* local_type = typed.typed.local_type(stmt);
     if (local_type != nullptr) {
       return print_type(local_type);

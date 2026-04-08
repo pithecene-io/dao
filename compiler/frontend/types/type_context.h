@@ -74,25 +74,25 @@ public:
 
   auto function_type(std::vector<const Type*> params, const Type* ret) -> const TypeFunction*;
 
-  auto named_type(const void* decl_id, std::string_view name, std::vector<const Type*> type_args)
+  auto named_type(const Decl* decl_id, std::string_view name, std::vector<const Type*> type_args)
       -> const TypeNamed*;
 
-  auto generic_param(const void* binder, std::string_view name, uint32_t index)
+  auto generic_param(const Decl* binder, std::string_view name, uint32_t index)
       -> const TypeGenericParam*;
 
   auto generator_type(const Type* yield_type) -> const TypeGenerator*;
 
   // --- Nominal constructors (not interned — each call allocates) ---
 
-  auto make_struct(const void* decl_id, std::string_view name, std::vector<StructField> fields)
+  auto make_struct(const Decl* decl_id, std::string_view name, std::vector<StructField> fields)
       -> const TypeStruct*;
 
   // Allocate a struct type shell with empty fields. Returns a mutable
   // pointer so the caller can call set_fields() once all type shells
   // are registered (enabling forward references between classes).
-  auto make_struct_shell(const void* decl_id, std::string_view name) -> TypeStruct*;
+  auto make_struct_shell(const Decl* decl_id, std::string_view name) -> TypeStruct*;
 
-  auto make_enum(const void* decl_id, std::string_view name, std::vector<EnumVariant> variants)
+  auto make_enum(const Decl* decl_id, std::string_view name, std::vector<EnumVariant> variants)
       -> const TypeEnum*;
 
 private:
@@ -121,7 +121,7 @@ private:
 
   // Named type key: (decl_id, type_args...).
   struct NamedKey {
-    const void* decl_id;
+    const Decl* decl_id;
     std::vector<const Type*> type_args;
 
     auto operator==(const NamedKey& other) const -> bool = default;
@@ -136,7 +136,7 @@ private:
   // Generic param key: (binder, index). The binder pointer
   // distinguishes T@0 from fn f<T> vs T@0 from fn g<T>.
   struct GenericParamKey {
-    const void* binder;
+    const Decl* binder;
     uint32_t index;
 
     auto operator==(const GenericParamKey& other) const -> bool = default;

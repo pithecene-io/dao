@@ -54,7 +54,7 @@ private:
   std::string error_;
 
   // Cache for struct type lowering to break cycles.
-  std::unordered_map<const void*, llvm::StructType*> struct_cache_;
+  std::unordered_map<const Decl*, llvm::StructType*> struct_cache_;
 
   auto lower_builtin(BuiltinKind kind) -> llvm::Type*;
   auto lower_struct(const TypeStruct* type) -> llvm::Type*;

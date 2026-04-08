@@ -147,7 +147,8 @@ private:
           binding_span,
           "duplicate top-level declaration '" + std::string(binding_name) + "'"));
     } else {
-      auto* sym = ctx_.make_symbol(SymbolKind::Module, binding_name, binding_span, &node);
+      auto* sym = ctx_.make_symbol(SymbolKind::Module, binding_name, binding_span,
+                                       reinterpret_cast<const Decl*>(&node));
       file_scope_->declare(binding_name, sym);
     }
   }
@@ -221,7 +222,7 @@ private:
           decl.kind() == NodeKind::FunctionDecl &&
           existing->decl != nullptr) {
         size_t new_arity = decl.as<FunctionDecl>().params.size();
-        const auto* existing_decl = static_cast<const Decl*>(existing->decl);
+        const auto* existing_decl = existing->decl;
 
         // Check arity collision against the overload set AND the
         // original declaration.
@@ -268,9 +269,8 @@ private:
     if (overloads != nullptr) {
       for (const auto* sym : *overloads) {
         if (sym->decl != nullptr) {
-          const auto* decl = static_cast<const Decl*>(sym->decl);
-          if (decl->is<FunctionDecl>() &&
-              decl->as<FunctionDecl>().params.size() == arity) {
+          if (sym->decl->is<FunctionDecl>() &&
+              sym->decl->as<FunctionDecl>().params.size() == arity) {
             return true;
           }
         }
@@ -289,9 +289,8 @@ private:
     }
     for (auto* sym : *overloads) {
       if (sym->decl != nullptr) {
-        const auto* decl = static_cast<const Decl*>(sym->decl);
-        if (decl->is<FunctionDecl>() &&
-            decl->as<FunctionDecl>().params.size() == arity) {
+        if (sym->decl->is<FunctionDecl>() &&
+            sym->decl->as<FunctionDecl>().params.size() == arity) {
           return sym;
         }
       }
@@ -442,7 +441,8 @@ private:
             "duplicate declaration '" + std::string(field->name) + "'"));
       } else {
         auto* sym =
-            ctx_.make_symbol(SymbolKind::Field, field->name, field->name_span, field);
+            ctx_.make_symbol(SymbolKind::Field, field->name, field->name_span,
+                            reinterpret_cast<const Decl*>(field));
         struct_scope->declare(field->name, sym);
       }
 
@@ -600,7 +600,8 @@ private:
             "duplicate declaration '" + std::string(let_stmt.name) + "'"));
       } else {
         auto* sym =
-            ctx_.make_symbol(SymbolKind::Local, let_stmt.name, let_stmt.name_span, &stmt);
+            ctx_.make_symbol(SymbolKind::Local, let_stmt.name, let_stmt.name_span,
+                            reinterpret_cast<const Decl*>(&stmt));
         scope->declare(let_stmt.name, sym);
       }
       break;
@@ -661,7 +662,8 @@ private:
       auto* for_scope = ctx_.make_scope(ScopeKind::Block, scope);
       for_scope->set_range(stmt.span);
       auto* sym = ctx_.make_symbol(
-          SymbolKind::Local, for_stmt.var, for_stmt.var_span, &stmt);
+          SymbolKind::Local, for_stmt.var, for_stmt.var_span,
+          reinterpret_cast<const Decl*>(&stmt));
       for_scope->declare(for_stmt.var, sym);
 
       for (const auto* s : for_stmt.body) {
@@ -874,7 +876,8 @@ private:
               span,
               "duplicate parameter '" + std::string(name) + "'"));
         } else {
-          auto* sym = ctx_.make_symbol(SymbolKind::LambdaParam, name, span, &expr);
+          auto* sym = ctx_.make_symbol(SymbolKind::LambdaParam, name, span,
+                                           reinterpret_cast<const Decl*>(&expr));
           lam_scope->declare(name, sym);
         }
       }

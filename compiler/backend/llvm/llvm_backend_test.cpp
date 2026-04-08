@@ -11,6 +11,7 @@
 #include "ir/hir/hir_context.h"
 #include "ir/mir/mir_builder.h"
 #include "ir/mir/mir_context.h"
+#include "frontend/ast/ast.h"
 #include "support/test_utils.h"
 
 #include <llvm/IR/LLVMContext.h>
@@ -29,7 +30,7 @@ using namespace dao;
 namespace {
 
 // Sentinel declaration identity for testing.
-const int kDeclSentinel = 1;
+const dao::Decl kDeclSentinel{};
 
 /// Full pipeline: source → MIR → LLVM IR.
 struct LlvmTestPipeline {

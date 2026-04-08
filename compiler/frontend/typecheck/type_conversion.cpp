@@ -10,7 +10,7 @@ namespace {
 /// `visiting` tracks struct decl_ids currently being checked to detect
 /// non-pointer self-reference cycles.
 auto is_c_abi_compatible_impl(const Type* type,
-                               std::unordered_set<const void*>& visiting)
+                               std::unordered_set<const Decl*>& visiting)
     -> bool;
 
 } // namespace
@@ -200,14 +200,14 @@ auto is_float(const Type* type) -> bool {
 }
 
 auto is_c_abi_compatible(const Type* type) -> bool {
-  std::unordered_set<const void*> visiting;
+  std::unordered_set<const Decl*> visiting;
   return is_c_abi_compatible_impl(type, visiting);
 }
 
 namespace {
 
 auto is_c_abi_compatible_impl(const Type* type,
-                               std::unordered_set<const void*>& visiting)
+                               std::unordered_set<const Decl*>& visiting)
     -> bool {
   if (type == nullptr) {
     return false;

@@ -1,6 +1,7 @@
 #include "frontend/types/type.h"
 #include "frontend/types/type_context.h"
 #include "frontend/types/type_printer.h"
+#include "frontend/ast/ast.h"
 
 #include <boost/ut.hpp>
 
@@ -10,8 +11,8 @@ using namespace dao;
 namespace {
 
 // Sentinel declaration identities for testing.
-const int kDeclA = 1;
-const int kDeclB = 2;
+const Decl kDeclA{};
+const Decl kDeclB{};
 
 } // namespace
 
