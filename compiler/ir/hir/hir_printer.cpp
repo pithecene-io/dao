@@ -1,6 +1,7 @@
 #include "ir/hir/hir_printer.h"
 
 #include "frontend/types/type_printer.h"
+#include "support/op_str.h"
 #include "support/variant.h"
 
 #include <string>
@@ -236,34 +237,7 @@ private:
 
   // --- Expressions ---
 
-  static auto binary_op_str(BinaryOp op) -> const char* {
-    switch (op) {
-    case BinaryOp::Add:    return "+";
-    case BinaryOp::Sub:    return "-";
-    case BinaryOp::Mul:    return "*";
-    case BinaryOp::Div:    return "/";
-    case BinaryOp::Mod:    return "%";
-    case BinaryOp::EqEq:   return "==";
-    case BinaryOp::BangEq: return "!=";
-    case BinaryOp::Lt:     return "<";
-    case BinaryOp::LtEq:   return "<=";
-    case BinaryOp::Gt:     return ">";
-    case BinaryOp::GtEq:   return ">=";
-    case BinaryOp::And:    return "and";
-    case BinaryOp::Or:     return "or";
-    }
-    return "?";
-  }
-
-  static auto unary_op_str(UnaryOp op) -> const char* {
-    switch (op) {
-    case UnaryOp::Negate: return "-";
-    case UnaryOp::Not:    return "!";
-    case UnaryOp::Deref:  return "*";
-    case UnaryOp::AddrOf: return "&";
-    }
-    return "?";
-  }
+  // binary_op_str / unary_op_str: see support/op_str.h
 
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   void print_expr(const HirExpr& expr) {
