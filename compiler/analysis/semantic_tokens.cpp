@@ -278,6 +278,12 @@ private:
     case NodeKind::AliasDecl:
       visit_alias(decl);
       break;
+    case NodeKind::ConceptDecl:
+      visit_concept(decl);
+      break;
+    case NodeKind::ExtendDecl:
+      visit_extend(decl);
+      break;
     default:
       break;
     }
@@ -335,6 +341,28 @@ private:
 
     if (alias.type != nullptr) {
       visit_type(*alias.type);
+    }
+  }
+
+  void visit_concept(const Decl& decl) {
+    const auto& concept_decl = decl.as<ConceptDecl>();
+    classify(concept_decl.name_span, "decl.type");
+
+    for (const auto* method : concept_decl.methods) {
+      visit_decl(*method);
+    }
+  }
+
+  void visit_extend(const Decl& decl) {
+    const auto& extend = decl.as<ExtendDecl>();
+    if (extend.target_type != nullptr) {
+      visit_type(*extend.target_type);
+    }
+    if (!extend.concept_name.empty()) {
+      classify(extend.concept_span, "use.type");
+    }
+    for (const auto* method : extend.methods) {
+      visit_decl(*method);
     }
   }
 
