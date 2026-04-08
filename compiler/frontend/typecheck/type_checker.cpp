@@ -359,6 +359,7 @@ auto TypeChecker::resolve_symbol_type_for_type_decl(const Symbol* sym) -> const 
 // ---------------------------------------------------------------------------
 
 void TypeChecker::register_declarations(const FileNode& file) {
+  pending_classes_.clear(); // Reset pass-local state for this file.
   register_type_names(file);
   register_enum_variants(file);
   register_struct_fields(file);
