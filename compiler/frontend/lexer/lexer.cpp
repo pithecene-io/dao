@@ -1,145 +1,54 @@
 #include "frontend/lexer/lexer.h"
 
+#include <cassert>
 #include <cctype>
+#include <unordered_map>
 
 namespace dao {
 
+// Lookup table indexed by the underlying uint8_t of TokenKind.
+// Must be kept in sync with the TokenKind enum in token.h.
+// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays)
+static constexpr const char* kTokenKindNames[] = {
+    // Keywords — control
+    "KwModule", "KwImport", "KwExtern", "KwFn", "KwClass", "KwEnum",
+    "KwType", "KwLet", "KwIf", "KwElse", "KwWhile", "KwFor", "KwIn",
+    "KwReturn", "KwYield", "KwBreak", "KwMatch",
+    // Keywords — execution / resource
+    "KwMode", "KwResource",
+    // Keywords — literals
+    "KwTrue", "KwFalse",
+    // Keywords — logical
+    "KwAnd", "KwOr",
+    // Keywords — concepts and conformance
+    "KwConcept", "KwDerived", "KwAs", "KwExtend", "KwDeny", "KwSelf",
+    "KwWhere",
+    // Operators
+    "Colon", "ColonColon", "Arrow", "FatArrow", "Eq", "EqEq", "BangEq",
+    "Lt", "LtEq", "Gt", "GtEq", "Plus", "Minus", "Star", "Slash",
+    "Percent", "Amp", "Bang", "Dot", "DotDot", "Comma", "Pipe", "PipeGt",
+    "Question",
+    // Delimiters
+    "LParen", "RParen", "LBracket", "RBracket",
+    // Literals
+    "IntLiteral", "FloatLiteral", "StringLiteral",
+    // Identifier
+    "Identifier",
+    // Synthetic
+    "Newline", "Indent", "Dedent", "Eof",
+    // Error
+    "Error",
+};
+// NOLINTEND(cppcoreguidelines-avoid-c-arrays)
+
+static_assert(sizeof(kTokenKindNames) / sizeof(kTokenKindNames[0]) ==
+                  static_cast<size_t>(TokenKind::Error) + 1,
+              "kTokenKindNames must cover every TokenKind variant");
+
 auto token_kind_name(TokenKind kind) -> const char* {
-  switch (kind) {
-  case TokenKind::KwModule:
-    return "KwModule";
-  case TokenKind::KwImport:
-    return "KwImport";
-  case TokenKind::KwExtern:
-    return "KwExtern";
-  case TokenKind::KwFn:
-    return "KwFn";
-  case TokenKind::KwClass:
-    return "KwClass";
-  case TokenKind::KwEnum:
-    return "KwEnum";
-  case TokenKind::KwType:
-    return "KwType";
-  case TokenKind::KwLet:
-    return "KwLet";
-  case TokenKind::KwIf:
-    return "KwIf";
-  case TokenKind::KwElse:
-    return "KwElse";
-  case TokenKind::KwWhile:
-    return "KwWhile";
-  case TokenKind::KwFor:
-    return "KwFor";
-  case TokenKind::KwIn:
-    return "KwIn";
-  case TokenKind::KwReturn:
-    return "KwReturn";
-  case TokenKind::KwYield:
-    return "KwYield";
-  case TokenKind::KwBreak:
-    return "KwBreak";
-  case TokenKind::KwMatch:
-    return "KwMatch";
-  case TokenKind::KwMode:
-    return "KwMode";
-  case TokenKind::KwResource:
-    return "KwResource";
-  case TokenKind::KwTrue:
-    return "KwTrue";
-  case TokenKind::KwFalse:
-    return "KwFalse";
-  case TokenKind::KwAnd:
-    return "KwAnd";
-  case TokenKind::KwOr:
-    return "KwOr";
-  case TokenKind::KwConcept:
-    return "KwConcept";
-  case TokenKind::KwDerived:
-    return "KwDerived";
-  case TokenKind::KwAs:
-    return "KwAs";
-  case TokenKind::KwExtend:
-    return "KwExtend";
-  case TokenKind::KwDeny:
-    return "KwDeny";
-  case TokenKind::KwSelf:
-    return "KwSelf";
-  case TokenKind::KwWhere:
-    return "KwWhere";
-  case TokenKind::Colon:
-    return "Colon";
-  case TokenKind::ColonColon:
-    return "ColonColon";
-  case TokenKind::Arrow:
-    return "Arrow";
-  case TokenKind::FatArrow:
-    return "FatArrow";
-  case TokenKind::Eq:
-    return "Eq";
-  case TokenKind::EqEq:
-    return "EqEq";
-  case TokenKind::BangEq:
-    return "BangEq";
-  case TokenKind::Lt:
-    return "Lt";
-  case TokenKind::LtEq:
-    return "LtEq";
-  case TokenKind::Gt:
-    return "Gt";
-  case TokenKind::GtEq:
-    return "GtEq";
-  case TokenKind::Plus:
-    return "Plus";
-  case TokenKind::Minus:
-    return "Minus";
-  case TokenKind::Star:
-    return "Star";
-  case TokenKind::Slash:
-    return "Slash";
-  case TokenKind::Percent:
-    return "Percent";
-  case TokenKind::Amp:
-    return "Amp";
-  case TokenKind::Bang:
-    return "Bang";
-  case TokenKind::Dot:
-    return "Dot";
-  case TokenKind::DotDot:
-    return "DotDot";
-  case TokenKind::Comma:
-    return "Comma";
-  case TokenKind::Pipe:
-    return "Pipe";
-  case TokenKind::PipeGt:
-    return "PipeGt";
-  case TokenKind::Question:
-    return "Question";
-  case TokenKind::LParen:
-    return "LParen";
-  case TokenKind::RParen:
-    return "RParen";
-  case TokenKind::LBracket:
-    return "LBracket";
-  case TokenKind::RBracket:
-    return "RBracket";
-  case TokenKind::IntLiteral:
-    return "IntLiteral";
-  case TokenKind::FloatLiteral:
-    return "FloatLiteral";
-  case TokenKind::StringLiteral:
-    return "StringLiteral";
-  case TokenKind::Identifier:
-    return "Identifier";
-  case TokenKind::Newline:
-    return "Newline";
-  case TokenKind::Indent:
-    return "Indent";
-  case TokenKind::Dedent:
-    return "Dedent";
-  case TokenKind::Eof:
-    return "Eof";
-  case TokenKind::Error:
-    return "Error";
+  auto idx = static_cast<std::uint8_t>(kind);
+  if (idx < sizeof(kTokenKindNames) / sizeof(kTokenKindNames[0])) {
+    return kTokenKindNames[idx]; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
   }
   return "Unknown";
 }
@@ -231,6 +140,7 @@ private:
   }
 
   auto advance() -> char {
+    assert(pos_ < src_.size() && "advance() called past end of source");
     char cur = src_[pos_];
     ++pos_;
     return cur;
@@ -537,99 +447,44 @@ private:
     emit(kind, start, pos_ - start);
   }
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   static auto classify_keyword(std::string_view word) -> TokenKind {
-    if (word == "module") {
-      return TokenKind::KwModule;
-    }
-    if (word == "import") {
-      return TokenKind::KwImport;
-    }
-    if (word == "extern") {
-      return TokenKind::KwExtern;
-    }
-    if (word == "fn") {
-      return TokenKind::KwFn;
-    }
-    if (word == "class") {
-      return TokenKind::KwClass;
-    }
-    if (word == "enum") {
-      return TokenKind::KwEnum;
-    }
-    if (word == "type") {
-      return TokenKind::KwType;
-    }
-    if (word == "let") {
-      return TokenKind::KwLet;
-    }
-    if (word == "if") {
-      return TokenKind::KwIf;
-    }
-    if (word == "else") {
-      return TokenKind::KwElse;
-    }
-    if (word == "while") {
-      return TokenKind::KwWhile;
-    }
-    if (word == "for") {
-      return TokenKind::KwFor;
-    }
-    if (word == "in") {
-      return TokenKind::KwIn;
-    }
-    if (word == "return") {
-      return TokenKind::KwReturn;
-    }
-    if (word == "yield") {
-      return TokenKind::KwYield;
-    }
-    if (word == "match") {
-      return TokenKind::KwMatch;
-    }
-    if (word == "break") {
-      return TokenKind::KwBreak;
-    }
-    if (word == "mode") {
-      return TokenKind::KwMode;
-    }
-    if (word == "resource") {
-      return TokenKind::KwResource;
-    }
-    if (word == "true") {
-      return TokenKind::KwTrue;
-    }
-    if (word == "false") {
-      return TokenKind::KwFalse;
-    }
-    if (word == "and") {
-      return TokenKind::KwAnd;
-    }
-    if (word == "or") {
-      return TokenKind::KwOr;
-    }
-    if (word == "concept") {
-      return TokenKind::KwConcept;
-    }
-    if (word == "derived") {
-      return TokenKind::KwDerived;
-    }
-    if (word == "as") {
-      return TokenKind::KwAs;
-    }
-    if (word == "extend") {
-      return TokenKind::KwExtend;
-    }
-    if (word == "deny") {
-      return TokenKind::KwDeny;
-    }
-    if (word == "self") {
-      return TokenKind::KwSelf;
-    }
-    if (word == "where") {
-      return TokenKind::KwWhere;
-    }
-    return TokenKind::Identifier;
+    // O(1) keyword lookup via static hash map, replacing the
+    // previous 30-element linear if-chain.
+    static const auto* keywords =
+        new std::unordered_map<std::string_view, TokenKind>{
+            {"module", TokenKind::KwModule},
+            {"import", TokenKind::KwImport},
+            {"extern", TokenKind::KwExtern},
+            {"fn", TokenKind::KwFn},
+            {"class", TokenKind::KwClass},
+            {"enum", TokenKind::KwEnum},
+            {"type", TokenKind::KwType},
+            {"let", TokenKind::KwLet},
+            {"if", TokenKind::KwIf},
+            {"else", TokenKind::KwElse},
+            {"while", TokenKind::KwWhile},
+            {"for", TokenKind::KwFor},
+            {"in", TokenKind::KwIn},
+            {"return", TokenKind::KwReturn},
+            {"yield", TokenKind::KwYield},
+            {"match", TokenKind::KwMatch},
+            {"break", TokenKind::KwBreak},
+            {"mode", TokenKind::KwMode},
+            {"resource", TokenKind::KwResource},
+            {"true", TokenKind::KwTrue},
+            {"false", TokenKind::KwFalse},
+            {"and", TokenKind::KwAnd},
+            {"or", TokenKind::KwOr},
+            {"concept", TokenKind::KwConcept},
+            {"derived", TokenKind::KwDerived},
+            {"as", TokenKind::KwAs},
+            {"extend", TokenKind::KwExtend},
+            {"deny", TokenKind::KwDeny},
+            {"self", TokenKind::KwSelf},
+            {"where", TokenKind::KwWhere},
+        };
+    auto found = keywords->find(word);
+    return found != keywords->end() ? found->second : TokenKind::Identifier;
   }
 };
 
