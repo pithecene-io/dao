@@ -19,20 +19,22 @@ namespace dao {
 // Typed identifiers
 // ---------------------------------------------------------------------------
 
-struct MirValueId {
+/// Type-safe IR identifier — prevents accidentally passing a BlockId
+/// where a MirValueId is expected. Each tag type produces a distinct
+/// C++ type with identical runtime layout (uint32_t).
+template <typename Tag>
+struct MirId {
   uint32_t id = UINT32_MAX;
   [[nodiscard]] auto valid() const -> bool { return id != UINT32_MAX; }
 };
 
-struct BlockId {
-  uint32_t id = UINT32_MAX;
-  [[nodiscard]] auto valid() const -> bool { return id != UINT32_MAX; }
-};
+struct MirValueTag {};
+struct BlockTag {};
+struct LocalTag {};
 
-struct LocalId {
-  uint32_t id = UINT32_MAX;
-  [[nodiscard]] auto valid() const -> bool { return id != UINT32_MAX; }
-};
+using MirValueId = MirId<MirValueTag>;
+using BlockId = MirId<BlockTag>;
+using LocalId = MirId<LocalTag>;
 
 // ---------------------------------------------------------------------------
 // MirLocal — named storage slot
