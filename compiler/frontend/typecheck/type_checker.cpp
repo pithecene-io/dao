@@ -2494,7 +2494,7 @@ void TypeChecker::build_method_table(const FileNode& file) {
   for (const auto& [type, concepts] : derived_conformances_) {
     for (const auto* concept_decl : concepts) {
       const auto& cpt = concept_decl->as<ConceptDecl>();
-      ConceptSelfMapGuard guard(concept_self_map_);
+      ConceptSelfMapGuard guard(concept_self_map_, cpt.name);
       concept_self_map_[cpt.name] = type;
       for (const auto* cpt_method_decl : cpt.methods) {
         const auto& method = cpt_method_decl->as<FunctionDecl>();
@@ -2603,7 +2603,7 @@ auto TypeChecker::lookup_method(const Type* obj_type,
           for (const auto* method_decl : cpt.methods) {
             const auto& method = method_decl->as<FunctionDecl>();
             if (method.name == name) {
-              ConceptSelfMapGuard guard(concept_self_map_);
+              ConceptSelfMapGuard guard(concept_self_map_, cpt.name);
               concept_self_map_[cpt.name] = obj_type;
               return build_method_fn_type(method);
             }
