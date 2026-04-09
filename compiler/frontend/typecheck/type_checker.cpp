@@ -144,7 +144,7 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
       if (sym->kind == SymbolKind::GenericParam) {
         // Find the parameter index from the enclosing declaration.
         uint32_t index = find_generic_param_index(sym);
-        return types_.generic_param(sym->decl, sym->name, index);
+        return types_.generic_param(sym->decl_as_decl(), sym->name, index);
       }
       // Concept name in type position: substitute the conforming type
       // when inside a context that has set concept_self_map_ (§3.2).
@@ -407,7 +407,7 @@ void TypeChecker::register_type_names(const FileNode& file) {
       }
       const auto* sym = decl_it->second;
 
-      auto* shell = types_.make_struct_shell(sym, st.name);
+      auto* shell = types_.make_struct_shell(decl, st.name);
       symbol_types_[sym] = shell;
       typed_.set_decl_type(decl, shell);
       pending_classes_.push_back({&st, decl, shell});
@@ -453,7 +453,7 @@ void TypeChecker::register_enum_variants(const FileNode& file) {
       }
       variants.push_back({variant.name, std::move(payload_types), variant.field_names});
     }
-    const auto* enum_type = types_.make_enum(sym, en.name, std::move(variants));
+    const auto* enum_type = types_.make_enum(decl, en.name, std::move(variants));
     symbol_types_[sym] = enum_type;
     typed_.set_decl_type(decl, enum_type);
   }
@@ -606,9 +606,8 @@ auto TypeChecker::type_conforms_to(const Type* type, const Decl* concept_decl) -
   // Check explicit conformance: inline `as` blocks on structs.
   if (type->kind() == TypeKind::Struct) {
     const auto* struct_type = static_cast<const TypeStruct*>(type);
-    const auto* decl_sym = static_cast<const Symbol*>(struct_type->decl_id());
-    if (decl_sym != nullptr && decl_sym->decl != nullptr) {
-      const auto* decl_node = static_cast<const Decl*>(decl_sym->decl);
+    const auto* decl_node = struct_type->decl_id();
+    if (decl_node != nullptr) {
       if (decl_node->is<ClassDecl>()) {
         const auto& cls = decl_node->as<ClassDecl>();
         const auto& concept_name = concept_decl->as<ConceptDecl>().name;
@@ -780,9 +779,8 @@ void TypeChecker::check_declaration(const Decl* decl) {
     // Diagnose extend targeting a type that denies the concept.
     if (ctx_.self_type != nullptr && ctx_.self_type->kind() == TypeKind::Struct) {
       const auto* st = static_cast<const TypeStruct*>(ctx_.self_type);
-      const auto* dsym = static_cast<const Symbol*>(st->decl_id());
-      if (dsym != nullptr && dsym->decl != nullptr) {
-        const auto* dnode = static_cast<const Decl*>(dsym->decl);
+      const auto* dnode = st->decl_id();
+      if (dnode != nullptr) {
         if (dnode->is<ClassDecl>()) {
           for (const auto& deny : dnode->as<ClassDecl>().denials) {
             if (deny.concept_name == ext.concept_name) {
@@ -1837,7 +1835,7 @@ void TypeChecker::verify_concept_constraints(
       sym_it->second->decl == nullptr) {
     return;
   }
-  const auto* fn_decl = static_cast<const Decl*>(sym_it->second->decl);
+  const auto* fn_decl = sym_it->second->decl_as_decl();
   if (!fn_decl->is<FunctionDecl>()) {
     return;
   }
@@ -1854,7 +1852,7 @@ void TypeChecker::verify_concept_constraints(
           csym_it->second->decl == nullptr) {
         continue;
       }
-      const auto* concept_decl = static_cast<const Decl*>(csym_it->second->decl);
+      const auto* concept_decl = csym_it->second->decl_as_decl();
       if (!type_conforms_to(binding_it->second, concept_decl)) {
         error(error_span,
               "type '" + print_type(binding_it->second) + "' does not satisfy concept '" +
@@ -2076,7 +2074,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
       // Determine expected type param count.
       size_t expected_count = 0;
       if (sym_it->second->decl != nullptr) {
-        const auto* fn_decl = static_cast<const Decl*>(sym_it->second->decl);
+        const auto* fn_decl = sym_it->second->decl_as_decl();
         if (fn_decl->is<FunctionDecl>()) {
           expected_count = fn_decl->as<FunctionDecl>().type_params.size();
           // For class methods (no own type params), use the enclosing
@@ -2581,7 +2579,7 @@ auto TypeChecker::lookup_method(const Type* obj_type,
   if (obj_type->kind() == TypeKind::GenericParam) {
     const auto* gp = static_cast<const TypeGenericParam*>(obj_type);
     if (gp->binder() != nullptr) {
-      const auto* decl_node = static_cast<const Decl*>(gp->binder());
+      const auto* decl_node = gp->binder();
       const std::vector<GenericParam>* type_params = nullptr;
       if (decl_node->is<FunctionDecl>()) {
         type_params = &decl_node->as<FunctionDecl>().type_params;
@@ -2595,7 +2593,7 @@ auto TypeChecker::lookup_method(const Type* obj_type,
           if (sym_it == resolve_.uses.end() || sym_it->second->kind != SymbolKind::Concept) {
             continue;
           }
-          const auto* cpt_decl = static_cast<const Decl*>(sym_it->second->decl);
+          const auto* cpt_decl = sym_it->second->decl_as_decl();
           if (cpt_decl == nullptr || !cpt_decl->is<ConceptDecl>()) {
             continue;
           }
@@ -2750,7 +2748,7 @@ auto TypeChecker::find_generic_param_index(const Symbol* sym) -> uint32_t {
   if (sym->decl == nullptr) {
     return 0;
   }
-  const auto* decl = static_cast<const Decl*>(sym->decl);
+  const auto* decl = sym->decl_as_decl();
 
   const std::vector<GenericParam>* type_params = nullptr;
   if (decl->is<FunctionDecl>()) {

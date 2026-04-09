@@ -76,7 +76,7 @@ auto query_hover(uint32_t offset, const ResolveResult& resolve,
   if (sym->decl != nullptr &&
       (sym->kind == SymbolKind::Function ||
        sym->kind == SymbolKind::Type)) {
-    const auto* decl = static_cast<const Decl*>(sym->decl);
+    const auto* decl = sym->decl_as_decl();
     const auto* decl_type = typed.typed.decl_type(decl);
     if (decl_type != nullptr) {
       result.type = print_type(decl_type);
@@ -86,7 +86,7 @@ auto query_hover(uint32_t offset, const ResolveResult& resolve,
   // For parameters, extract the type from the enclosing function's type
   // by matching the parameter name.
   if (sym->kind == SymbolKind::Param && sym->decl != nullptr) {
-    const auto* fn_decl = static_cast<const Decl*>(sym->decl);
+    const auto* fn_decl = sym->decl_as_decl();
     const auto* fn_type = typed.typed.decl_type(fn_decl);
     if (fn_type != nullptr && fn_type->kind() == TypeKind::Function) {
       const auto* ft = static_cast<const TypeFunction*>(fn_type);
@@ -105,7 +105,7 @@ auto query_hover(uint32_t offset, const ResolveResult& resolve,
 
   // For local variables, the type comes from the Stmt.
   if (sym->kind == SymbolKind::Local && sym->decl != nullptr) {
-    const auto* stmt = static_cast<const Stmt*>(sym->decl);
+    const auto* stmt = sym->decl_as_stmt();
     const auto* local_type = typed.typed.local_type(stmt);
     if (local_type != nullptr) {
       result.type = print_type(local_type);

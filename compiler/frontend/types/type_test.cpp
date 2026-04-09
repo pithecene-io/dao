@@ -10,8 +10,12 @@ using namespace dao;
 namespace {
 
 // Sentinel declaration identities for testing.
-const int kDeclA = 1;
-const int kDeclB = 2;
+// These are never dereferenced — they serve only as distinct pointer values
+// for nominal type identity checks.
+// NOLINTBEGIN(performance-no-int-to-ptr)
+const auto* kDeclA = reinterpret_cast<const Decl*>(uintptr_t{1});
+const auto* kDeclB = reinterpret_cast<const Decl*>(uintptr_t{2});
+// NOLINTEND(performance-no-int-to-ptr)
 
 } // namespace
 
@@ -149,8 +153,8 @@ suite<"type_function"> type_function = [] {
 suite<"type_named"> type_named = [] {
   "named type with zero args"_test = [] {
     TypeContext ctx;
-    auto* t1 = ctx.named_type(&kDeclA, "Point", {});
-    auto* t2 = ctx.named_type(&kDeclA, "Point", {});
+    auto* t1 = ctx.named_type(kDeclA, "Point", {});
+    auto* t2 = ctx.named_type(kDeclA, "Point", {});
     expect(t1 == t2);
     expect(t1->name() == "Point");
     expect(t1->type_args().empty());
@@ -158,22 +162,22 @@ suite<"type_named"> type_named = [] {
 
   "named type with args canonicalizes"_test = [] {
     TypeContext ctx;
-    auto* t1 = ctx.named_type(&kDeclA, "List", {ctx.i32()});
-    auto* t2 = ctx.named_type(&kDeclA, "List", {ctx.i32()});
+    auto* t1 = ctx.named_type(kDeclA, "List", {ctx.i32()});
+    auto* t2 = ctx.named_type(kDeclA, "List", {ctx.i32()});
     expect(t1 == t2) << "List[i32] twice should yield same pointer";
   };
 
   "named types with different args are distinct"_test = [] {
     TypeContext ctx;
-    auto* t1 = ctx.named_type(&kDeclA, "List", {ctx.i32()});
-    auto* t2 = ctx.named_type(&kDeclA, "List", {ctx.f64()});
+    auto* t1 = ctx.named_type(kDeclA, "List", {ctx.i32()});
+    auto* t2 = ctx.named_type(kDeclA, "List", {ctx.f64()});
     expect(t1 != t2) << "List[i32] and List[f64] should be distinct";
   };
 
   "different decl_id with same name yields distinct types"_test = [] {
     TypeContext ctx;
-    auto* t1 = ctx.named_type(&kDeclA, "Foo", {});
-    auto* t2 = ctx.named_type(&kDeclB, "Foo", {});
+    auto* t1 = ctx.named_type(kDeclA, "Foo", {});
+    auto* t2 = ctx.named_type(kDeclB, "Foo", {});
     expect(t1 != t2) << "nominal identity is declaration-backed";
   };
 };
@@ -185,31 +189,31 @@ suite<"type_named"> type_named = [] {
 suite<"type_generic_param"> type_generic_param = [] {
   "generic param creation"_test = [] {
     TypeContext ctx;
-    auto* t = ctx.generic_param(&kDeclA, "T", 0);
+    auto* t = ctx.generic_param(kDeclA, "T", 0);
     expect(t != nullptr);
     expect(t->name() == "T");
     expect(t->index() == 0u);
-    expect(t->binder() == &kDeclA);
+    expect(t->binder() == kDeclA);
   };
 
   "same binder same index canonicalizes"_test = [] {
     TypeContext ctx;
-    auto* t1 = ctx.generic_param(&kDeclA, "T", 0);
-    auto* t2 = ctx.generic_param(&kDeclA, "T", 0);
+    auto* t1 = ctx.generic_param(kDeclA, "T", 0);
+    auto* t2 = ctx.generic_param(kDeclA, "T", 0);
     expect(t1 == t2);
   };
 
   "different index at same binder is distinct"_test = [] {
     TypeContext ctx;
-    auto* t1 = ctx.generic_param(&kDeclA, "T", 0);
-    auto* t2 = ctx.generic_param(&kDeclA, "U", 1);
+    auto* t1 = ctx.generic_param(kDeclA, "T", 0);
+    auto* t2 = ctx.generic_param(kDeclA, "U", 1);
     expect(t1 != t2);
   };
 
   "same name and index at different binders are distinct"_test = [] {
     TypeContext ctx;
-    auto* t1 = ctx.generic_param(&kDeclA, "T", 0);
-    auto* t2 = ctx.generic_param(&kDeclB, "T", 0);
+    auto* t1 = ctx.generic_param(kDeclA, "T", 0);
+    auto* t2 = ctx.generic_param(kDeclB, "T", 0);
     expect(t1 != t2) << "T@0 from different declarations must not collapse";
   };
 };
@@ -221,7 +225,7 @@ suite<"type_generic_param"> type_generic_param = [] {
 suite<"type_struct_enum"> type_struct_enum = [] {
   "struct creation with fields"_test = [] {
     TypeContext ctx;
-    auto* s = ctx.make_struct(&kDeclA, "Point", {{"x", ctx.f64()}, {"y", ctx.f64()}});
+    auto* s = ctx.make_struct(kDeclA, "Point", {{"x", ctx.f64()}, {"y", ctx.f64()}});
     expect(s != nullptr);
     expect(s->kind() == TypeKind::Struct);
     expect(s->name() == "Point");
@@ -232,14 +236,14 @@ suite<"type_struct_enum"> type_struct_enum = [] {
 
   "each make_struct call produces distinct object"_test = [] {
     TypeContext ctx;
-    auto* s1 = ctx.make_struct(&kDeclA, "Point", {{"x", ctx.f64()}});
-    auto* s2 = ctx.make_struct(&kDeclA, "Point", {{"x", ctx.f64()}});
+    auto* s1 = ctx.make_struct(kDeclA, "Point", {{"x", ctx.f64()}});
+    auto* s2 = ctx.make_struct(kDeclA, "Point", {{"x", ctx.f64()}});
     expect(s1 != s2) << "nominal types are not interned";
   };
 
   "enum creation with variants"_test = [] {
     TypeContext ctx;
-    auto* e = ctx.make_enum(&kDeclA, "Option", {{"None", {}}, {"Some", {ctx.i32()}}});
+    auto* e = ctx.make_enum(kDeclA, "Option", {{"None", {}}, {"Some", {ctx.i32()}}});
     expect(e != nullptr);
     expect(e->kind() == TypeKind::Enum);
     expect(e->name() == "Option");
@@ -283,31 +287,31 @@ suite<"type_printer"> type_printer = [] {
 
   "print named type without args"_test = [] {
     TypeContext ctx;
-    auto* t = ctx.named_type(&kDeclA, "Point", {});
+    auto* t = ctx.named_type(kDeclA, "Point", {});
     expect(print_type(t) == "Point");
   };
 
   "print named type with args"_test = [] {
     TypeContext ctx;
-    auto* t = ctx.named_type(&kDeclA, "List", {ctx.i32()});
+    auto* t = ctx.named_type(kDeclA, "List", {ctx.i32()});
     expect(print_type(t) == "List<i32>");
   };
 
   "print generic param"_test = [] {
     TypeContext ctx;
-    auto* t = ctx.generic_param(&kDeclA, "T", 0);
+    auto* t = ctx.generic_param(kDeclA, "T", 0);
     expect(print_type(t) == "T");
   };
 
   "print struct"_test = [] {
     TypeContext ctx;
-    auto* s = ctx.make_struct(&kDeclA, "Point", {{"x", ctx.f64()}});
+    auto* s = ctx.make_struct(kDeclA, "Point", {{"x", ctx.f64()}});
     expect(print_type(s) == "Point");
   };
 
   "print enum"_test = [] {
     TypeContext ctx;
-    auto* e = ctx.make_enum(&kDeclA, "Color", {{"Red", {}}, {"Blue", {}}});
+    auto* e = ctx.make_enum(kDeclA, "Color", {{"Red", {}}, {"Blue", {}}});
     expect(print_type(e) == "Color");
   };
 

@@ -29,7 +29,10 @@ using namespace dao;
 namespace {
 
 // Sentinel declaration identity for testing.
-const int kDeclSentinel = 1;
+// Never dereferenced — serves only as a distinct pointer value.
+// NOLINTBEGIN(performance-no-int-to-ptr)
+const auto* kDeclSentinel = reinterpret_cast<const Decl*>(uintptr_t{1});
+// NOLINTEND(performance-no-int-to-ptr)
 
 /// Full pipeline: source → MIR → LLVM IR.
 struct LlvmTestPipeline {
@@ -151,7 +154,7 @@ suite<"type_lowering"> type_lowering = [] {
     LlvmTypeLowering lowering(ctx);
     TypeContext types;
 
-    auto* gp = types.generic_param(&kDeclSentinel, "T", 0);
+    auto* gp = types.generic_param(kDeclSentinel, "T", 0);
     expect(lowering.lower(gp) == nullptr);
     expect(contains(lowering.error(), "generic"));
   };

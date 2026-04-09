@@ -221,7 +221,7 @@ private:
           decl.kind() == NodeKind::FunctionDecl &&
           existing->decl != nullptr) {
         size_t new_arity = decl.as<FunctionDecl>().params.size();
-        const auto* existing_decl = static_cast<const Decl*>(existing->decl);
+        const auto* existing_decl = existing->decl_as_decl();
 
         // Check arity collision against the overload set AND the
         // original declaration.
@@ -268,7 +268,7 @@ private:
     if (overloads != nullptr) {
       for (const auto* sym : *overloads) {
         if (sym->decl != nullptr) {
-          const auto* decl = static_cast<const Decl*>(sym->decl);
+          const auto* decl = sym->decl_as_decl();
           if (decl->is<FunctionDecl>() &&
               decl->as<FunctionDecl>().params.size() == arity) {
             return true;
@@ -289,7 +289,7 @@ private:
     }
     for (auto* sym : *overloads) {
       if (sym->decl != nullptr) {
-        const auto* decl = static_cast<const Decl*>(sym->decl);
+        const auto* decl = sym->decl_as_decl();
         if (decl->is<FunctionDecl>() &&
             decl->as<FunctionDecl>().params.size() == arity) {
           return sym;
