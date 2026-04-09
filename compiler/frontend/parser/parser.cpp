@@ -23,6 +23,17 @@ private:
   std::vector<Diagnostic> diagnostics_;
   bool in_pipe_target_ = false;
 
+  /// RAII guard that sets in_pipe_target_ to true for the scope's
+  /// lifetime and restores the previous value on destruction.
+  struct PipeTargetGuard {
+    bool& flag;
+    bool saved;
+    explicit PipeTargetGuard(bool& f) : flag(f), saved(f) { flag = true; } // NOLINT(readability-identifier-length)
+    ~PipeTargetGuard() { flag = saved; }
+    PipeTargetGuard(const PipeTargetGuard&) = delete;
+    auto operator=(const PipeTargetGuard&) -> PipeTargetGuard& = delete;
+  };
+
   // -----------------------------------------------------------------------
   // Token access
   // -----------------------------------------------------------------------
@@ -851,6 +862,75 @@ private:
                                         .else_body = std::move(else_body)});
   }
 
+  /// Try to rewrite a CallExpr pattern as a destructuring pattern.
+  /// Returns true if the pattern was rewritten: *pattern is replaced
+  /// with the callee, bindings/binding_spans are filled, and has_rest
+  /// is set if a `..` rest marker was present.
+  static auto try_destructure_pattern(Expr*& pattern,
+                                      std::vector<std::string_view>& bindings,
+                                      std::vector<Span>& binding_spans,
+                                      bool& has_rest) -> bool {
+    if (!pattern->is<CallExpr>()) {
+      return false;
+    }
+    const auto& call = pattern->as<CallExpr>();
+    if (!call.callee->is<FieldExpr>() && !call.callee->is<QualifiedName>()) {
+      return false;
+    }
+    // All args must be simple identifiers for destructuring.
+    for (const auto* arg : call.args) {
+      if (!arg->is<IdentifierExpr>()) {
+        return false;
+      }
+    }
+    // Check for `..` rest marker in arg_names.
+    bool trailing_rest = false;
+    for (const auto& arg_name : call.arg_names) {
+      if (arg_name.data() != nullptr && arg_name == "..") {
+        trailing_rest = true;
+      }
+    }
+    if (call.args.empty() && !trailing_rest) {
+      return false;
+    }
+    for (const auto* arg : call.args) {
+      const auto& ident = arg->as<IdentifierExpr>();
+      bindings.push_back(ident.name);
+      binding_spans.push_back(arg->span);
+    }
+    has_rest = trailing_rest;
+    pattern = call.callee;
+    return true;
+  }
+
+  auto parse_match_arm() -> MatchArm {
+    auto* pattern = parse_expression();
+    std::vector<std::string_view> bindings;
+    std::vector<Span> binding_spans;
+    bool has_rest = false;
+    try_destructure_pattern(pattern, bindings, binding_spans, has_rest);
+
+    // Optional `as` binding: `Pattern as name:`
+    std::string_view as_binding;
+    Span as_binding_span{};
+    if (peek_kind() == TokenKind::KwAs) {
+      advance();
+      const auto& binding_tok = consume(TokenKind::Identifier);
+      as_binding = binding_tok.text;
+      as_binding_span = binding_tok.span;
+    }
+
+    consume(TokenKind::Colon);
+    auto body = parse_suite();
+    return {.pattern = pattern,
+            .bindings = std::move(bindings),
+            .binding_spans = std::move(binding_spans),
+            .has_rest = has_rest,
+            .as_binding = as_binding,
+            .as_binding_span = as_binding_span,
+            .body = std::move(body)};
+  }
+
   auto parse_match_statement() -> Stmt* {
     const auto& kw = consume(TokenKind::KwMatch); // NOLINT(readability-identifier-length)
     auto* scrutinee = parse_expression();
@@ -868,65 +948,7 @@ private:
       if (peek_kind() == TokenKind::Dedent || peek_kind() == TokenKind::Eof) {
         break;
       }
-      // Parse arm pattern (expression — constant, enum variant, etc.).
-      // The expression parser will parse `Enum::Variant(a, b)` as a CallExpr.
-      // If the callee is a FieldExpr or QualifiedName and all args are
-      // simple identifiers (possibly ending with `..`), treat it as
-      // destructuring: extract the callee as the pattern and the
-      // identifier args as bindings.
-      auto* pattern = parse_expression();
-      std::vector<std::string_view> bindings;
-      std::vector<Span> binding_spans;
-      bool has_rest = false;
-      if (pattern->is<CallExpr>()) {
-        const auto& call = pattern->as<CallExpr>();
-        if (call.callee->is<FieldExpr>() || call.callee->is<QualifiedName>()) {
-          bool all_idents = true;
-          for (const auto* arg : call.args) {
-            if (!arg->is<IdentifierExpr>()) {
-              all_idents = false;
-              break;
-            }
-          }
-          // Check for `..` rest marker in arg_names.
-          bool trailing_rest = false;
-          if (!call.arg_names.empty()) {
-            for (const auto& an : call.arg_names) {
-              if (an.data() != nullptr && an == "..") {
-                trailing_rest = true;
-              }
-            }
-          }
-          if (all_idents && (!call.args.empty() || trailing_rest)) {
-            for (const auto* arg : call.args) {
-              const auto& ident = arg->as<IdentifierExpr>();
-              bindings.push_back(ident.name);
-              binding_spans.push_back(arg->span);
-            }
-            has_rest = trailing_rest;
-            pattern = call.callee;
-          }
-        }
-      }
-      // Check for `as` binding: `Pattern as name:`
-      std::string_view as_binding;
-      Span as_binding_span{};
-      if (peek_kind() == TokenKind::KwAs) {
-        advance(); // consume 'as'
-        const auto& binding_tok = consume(TokenKind::Identifier);
-        as_binding = binding_tok.text;
-        as_binding_span = binding_tok.span;
-      }
-
-      consume(TokenKind::Colon);
-      auto body = parse_suite();
-      arms.push_back({.pattern = pattern,
-                      .bindings = std::move(bindings),
-                      .binding_spans = std::move(binding_spans),
-                      .has_rest = has_rest,
-                      .as_binding = as_binding,
-                      .as_binding_span = as_binding_span,
-                      .body = std::move(body)});
+      arms.push_back(parse_match_arm());
     }
     consume(TokenKind::Dedent);
     if (arms.empty()) {
@@ -1052,9 +1074,8 @@ private:
       if (peek_kind() == TokenKind::Pipe) {
         right = parse_lambda();
       } else {
-        in_pipe_target_ = true;
+        PipeTargetGuard pipe_guard(in_pipe_target_);
         right = parse_application();
-        in_pipe_target_ = false;
       }
       Span span = {.offset = left->span.offset,
                    .length = (right->span.offset + right->span.length) - left->span.offset};
