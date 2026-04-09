@@ -516,7 +516,16 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
         auto obj = lower_expr_value(*field.object);
         auto field_idx = resolve_field_index(field.object->type, field.field_name);
         if (!field_idx) {
-          error(expr.span, "unresolved field '" + std::string(field.field_name) + "'");
+          // For concept method access on generic type parameters (e.g.,
+          // x.to_string() where x: T: Printable), there is no struct
+          // field to resolve — the method will be resolved during
+          // monomorphization when T is substituted with a concrete type.
+          // Emit a diagnostic only for concrete struct types where the
+          // field genuinely doesn't exist.
+          if (field.object->type != nullptr &&
+              field.object->type->kind() == TypeKind::Struct) {
+            error(expr.span, "unresolved field '" + std::string(field.field_name) + "'");
+          }
         }
         return emit_value(expr, MirFieldAccess{
             obj, field.field_name, field_idx.value_or(0)});
@@ -600,7 +609,10 @@ auto MirBuilder::lower_expr_place(const HirExpr& expr) -> MirPlace {
         auto base = lower_expr_place(*field.object);
         auto field_idx = resolve_field_index(field.object->type, field.field_name);
         if (!field_idx) {
-          error(field.object->span, "unresolved field '" + std::string(field.field_name) + "'");
+          if (field.object->type != nullptr &&
+              field.object->type->kind() == TypeKind::Struct) {
+            error(field.object->span, "unresolved field '" + std::string(field.field_name) + "'");
+          }
         }
         base.projections.push_back(
             {.kind = MirProjectionKind::Field,

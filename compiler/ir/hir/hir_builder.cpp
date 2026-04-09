@@ -590,6 +590,22 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
             break;
           }
         }
+        // Fallback: for concept methods on generic type parameters,
+        // the concept method Decl* won't match any resolver symbol
+        // (only concrete extend methods have symbols). Search by
+        // mangled name "TypeName.methodName" instead.
+        if (method_sym == nullptr) {
+          auto* obj_type = typed_.typed.expr_type(field.object);
+          if (obj_type != nullptr) {
+            auto mangled = std::string(print_type(obj_type)) + "." + std::string(field.field);
+            for (const auto& sym_ptr : resolve_.context.symbols()) {
+              if (sym_ptr->kind == SymbolKind::Function && sym_ptr->name == mangled) {
+                method_sym = sym_ptr.get();
+                break;
+              }
+            }
+          }
+        }
         if (method_sym != nullptr) {
           auto* callee_ref = ctx_.alloc<HirExpr>(
               call.callee->span, expr_type(call.callee),
@@ -602,6 +618,19 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
           return ctx_.alloc<HirExpr>(span, type,
                                       HirCall{callee_ref, std::move(args)});
         }
+        // Concept method on a generic type parameter: no concrete
+        // symbol exists because concept methods don't have resolver
+        // symbols (only concrete extend methods do). Falls through to
+        // the normal call path, which lowers the FieldExpr callee as
+        // an HirField. The MIR builder tolerates this by suppressing
+        // "unresolved field" errors for non-struct receivers.
+        //
+        // WORKAROUND: The proper fix is to not lower uninstantiated
+        // generic function bodies to MIR at all (option 1 from the
+        // Task 27 plan). That requires a phase-boundary change where
+        // generic bodies are only lowered during monomorphization.
+        // Until then, concept method calls on generic params produce
+        // placeholder MIR that is never executed.
       }
     }
 

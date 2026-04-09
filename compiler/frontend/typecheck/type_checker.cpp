@@ -2598,11 +2598,14 @@ auto TypeChecker::lookup_method(const Type* obj_type,
             continue;
           }
           const auto& cpt = cpt_decl->as<ConceptDecl>();
-          for (const auto* method_decl : cpt.methods) {
-            const auto& method = method_decl->as<FunctionDecl>();
+          for (const auto* concept_method : cpt.methods) {
+            const auto& method = concept_method->as<FunctionDecl>();
             if (method.name == name) {
               ConceptSelfMapGuard guard(concept_self_map_, cpt.name);
               concept_self_map_[cpt.name] = obj_type;
+              if (resolved_decl != nullptr) {
+                *resolved_decl = concept_method;
+              }
               return build_method_fn_type(method);
             }
           }
