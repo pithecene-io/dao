@@ -926,18 +926,17 @@ fn resolve(src: string): ResolveResult
 // (Single-file ResolveResult.uses keeps the old pair format.)
 //
 // `extend_concept_bindings` is the Task 27 D3 side table: each
-// `extend T as C:` / `as C:` block gets a binding from
-// `extend_binding_key(file_id, extend_decl_node_idx)` to the
-// concept's resolver-bound sym_idx.  Typecheck reads this via
-// `program_extend_concept_sym` instead of scanning symbols by name.
-// D0 leaves this empty; D3 populates it.
+// `extend T as C:` block gets a binding from (file_id, decl_idx) to
+// the concept's resolver-bound sym_idx.  Stored as flat triples
+// [file_id, decl_idx, sym_idx, ...] to avoid the HashMap-in-while
+// codegen bug.  Typecheck reads this via `program_extend_concept_sym`.
 class ProgramResolveResult:
   symbols: Vector<Symbol>
   scopes: Vector<Scope>
   uses: Vector<i64>       // flat triples: [file_id, tok_idx, sym_idx, ...]
   diags: Vector<FileDiagnostic>
   module_exports: ExportTables
-  extend_concept_bindings: HashMap<i64>
+  extend_concept_bindings: Vector<i64>  // flat triples: [file_id, decl_idx, sym_idx, ...]
 
 // Build export table by walking the file's declarations and looking up
 // each declared name in the scope.  This exports only the module's own
@@ -979,6 +978,63 @@ fn build_export_table(rs: RS, file_node_idx: i64): HashMap<i64>
         i = i + 1
   return exports
 
+// D3 helpers factored out of resolve_program to avoid the
+// mutable-variable-in-while codegen bug.  Each function encapsulates
+// one concern so the calling while loop body stays flat (no match/if
+// nesting around mutable variable reassignment).
+
+// Returns the decl_idx if the node is an ExtendDeclD, else -1.
+fn extend_decl_or_neg(po: ParseOutput, decl_idx: i64): i64
+  let node: Node = po.nodes.get(decl_idx)
+  match node:
+    Node.ExtendDeclD(ttn, cn, ml):
+      return decl_idx
+  return to_i64(-1)
+
+// Conditionally append a value to a vector (noop if val < 0).
+fn vec_i64_maybe_push(v: Vector<i64>, val: i64): Vector<i64>
+  if val >= 0:
+    return v.push(val)
+  return v
+
+// Extract the node indices of all ExtendDeclD nodes from a file's
+// top-level declarations.  The while loop body calls helpers to avoid
+// nesting match/if around the mutable vector reassignment.
+fn extract_extend_decl_indices(po: ParseOutput): Vector<i64>
+  let result: Vector<i64> = Vector<i64>::new()
+  let root: Node = po.nodes.get(po.root)
+  match root:
+    Node.FileN(md, imp_lp, dec_lp):
+      let decls: Vector<i64> = pg_read_list(po.idx, dec_lp)
+      let i: i64 = 0
+      while i < decls.length():
+        result = vec_i64_maybe_push(result, extend_decl_or_neg(po, decls.get(i)))
+        i = i + 1
+  return result
+
+// Find the resolver-bound concept sym_idx for a given extend decl by
+// scanning the uses delta.  Returns -1 if no binding found.
+fn find_extend_concept_use(po: ParseOutput, ext_idx: i64, uses: Vector<i64>, uses_before: i64): i64
+  let node: Node = po.nodes.get(ext_idx)
+  match node:
+    Node.ExtendDeclD(ttn, concept_name_tidx, ml):
+      if concept_name_tidx >= 0:
+        let i: i64 = uses_before
+        while i < uses.length():
+          if uses.get(i) == concept_name_tidx:
+            return uses.get(i + 1)
+          i = i + 2
+  return to_i64(-1)
+
+// Conditionally append a (file_id, decl_idx, sym_idx) triple.
+fn extend_triple_maybe_add(triples: Vector<i64>, file_id: i64, decl_idx: i64, sym: i64): Vector<i64>
+  if sym >= 0:
+    let r: Vector<i64> = triples.push(file_id)
+    r = r.push(decl_idx)
+    r = r.push(sym)
+    return r
+  return triples
+
 fn resolve_program(pg: ProgramGraph): ProgramResolveResult
   // Shared mutable state across all modules — symbols and scopes
   // accumulate program-wide.  Uses are converted from per-module
@@ -993,7 +1049,9 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
   let all_diags: Vector<FileDiagnostic> = Vector<FileDiagnostic>::new()
   let export_tables: Vector<ExportTable> = Vector<ExportTable>::new()
   // D3: concept bindings accumulated during Pass 2 body resolution.
-  let all_extend_bindings: HashMap<i64> = HashMap<i64>::new()
+  // Stored as flat triples [file_id, decl_idx, sym_idx, ...] to
+  // avoid the HashMap-in-while codegen bug.
+  let all_extend_triples: Vector<i64> = Vector<i64>::new()
 
   // Initialize empty export tables for all modules.
   let mi: i64 = 0
@@ -1116,34 +1174,14 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
       ui = ui + 2
 
     // D3: Extract concept bindings for this module's extend decls.
-    // For each ExtendDeclD, the resolver recorded a use for the
-    // concept name token during resolve_extend_decl.  Find that use
-    // in the delta (pair format from uses_before) and record the
-    // binding as extend_binding_key(file_id, decl_node_idx) →
-    // concept_sym_idx.
-    let root_node_p2: Node = po.nodes.get(po.root)
-    match root_node_p2:
-      Node.FileN(md, imp_lp, dec_lp):
-        let ext_decls: Vector<i64> = pg_read_list(po.idx, dec_lp)
-        let edi: i64 = 0
-        while edi < ext_decls.length():
-          let ext_idx: i64 = ext_decls.get(edi)
-          let ext_node: Node = po.nodes.get(ext_idx)
-          match ext_node:
-            Node.ExtendDeclD(target_type_node, concept_name_tidx, ext_methods_lp):
-              if concept_name_tidx >= 0:
-                // Scan this module's uses delta for the concept
-                // token's binding.
-                let ubi: i64 = uses_before
-                while ubi < rs_uses.length():
-                  if rs_uses.get(ubi) == concept_name_tidx:
-                    let concept_sym: i64 = rs_uses.get(ubi + 1)
-                    let bkey: string = extend_binding_key(sf.file_id, ext_idx)
-                    all_extend_bindings = all_extend_bindings.set(bkey, concept_sym)
-                    ubi = rs_uses.length()
-                  else:
-                    ubi = ubi + 2
-          edi = edi + 1
+    // Calls a helper function per-decl to avoid deep nesting that
+    // triggers the mutable-variable-in-while codegen bug.
+    let d3_decl_list: Vector<i64> = extract_extend_decl_indices(po)
+    let d3i: i64 = 0
+    while d3i < d3_decl_list.length():
+      let d3_concept: i64 = find_extend_concept_use(po, d3_decl_list.get(d3i), rs_uses, uses_before)
+      all_extend_triples = extend_triple_maybe_add(all_extend_triples, sf.file_id, d3_decl_list.get(d3i), d3_concept)
+      d3i = d3i + 1
 
     let pdi: i64 = 0
     while pdi < rs.diags.length():
@@ -1151,7 +1189,7 @@ fn resolve_program(pg: ProgramGraph): ProgramResolveResult
       pdi = pdi + 1
     ti = ti + 1
 
-  return ProgramResolveResult(all_symbols, all_scopes, all_uses_triples, all_diags, ExportTables(export_tables), all_extend_bindings)
+  return ProgramResolveResult(all_symbols, all_scopes, all_uses_triples, all_diags, ExportTables(export_tables), all_extend_triples)
 
 // =========================================================================
 // Section 30: Task 27 — Program wrapper and service helpers (D0)
@@ -1177,13 +1215,6 @@ class Program:
   hir: HirData
   diags: Vector<FileDiagnostic>
 
-// Build the stringified composite key used by
-// `ProgramResolveResult.extend_concept_bindings`.  Both the resolver
-// write side (D3) and the typecheck read side (`program_extend_concept_sym`)
-// go through this helper so the key format stays in one place.
-fn extend_binding_key(file_id: i64, extend_decl_idx: i64): string
-  return i64_to_string(file_id) + ":" + i64_to_string(extend_decl_idx)
-
 // Construct a `Program` from a graph with empty resolve/typecheck/hir
 // payloads.  Does not run any passes.
 fn program_from_graph(pg: ProgramGraph): Program
@@ -1193,7 +1224,7 @@ fn program_from_graph(pg: ProgramGraph): Program
     Vector<i64>::new(),
     Vector<FileDiagnostic>::new(),
     ExportTables(Vector<ExportTable>::new()),
-    HashMap<i64>::new())
+    Vector<i64>::new())
   let empty_tc: TypeCheckData = TypeCheckData(false, Vector<DaoType>::new(), Vector<i64>::new(), Vector<i64>::new(), HashMap<i64>::new(), Vector<i64>::new())
   let empty_hir: HirData = HirData(false, to_i64(-1), to_i64(0), to_i64(0))
   return Program(pg, empty_resolve, empty_tc, empty_hir, Vector<FileDiagnostic>::new())
@@ -1285,16 +1316,17 @@ fn program_module_uses_map(p: Program, file_id: i64): HashMap<i64>
   return um
 
 // Look up the concept sym_idx bound to an `extend T as C:` block.
-// Returns -1 until D3 populates the binding table (D0 is the
-// placeholder step).
+// Scans the flat triples vector [file_id, decl_idx, sym_idx, ...].
+// Returns -1 if no binding exists.
 fn program_extend_concept_sym(p: Program, file_id: i64, extend_decl_idx: i64): i64
-  let key: string = extend_binding_key(file_id, extend_decl_idx)
-  let found: Option<i64> = p.resolve.extend_concept_bindings.get(key)
-  match found:
-    Option.Some(sym_idx):
-      return sym_idx
-    Option.None:
-      return to_i64(-1)
+  let triples: Vector<i64> = p.resolve.extend_concept_bindings
+  let i: i64 = 0
+  while i + 2 < triples.length():
+    if triples.get(i) == file_id:
+      if triples.get(i + 1) == extend_decl_idx:
+        return triples.get(i + 2)
+    i = i + 3
+  return to_i64(-1)
 
 // BEGIN_RESOLVER_TESTS
 // =========================================================================
