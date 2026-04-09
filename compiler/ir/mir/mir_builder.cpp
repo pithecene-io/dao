@@ -68,12 +68,15 @@ void MirBuilder::emit_terminator(Span span, MirPayload payload) {
 }
 
 // ---------------------------------------------------------------------------
-// Generic detection — check if an HirFunction has unresolved generic
-// parameter types in its signature (params or return type).
+// Generic detection
 // ---------------------------------------------------------------------------
 
 namespace {
 
+/// Check if a Dao type (or any nested type) contains TypeGenericParam.
+/// Used to detect functions on generic classes (e.g. HashMap<V>.length)
+/// whose own declaration has no type params but whose signature references
+/// the enclosing class's generic parameters.
 auto type_has_generic_param(const Type* type) -> bool {
   if (type == nullptr) {
     return false;
@@ -93,9 +96,6 @@ auto type_has_generic_param(const Type* type) -> bool {
   case TypeKind::Pointer:
     return type_has_generic_param(
         static_cast<const TypePointer*>(type)->pointee());
-  case TypeKind::Generator:
-    return type_has_generic_param(
-        static_cast<const TypeGenerator*>(type)->yield_type());
   case TypeKind::Struct: {
     const auto* str = static_cast<const TypeStruct*>(type);
     for (const auto& field : str->fields()) {
@@ -116,12 +116,22 @@ auto type_has_generic_param(const Type* type) -> bool {
     }
     return false;
   }
+  case TypeKind::Generator:
+    return type_has_generic_param(
+        static_cast<const TypeGenerator*>(type)->yield_type());
   default:
     return false;
   }
 }
 
+/// A function is generic if either:
+///  (a) its AST declaration has own type parameters (e.g. fn f<T>), or
+///  (b) its lowered signature contains TypeGenericParam (e.g. methods
+///      on generic classes where self: HashMap<V>).
 auto hir_function_is_generic(const HirFunction& fn) -> bool {
+  if (fn.has_type_params) {
+    return true;
+  }
   if (type_has_generic_param(fn.return_type)) {
     return true;
   }

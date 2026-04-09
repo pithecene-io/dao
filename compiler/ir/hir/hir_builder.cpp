@@ -123,7 +123,8 @@ auto HirBuilder::lower_function(const Decl* decl) -> HirDecl* {
   return ctx_.alloc<HirDecl>(
       decl->span,
       HirFunction{sym, std::move(hir_params), ret_type,
-                  std::move(hir_body), fn.is_extern});
+                  std::move(hir_body), fn.is_extern,
+                  /*has_type_params=*/!fn.type_params.empty()});
 }
 
 auto HirBuilder::lower_class(const Decl* decl) -> HirDecl* {
