@@ -240,7 +240,8 @@ auto run_through_mir(const std::filesystem::path& path) -> MirResult {
   }
 
   auto mono_result =
-      monomorphize(*mir.module, mir_ctx, hir_result.frontend.types);
+      monomorphize(*mir.module, mir_ctx, hir_result.frontend.types,
+                   mir.generic_templates);
   if (!mono_result.diagnostics.empty()) {
     print_error_diagnostics(filename, hir_result.frontend.parsed.source,
                             mono_result.diagnostics,

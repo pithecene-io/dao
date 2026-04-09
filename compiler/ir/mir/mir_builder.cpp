@@ -1,5 +1,6 @@
 #include "ir/mir/mir_builder.h"
 
+#include "frontend/types/type.h"
 #include "frontend/types/type_printer.h"
 #include "support/variant.h"
 
@@ -67,6 +68,74 @@ void MirBuilder::emit_terminator(Span span, MirPayload payload) {
 }
 
 // ---------------------------------------------------------------------------
+// Generic detection — check if an HirFunction has unresolved generic
+// parameter types in its signature (params or return type).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+auto type_has_generic_param(const Type* type) -> bool {
+  if (type == nullptr) {
+    return false;
+  }
+  switch (type->kind()) {
+  case TypeKind::GenericParam:
+    return true;
+  case TypeKind::Function: {
+    const auto* fn_type = static_cast<const TypeFunction*>(type);
+    for (const auto* param : fn_type->param_types()) {
+      if (type_has_generic_param(param)) {
+        return true;
+      }
+    }
+    return type_has_generic_param(fn_type->return_type());
+  }
+  case TypeKind::Pointer:
+    return type_has_generic_param(
+        static_cast<const TypePointer*>(type)->pointee());
+  case TypeKind::Generator:
+    return type_has_generic_param(
+        static_cast<const TypeGenerator*>(type)->yield_type());
+  case TypeKind::Struct: {
+    const auto* str = static_cast<const TypeStruct*>(type);
+    for (const auto& field : str->fields()) {
+      if (type_has_generic_param(field.type)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  case TypeKind::Enum: {
+    const auto* enm = static_cast<const TypeEnum*>(type);
+    for (const auto& variant : enm->variants()) {
+      for (const auto* payload : variant.payload_types) {
+        if (type_has_generic_param(payload)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  default:
+    return false;
+  }
+}
+
+auto hir_function_is_generic(const HirFunction& fn) -> bool {
+  if (type_has_generic_param(fn.return_type)) {
+    return true;
+  }
+  for (const auto& param : fn.params) {
+    if (type_has_generic_param(param.type)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+} // namespace
+
+// ---------------------------------------------------------------------------
 // Top-level
 // ---------------------------------------------------------------------------
 
@@ -74,18 +143,39 @@ auto MirBuilder::build(const HirModule& module) -> MirBuildResult {
   auto* mir_mod = ctx_.alloc<MirModule>();
   mir_mod->span = module.span;
   current_module_ = mir_mod;
+  generic_templates_.clear();
 
   for (const auto* decl : module.declarations) {
     if (decl->is<HirFunction>()) {
-      auto* mir_fn = lower_function(decl->as<HirFunction>(), decl->span);
-      if (mir_fn != nullptr) {
-        mir_mod->functions.push_back(mir_fn);
+      const auto& hir_fn = decl->as<HirFunction>();
+
+      if (hir_function_is_generic(hir_fn)) {
+        // Generic function: lower body into a template for the
+        // monomorphizer to clone from, but do NOT add to the module's
+        // function list.  The lowering_generic_template_ flag gates
+        // tolerance for unresolved field accesses on generic type
+        // parameters (concept method calls like x.to_string() where
+        // x: T: Printable).
+        lowering_generic_template_ = true;
+        auto* mir_fn = lower_function(hir_fn, decl->span);
+        lowering_generic_template_ = false;
+        if (mir_fn != nullptr && mir_fn->symbol != nullptr) {
+          generic_templates_[mir_fn->symbol] = mir_fn;
+        }
+      } else {
+        // Monomorphic function: lower normally into the module.
+        auto* mir_fn = lower_function(hir_fn, decl->span);
+        if (mir_fn != nullptr) {
+          mir_mod->functions.push_back(mir_fn);
+        }
       }
     }
     // ClassDecl: no MIR function to produce; skip.
   }
 
-  return {.module = mir_mod, .diagnostics = std::move(diagnostics_)};
+  return {.module = mir_mod,
+          .diagnostics = std::move(diagnostics_),
+          .generic_templates = std::move(generic_templates_)};
 }
 
 // ---------------------------------------------------------------------------
@@ -516,14 +606,16 @@ auto MirBuilder::lower_expr_value(const HirExpr& expr) -> MirValueId {
         auto obj = lower_expr_value(*field.object);
         auto field_idx = resolve_field_index(field.object->type, field.field_name);
         if (!field_idx) {
-          // For concept method access on generic type parameters (e.g.,
-          // x.to_string() where x: T: Printable), there is no struct
-          // field to resolve — the method will be resolved during
-          // monomorphization when T is substituted with a concrete type.
-          // Emit a diagnostic only for concrete struct types where the
-          // field genuinely doesn't exist.
-          if (field.object->type != nullptr &&
-              field.object->type->kind() == TypeKind::Struct) {
+          if (lowering_generic_template_) {
+            // Template body: tolerate unresolved field accesses on
+            // generic type parameters (e.g., x.to_string() where
+            // x: T: Printable).  The monomorphizer will clone this
+            // template and substitute concrete types, at which point
+            // the field access resolves normally.
+          } else if (field.object->type != nullptr &&
+                     field.object->type->kind() == TypeKind::Struct) {
+            error(expr.span, "unresolved field '" + std::string(field.field_name) + "'");
+          } else {
             error(expr.span, "unresolved field '" + std::string(field.field_name) + "'");
           }
         }
@@ -609,8 +701,9 @@ auto MirBuilder::lower_expr_place(const HirExpr& expr) -> MirPlace {
         auto base = lower_expr_place(*field.object);
         auto field_idx = resolve_field_index(field.object->type, field.field_name);
         if (!field_idx) {
-          if (field.object->type != nullptr &&
-              field.object->type->kind() == TypeKind::Struct) {
+          if (lowering_generic_template_) {
+            // Template body: tolerate (see value-lowering counterpart).
+          } else {
             error(field.object->span, "unresolved field '" + std::string(field.field_name) + "'");
           }
         }

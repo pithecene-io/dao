@@ -3,9 +3,11 @@
 
 #include "ir/mir/mir.h"
 #include "ir/mir/mir_context.h"
+#include "frontend/resolve/symbol.h"
 #include "frontend/types/type_context.h"
 #include "frontend/diagnostics/diagnostic.h"
 
+#include <unordered_map>
 #include <vector>
 
 namespace dao {
@@ -15,10 +17,14 @@ struct MonomorphizeResult {
 };
 
 /// Replace generic functions with concrete specializations based on
-/// observed call-site types. After this pass, no TypeGenericParam
-/// remains in the module and the LLVM backend can lower all types.
-auto monomorphize(MirModule& module, MirContext& ctx,
-                  TypeContext& types) -> MonomorphizeResult;
+/// observed call-site types.  Generic templates are provided separately
+/// from the module's function list (the MIR builder excludes them from
+/// module->functions).  After this pass, no TypeGenericParam remains
+/// in the module and the LLVM backend can lower all types.
+auto monomorphize(
+    MirModule& module, MirContext& ctx, TypeContext& types,
+    const std::unordered_map<const Symbol*, MirFunction*>& generic_templates)
+    -> MonomorphizeResult;
 
 } // namespace dao
 
