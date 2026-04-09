@@ -52,7 +52,7 @@ class TC:
   uses_map: HashMap<i64>         // per-module uses (single-file legacy path)
   uses_triples: Vector<i64>     // program-level uses triples (D4 multi-module path)
   file_id: i64                   // module-level file provenance (-1 for dummy)
-  concept_bindings: HashMap<i64> // extend decl node_idx → concept sym_idx (D3)
+  concept_bindings: Vector<i64> // program-level triples: [file_id, decl_idx, sym_idx, ...]
   module_id: i64                 // module identity for owner_module_id filtering (D2)
   exports: ExportTables          // cross-module export lookup (D4)
 
@@ -291,7 +291,7 @@ fn program_init_typecheck(p: Program): Program
     HashMap<i64>::new(),
     Vector<i64>::new(),
     to_i64(-1),
-    HashMap<i64>::new(),
+    Vector<i64>::new(),  // concept_bindings: empty triples
     to_i64(-1),
     ExportTables(Vector<ExportTable>::new()))
   let dummy_ts: TS = TS(
@@ -916,6 +916,17 @@ fn tc_register_extend_methods(ts: TS, decls: Vector<i64>): TS
 // Validate that each extend Type as Concept: provides all required
 // methods with matching signatures. Emits diagnostics for missing
 // methods and signature mismatches.
+// Look up the concept sym_idx for an extend decl in the program-level
+// concept bindings triples.  Returns -1 if no binding found.
+fn lookup_concept_sym_in_triples(triples: Vector<i64>, file_id: i64, decl_idx: i64): i64
+  let i: i64 = 0
+  while i + 2 < triples.length():
+    if triples.get(i) == file_id:
+      if triples.get(i + 1) == decl_idx:
+        return triples.get(i + 2)
+    i = i + 3
+  return to_i64(-1)
+
 fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
   let r: TS = ts
   let i: i64 = 0
@@ -925,22 +936,19 @@ fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
     match node:
       Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
         // Look up the concept type via the resolver-bound identity in
-        // TC.concept_bindings (D3), NOT by scanning symbols by name.
-        // The resolver already bound the concept name to its sym_idx
-        // during resolution; the binding was extracted into
-        // TC.concept_bindings by build_module_concept_bindings.
+        // TC.concept_bindings (program-level triples), NOT by scanning
+        // symbols by name.  The resolver already bound the concept name
+        // to its sym_idx during resolution.
         let concept_name: string = ts_tok_name(r, concept_name_tidx)
         let concept_ti: i64 = to_i64(-1)
-        let cb_key: string = i64_to_string(decl_idx)
-        let cb_found: Option<i64> = r.tc.concept_bindings.get(cb_key)
-        match cb_found:
-          Option.Some(concept_sym_idx):
-            let cti: i64 = vec_i64_get(r.sym_types, concept_sym_idx)
-            if cti >= 0:
-              let ct: DaoType = r.types.get(cti)
-              match ct.kind:
-                TypeKind.TConcept:
-                  concept_ti = cti
+        let concept_sym_idx: i64 = lookup_concept_sym_in_triples(r.tc.concept_bindings, r.tc.file_id, decl_idx)
+        if concept_sym_idx >= 0:
+          let cti: i64 = vec_i64_get(r.sym_types, concept_sym_idx)
+          if cti >= 0:
+            let ct: DaoType = r.types.get(cti)
+            match ct.kind:
+              TypeKind.TConcept:
+                concept_ti = cti
         if concept_ti < 0:
           i = i + 1
         else:
@@ -1867,29 +1875,6 @@ fn tc_pass2(ts: TS, file_node_idx: i64): TS
 // Section 45a: Per-module concept binding extraction (Task 27 D3)
 // =========================================================================
 
-// Build a per-module concept bindings map from the program's
-// extend_concept_bindings side table.  For each ExtendDeclD in the
-// module's top-level declarations, look up the resolver-bound concept
-// sym_idx via program_extend_concept_sym.  Returns a HashMap<i64>
-// keyed by i64_to_string(extend_decl_node_idx) → concept sym_idx.
-fn build_module_concept_bindings(p: Program, file_id: i64, po: ParseOutput): HashMap<i64>
-  let cb: HashMap<i64> = HashMap<i64>::new()
-  let root_node: Node = po.nodes.get(po.root)
-  match root_node:
-    Node.FileN(mod_decl, imports_lp, decls_lp):
-      let decls: Vector<i64> = read_list(po.idx, decls_lp)
-      let di: i64 = 0
-      while di < decls.length():
-        let decl_idx: i64 = decls.get(di)
-        let node: Node = po.nodes.get(decl_idx)
-        match node:
-          Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
-            let sym: i64 = program_extend_concept_sym(p, file_id, decl_idx)
-            if sym >= 0:
-              cb = cb.set(i64_to_string(decl_idx), sym)
-        di = di + 1
-  return cb
-
 // =========================================================================
 // Section 46: Public type checker API
 // =========================================================================
@@ -1903,8 +1888,7 @@ fn build_module_tc(p: Program, mid: i64): TC
   let sf: SourceFile = program_file_of_module(p, mid)
   let po: ParseOutput = sf.parse_output
   let um: HashMap<i64> = program_module_uses_map(p, sf.file_id)
-  let cb: HashMap<i64> = build_module_concept_bindings(p, sf.file_id, po)
-  return TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, um, p.resolve.uses, sf.file_id, cb, mid, p.resolve.module_exports)
+  return TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, um, p.resolve.uses, sf.file_id, p.resolve.extend_concept_bindings, mid, p.resolve.module_exports)
 
 // Helper: build per-module TS from accumulated program state.
 fn build_module_ts(tc: TC, types: Vector<DaoType>, type_info: Vector<i64>, sym_types: Vector<i64>, variant_set: HashMap<i64>): TS
@@ -2060,7 +2044,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 37
+  let total: i32 = 38
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -2410,30 +2394,10 @@ fn main(): i32
 
   let d3_ok: bool = true
 
-  // The binding side table should have an entry for the extend decl.
-  let d3_sf: SourceFile = program_file_of_module(d3_p, to_i64(0))
-  let d3_po: ParseOutput = d3_sf.parse_output
-  let d3_cb: HashMap<i64> = build_module_concept_bindings(d3_p, d3_sf.file_id, d3_po)
-  // There should be at least one concept binding (for the extend Msg as Showable:).
-  // Look for any entry in the map by scanning extend decl nodes.
-  let d3_found_binding: bool = false
-  let d3_root: Node = d3_po.nodes.get(d3_po.root)
-  match d3_root:
-    Node.FileN(md3, il3, dl3):
-      let d3_decls: Vector<i64> = read_list(d3_po.idx, dl3)
-      let d3i: i64 = 0
-      while d3i < d3_decls.length():
-        let d3_didx: i64 = d3_decls.get(d3i)
-        let d3_node: Node = d3_po.nodes.get(d3_didx)
-        match d3_node:
-          Node.ExtendDeclD(t, c, m):
-            let d3_check: Option<i64> = d3_cb.get(i64_to_string(d3_didx))
-            match d3_check:
-              Option.Some(sym):
-                if sym >= 0:
-                  d3_found_binding = true
-        d3i = d3i + 1
-  if d3_found_binding == false:
+  // The binding triples should have an entry for the extend decl.
+  // Verify by checking that the triples vector is non-empty (at least
+  // one triple = 3 entries for the extend Msg as Showable:).
+  if d3_p.resolve.extend_concept_bindings.length() < 3:
     d3_ok = false
 
   // Now run typecheck through the adapter — the extend declares
@@ -2458,6 +2422,35 @@ fn main(): i32
     print("FAIL d3_concept_binding_identity")
 
   // -----------------------------------------------------------------
+  // Regression: multi-extend concept satisfaction (HashMap-in-while)
+  // -----------------------------------------------------------------
+  // A single module with TWO extend-as-concept blocks.  Before the
+  // triples fix, the HashMap-in-while codegen bug caused only the
+  // last binding to survive, so the first extend would silently skip
+  // concept satisfaction (no diagnostic even when a method is missing).
+  //
+  // This test verifies that BOTH extends are checked: the first
+  // (extend Foo as Showable) is MISSING the required method 'show',
+  // so it must produce a diagnostic.  The second (extend Bar as
+  // Showable) provides 'show' correctly and should produce no extra
+  // diagnostics.
+
+  let me_src: string = "concept Showable:\n  fn show(self): string\n\nclass Foo:\n  x: i32\n\nclass Bar:\n  name: string\n\nextend Foo as Showable:\n  fn other(self): i32\n    return self.x\n\nextend Bar as Showable:\n  fn show(self): string\n    return self.name\n"
+  let me_r: TypeCheckResult = typecheck(me_src)
+  let me_found: bool = false
+  let me_di: i64 = 0
+  while me_di < me_r.diags.length():
+    let me_d: Diagnostic = me_r.diags.get(me_di)
+    if me_d.message == "extend does not implement required method 'show' from concept 'Showable'":
+      me_found = true
+    me_di = me_di + 1
+  if me_found:
+    print("PASS multi_extend_concept_satisfaction")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL multi_extend_concept_satisfaction: first extend missing-method not detected")
+
+  // -----------------------------------------------------------------
   // Task 27 D4: Cross-module qualified name typing
   // -----------------------------------------------------------------
 
@@ -2476,16 +2469,14 @@ fn main(): i32
   let d4_sf: SourceFile = program_file_of_module(d4_p1, d4_main_mid)
   let d4_po: ParseOutput = d4_sf.parse_output
   let d4_um: HashMap<i64> = program_module_uses_map(d4_p1, d4_sf.file_id)
-  let d4_cb: HashMap<i64> = build_module_concept_bindings(d4_p1, d4_sf.file_id, d4_po)
-  let d4_tc: TC = TC(d4_po.nodes, d4_po.idx, d4_po.toks, d4_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_um, d4_p1.resolve.uses, d4_sf.file_id, d4_cb, d4_main_mid, d4_p1.resolve.module_exports)
+  let d4_tc: TC = TC(d4_po.nodes, d4_po.idx, d4_po.toks, d4_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_um, d4_p1.resolve.uses, d4_sf.file_id, d4_p1.resolve.extend_concept_bindings, d4_main_mid, d4_p1.resolve.module_exports)
   let d4_ts: TS = TS(d4_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new(), Vector<i64>::new())
   // Run pass1 on math first (to register the exported function type).
   let d4_math_mid: i64 = find_module_by_name(d4_p1.graph.modules, "app::math")
   let d4_math_sf: SourceFile = program_file_of_module(d4_p1, d4_math_mid)
   let d4_math_po: ParseOutput = d4_math_sf.parse_output
   let d4_math_um: HashMap<i64> = program_module_uses_map(d4_p1, d4_math_sf.file_id)
-  let d4_math_cb: HashMap<i64> = build_module_concept_bindings(d4_p1, d4_math_sf.file_id, d4_math_po)
-  let d4_math_tc: TC = TC(d4_math_po.nodes, d4_math_po.idx, d4_math_po.toks, d4_math_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_math_um, d4_p1.resolve.uses, d4_math_sf.file_id, d4_math_cb, d4_math_mid, d4_p1.resolve.module_exports)
+  let d4_math_tc: TC = TC(d4_math_po.nodes, d4_math_po.idx, d4_math_po.toks, d4_math_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_math_um, d4_p1.resolve.uses, d4_math_sf.file_id, d4_p1.resolve.extend_concept_bindings, d4_math_mid, d4_p1.resolve.module_exports)
   let d4_math_ts: TS = TS(d4_math_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new(), Vector<i64>::new())
   d4_math_ts = tc_pass1(d4_math_ts, d4_math_po.root)
   // Now run both passes on main using math's accumulated types/sym_types.
@@ -2520,15 +2511,13 @@ fn main(): i32
   let d4_b_sf: SourceFile = program_file_of_module(d4_p2, d4_b_mid)
   let d4_b_po: ParseOutput = d4_b_sf.parse_output
   let d4_b_um: HashMap<i64> = program_module_uses_map(d4_p2, d4_b_sf.file_id)
-  let d4_b_cb: HashMap<i64> = build_module_concept_bindings(d4_p2, d4_b_sf.file_id, d4_b_po)
-  let d4_b_tc: TC = TC(d4_b_po.nodes, d4_b_po.idx, d4_b_po.toks, d4_b_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_b_um, d4_p2.resolve.uses, d4_b_sf.file_id, d4_b_cb, d4_b_mid, d4_p2.resolve.module_exports)
+  let d4_b_tc: TC = TC(d4_b_po.nodes, d4_b_po.idx, d4_b_po.toks, d4_b_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_b_um, d4_p2.resolve.uses, d4_b_sf.file_id, d4_p2.resolve.extend_concept_bindings, d4_b_mid, d4_p2.resolve.module_exports)
   // Run pass1 on lib::a first.
   let d4_a_mid: i64 = find_module_by_name(d4_p2.graph.modules, "lib::a")
   let d4_a_sf: SourceFile = program_file_of_module(d4_p2, d4_a_mid)
   let d4_a_po: ParseOutput = d4_a_sf.parse_output
   let d4_a_um: HashMap<i64> = program_module_uses_map(d4_p2, d4_a_sf.file_id)
-  let d4_a_cb: HashMap<i64> = build_module_concept_bindings(d4_p2, d4_a_sf.file_id, d4_a_po)
-  let d4_a_tc: TC = TC(d4_a_po.nodes, d4_a_po.idx, d4_a_po.toks, d4_a_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_a_um, d4_p2.resolve.uses, d4_a_sf.file_id, d4_a_cb, d4_a_mid, d4_p2.resolve.module_exports)
+  let d4_a_tc: TC = TC(d4_a_po.nodes, d4_a_po.idx, d4_a_po.toks, d4_a_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_a_um, d4_p2.resolve.uses, d4_a_sf.file_id, d4_p2.resolve.extend_concept_bindings, d4_a_mid, d4_p2.resolve.module_exports)
   let d4_a_ts: TS = TS(d4_a_tc, d4_p2.typecheck.types, d4_p2.typecheck.type_info, d4_p2.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new(), Vector<i64>::new())
   d4_a_ts = tc_pass1(d4_a_ts, d4_a_po.root)
   // Now typecheck app::b.
@@ -2562,8 +2551,7 @@ fn main(): i32
   let d4_c_sf: SourceFile = program_file_of_module(d4_p3, d4_c_mid)
   let d4_c_po: ParseOutput = d4_c_sf.parse_output
   let d4_c_um: HashMap<i64> = program_module_uses_map(d4_p3, d4_c_sf.file_id)
-  let d4_c_cb: HashMap<i64> = build_module_concept_bindings(d4_p3, d4_c_sf.file_id, d4_c_po)
-  let d4_c_tc: TC = TC(d4_c_po.nodes, d4_c_po.idx, d4_c_po.toks, d4_c_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_c_um, d4_p3.resolve.uses, d4_c_sf.file_id, d4_c_cb, d4_c_mid, d4_p3.resolve.module_exports)
+  let d4_c_tc: TC = TC(d4_c_po.nodes, d4_c_po.idx, d4_c_po.toks, d4_c_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_c_um, d4_p3.resolve.uses, d4_c_sf.file_id, d4_p3.resolve.extend_concept_bindings, d4_c_mid, d4_p3.resolve.module_exports)
   let d4_c_ts: TS = TS(d4_c_tc, d4_p3.typecheck.types, d4_p3.typecheck.type_info, d4_p3.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new(), Vector<i64>::new())
   d4_c_ts = tc_pass1(d4_c_ts, d4_c_po.root)
   // Run pass1+pass2 on app::d with colors' variant_set.
@@ -2571,8 +2559,7 @@ fn main(): i32
   let d4_d_sf: SourceFile = program_file_of_module(d4_p3, d4_d_mid)
   let d4_d_po: ParseOutput = d4_d_sf.parse_output
   let d4_d_um: HashMap<i64> = program_module_uses_map(d4_p3, d4_d_sf.file_id)
-  let d4_d_cb: HashMap<i64> = build_module_concept_bindings(d4_p3, d4_d_sf.file_id, d4_d_po)
-  let d4_d_tc: TC = TC(d4_d_po.nodes, d4_d_po.idx, d4_d_po.toks, d4_d_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_d_um, d4_p3.resolve.uses, d4_d_sf.file_id, d4_d_cb, d4_d_mid, d4_p3.resolve.module_exports)
+  let d4_d_tc: TC = TC(d4_d_po.nodes, d4_d_po.idx, d4_d_po.toks, d4_d_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_d_um, d4_p3.resolve.uses, d4_d_sf.file_id, d4_p3.resolve.extend_concept_bindings, d4_d_mid, d4_p3.resolve.module_exports)
   let d4_d_ts: TS = TS(d4_d_tc, d4_c_ts.types, d4_c_ts.type_info, d4_c_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_c_ts.variant_set, Vector<i64>::new())
   d4_d_ts = tc_pass1(d4_d_ts, d4_d_po.root)
   d4_d_ts = tc_pass2(d4_d_ts, d4_d_po.root)
