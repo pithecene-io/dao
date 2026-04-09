@@ -10,8 +10,7 @@
 
 namespace dao {
 
-// Forward declaration — types reference Decl* without depending on ast.h.
-struct Decl;
+struct Decl;  // forward declaration for typed decl_id fields
 
 // ---------------------------------------------------------------------------
 // Base class — all semantic types derive from this.

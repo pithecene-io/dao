@@ -11,7 +11,6 @@
 #include "ir/hir/hir_context.h"
 #include "ir/mir/mir_builder.h"
 #include "ir/mir/mir_context.h"
-#include "frontend/ast/ast.h"
 #include "support/test_utils.h"
 
 #include <llvm/IR/LLVMContext.h>
@@ -30,7 +29,10 @@ using namespace dao;
 namespace {
 
 // Sentinel declaration identity for testing.
-const dao::Decl kDeclSentinel{};
+// Never dereferenced — serves only as a distinct pointer value.
+// NOLINTBEGIN(performance-no-int-to-ptr)
+const auto* kDeclSentinel = reinterpret_cast<const Decl*>(uintptr_t{1});
+// NOLINTEND(performance-no-int-to-ptr)
 
 /// Full pipeline: source → MIR → LLVM IR.
 struct LlvmTestPipeline {
@@ -152,7 +154,7 @@ suite<"type_lowering"> type_lowering = [] {
     LlvmTypeLowering lowering(ctx);
     TypeContext types;
 
-    auto* gp = types.generic_param(&kDeclSentinel, "T", 0);
+    auto* gp = types.generic_param(kDeclSentinel, "T", 0);
     expect(lowering.lower(gp) == nullptr);
     expect(contains(lowering.error(), "generic"));
   };

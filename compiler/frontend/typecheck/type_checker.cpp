@@ -144,7 +144,7 @@ auto TypeChecker::resolve_type_node(const TypeNode* node) -> const Type* {
       if (sym->kind == SymbolKind::GenericParam) {
         // Find the parameter index from the enclosing declaration.
         uint32_t index = find_generic_param_index(sym);
-        return types_.generic_param(sym->decl, sym->name, index);
+        return types_.generic_param(sym->decl_as_decl(), sym->name, index);
       }
       // Concept name in type position: substitute the conforming type
       // when inside a context that has set concept_self_map_ (§3.2).
@@ -407,7 +407,7 @@ void TypeChecker::register_type_names(const FileNode& file) {
       }
       const auto* sym = decl_it->second;
 
-      auto* shell = types_.make_struct_shell(sym->decl, st.name);
+      auto* shell = types_.make_struct_shell(decl, st.name);
       symbol_types_[sym] = shell;
       typed_.set_decl_type(decl, shell);
       pending_classes_.push_back({&st, decl, shell});
@@ -453,7 +453,7 @@ void TypeChecker::register_enum_variants(const FileNode& file) {
       }
       variants.push_back({variant.name, std::move(payload_types), variant.field_names});
     }
-    const auto* enum_type = types_.make_enum(sym->decl, en.name, std::move(variants));
+    const auto* enum_type = types_.make_enum(decl, en.name, std::move(variants));
     symbol_types_[sym] = enum_type;
     typed_.set_decl_type(decl, enum_type);
   }
@@ -607,23 +607,25 @@ auto TypeChecker::type_conforms_to(const Type* type, const Decl* concept_decl) -
   if (type->kind() == TypeKind::Struct) {
     const auto* struct_type = static_cast<const TypeStruct*>(type);
     const auto* decl_node = struct_type->decl_id();
-    if (decl_node != nullptr && decl_node->is<ClassDecl>()) {
-      const auto& cls = decl_node->as<ClassDecl>();
-      const auto& concept_name = concept_decl->as<ConceptDecl>().name;
+    if (decl_node != nullptr) {
+      if (decl_node->is<ClassDecl>()) {
+        const auto& cls = decl_node->as<ClassDecl>();
+        const auto& concept_name = concept_decl->as<ConceptDecl>().name;
 
-      // deny supersedes everything — if present, the type does not
-      // conform regardless of explicit `as` blocks. (Having both
-      // is a compile error diagnosed in check_class.)
-      for (const auto& deny : cls.denials) {
-        if (deny.concept_name == concept_name) {
-          return false;
+        // deny supersedes everything — if present, the type does not
+        // conform regardless of explicit `as` blocks. (Having both
+        // is a compile error diagnosed in check_class.)
+        for (const auto& deny : cls.denials) {
+          if (deny.concept_name == concept_name) {
+            return false;
+          }
         }
-      }
 
-      // Check explicit conformance.
-      for (const auto& conf : cls.conformances) {
-        if (conf.concept_name == concept_name) {
-          return true;
+        // Check explicit conformance.
+        for (const auto& conf : cls.conformances) {
+          if (conf.concept_name == concept_name) {
+            return true;
+          }
         }
       }
     }
@@ -777,13 +779,15 @@ void TypeChecker::check_declaration(const Decl* decl) {
     // Diagnose extend targeting a type that denies the concept.
     if (ctx_.self_type != nullptr && ctx_.self_type->kind() == TypeKind::Struct) {
       const auto* st = static_cast<const TypeStruct*>(ctx_.self_type);
-      const auto* decl_node = st->decl_id();
-      if (decl_node != nullptr && decl_node->is<ClassDecl>()) {
-        for (const auto& deny : decl_node->as<ClassDecl>().denials) {
-          if (deny.concept_name == ext.concept_name) {
-            error(ext.concept_span,
-                  "cannot extend '" + std::string(st->name()) + "' as '" +
-                      std::string(ext.concept_name) + "' because the type denies it");
+      const auto* dnode = st->decl_id();
+      if (dnode != nullptr) {
+        if (dnode->is<ClassDecl>()) {
+          for (const auto& deny : dnode->as<ClassDecl>().denials) {
+            if (deny.concept_name == ext.concept_name) {
+              error(ext.concept_span,
+                    "cannot extend '" + std::string(st->name()) + "' as '" +
+                        std::string(ext.concept_name) + "' because the type denies it");
+            }
           }
         }
       }
@@ -1831,7 +1835,7 @@ void TypeChecker::verify_concept_constraints(
       sym_it->second->decl == nullptr) {
     return;
   }
-  const auto* fn_decl = sym_it->second->decl;
+  const auto* fn_decl = sym_it->second->decl_as_decl();
   if (!fn_decl->is<FunctionDecl>()) {
     return;
   }
@@ -1848,7 +1852,8 @@ void TypeChecker::verify_concept_constraints(
           csym_it->second->decl == nullptr) {
         continue;
       }
-      if (!type_conforms_to(binding_it->second, csym_it->second->decl)) {
+      const auto* concept_decl = csym_it->second->decl_as_decl();
+      if (!type_conforms_to(binding_it->second, concept_decl)) {
         error(error_span,
               "type '" + print_type(binding_it->second) + "' does not satisfy concept '" +
                   std::string(csym_it->second->name) + "' required by generic parameter '" +
@@ -2069,7 +2074,7 @@ auto TypeChecker::check_call(const Expr* expr) -> const Type* {
       // Determine expected type param count.
       size_t expected_count = 0;
       if (sym_it->second->decl != nullptr) {
-        const auto* fn_decl = sym_it->second->decl;
+        const auto* fn_decl = sym_it->second->decl_as_decl();
         if (fn_decl->is<FunctionDecl>()) {
           expected_count = fn_decl->as<FunctionDecl>().type_params.size();
           // For class methods (no own type params), use the enclosing
@@ -2588,7 +2593,7 @@ auto TypeChecker::lookup_method(const Type* obj_type,
           if (sym_it == resolve_.uses.end() || sym_it->second->kind != SymbolKind::Concept) {
             continue;
           }
-          const auto* cpt_decl = sym_it->second->decl;
+          const auto* cpt_decl = sym_it->second->decl_as_decl();
           if (cpt_decl == nullptr || !cpt_decl->is<ConceptDecl>()) {
             continue;
           }
@@ -2743,13 +2748,15 @@ auto TypeChecker::find_generic_param_index(const Symbol* sym) -> uint32_t {
   if (sym->decl == nullptr) {
     return 0;
   }
+  const auto* decl = sym->decl_as_decl();
+
   const std::vector<GenericParam>* type_params = nullptr;
-  if (sym->decl->is<FunctionDecl>()) {
-    type_params = &sym->decl->as<FunctionDecl>().type_params;
-  } else if (sym->decl->is<ClassDecl>()) {
-    type_params = &sym->decl->as<ClassDecl>().type_params;
-  } else if (sym->decl->is<EnumDeclNode>()) {
-    type_params = &sym->decl->as<EnumDeclNode>().type_params;
+  if (decl->is<FunctionDecl>()) {
+    type_params = &decl->as<FunctionDecl>().type_params;
+  } else if (decl->is<ClassDecl>()) {
+    type_params = &decl->as<ClassDecl>().type_params;
+  } else if (decl->is<EnumDeclNode>()) {
+    type_params = &decl->as<EnumDeclNode>().type_params;
   }
 
   if (type_params != nullptr) {

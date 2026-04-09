@@ -25,7 +25,7 @@ public:
   auto make_symbol(SymbolKind kind,
                    std::string_view name,
                    Span decl_span,
-                   const Decl* decl) -> Symbol* {
+                   const void* decl) -> Symbol* {
     symbols_.push_back(
         std::make_unique<Symbol>(Symbol{.kind = kind, .name = name, .decl_span = decl_span, .decl = decl}));
     return symbols_.back().get();

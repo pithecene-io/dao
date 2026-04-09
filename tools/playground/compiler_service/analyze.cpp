@@ -601,10 +601,9 @@ auto resolve_receiver_type(const dao::Symbol* sym,
   }
   switch (sym->kind) {
   case dao::SymbolKind::Local:
-    return typed.typed.local_type(
-        reinterpret_cast<const dao::Stmt*>(sym->decl));
+    return typed.typed.local_type(sym->decl_as_stmt());
   case dao::SymbolKind::Param: {
-    const auto* fn_decl = sym->decl;
+    const auto* fn_decl = sym->decl_as_decl();
     const auto* fn_type = typed.typed.decl_type(fn_decl);
     if (fn_type == nullptr || fn_type->kind() != dao::TypeKind::Function) {
       return nullptr;
