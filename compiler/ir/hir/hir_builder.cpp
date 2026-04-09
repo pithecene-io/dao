@@ -619,11 +619,18 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
                                       HirCall{callee_ref, std::move(args)});
         }
         // Concept method on a generic type parameter: no concrete
-        // symbol exists. Generic function bodies are skipped during
-        // HIR lowering (see lower_function), so this path should not
-        // be reached for uninstantiated generics. If it IS reached
-        // (e.g., from a future monomorphization path), fall through
-        // to the normal call path which will produce a diagnostic.
+        // symbol exists because concept methods don't have resolver
+        // symbols (only concrete extend methods do). Falls through to
+        // the normal call path, which lowers the FieldExpr callee as
+        // an HirField. The MIR builder tolerates this by suppressing
+        // "unresolved field" errors for non-struct receivers.
+        //
+        // WORKAROUND: The proper fix is to not lower uninstantiated
+        // generic function bodies to MIR at all (option 1 from the
+        // Task 27 plan). That requires a phase-boundary change where
+        // generic bodies are only lowered during monomorphization.
+        // Until then, concept method calls on generic params produce
+        // placeholder MIR that is never executed.
       }
     }
 
