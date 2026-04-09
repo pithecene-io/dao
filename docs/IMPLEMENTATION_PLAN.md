@@ -315,8 +315,8 @@ The Tier A bootstrap pipeline (lex → parse → resolve → typecheck →
 HIR) is complete.  Tasks 25–27 (multi-file substrate) are complete —
 the `Program` value threads through resolve → typecheck → HIR with
 canonical type identity, cross-module qualified name typing, and
-program-level HIR aggregation.  Next focus is Tier B feature slices
-(associated items, method dispatch) and bootstrap MIR lowering.
+program-level HIR aggregation.  Task 28 (generic body lowering boundary)
+is the next architectural cleanup before Tier B feature slices begin.
 
 ### Task 25 — Bootstrap Multi-file Compilation + Imports (v1)
 
@@ -376,6 +376,30 @@ Known gaps (documented, not blocking):
 After Tasks 25–27, the remaining feature-oriented Tier B slices
 (associated items, method dispatch, richer patterns) have a sane
 multi-file substrate to sit on.
+
+### Task 28 — Proper Generic Body Lowering Boundary
+
+**Objective**: Replace the current workaround for generic MIR
+lowering with the proper architectural boundary: uninstantiated
+generic function bodies must not be lowered to MIR.
+
+See `docs/task_specs/TASK_28_GENERIC_BODY_LOWERING_BOUNDARY.md`.
+
+Deliverables:
+
+- explicit lowerability classification at HIR → MIR boundary
+- generic declaration bodies skipped during MIR worklist construction
+- concrete instantiation path: substitution → lowered MIR body
+- MIR concreteness invariant assertion (no generic parameter residue)
+- removal of PR #237 workaround (MIR error suppression for
+  non-struct receivers)
+- regression tests: eager skip, concrete lowering, multiple
+  instantiations, cross-module generic use, dedup
+
+This is architectural cleanup of the host compiler, not a bootstrap
+task.  It lands before Tier B bootstrap slices because those slices
+(methods, concept dispatch, generic semantics) depend on a clean
+generic compilation pipeline.
 
 ### Task 14 — Numeric Type Expansion
 
