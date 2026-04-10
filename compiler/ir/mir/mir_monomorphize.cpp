@@ -673,9 +673,11 @@ auto monomorphize(
   // Phase 1: use the provided generic templates directly.
   // The MIR builder already separated generic function bodies into
   // templates (not in module.functions).  No scanning needed.
-  if (generic_templates.empty()) {
-    return result;
-  }
+  //
+  // When generic_templates is empty, skip specialization but still
+  // run the concreteness invariant check below — the check must fire
+  // even for programs with no generics, to catch synthetic residue.
+  const bool has_templates = !generic_templates.empty();
 
   // Specialization cache: (generic fn, type args) → specialized fn.
   std::unordered_map<SpecKey, MirFunction*, SpecKeyHash> spec_cache;
@@ -683,7 +685,7 @@ auto monomorphize(
   // Phase 2+3+4: iterate until no new specializations are produced.
   // Use index-based iteration because specialize_call_site() may
   // push_back new functions, invalidating range-for iterators.
-  bool changed = true;
+  bool changed = has_templates;
   while (changed) {
     changed = false;
 
@@ -715,6 +717,55 @@ auto monomorphize(
 
   // No Phase 5 needed — generic originals were never in
   // module.functions (they live only in generic_templates).
+
+  // MIR concreteness invariant (Task 28 §8.1, §14.2):
+  //
+  // After monomorphization, every function in module.functions must
+  // be type-concrete.  No TypeGenericParam residue may remain in:
+  //   - function return types
+  //   - local variable types (including parameters)
+  //   - per-instruction result types
+  //
+  // If this invariant is violated, the LLVM backend will abort on
+  // unsized types later (`getTypeInfo() on unsized type`) with a
+  // backtrace deep inside LLVM, making regressions hard to diagnose.
+  // Emit an explicit internal-error diagnostic at the MIR boundary
+  // instead so the regression is localized to the offending function.
+  for (const auto* fn : module.functions) {
+    if (is_generic_function(fn)) {
+      std::string fn_name = fn->symbol != nullptr
+                                ? std::string(fn->symbol->name)
+                                : std::string("<anonymous>");
+      result.diagnostics.push_back(Diagnostic::error(
+          fn->span,
+          "internal: MIR concreteness invariant violated — function '" +
+              fn_name +
+              "' contains unresolved generic parameter types after "
+              "monomorphization"));
+      continue;
+    }
+    // Also scan instruction types: is_generic_function() checks the
+    // signature and locals, but an instruction may produce a value of
+    // generic type even when locals are concrete (e.g. a call to a
+    // generic function not yet monomorphized).
+    for (const auto* block : fn->blocks) {
+      for (const auto* inst : block->insts) {
+        if (type_has_generic(inst->type)) {
+          std::string fn_name = fn->symbol != nullptr
+                                    ? std::string(fn->symbol->name)
+                                    : std::string("<anonymous>");
+          result.diagnostics.push_back(Diagnostic::error(
+              inst->span,
+              "internal: MIR concreteness invariant violated — "
+              "instruction in '" +
+                  fn_name +
+                  "' produces a value with unresolved generic "
+                  "parameter type after monomorphization"));
+          break;
+        }
+      }
+    }
+  }
 
   return result;
 }
