@@ -210,19 +210,20 @@ Exit criteria:
 
 ## Phase 7 — Bootstrap Compiler
 
-Status: **Tier A pipeline + multi-file substrate complete** —
-Tasks 19–27 complete.  Six bootstrap subsystems share a consolidated
-substrate (`bootstrap/shared/base.dao`): lexer (105 tests), parser
-(51 tests), graph (12 tests), resolver (34 tests), type checker
-(37 tests), and HIR lowering (19 tests).  The Tier A pipeline
-(lex → parse → resolve → typecheck → HIR) operates at both
+Status: **Tier A pipeline + multi-file substrate + generic lowering
+boundary complete** — Tasks 19–28 complete.  Six bootstrap subsystems
+share a consolidated substrate (`bootstrap/shared/base.dao`): lexer
+(105 tests), parser (51 tests), graph (12 tests), resolver (34 tests),
+type checker (37 tests), and HIR lowering (19 tests).  The Tier A
+pipeline (lex → parse → resolve → typecheck → HIR) operates at both
 single-file and program level.  The `Program` value threads through
 all passes with canonical type identity, resolver-bound concept
 identity, module-scoped extend methods, cross-module qualified name
 typing, and program-level HIR aggregation (`HirProgram`/`HirModule`).
 On-disk multi-file test fixtures exercise the full pipeline
-end-to-end.  Next: bootstrap MIR lowering and continued self-hosting
-progression.
+end-to-end.  Task 28 (generic body lowering boundary) enforces clean
+separation of generic templates from monomorphic functions at the
+HIR → MIR boundary.  Next: Tier B bootstrap feature slices.
 
 Goals:
 - begin implementing non-trivial compiler subsystems in Dao itself

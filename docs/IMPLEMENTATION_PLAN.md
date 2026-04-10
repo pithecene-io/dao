@@ -316,7 +316,7 @@ HIR) is complete.  Tasks 25–27 (multi-file substrate) are complete —
 the `Program` value threads through resolve → typecheck → HIR with
 canonical type identity, cross-module qualified name typing, and
 program-level HIR aggregation.  Task 28 (generic body lowering boundary)
-is the next architectural cleanup before Tier B feature slices begin.
+is complete — see below.
 
 ### Task 25 — Bootstrap Multi-file Compilation + Imports (v1)
 
@@ -379,11 +379,20 @@ multi-file substrate to sit on.
 
 ### Task 28 — Proper Generic Body Lowering Boundary
 
+Status: **complete**
+
 **Objective**: Replace the current workaround for generic MIR
 lowering with the proper architectural boundary: uninstantiated
 generic function bodies must not be lowered to MIR.
 
 See `docs/task_specs/TASK_28_GENERIC_BODY_LOWERING_BOUNDARY.md`.
+
+- ✓ `HirFunction::has_type_params` propagated from AST declaration
+- ✓ `MirBuilder::build()` separates generic templates from monomorphic functions
+- ✓ Combined generic detection: declaration-based (own type params) + signature-based (enclosing class generic params)
+- ✓ `lowering_generic_template_` flag gates field-access tolerance during template lowering
+- ✓ `monomorphize()` accepts templates map directly; no Phase 5 removal needed
+- ✓ Generic enum payload sizing guard in LLVM type lowering
 
 Deliverables:
 
