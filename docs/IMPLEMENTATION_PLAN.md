@@ -364,14 +364,19 @@ See `docs/task_specs/TASK_27_BOOTSTRAP_PROGRAM_TYPECHECK_AND_HIR.md`.
 - ✓ Taskfile updated: HIR included in `bootstrap-test`
 
 Known gaps (documented, not blocking):
-- concept satisfaction for extend blocks on builtin types in
-  program mode produces a spurious diagnostic
 - qualified concept references in extend blocks (`as mod::C:`)
   not supported — parser only accepts unqualified names
-- extend-method isolation only verifiable via dot-call dispatch
-  (Task 28 scope)
+- extend-method isolation verified at HIR level by PR #242's
+  method-dispatch desugaring; exact-symbol-identity assertion in
+  the isolation test is still coarse-grained
 - bootstrap HashMap-in-while codegen bug: worked around via
   triple-scan fallback in `lookup_use` and `hir_lookup_use`
+
+Resolved:
+- concept satisfaction for extend blocks on builtin types in
+  program mode was fixed implicitly by PR #238 (concept bindings
+  HashMap → triples); locked in by `concept_sat_builtin_program`
+  regression test in bootstrap/typecheck
 
 After Tasks 25–27, the remaining feature-oriented Tier B slices
 (associated items, method dispatch, richer patterns) have a sane

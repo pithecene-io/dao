@@ -2044,7 +2044,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 38
+  let total: i32 = 39
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -2755,6 +2755,53 @@ fn main(): i32
       print("FAIL d10_cross_module_class_export")
     else:
       print("SKIP d10_cross_module_class_export: fixtures not found at " + ext_base)
+
+  // -----------------------------------------------------------------
+  // Regression: concept satisfaction on builtin types in program mode
+  // -----------------------------------------------------------------
+  // Task 27 known gap: `extend <builtin> as Concept:` was reported to
+  // produce a spurious "does not implement required method" diagnostic
+  // when run through program_run_typecheck.  The gap was implicitly
+  // fixed by PR #238 (concept bindings HashMap → triples).  This test
+  // locks in the fix across the three extend-on-builtin shapes:
+  //   1. Local concept + extend in same module.
+  //   2. Concept in one module, extend in another (cross-module).
+  //   3. Multiple builtins extended in one module.
+  let cb_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+  cb_inputs = cb_inputs.push(SourceInput("a.dao", "module case_a\n\nconcept Showable:\n  fn show(self): string\n\nextend i32 as Showable:\n  fn show(self): string\n    return \"i32\"\n"))
+  cb_inputs = cb_inputs.push(SourceInput("c.dao", "module case_b::concepts\nconcept Printable:\n  fn to_string(self): string\n"))
+  cb_inputs = cb_inputs.push(SourceInput("p.dao", "module case_b::impl\nimport case_b::concepts\n\nextend i64 as Printable:\n  fn to_string(self): string\n    return \"i64\"\n"))
+  cb_inputs = cb_inputs.push(SourceInput("m.dao", "module case_c\n\nconcept Named:\n  fn name(self): string\n\nextend i32 as Named:\n  fn name(self): string\n    return \"i32\"\n\nextend bool as Named:\n  fn name(self): string\n    return \"bool\"\n\nextend string as Named:\n  fn name(self): string\n    return \"string\"\n"))
+  let cb_pg: ProgramGraph = build_program(cb_inputs)
+  let cb_p: Program = program_from_graph(cb_pg)
+  cb_p = program_run_resolve(cb_p)
+  // Resolve must succeed cleanly.  Without this guard, a resolver
+  // regression (e.g. a cross-module import breaking) would silently
+  // weaken this test: extend decls would never register, concept
+  // satisfaction would never fire, and the typecheck-origin diag
+  // count below would still be zero.
+  let cb_resolve_diags: i64 = cb_p.resolve.diags.length()
+  cb_p = program_run_typecheck(cb_p)
+  // Count typecheck-origin diagnostics (exclude resolve baseline).
+  let cb_typecheck_diags: i64 = cb_p.diags.length() - cb_resolve_diags
+  let cb_found_spurious: bool = false
+  let cb_di: i64 = cb_resolve_diags
+  while cb_di < cb_p.diags.length():
+    let fd: FileDiagnostic = cb_p.diags.get(cb_di)
+    if fd.diag.message == "extend does not implement required method 'show' from concept 'Showable'":
+      cb_found_spurious = true
+    cb_di = cb_di + 1
+  if cb_resolve_diags > 0:
+    print("FAIL concept_sat_builtin_program: " + i64_to_string(cb_resolve_diags) + " resolve diagnostic(s) — test premise broken")
+  else:
+    if cb_found_spurious:
+      print("FAIL concept_sat_builtin_program: spurious missing-method diagnostic")
+    else:
+      if cb_typecheck_diags == 0:
+        print("PASS concept_sat_builtin_program")
+        pass_count = pass_count + 1
+      else:
+        print("FAIL concept_sat_builtin_program: " + i64_to_string(cb_typecheck_diags) + " unexpected typecheck diagnostic(s)")
 
   // -----------------------------------------------------------------
   // Summary
