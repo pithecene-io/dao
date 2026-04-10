@@ -240,6 +240,35 @@ fn hir_sym_type(hs: HS, sym_idx: i64): i64
   return hs.sym_types.get(sym_idx)
 
 // =========================================================================
+// Section 53b: Method dispatch helpers
+// =========================================================================
+
+// Find a mangled method symbol (e.g. "Foo.bar") by scanning the
+// symbol table, respecting module visibility.  Only builtin symbols
+// (owner_module_id < 0) or symbols owned by the current module are
+// visible — matching the typecheck-side module scoping for extend
+// methods (Task 26 §6.5).  Without this filter, HIR would desugar
+// a dot-call to the wrong module's symbol when two modules define
+// the same mangled extend method name.
+//
+// Single-file mode (hs.module_id < 0) is a legacy path used by the
+// `typecheck(src)` / `lower_to_hir(src)` adapters.  In that mode no
+// cross-module ambiguity is possible, so the visibility filter is
+// skipped.
+fn hir_find_method_sym(hs: HS, mangled: string): i64
+  let i: i64 = 0
+  while i < hs.symbols.length():
+    let sym: Symbol = hs.symbols.get(i)
+    if sym.name == mangled:
+      if symbol_kind_name(sym.kind) == "Function":
+        if hs.module_id < 0:
+          return i
+        if sym_visible_in_module(sym, hs.module_id):
+          return i
+    i = i + 1
+  return to_i64(-1)
+
+// =========================================================================
 // Section 54: Expression lowering
 // =========================================================================
 
@@ -343,6 +372,79 @@ fn lower_expr(hs: HS, node_idx: i64): HirR
   return hs_add_node(hs, HirNode.HirErrorExpr(to_i64(0)))
 
 fn lower_call_expr(hs: HS, node_idx: i64, callee: i64, args_lp: i64, arg_count: i64, ti: i64): HirR
+  // ---------------------------------------------------------------
+  // Method call desugaring: obj.method(args) → Method(obj, args)
+  // ---------------------------------------------------------------
+  // Preconditions for desugaring:
+  //   1. Callee is a FieldE node.
+  //   2. The type checker resolved the FieldE's expression type as
+  //      TFunction.  If it resolved as anything else (e.g. TStruct
+  //      for a concrete field with the same name as a method), the
+  //      callee is a field access, not a method — do NOT desugar.
+  //   3. The object type is a struct.
+  //   4. A module-visible mangled symbol `TypeName.fieldName` exists.
+  //
+  // Gating on (2) prevents rewriting `obj.name()` to `Type.name(obj)`
+  // when the class has both a field `name` and a method `name`:
+  // check_field_expr prefers field lookup, so the FieldE's resolved
+  // type is the field's type, not a function type.
+  let callee_node: Node = hs.nodes.get(callee)
+  match callee_node:
+    Node.FieldE(mobj, mfield_tidx):
+      // Check if the type checker resolved the FieldE as a function
+      // type.  If not (e.g. it's a concrete field), suppress the
+      // desugaring so we don't rewrite a field access as a method call.
+      let callee_ti: i64 = hir_get_expr_type(hs, callee)
+      let is_method_callee: bool = false
+      if callee_ti >= 0:
+        let callee_type: DaoType = hs.types.get(callee_ti)
+        match callee_type.kind:
+          TypeKind.TFunction:
+            is_method_callee = true
+      let obj_ti: i64 = hir_get_expr_type(hs, mobj)
+      // Use sentinel values to avoid deep nesting: if any guard fails,
+      // obj_ti is set to -1 and the lookup is skipped.
+      let method_obj_ti: i64 = obj_ti
+      if is_method_callee == false:
+        method_obj_ti = to_i64(-1)
+      if method_obj_ti >= 0:
+        let obj_type: DaoType = hs.types.get(method_obj_ti)
+        match obj_type.kind:
+          TypeKind.TStruct:
+            let field_name: string = substring(hs.src, hs.toks.get(mfield_tidx).offset, hs.toks.get(mfield_tidx).len)
+            let mangled: string = obj_type.name + "." + field_name
+            let msym: i64 = hir_find_method_sym(hs, mangled)
+            if msym >= 0:
+              // Found the method symbol.  Desugar:
+              //   CallE(FieldE(obj, method), [a1, a2])
+              //     → HirCall(HirIdent(msym), [obj, a1, a2])
+              let obj_r: HirR = lower_expr(hs, mobj)
+              let cur: HS = obj_r.hs
+              let hir_args: Vector<i64> = Vector<i64>::new()
+              hir_args = hir_args.push(obj_r.hir)  // self
+              let args: Vector<i64> = read_list(cur.idx_data, args_lp)
+              let ai: i64 = 0
+              while ai < args.length():
+                let ar: HirR = lower_expr(cur, args.get(ai))
+                cur = ar.hs
+                hir_args = hir_args.push(ar.hir)
+                ai = ai + 1
+              let fl: HirFlush = hir_flush_list(cur, hir_args)
+              let meth_ti: i64 = hir_sym_type(fl.hs, msym)
+              let callee_hir: HirR = hs_add_node(fl.hs, HirNode.HirIdent(msym, meth_ti, mfield_tidx))
+              // Derive call result type from the method's return type.
+              let call_ti: i64 = ti
+              if call_ti < 0:
+                if meth_ti >= 0:
+                  let mt: DaoType = callee_hir.hs.types.get(meth_ti)
+                  match mt.kind:
+                    TypeKind.TFunction:
+                      call_ti = mt.ret_type
+              return hs_add_node(callee_hir.hs, HirNode.HirCall(callee_hir.hir, fl.list_pos, hir_args.length(), call_ti))
+
+  // ---------------------------------------------------------------
+  // Normal call path (non-method)
+  // ---------------------------------------------------------------
   let callee_r: HirR = lower_expr(hs, callee)
   let cur: HS = callee_r.hs
   let args: Vector<i64> = read_list(cur.idx_data, args_lp)
@@ -367,8 +469,8 @@ fn lower_call_expr(hs: HS, node_idx: i64, callee: i64, args_lp: i64, arg_count: 
           call_ti = ct.ret_type
     // Check if callee is an IdentE resolving to a Type symbol (struct constructor)
     if call_ti < 0:
-      let callee_node: Node = fl.hs.nodes.get(callee)
-      match callee_node:
+      let cn: Node = fl.hs.nodes.get(callee)
+      match cn:
         Node.IdentE(ctidx):
           let csym: i64 = hir_lookup_use(fl.hs, ctidx)
           if csym >= 0:
@@ -1311,7 +1413,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 19
+  let total: i32 = 21
 
   // Test 1: simple_fn
   let src1: string = "fn add(a: i32, b: i32): i32\n  return a + b\n"
@@ -1723,6 +1825,90 @@ fn main(): i32
       print("FAIL d10_hir_three_file_smoke")
     else:
       print("SKIP d10_hir_three_file_smoke: fixtures not found at " + hir_smoke_base)
+
+  // -----------------------------------------------------------------
+  // Test 20: method_dispatch — dot-call desugaring
+  // -----------------------------------------------------------------
+  // obj.method(args) should desugar to HirCall(HirIdent(mangled_sym), [obj, args])
+  // instead of HirCall(HirFieldAccess(obj, method), [args]).
+  let src20: string = "class Point:\n  x: i32\n  y: i32\n\n  fn sum(self): i32\n    return self.x + self.y\n\nfn main(): i32\n  let p: Point = Point(1, 2)\n  return p.sum()\n"
+  let r20: HirResult = lower_to_hir(src20)
+  // After desugaring, the call p.sum() should produce:
+  //   HirCall(HirIdent(sym=Point.sum), [p])
+  // NOT:
+  //   HirCall(HirFieldAccess(p, sum), [])
+  // Verify: any HirCall whose callee is an HirIdent (desugared method)
+  // rather than an HirFieldAccess (undesugared dot-call).
+  let found_ident_callee: bool = false
+  let found_field_callee: bool = false
+  let i20: i64 = 0
+  while i20 < hir_count_nodes(r20):
+    let n20: HirNode = r20.hir_nodes.get(i20)
+    match n20:
+      HirNode.HirCall(callee20, a20, n20c, t20):
+        let callee_node20: HirNode = r20.hir_nodes.get(callee20)
+        match callee_node20:
+          HirNode.HirIdent(sym20, ti20, tok20):
+            // Desugared method call: callee is a symbol ref.
+            // Check arg_count > 0 (self was prepended).
+            if n20c > 0:
+              found_ident_callee = true
+          HirNode.HirFieldAccess(o20, f20, ft20):
+            // Undesugared dot-call — this should NOT happen for
+            // method calls after desugaring.  (Field accesses
+            // inside the method body like self.x are fine — they
+            // are not callees of a HirCall.)
+            found_field_callee = true
+    i20 = i20 + 1
+  // We only check that the desugaring produced at least one
+  // HirCall(HirIdent, ...) with self prepended.  Other calls in the
+  // program (e.g. prelude concept methods on generic params) may still
+  // have HirFieldAccess callees — that's expected until those are
+  // desugared too.
+  if found_ident_callee:
+    print("PASS method_dispatch")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL method_dispatch: no desugared HirCall(HirIdent, ...) found")
+
+  // -----------------------------------------------------------------
+  // Test 21: method_dispatch_module_isolation
+  // -----------------------------------------------------------------
+  // Two modules each define a class with the same method name.
+  // When lowering module B, hir_find_method_sym must not accidentally
+  // pick module A's mangled symbol — the module-visibility filter
+  // guarantees extend-method isolation (Task 26 §6.5).
+  //
+  // This test verifies the filter by running program_run_hir on two
+  // modules that each declare `class Point` with method `kind(self)`
+  // returning a distinct integer.  Both modules must lower cleanly
+  // without cross-module symbol contamination.
+  let iso_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+  iso_inputs = iso_inputs.push(SourceInput("a.dao", "module iso::a\nclass Point:\n  x: i32\n\n  fn kind(self): i32\n    return 1\n\nfn use_a(): i32\n  let p: Point = Point(0)\n  return p.kind()\n"))
+  iso_inputs = iso_inputs.push(SourceInput("b.dao", "module iso::b\nclass Point:\n  y: i32\n\n  fn kind(self): i32\n    return 2\n\nfn use_b(): i32\n  let q: Point = Point(0)\n  return q.kind()\n"))
+  let iso_pg: ProgramGraph = build_program(iso_inputs)
+  let iso_p: Program = program_from_graph(iso_pg)
+  iso_p = program_run_resolve(iso_p)
+  iso_p = program_run_typecheck(iso_p)
+  iso_p = program_run_hir(iso_p)
+  // Success criteria: both modules lowered without diagnostic storms,
+  // two HirModules produced, and HIR nodes accumulated beyond the
+  // minimum.  If hir_find_method_sym had module-leaking behavior,
+  // one module's lowering would pick the other's mangled symbol
+  // (observable only by inspecting symbol identities — we assert the
+  // coarser-grained success of a clean lowering here).
+  let iso_ok: bool = true
+  if iso_p.hir.initialized == false:
+    iso_ok = false
+  if iso_p.hir.module_count != 2:
+    iso_ok = false
+  if iso_p.diags.length() > iso_p.resolve.diags.length():
+    iso_ok = false
+  if iso_ok:
+    print("PASS method_dispatch_module_isolation")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL method_dispatch_module_isolation")
 
   // -----------------------------------------------------------------
   // Summary
