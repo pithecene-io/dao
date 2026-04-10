@@ -253,6 +253,22 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
     print_mir(mir_out, *mir_result.module);
     mir_text = mir_out.str();
 
+    // Stop before LLVM lowering on mono errors (e.g. MIR concreteness
+    // invariant violations — Task 28 §14.2).  MIR dump is still
+    // produced for inspection, but LLVM IR would fail on unsized
+    // types with an opaque assertion.
+    bool mono_has_user_error = false;
+    for (const auto& diag : mono_result.diagnostics) {
+      if (diag.severity == Severity::Error &&
+          diag.span.offset >= prelude_bytes) {
+        mono_has_user_error = true;
+        break;
+      }
+    }
+    if (mono_has_user_error) {
+      goto respond; // NOLINT(cppcoreguidelines-avoid-goto)
+    }
+
     // --- LLVM IR ---
     llvm::LLVMContext llvm_ctx;
     LlvmBackend llvm_backend(llvm_ctx);
