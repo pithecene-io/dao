@@ -2775,24 +2775,33 @@ fn main(): i32
   let cb_pg: ProgramGraph = build_program(cb_inputs)
   let cb_p: Program = program_from_graph(cb_pg)
   cb_p = program_run_resolve(cb_p)
+  // Resolve must succeed cleanly.  Without this guard, a resolver
+  // regression (e.g. a cross-module import breaking) would silently
+  // weaken this test: extend decls would never register, concept
+  // satisfaction would never fire, and the typecheck-origin diag
+  // count below would still be zero.
+  let cb_resolve_diags: i64 = cb_p.resolve.diags.length()
   cb_p = program_run_typecheck(cb_p)
   // Count typecheck-origin diagnostics (exclude resolve baseline).
-  let cb_typecheck_diags: i64 = cb_p.diags.length() - cb_p.resolve.diags.length()
+  let cb_typecheck_diags: i64 = cb_p.diags.length() - cb_resolve_diags
   let cb_found_spurious: bool = false
-  let cb_di: i64 = cb_p.resolve.diags.length()
+  let cb_di: i64 = cb_resolve_diags
   while cb_di < cb_p.diags.length():
     let fd: FileDiagnostic = cb_p.diags.get(cb_di)
     if fd.diag.message == "extend does not implement required method 'show' from concept 'Showable'":
       cb_found_spurious = true
     cb_di = cb_di + 1
-  if cb_found_spurious == false:
-    if cb_typecheck_diags == 0:
-      print("PASS concept_sat_builtin_program")
-      pass_count = pass_count + 1
-    else:
-      print("FAIL concept_sat_builtin_program: " + i64_to_string(cb_typecheck_diags) + " unexpected typecheck diagnostic(s)")
+  if cb_resolve_diags > 0:
+    print("FAIL concept_sat_builtin_program: " + i64_to_string(cb_resolve_diags) + " resolve diagnostic(s) — test premise broken")
   else:
-    print("FAIL concept_sat_builtin_program: spurious missing-method diagnostic")
+    if cb_found_spurious:
+      print("FAIL concept_sat_builtin_program: spurious missing-method diagnostic")
+    else:
+      if cb_typecheck_diags == 0:
+        print("PASS concept_sat_builtin_program")
+        pass_count = pass_count + 1
+      else:
+        print("FAIL concept_sat_builtin_program: " + i64_to_string(cb_typecheck_diags) + " unexpected typecheck diagnostic(s)")
 
   // -----------------------------------------------------------------
   // Summary
