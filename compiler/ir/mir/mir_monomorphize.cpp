@@ -664,19 +664,16 @@ auto specialize_call_site(
 // Main pass
 // ---------------------------------------------------------------------------
 
-auto monomorphize(MirModule& module, MirContext& ctx,
-                  TypeContext& types) -> MonomorphizeResult {
+auto monomorphize(
+    MirModule& module, MirContext& ctx, TypeContext& types,
+    const std::unordered_map<const Symbol*, MirFunction*>& generic_templates)
+    -> MonomorphizeResult {
   MonomorphizeResult result;
 
-  // Phase 1: identify generic functions by symbol.
-  std::unordered_map<const Symbol*, MirFunction*> generic_fns;
-  for (auto* fn : module.functions) {
-    if (fn->symbol != nullptr && is_generic_function(fn)) {
-      generic_fns[fn->symbol] = fn;
-    }
-  }
-
-  if (generic_fns.empty()) {
+  // Phase 1: use the provided generic templates directly.
+  // The MIR builder already separated generic function bodies into
+  // templates (not in module.functions).  No scanning needed.
+  if (generic_templates.empty()) {
     return result;
   }
 
@@ -693,10 +690,6 @@ auto monomorphize(MirModule& module, MirContext& ctx,
     const size_t fn_count = module.functions.size();
     for (size_t fn_idx = 0; fn_idx < fn_count; ++fn_idx) {
       auto* fn = module.functions[fn_idx];
-      // Skip generic functions themselves — they'll be removed later.
-      if (fn->symbol != nullptr && generic_fns.count(fn->symbol) != 0) {
-        continue;
-      }
 
       // Build per-function value-type index for O(1) arg type lookups.
       auto value_types = build_value_types(fn);
@@ -711,8 +704,8 @@ auto monomorphize(MirModule& module, MirContext& ctx,
           }
 
           if (specialize_call_site(inst, fn_ref, block, inst_idx,
-                                   value_types, generic_fns, spec_cache,
-                                   module, ctx, types)) {
+                                   value_types, generic_templates,
+                                   spec_cache, module, ctx, types)) {
             changed = true;
           }
         }
@@ -720,10 +713,8 @@ auto monomorphize(MirModule& module, MirContext& ctx,
     }
   }
 
-  // Phase 5: remove generic originals.
-  std::erase_if(module.functions, [&](const MirFunction* fn) {
-    return fn->symbol != nullptr && generic_fns.count(fn->symbol) != 0;
-  });
+  // No Phase 5 needed — generic originals were never in
+  // module.functions (they live only in generic_templates).
 
   return result;
 }

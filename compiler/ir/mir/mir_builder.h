@@ -20,6 +20,11 @@ namespace dao {
 struct MirBuildResult {
   MirModule* module = nullptr;
   std::vector<Diagnostic> diagnostics;
+
+  /// Generic function templates: bodies lowered to MIR but excluded from
+  /// module->functions.  The monomorphizer clones from these to produce
+  /// concrete instantiations.  Keyed by declaration symbol.
+  std::unordered_map<const Symbol*, MirFunction*> generic_templates;
 };
 
 // ---------------------------------------------------------------------------
@@ -46,6 +51,14 @@ private:
   uint32_t next_value_id_ = 0;
   uint32_t next_block_id_ = 0;
   std::unordered_map<const Symbol*, LocalId> symbol_to_local_;
+
+  // True while lowering a generic function body into a template.
+  // Gates tolerance for unresolved field accesses on non-struct types
+  // (concept method calls on generic type parameters).
+  bool lowering_generic_template_ = false;
+
+  // Generic templates accumulated during build().
+  std::unordered_map<const Symbol*, MirFunction*> generic_templates_;
 
   // Loop exit block stack for break statement lowering.
   std::vector<BlockId> loop_exit_stack_;

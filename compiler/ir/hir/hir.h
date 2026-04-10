@@ -50,6 +50,7 @@ struct HirFunction {
   const Type* return_type;
   std::vector<HirStmt*> body;
   bool is_extern;
+  bool has_type_params = false; // true if the AST declaration has own type params
 };
 
 struct HirClassDecl {

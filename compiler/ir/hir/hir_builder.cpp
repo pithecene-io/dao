@@ -123,7 +123,8 @@ auto HirBuilder::lower_function(const Decl* decl) -> HirDecl* {
   return ctx_.alloc<HirDecl>(
       decl->span,
       HirFunction{sym, std::move(hir_params), ret_type,
-                  std::move(hir_body), fn.is_extern});
+                  std::move(hir_body), fn.is_extern,
+                  /*has_type_params=*/!fn.type_params.empty()});
 }
 
 auto HirBuilder::lower_class(const Decl* decl) -> HirDecl* {
@@ -620,17 +621,15 @@ auto HirBuilder::lower_expr(const Expr* expr) -> HirExpr* {
         }
         // Concept method on a generic type parameter: no concrete
         // symbol exists because concept methods don't have resolver
-        // symbols (only concrete extend methods do). Falls through to
-        // the normal call path, which lowers the FieldExpr callee as
-        // an HirField. The MIR builder tolerates this by suppressing
-        // "unresolved field" errors for non-struct receivers.
+        // symbols (only concrete extend methods do).  Falls through
+        // to the normal call path, which lowers the FieldExpr callee
+        // as an HirField.
         //
-        // WORKAROUND: The proper fix is to not lower uninstantiated
-        // generic function bodies to MIR at all (option 1 from the
-        // Task 27 plan). That requires a phase-boundary change where
-        // generic bodies are only lowered during monomorphization.
-        // Until then, concept method calls on generic params produce
-        // placeholder MIR that is never executed.
+        // The MIR builder lowers this into a generic template body
+        // (not the main module).  The unresolved field access is
+        // tolerated during template lowering and resolved when the
+        // monomorphizer clones and specializes the function with
+        // concrete type arguments (Task 28).
       }
     }
 

@@ -192,7 +192,8 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
   collect_diagnostics(diagnostics, source, mir_result.diagnostics,
                       prelude_bytes, prelude_lines);
   if (mir_result.module != nullptr) {
-    auto mono = monomorphize(*mir_result.module, mir_ctx, types);
+    auto mono = monomorphize(*mir_result.module, mir_ctx, types,
+                             mir_result.generic_templates);
     collect_diagnostics(diagnostics, source, mono.diagnostics,
                         prelude_bytes, prelude_lines);
   }

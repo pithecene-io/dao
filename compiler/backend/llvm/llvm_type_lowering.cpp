@@ -96,6 +96,20 @@ auto LlvmTypeLowering::lower(const Type* type) -> llvm::Type* {
       if (variant.payload_types.empty()) {
         continue;
       }
+      // Skip variants whose payload types contain unresolved generic
+      // parameters — these are templates (e.g. Option<T>), not concrete
+      // types.  Concrete instantiations (Option<i32>) will have real
+      // payload types that can be lowered.
+      bool has_generic_payload = false;
+      for (const auto* pt : variant.payload_types) {
+        if (pt != nullptr && pt->kind() == TypeKind::GenericParam) {
+          has_generic_payload = true;
+          break;
+        }
+      }
+      if (has_generic_payload) {
+        continue;
+      }
       std::vector<llvm::Type*> field_types;
       for (const auto* pt : variant.payload_types) {
         auto* lt = lower(pt);
