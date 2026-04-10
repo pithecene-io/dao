@@ -375,15 +375,40 @@ fn lower_call_expr(hs: HS, node_idx: i64, callee: i64, args_lp: i64, arg_count: 
   // ---------------------------------------------------------------
   // Method call desugaring: obj.method(args) → Method(obj, args)
   // ---------------------------------------------------------------
-  // If the callee is a FieldE and the type checker resolved it as a
-  // function type (meaning it found a mangled method symbol), desugar
-  // into a direct call with self prepended.
+  // Preconditions for desugaring:
+  //   1. Callee is a FieldE node.
+  //   2. The type checker resolved the FieldE's expression type as
+  //      TFunction.  If it resolved as anything else (e.g. TStruct
+  //      for a concrete field with the same name as a method), the
+  //      callee is a field access, not a method — do NOT desugar.
+  //   3. The object type is a struct.
+  //   4. A module-visible mangled symbol `TypeName.fieldName` exists.
+  //
+  // Gating on (2) prevents rewriting `obj.name()` to `Type.name(obj)`
+  // when the class has both a field `name` and a method `name`:
+  // check_field_expr prefers field lookup, so the FieldE's resolved
+  // type is the field's type, not a function type.
   let callee_node: Node = hs.nodes.get(callee)
   match callee_node:
     Node.FieldE(mobj, mfield_tidx):
+      // Check if the type checker resolved the FieldE as a function
+      // type.  If not (e.g. it's a concrete field), suppress the
+      // desugaring so we don't rewrite a field access as a method call.
+      let callee_ti: i64 = hir_get_expr_type(hs, callee)
+      let is_method_callee: bool = false
+      if callee_ti >= 0:
+        let callee_type: DaoType = hs.types.get(callee_ti)
+        match callee_type.kind:
+          TypeKind.TFunction:
+            is_method_callee = true
       let obj_ti: i64 = hir_get_expr_type(hs, mobj)
-      if obj_ti >= 0:
-        let obj_type: DaoType = hs.types.get(obj_ti)
+      // Use sentinel values to avoid deep nesting: if any guard fails,
+      // obj_ti is set to -1 and the lookup is skipped.
+      let method_obj_ti: i64 = obj_ti
+      if is_method_callee == false:
+        method_obj_ti = to_i64(-1)
+      if method_obj_ti >= 0:
+        let obj_type: DaoType = hs.types.get(method_obj_ti)
         match obj_type.kind:
           TypeKind.TStruct:
             let field_name: string = substring(hs.src, hs.toks.get(mfield_tidx).offset, hs.toks.get(mfield_tidx).len)
