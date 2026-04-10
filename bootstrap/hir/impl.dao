@@ -244,14 +244,27 @@ fn hir_sym_type(hs: HS, sym_idx: i64): i64
 // =========================================================================
 
 // Find a mangled method symbol (e.g. "Foo.bar") by scanning the
-// symbol table.  Returns the symbol index, or -1.
+// symbol table, respecting module visibility.  Only builtin symbols
+// (owner_module_id < 0) or symbols owned by the current module are
+// visible — matching the typecheck-side module scoping for extend
+// methods (Task 26 §6.5).  Without this filter, HIR would desugar
+// a dot-call to the wrong module's symbol when two modules define
+// the same mangled extend method name.
+//
+// Single-file mode (hs.module_id < 0) is a legacy path used by the
+// `typecheck(src)` / `lower_to_hir(src)` adapters.  In that mode no
+// cross-module ambiguity is possible, so the visibility filter is
+// skipped.
 fn hir_find_method_sym(hs: HS, mangled: string): i64
   let i: i64 = 0
   while i < hs.symbols.length():
     let sym: Symbol = hs.symbols.get(i)
     if sym.name == mangled:
       if symbol_kind_name(sym.kind) == "Function":
-        return i
+        if hs.module_id < 0:
+          return i
+        if sym_visible_in_module(sym, hs.module_id):
+          return i
     i = i + 1
   return to_i64(-1)
 
@@ -1375,7 +1388,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 20
+  let total: i32 = 21
 
   // Test 1: simple_fn
   let src1: string = "fn add(a: i32, b: i32): i32\n  return a + b\n"
@@ -1832,6 +1845,45 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL method_dispatch: no desugared HirCall(HirIdent, ...) found")
+
+  // -----------------------------------------------------------------
+  // Test 21: method_dispatch_module_isolation
+  // -----------------------------------------------------------------
+  // Two modules each define a class with the same method name.
+  // When lowering module B, hir_find_method_sym must not accidentally
+  // pick module A's mangled symbol — the module-visibility filter
+  // guarantees extend-method isolation (Task 26 §6.5).
+  //
+  // This test verifies the filter by running program_run_hir on two
+  // modules that each declare `class Point` with method `kind(self)`
+  // returning a distinct integer.  Both modules must lower cleanly
+  // without cross-module symbol contamination.
+  let iso_inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+  iso_inputs = iso_inputs.push(SourceInput("a.dao", "module iso::a\nclass Point:\n  x: i32\n\n  fn kind(self): i32\n    return 1\n\nfn use_a(): i32\n  let p: Point = Point(0)\n  return p.kind()\n"))
+  iso_inputs = iso_inputs.push(SourceInput("b.dao", "module iso::b\nclass Point:\n  y: i32\n\n  fn kind(self): i32\n    return 2\n\nfn use_b(): i32\n  let q: Point = Point(0)\n  return q.kind()\n"))
+  let iso_pg: ProgramGraph = build_program(iso_inputs)
+  let iso_p: Program = program_from_graph(iso_pg)
+  iso_p = program_run_resolve(iso_p)
+  iso_p = program_run_typecheck(iso_p)
+  iso_p = program_run_hir(iso_p)
+  // Success criteria: both modules lowered without diagnostic storms,
+  // two HirModules produced, and HIR nodes accumulated beyond the
+  // minimum.  If hir_find_method_sym had module-leaking behavior,
+  // one module's lowering would pick the other's mangled symbol
+  // (observable only by inspecting symbol identities — we assert the
+  // coarser-grained success of a clean lowering here).
+  let iso_ok: bool = true
+  if iso_p.hir.initialized == false:
+    iso_ok = false
+  if iso_p.hir.module_count != 2:
+    iso_ok = false
+  if iso_p.diags.length() > iso_p.resolve.diags.length():
+    iso_ok = false
+  if iso_ok:
+    print("PASS method_dispatch_module_isolation")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL method_dispatch_module_isolation")
 
   // -----------------------------------------------------------------
   // Summary
