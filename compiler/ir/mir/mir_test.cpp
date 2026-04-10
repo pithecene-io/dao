@@ -602,6 +602,25 @@ suite<"mir_concreteness"> mir_concreteness = [] {
     expect(pipe.mir_result.generic_templates.empty());
   };
 
+  // Regression: the invariant scan must not stack-overflow on
+  // recursive types like `class Node { next: *Node }` where
+  // following Struct fields through a Pointer pointee returns to
+  // the same Struct.
+  "concreteness check handles recursive types"_test = [] {
+    MirTestPipeline pipe(
+        "class Node:\n"
+        "    next: *Node\n"
+        "    value: i32\n"
+        "fn main(): i32\n"
+        "    return 0\n");
+    // Should complete without stack overflow and without emitting
+    // spurious concreteness diagnostics.
+    auto mono = monomorphize(*pipe.module(), pipe.mir_ctx, pipe.types,
+                             pipe.mir_result.generic_templates);
+    expect(mono.diagnostics.empty())
+        << "unexpected concreteness diagnostics on recursive type";
+  };
+
   // Concreteness check catches synthetic residue: manually inject a
   // generic function into module.functions and verify monomorphize
   // emits the internal-error diagnostic.

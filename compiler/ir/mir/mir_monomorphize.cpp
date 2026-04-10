@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace dao {
@@ -129,9 +130,18 @@ auto substitute_type(const Type* type, const TypeSubst& subst,
 // or instruction types contain TypeGenericParam.
 // ---------------------------------------------------------------------------
 
-auto type_has_generic(const Type* type) -> bool {
+// Recursive walk with a visited set to tolerate cyclic types such as
+// `class Node { next: *Node }` where following Struct fields through
+// a Pointer pointee returns to the same Struct.  Without the visited
+// set this would stack-overflow.
+auto type_has_generic_impl(const Type* type,
+                           std::unordered_set<const Type*>& visited)
+    -> bool {
   if (type == nullptr) {
     return false;
+  }
+  if (!visited.insert(type).second) {
+    return false; // already walked this node; cycle — assume no generic here
   }
   switch (type->kind()) {
   case TypeKind::GenericParam:
@@ -139,22 +149,22 @@ auto type_has_generic(const Type* type) -> bool {
   case TypeKind::Function: {
     const auto* fn = static_cast<const TypeFunction*>(type);
     for (const auto* param : fn->param_types()) {
-      if (type_has_generic(param)) {
+      if (type_has_generic_impl(param, visited)) {
         return true;
       }
     }
-    return type_has_generic(fn->return_type());
+    return type_has_generic_impl(fn->return_type(), visited);
   }
   case TypeKind::Pointer:
-    return type_has_generic(
-        static_cast<const TypePointer*>(type)->pointee());
+    return type_has_generic_impl(
+        static_cast<const TypePointer*>(type)->pointee(), visited);
   case TypeKind::Generator:
-    return type_has_generic(
-        static_cast<const TypeGenerator*>(type)->yield_type());
+    return type_has_generic_impl(
+        static_cast<const TypeGenerator*>(type)->yield_type(), visited);
   case TypeKind::Struct: {
     const auto* st = static_cast<const TypeStruct*>(type);
     for (const auto& field : st->fields()) {
-      if (type_has_generic(field.type)) {
+      if (type_has_generic_impl(field.type, visited)) {
         return true;
       }
     }
@@ -164,7 +174,7 @@ auto type_has_generic(const Type* type) -> bool {
     const auto* en = static_cast<const TypeEnum*>(type);
     for (const auto& variant : en->variants()) {
       for (const auto* pt : variant.payload_types) {
-        if (type_has_generic(pt)) {
+        if (type_has_generic_impl(pt, visited)) {
           return true;
         }
       }
@@ -174,6 +184,11 @@ auto type_has_generic(const Type* type) -> bool {
   default:
     return false;
   }
+}
+
+auto type_has_generic(const Type* type) -> bool {
+  std::unordered_set<const Type*> visited;
+  return type_has_generic_impl(type, visited);
 }
 
 auto is_generic_function(const MirFunction* fn) -> bool {
