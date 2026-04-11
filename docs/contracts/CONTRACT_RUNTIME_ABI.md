@@ -283,12 +283,14 @@ For the current supported hook slice:
    reside in static storage and are valid for the lifetime of the
    process.
 
-3. **Conversion results use transient storage.** Scalar-to-string
+3. **Conversion results are heap-owned.** Scalar-to-string
    conversion hooks (`__dao_conv_*_to_string`) return a `dao_string`
-   whose `ptr` points to thread-local transient storage. The result
-   is valid until the next call to the same conversion hook on the
-   same thread. Callers must consume or copy the result before the
-   next conversion call.
+   whose `ptr` points to a freshly `malloc`-allocated buffer owned
+   by the caller.  The result is valid until the caller explicitly
+   frees it (or indefinitely, under the current leak-on-exit runtime
+   posture).  Callers may store the result in long-lived data
+   structures (e.g. as a HashMap key) without copying — see rule 6
+   below for details.
 
 4. **Generator frames are caller-managed.** Generator frames are
    allocated by `__dao_gen_alloc` and must be freed by
