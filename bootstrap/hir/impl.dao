@@ -106,26 +106,18 @@ class HirR:
 // Section 51: HS state helpers
 // =========================================================================
 
-fn hs_set_hir_nodes(hs: HS, hn: Vector<HirNode>): HS
-  return HS(hs.nodes, hs.idx_data, hs.toks, hs.src, hs.symbols, hs.types, hs.type_info, hs.expr_types, hs.sym_types, hs.uses_map, hn, hs.hir_idx, hs.diags, hs.module_id, hs.file_id)
-
-fn hs_set_hir_idx(hs: HS, hi: Vector<i64>): HS
-  return HS(hs.nodes, hs.idx_data, hs.toks, hs.src, hs.symbols, hs.types, hs.type_info, hs.expr_types, hs.sym_types, hs.uses_map, hs.hir_nodes, hi, hs.diags, hs.module_id, hs.file_id)
-
-fn hs_set_diags(hs: HS, d: Vector<Diagnostic>): HS
-  return HS(hs.nodes, hs.idx_data, hs.toks, hs.src, hs.symbols, hs.types, hs.type_info, hs.expr_types, hs.sym_types, hs.uses_map, hs.hir_nodes, hs.hir_idx, d, hs.module_id, hs.file_id)
-
 fn hs_add_node(hs: HS, node: HirNode): HirR
   let idx: i64 = hs.hir_nodes.length()
-  let new_hs: HS = hs_set_hir_nodes(hs, hs.hir_nodes.push(node))
-  return HirR(new_hs, idx)
+  hs.hir_nodes = hs.hir_nodes.push(node)
+  return HirR(hs, idx)
 
 fn hs_add_diag(hs: HS, span: Span, msg: string): HS
-  let d: Diagnostic = make_error(span, msg)
-  return hs_set_diags(hs, hs.diags.push(d))
+  hs.diags = hs.diags.push(make_error(span, msg))
+  return hs
 
 fn hs_idx_push(hs: HS, val: i64): HS
-  return hs_set_hir_idx(hs, hs.hir_idx.push(val))
+  hs.hir_idx = hs.hir_idx.push(val)
+  return hs
 
 fn hs_tok_name(hs: HS, tidx: i64): string
   let tok: Token = hs.toks.get(tidx)

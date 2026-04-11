@@ -2605,7 +2605,8 @@ fn tc_get_expr_type(td: TypeCheckData, module_id: i64, node_idx: i64): i64
 
 fn tc_set_expr_type(td: TypeCheckData, module_id: i64, node_idx: i64, ty: i64): TypeCheckData
   let key: string = expr_id_key(module_id, node_idx)
-  return TypeCheckData(td.initialized, td.types, td.type_info, td.sym_types, td.expr_types.set(key, ty))
+  td.expr_types = td.expr_types.set(key, ty)
+  return td
 
 // --- Graph construction ---
 

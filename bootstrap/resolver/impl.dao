@@ -77,78 +77,48 @@ class ScopeR:
 
 fn rs_add_symbol(rs: RS, sym: Symbol): SymR
   let idx: i64 = rs.symbols.length()
-  let new_syms: Vector<Symbol> = rs.symbols.push(sym)
-  let new_rs: RS = RS(rs.rc, new_syms, rs.scopes, rs.uses, rs.diags, rs.current_scope, rs.owner_module_id)
-  return SymR(new_rs, idx)
-
-fn rs_set_scopes(rs: RS, scopes: Vector<Scope>): RS
-  return RS(rs.rc, rs.symbols, scopes, rs.uses, rs.diags, rs.current_scope, rs.owner_module_id)
-
-fn rs_set_current_scope(rs: RS, scope_idx: i64): RS
-  return RS(rs.rc, rs.symbols, rs.scopes, rs.uses, rs.diags, scope_idx, rs.owner_module_id)
-
-fn rs_set_uses(rs: RS, uses: Vector<i64>): RS
-  return RS(rs.rc, rs.symbols, rs.scopes, uses, rs.diags, rs.current_scope, rs.owner_module_id)
-
-fn rs_set_diags(rs: RS, diags: Vector<Diagnostic>): RS
-  return RS(rs.rc, rs.symbols, rs.scopes, rs.uses, diags, rs.current_scope, rs.owner_module_id)
+  rs.symbols = rs.symbols.push(sym)
+  return SymR(rs, idx)
 
 fn rs_push_scope(rs: RS, kind: ScopeKind): ScopeR
   let idx: i64 = rs.scopes.length()
-  let new_scope: Scope = Scope(kind, rs.current_scope, HashMap<i64>::new())
-  let new_scopes: Vector<Scope> = rs.scopes.push(new_scope)
-  let new_rs: RS = rs_set_current_scope(rs_set_scopes(rs, new_scopes), idx)
-  return ScopeR(new_rs, idx)
+  rs.scopes = rs.scopes.push(Scope(kind, rs.current_scope, HashMap<i64>::new()))
+  rs.current_scope = idx
+  return ScopeR(rs, idx)
 
 fn rs_pop_scope(rs: RS): RS
   let scope: Scope = rs.scopes.get(rs.current_scope)
-  return rs_set_current_scope(rs, scope.parent)
+  rs.current_scope = scope.parent
+  return rs
 
 fn rs_add_use(rs: RS, tok_idx: i64, sym_idx: i64): RS
-  let new_uses: Vector<i64> = rs.uses.push(tok_idx)
-  let new_uses2: Vector<i64> = new_uses.push(sym_idx)
-  return rs_set_uses(rs, new_uses2)
+  rs.uses = rs.uses.push(tok_idx).push(sym_idx)
+  return rs
 
 fn rs_add_diag(rs: RS, span: Span, msg: string): RS
-  let d: Diagnostic = make_error(span, msg)
-  return rs_set_diags(rs, rs.diags.push(d))
+  rs.diags = rs.diags.push(make_error(span, msg))
+  return rs
 
 // =========================================================================
 // Section 19: Scope operations
 // =========================================================================
 
-// Replace a scope in the scopes vector (O(n) but scopes are small).
-fn replace_scope(scopes: Vector<Scope>, idx: i64, new_scope: Scope): Vector<Scope>
-  let result: Vector<Scope> = Vector<Scope>::new()
-  let i: i64 = 0
-  while i < scopes.length():
-    if i == idx:
-      result = result.push(new_scope)
-    else:
-      result = result.push(scopes.get(i))
-    i = i + 1
-  return result
-
 fn rs_update_scope(rs: RS, scope_idx: i64, new_scope: Scope): RS
-  let new_scopes: Vector<Scope> = replace_scope(rs.scopes, scope_idx, new_scope)
-  return rs_set_scopes(rs, new_scopes)
+  rs.scopes = rs.scopes.set(scope_idx, new_scope)
+  return rs
 
 fn scope_declare(rs: RS, name: string, sym_idx: i64, decl_tidx: i64): RS
   let scope: Scope = rs.scopes.get(rs.current_scope)
-  let existing: Option<i64> = scope.decls.get(name)
-  match existing:
+  match scope.decls.get(name):
     Option.Some(eidx):
-      // Duplicate declaration — emit diagnostic at the duplicate's span
       let sp: Span = Span(to_i64(0), to_i64(1))
       if decl_tidx >= 0:
         let tok: Token = rs.rc.toks.get(decl_tidx)
         sp = Span(tok.offset, tok.len)
-      let rs2: RS = rs_add_diag(rs, sp, "duplicate declaration '" + name + "'")
-      return rs2
+      return rs_add_diag(rs, sp, "duplicate declaration '" + name + "'")
     Option.None:
-      let new_decls: HashMap<i64> = scope.decls.set(name, sym_idx)
-      let new_scope: Scope = Scope(scope.kind, scope.parent, new_decls)
-      return rs_update_scope(rs, rs.current_scope, new_scope)
+      scope.decls = scope.decls.set(name, sym_idx)
+      return rs_update_scope(rs, rs.current_scope, scope)
   return rs
 
 fn scope_lookup(rs: RS, name: string): i64
