@@ -2012,7 +2012,7 @@ fn typecheck(src: string): TypeCheckResult
   // per-file expr_types which the program orchestrator does not
   // accumulate into TypeCheckData. Multi-module callers should use
   // program_run_typecheck instead.
-  let wrapped: string = "module test\n" + src
+  let wrapped: string = wrap_test_module(src)
   let inputs: Vector<SourceInput> = Vector<SourceInput>::new()
   inputs = inputs.push(SourceInput("test.dao", wrapped))
   let pg: ProgramGraph = build_program(inputs)

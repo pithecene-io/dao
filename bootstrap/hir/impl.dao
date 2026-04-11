@@ -1083,7 +1083,10 @@ fn program_run_hir(p: Program): Program
 fn lower_to_hir(src: string): HirResult
   // Route through the program pipeline so HS sees the same
   // composite-keyed uses/expr_types HashMaps as program_run_hir.
-  let wrapped: string = "module test\n" + src
+  // wrap_test_module leaves the source unchanged if it already
+  // starts with its own `module` declaration, so callers that
+  // provide complete file text still work.
+  let wrapped: string = wrap_test_module(src)
   let inputs: Vector<SourceInput> = Vector<SourceInput>::new()
   inputs = inputs.push(SourceInput("test.dao", wrapped))
   let pg: ProgramGraph = build_program(inputs)
@@ -1395,7 +1398,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 21
+  let total: i32 = 22
 
   // Test 1: simple_fn
   let src1: string = "fn add(a: i32, b: i32): i32\n  return a + b\n"
@@ -1891,6 +1894,26 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL method_dispatch_module_isolation")
+
+  // -----------------------------------------------------------------
+  // Test 22: lower_to_hir_respects_own_module
+  // -----------------------------------------------------------------
+  // Regression: lower_to_hir(src) must NOT double-prepend a synthetic
+  // `module test` declaration when the source already has its own
+  // module line.  Before wrap_test_module existed, the adapter
+  // unconditionally prepended, producing two consecutive module
+  // declarations and a parse error.
+  let src22: string = "module app\nfn main(): i32\n  return 42\n"
+  let r22: HirResult = lower_to_hir(src22)
+  // Success means it lowered without error — root is valid.
+  if r22.root >= 0:
+    if hir_count_nodes(r22) > 0:
+      print("PASS lower_to_hir_respects_own_module")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL lower_to_hir_respects_own_module: empty HIR")
+  else:
+    print("FAIL lower_to_hir_respects_own_module: root < 0")
 
   // -----------------------------------------------------------------
   // Summary

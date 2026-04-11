@@ -2582,6 +2582,16 @@ class HirData:
 fn expr_id_key(module_id: i64, node_idx: i64): string
   return i64_to_string(module_id) + ":" + i64_to_string(node_idx)
 
+// Wrap a source string with a synthetic `module test` declaration
+// unless it already starts with one.  Used by the single-file
+// adapters (`typecheck(src)`, `lower_to_hir(src)`) so callers can
+// pass either a bare snippet OR a complete file with its own module
+// declaration.
+fn wrap_test_module(src: string): string
+  if starts_with(src, "module "):
+    return src
+  return "module test\n" + src
+
 // Read helpers for TypeCheckData.expr_types.
 
 fn tc_get_expr_type(td: TypeCheckData, module_id: i64, node_idx: i64): i64
