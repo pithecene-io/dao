@@ -83,52 +83,27 @@ class TypeCheckResult:
 // Section 35: TS state helpers
 // =========================================================================
 
-fn ts_set_types(ts: TS, t: Vector<DaoType>): TS
-  return TS(ts.tc, t, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
-
-fn ts_set_type_info(ts: TS, ti: Vector<i64>): TS
-  return TS(ts.tc, ts.types, ti, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
-
-fn ts_set_diags_tc(ts: TS, d: Vector<Diagnostic>): TS
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, d, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
-
-fn ts_set_return_type(ts: TS, rt: i64): TS
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, rt, ts.loop_depth, ts.expr_types, ts.variant_set)
-
-fn ts_set_loop_depth(ts: TS, ld: i64): TS
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ld, ts.expr_types, ts.variant_set)
-
 fn ts_add_type(ts: TS, t: DaoType): TypeR
   let idx: i64 = ts.types.length()
-  let new_types: Vector<DaoType> = ts.types.push(t)
-  return TypeR(ts_set_types(ts, new_types), idx)
+  ts.types = ts.types.push(t)
+  return TypeR(ts, idx)
 
 fn ts_add_diag(ts: TS, span: Span, msg: string): TS
-  let d: Diagnostic = make_error(span, msg)
-  return ts_set_diags_tc(ts, ts.diags.push(d))
+  ts.diags = ts.diags.push(make_error(span, msg))
+  return ts
 
 fn ts_set_expr_type(ts: TS, node_idx: i64, type_idx: i64): TS
   // Key by (module_id, node_idx) so the per-program expr_types
   // HashMap disambiguates nodes across modules.
   let key: string = expr_id_key(ts.tc.module_id, node_idx)
-  let new_et: HashMap<i64> = ts.expr_types.set(key, type_idx)
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, new_et, ts.variant_set)
+  ts.expr_types = ts.expr_types.set(key, type_idx)
+  return ts
 
 fn vec_i64_set(v: Vector<i64>, idx: i64, val: i64): Vector<i64>
-  // Extend vector if needed
-  let cur: Vector<i64> = v
-  while cur.length() <= idx:
-    cur = cur.push(to_i64(-1))
-  // Replace element at idx
-  let result: Vector<i64> = Vector<i64>::new()
-  let i: i64 = 0
-  while i < cur.length():
-    if i == idx:
-      result = result.push(val)
-    else:
-      result = result.push(cur.get(i))
-    i = i + 1
-  return result
+  // Extend vector if needed, then set.
+  while v.length() <= idx:
+    v = v.push(to_i64(-1))
+  return v.set(idx, val)
 
 fn vec_i64_get(v: Vector<i64>, idx: i64): i64
   if idx < 0:
@@ -138,17 +113,20 @@ fn vec_i64_get(v: Vector<i64>, idx: i64): i64
   return v.get(idx)
 
 fn ts_set_sym_type(ts: TS, sym_idx: i64, type_idx: i64): TS
-  let new_st: Vector<i64> = vec_i64_set(ts.sym_types, sym_idx, type_idx)
-  return TS(ts.tc, ts.types, ts.type_info, new_st, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
+  ts.sym_types = vec_i64_set(ts.sym_types, sym_idx, type_idx)
+  return ts
 
 fn ts_inc_loop_depth(ts: TS): TS
-  return ts_set_loop_depth(ts, ts.loop_depth + 1)
+  ts.loop_depth = ts.loop_depth + 1
+  return ts
 
 fn ts_dec_loop_depth(ts: TS): TS
-  return ts_set_loop_depth(ts, ts.loop_depth - 1)
+  ts.loop_depth = ts.loop_depth - 1
+  return ts
 
 fn ts_push_type_info(ts: TS, val: i64): TS
-  return ts_set_type_info(ts, ts.type_info.push(val))
+  ts.type_info = ts.type_info.push(val)
+  return ts
 
 // =========================================================================
 // Section 36: Name extraction for type checker
@@ -564,24 +542,13 @@ fn tc_register_enums(ts: TS, decls: Vector<i64>): TS
           let vname_tidx: i64 = r.type_info.get(v_offset)
           let vname: string = ts_tok_name(r, vname_tidx)
           let vkey: string = i64_to_string(tr.type_idx) + ":" + vname
-          let new_vs: HashMap<i64> = r.variant_set.set(vkey, to_i64(1))
-          r = TS(r.tc, r.types, r.type_info, r.sym_types, r.diags, r.return_type, r.loop_depth, r.expr_types, new_vs)
+          r.variant_set = r.variant_set.set(vkey, to_i64(1))
           let payload_count: i64 = r.type_info.get(v_offset + 1)
           v_offset = v_offset + 2 + payload_count
           vr = vr + 1
     i = i + 1
   return r
 
-fn replace_type(types: Vector<DaoType>, idx: i64, new_type: DaoType): Vector<DaoType>
-  let result: Vector<DaoType> = Vector<DaoType>::new()
-  let i: i64 = 0
-  while i < types.length():
-    if i == idx:
-      result = result.push(new_type)
-    else:
-      result = result.push(types.get(i))
-    i = i + 1
-  return result
 
 fn tc_fill_struct_fields(ts: TS, decls: Vector<i64>): TS
   let r: TS = ts
@@ -614,9 +581,10 @@ fn tc_fill_struct_fields(ts: TS, decls: Vector<i64>): TS
         if struct_sym >= 0:
           let struct_ti: i64 = vec_i64_get(r.sym_types, struct_sym)
           if struct_ti >= 0:
-            let old_t: DaoType = r.types.get(struct_ti)
-            let new_t: DaoType = DaoType(old_t.kind, old_t.builtin_id, old_t.name, old_t.decl_node, field_info_start, field_count, old_t.ret_type, old_t.pointee)
-            r = ts_set_types(r, replace_type(r.types, struct_ti, new_t))
+            let t: DaoType = r.types.get(struct_ti)
+            t.info_lp = field_info_start
+            t.info_count = field_count
+            r.types = r.types.set(struct_ti, t)
     i = i + 1
   return r
 
@@ -683,17 +651,15 @@ fn tc_register_functions(ts: TS, decls: Vector<i64>): TS
       fn_syms = fn_syms.push(fn_sym)
       fn_type_idxs = fn_type_idxs.push(tr.type_idx)
     i = i + 1
-  // Phase B: Set all sym_types using the ORIGINAL input sym_types
-  // (r.sym_types may be corrupted by the compiler bug)
-  let st: Vector<i64> = ts.sym_types
+  // Phase B: Set all sym_types.
   let j: i64 = 0
   while j < fn_syms.length():
     let sym: i64 = fn_syms.get(j)
     let tidx: i64 = fn_type_idxs.get(j)
     if sym >= 0:
-      st = vec_i64_set(st, sym, tidx)
+      r.sym_types = vec_i64_set(r.sym_types, sym, tidx)
     j = j + 1
-  return TS(r.tc, r.types, r.type_info, st, r.diags, r.return_type, r.loop_depth, r.expr_types, r.variant_set)
+  return r
 
 fn tc_register_methods(ts: TS, decls: Vector<i64>): TS
   let r: TS = ts
@@ -1697,7 +1663,7 @@ fn tc_check_fn_body(ts: TS, decl_idx: i64, name_tidx: i64, params_lp: i64, ret_t
   let old_return_type: i64 = r.return_type
   if fn_ti >= 0:
     let fn_type: DaoType = r.types.get(fn_ti)
-    r = ts_set_return_type(r, fn_type.ret_type)
+    r.return_type = fn_type.ret_type
   // Declare param types
   let pairs: Vector<i64> = read_pairs(r.tc.idx_data, params_lp)
   let pi: i64 = 0
@@ -1713,7 +1679,7 @@ fn tc_check_fn_body(ts: TS, decl_idx: i64, name_tidx: i64, params_lp: i64, ret_t
         r = ts_set_sym_type(r, p_sym, pt_r.type_idx)
     pi = pi + 2
   r = check_body_stmts(r, body_lp)
-  r = ts_set_return_type(r, old_return_type)
+  r.return_type = old_return_type
   return r
 
 fn tc_check_expr_fn_body(ts: TS, decl_idx: i64, name_tidx: i64, params_lp: i64, ret_type_node: i64, body_expr: i64): TS
@@ -1725,7 +1691,7 @@ fn tc_check_expr_fn_body(ts: TS, decl_idx: i64, name_tidx: i64, params_lp: i64, 
   let old_return_type: i64 = r.return_type
   if fn_ti >= 0:
     let fn_type: DaoType = r.types.get(fn_ti)
-    r = ts_set_return_type(r, fn_type.ret_type)
+    r.return_type = fn_type.ret_type
   let pairs: Vector<i64> = read_pairs(r.tc.idx_data, params_lp)
   let pi: i64 = 0
   while pi < pairs.length():
@@ -1746,7 +1712,7 @@ fn tc_check_expr_fn_body(ts: TS, decl_idx: i64, name_tidx: i64, params_lp: i64, 
       if types_equal(r, body_ti, r.return_type) == false:
         let sp: Span = ts_node_span(r, body_expr)
         r = ts_add_diag(r, sp, "expression body type mismatch: expected " + type_name(r, r.return_type) + ", got " + type_name(r, body_ti))
-  r = ts_set_return_type(r, old_return_type)
+  r.return_type = old_return_type
   return r
 
 fn tc_check_method_body(ts: TS, class_decl_idx: i64, meth_idx: i64, m_name_tidx: i64, m_params_lp: i64, m_ret_type: i64, m_body_lp: i64): TS
@@ -1773,7 +1739,7 @@ fn tc_check_method_body(ts: TS, class_decl_idx: i64, meth_idx: i64, m_name_tidx:
   let old_return_type: i64 = r.return_type
   if fn_ti >= 0:
     let fn_type: DaoType = r.types.get(fn_ti)
-    r = ts_set_return_type(r, fn_type.ret_type)
+    r.return_type = fn_type.ret_type
   // Declare param types — self gets the enclosing struct type
   let pairs: Vector<i64> = read_pairs(r.tc.idx_data, m_params_lp)
   let pi: i64 = 0
@@ -1797,7 +1763,7 @@ fn tc_check_method_body(ts: TS, class_decl_idx: i64, meth_idx: i64, m_name_tidx:
           r = ts_set_sym_type(r, p_sym, pt_r.type_idx)
     pi = pi + 2
   r = check_body_stmts(r, m_body_lp)
-  r = ts_set_return_type(r, old_return_type)
+  r.return_type = old_return_type
   return r
 
 fn tc_check_extend_method_body(ts: TS, extend_decl_idx: i64, meth_idx: i64, m_name_tidx: i64, m_params_lp: i64, m_ret_type: i64, m_body_lp: i64): TS
@@ -1824,7 +1790,7 @@ fn tc_check_extend_method_body(ts: TS, extend_decl_idx: i64, meth_idx: i64, m_na
   let old_return_type: i64 = r.return_type
   if fn_ti >= 0:
     let fn_type: DaoType = r.types.get(fn_ti)
-    r = ts_set_return_type(r, fn_type.ret_type)
+    r.return_type = fn_type.ret_type
   // Declare param types — self gets the target type
   let pairs: Vector<i64> = read_pairs(r.tc.idx_data, m_params_lp)
   let pi: i64 = 0
@@ -1855,7 +1821,7 @@ fn tc_check_extend_method_body(ts: TS, extend_decl_idx: i64, meth_idx: i64, m_na
           r = ts_set_sym_type(r, p_sym, pt_r.type_idx)
     pi = pi + 2
   r = check_body_stmts(r, m_body_lp)
-  r = ts_set_return_type(r, old_return_type)
+  r.return_type = old_return_type
   return r
 
 fn tc_pass2(ts: TS, file_node_idx: i64): TS
@@ -2027,12 +1993,10 @@ fn typecheck(src: string): TypeCheckResult
   let ts: TS = build_module_ts(tc, p.typecheck.types, p.typecheck.type_info, p.typecheck.sym_types, p.typecheck.expr_types, HashMap<i64>::new())
 
   // Collect resolve diagnostics into TS.
-  let resolve_diags: Vector<Diagnostic> = Vector<Diagnostic>::new()
   let rdi: i64 = 0
   while rdi < p.resolve.diags.length():
-    resolve_diags = resolve_diags.push(p.resolve.diags.get(rdi).diag)
+    ts.diags = ts.diags.push(p.resolve.diags.get(rdi).diag)
     rdi = rdi + 1
-  ts = TS(ts.tc, ts.types, ts.type_info, ts.sym_types, resolve_diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
   ts = tc_pass1(ts, po.root)
   ts = tc_pass2(ts, po.root)
