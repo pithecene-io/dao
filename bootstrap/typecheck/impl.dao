@@ -472,9 +472,7 @@ fn resolve_ast_type(ts: TS, node_idx: i64): TypeR
       let inner_r: TypeR = resolve_ast_type(ts, inner)
       if inner_r.type_idx < 0:
         return TypeR(inner_r.ts, to_i64(-1))
-      let ptr_name: string = "*" + type_name(inner_r.ts, inner_r.type_idx)
-      let pr2: TypeR = ts_add_type(inner_r.ts, DaoType(TypeKind.TPointer, to_i64(-1), ptr_name, to_i64(-1), to_i64(-1), to_i64(0), to_i64(-1), inner_r.type_idx))
-      return pr2
+      return find_or_add_pointer_type(inner_r.ts, inner_r.type_idx)
     Node.GenericT(name_tidx, args_lp, arg_count):
       return TypeR(ts, to_i64(-1))
     Node.ErrorT(t):
@@ -1303,6 +1301,45 @@ fn check_logical_binop(ts: TS, node_idx: i64, op_tidx: i64, lt: i64, rt: i64, op
       return ts_add_diag(ts, sp, "'" + op_str + "' requires bool operands, got " + type_name(ts, rt))
   return ts_set_expr_type(ts, node_idx, to_i64(10))
 
+// Find an existing TPointer type whose pointee matches, or create a
+// new one.  Deduping is required so that `let p: *i32 = &x` sees the
+// same type index on both sides of the assignment (the type
+// annotation resolves to the canonical pointer type via
+// resolve_ast_type, and addr-of must return the same index).
+fn find_or_add_pointer_type(ts: TS, pointee_ti: i64): TypeR
+  let i: i64 = 0
+  while i < ts.types.length():
+    let t: DaoType = ts.types.get(i)
+    match t.kind:
+      TypeKind.TPointer:
+        if t.pointee == pointee_ti:
+          return TypeR(ts, i)
+    i = i + 1
+  let ptr_name: string = "*" + type_name(ts, pointee_ti)
+  return ts_add_type(ts, DaoType(TypeKind.TPointer, to_i64(-1), ptr_name, to_i64(-1), to_i64(-1), to_i64(0), to_i64(-1), pointee_ti))
+
+// True if the AST node is an lvalue: identifier, field access,
+// index expression, or dereferenced pointer.  Used by addr-of to
+// reject taking the address of temporaries/literals.
+fn is_lvalue_expr(ts: TS, node_idx: i64): bool
+  if node_idx < 0:
+    return false
+  let node: Node = ts.tc.nodes.get(node_idx)
+  match node:
+    Node.IdentE(t):
+      return true
+    Node.FieldE(o, f):
+      return true
+    Node.IndexE(o, i):
+      return true
+    Node.UnaryE(op_tidx, operand):
+      // *ptr is an lvalue.
+      let op_tok: Token = ts.tc.toks.get(op_tidx)
+      if tk_name(op_tok.kind) == "Star":
+        return true
+      return false
+  return false
+
 fn check_unary_expr(ts: TS, node_idx: i64, op_tidx: i64, operand: i64): TS
   let r: TS = check_expr(ts, operand)
   let ot: i64 = get_expr_type(r, operand)
@@ -1326,6 +1363,31 @@ fn check_unary_expr(ts: TS, node_idx: i64, op_tidx: i64, operand: i64): TS
         r = ts_add_diag(r, sp, "'not' requires bool operand, got " + type_name(r, ot))
         return r
     return ts_set_expr_type(r, node_idx, to_i64(10))
+  if op_name_str == "Star":
+    // Dereference: *ptr where ptr: *T produces T.
+    // NOTE: Host compiler additionally requires `mode unsafe =>` for
+    // deref.  The bootstrap type checker does not yet track active
+    // modes; the unsafe-mode check is deferred to a later Tier B slice.
+    if ot >= 0:
+      let ptr_type: DaoType = r.types.get(ot)
+      match ptr_type.kind:
+        TypeKind.TPointer:
+          return ts_set_expr_type(r, node_idx, ptr_type.pointee)
+      let sp: Span = ts_tok_span(r, op_tidx)
+      r = ts_add_diag(r, sp, "cannot dereference non-pointer type " + type_name(r, ot))
+    return ts_set_expr_type(r, node_idx, to_i64(-1))
+  if op_name_str == "Amp":
+    // Address-of: &x where x: T produces *T.  Operand must be an
+    // lvalue (cannot take address of a literal or temporary).
+    if is_lvalue_expr(r, operand) == false:
+      let sp: Span = ts_tok_span(r, op_tidx)
+      r = ts_add_diag(r, sp, "cannot take address of non-lvalue")
+      return ts_set_expr_type(r, node_idx, to_i64(-1))
+    if ot >= 0:
+      let pr: TypeR = find_or_add_pointer_type(r, ot)
+      r = pr.ts
+      return ts_set_expr_type(r, node_idx, pr.type_idx)
+    return ts_set_expr_type(r, node_idx, to_i64(-1))
   return ts_set_expr_type(r, node_idx, ot)
 
 fn check_call_expr(ts: TS, node_idx: i64, callee: i64, args_lp: i64, arg_count: i64): TS
@@ -2044,7 +2106,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 39
+  let total: i32 = 43
 
   // Test 1: correct_arithmetic
   let src1: string = "fn main(): i32\n  return 1 + 2\n"
@@ -2180,6 +2242,56 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL correct_expr_fn: expected 0 diagnostics, got " + i64_to_string(tc_count_diags(r15)))
+
+  // Test 15a: correct_addr_of — &x on an identifier
+  let src15a: string = "fn test(): i32\n  let x: i32 = 1\n  let p: *i32 = &x\n  return 0\n"
+  let r15a: TypeCheckResult = typecheck(src15a)
+  if tc_count_diags(r15a) == 0:
+    print("PASS correct_addr_of")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL correct_addr_of: expected 0 diagnostics, got " + i64_to_string(tc_count_diags(r15a)))
+
+  // Test 15b: correct_deref — *p where p: *i32 produces i32
+  let src15b: string = "fn test(): i32\n  let x: i32 = 1\n  let p: *i32 = &x\n  let y: i32 = *p\n  return 0\n"
+  let r15b: TypeCheckResult = typecheck(src15b)
+  if tc_count_diags(r15b) == 0:
+    print("PASS correct_deref")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL correct_deref: expected 0 diagnostics, got " + i64_to_string(tc_count_diags(r15b)))
+
+  // Test 15c: err_deref_non_pointer — *x where x: i32 should diagnose
+  let src15c: string = "fn test(): i32\n  let x: i32 = 1\n  let y: i32 = *x\n  return 0\n"
+  let r15c: TypeCheckResult = typecheck(src15c)
+  let found_deref_err: bool = false
+  let d15c: i64 = 0
+  while d15c < r15c.diags.length():
+    let dd: Diagnostic = r15c.diags.get(d15c)
+    if dd.message == "cannot dereference non-pointer type i32":
+      found_deref_err = true
+    d15c = d15c + 1
+  if found_deref_err:
+    print("PASS err_deref_non_pointer")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL err_deref_non_pointer: expected non-pointer deref diagnostic")
+
+  // Test 15d: err_addr_of_literal — &42 is not an lvalue
+  let src15d: string = "fn test(): i32\n  let p: *i32 = &42\n  return 0\n"
+  let r15d: TypeCheckResult = typecheck(src15d)
+  let found_lvalue_err: bool = false
+  let d15d: i64 = 0
+  while d15d < r15d.diags.length():
+    let dd2: Diagnostic = r15d.diags.get(d15d)
+    if dd2.message == "cannot take address of non-lvalue":
+      found_lvalue_err = true
+    d15d = d15d + 1
+  if found_lvalue_err:
+    print("PASS err_addr_of_literal")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL err_addr_of_literal: expected non-lvalue addr-of diagnostic")
 
   // Test 16: err_assign_to_literal — assignment to non-lvalue
   let src16a: string = "fn test(): i32\n  42 = 1\n  return 0\n"
