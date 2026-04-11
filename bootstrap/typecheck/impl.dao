@@ -49,10 +49,9 @@ class TC:
   src: string
   symbols: Vector<Symbol>
   scopes: Vector<Scope>
-  uses_map: HashMap<i64>         // per-module uses (single-file legacy path)
-  uses_triples: Vector<i64>     // program-level uses triples (D4 multi-module path)
+  uses_map: HashMap<i64>         // program-level uses_key(file_id, tok_idx) → sym_idx
   file_id: i64                   // module-level file provenance (-1 for dummy)
-  concept_bindings: Vector<i64> // program-level triples: [file_id, decl_idx, sym_idx, ...]
+  concept_bindings: HashMap<i64> // program-level extend_binding_key → concept sym_idx
   module_id: i64                 // module identity for owner_module_id filtering (D2)
   exports: ExportTables          // cross-module export lookup (D4)
 
@@ -65,9 +64,8 @@ class TS:
   diags: Vector<Diagnostic>
   return_type: i64
   loop_depth: i64
-  expr_types: HashMap<i64>
+  expr_types: HashMap<i64>   // keyed by expr_id_key(module_id, node_idx)
   variant_set: HashMap<i64>  // D4: "{type_idx}:{variant_name}" → 1
-  expr_triples: Vector<i64> // D5: flat [module_id, node_idx, type_idx, ...] for program accumulation
 
 class TypeR:
   ts: TS
@@ -86,19 +84,19 @@ class TypeCheckResult:
 // =========================================================================
 
 fn ts_set_types(ts: TS, t: Vector<DaoType>): TS
-  return TS(ts.tc, t, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set, ts.expr_triples)
+  return TS(ts.tc, t, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_set_type_info(ts: TS, ti: Vector<i64>): TS
-  return TS(ts.tc, ts.types, ti, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set, ts.expr_triples)
+  return TS(ts.tc, ts.types, ti, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_set_diags_tc(ts: TS, d: Vector<Diagnostic>): TS
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, d, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set, ts.expr_triples)
+  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, d, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_set_return_type(ts: TS, rt: i64): TS
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, rt, ts.loop_depth, ts.expr_types, ts.variant_set, ts.expr_triples)
+  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, rt, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_set_loop_depth(ts: TS, ld: i64): TS
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ld, ts.expr_types, ts.variant_set, ts.expr_triples)
+  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ld, ts.expr_types, ts.variant_set)
 
 fn ts_add_type(ts: TS, t: DaoType): TypeR
   let idx: i64 = ts.types.length()
@@ -110,14 +108,11 @@ fn ts_add_diag(ts: TS, span: Span, msg: string): TS
   return ts_set_diags_tc(ts, ts.diags.push(d))
 
 fn ts_set_expr_type(ts: TS, node_idx: i64, type_idx: i64): TS
-  let new_et: HashMap<i64> = ts.expr_types.set(i64_to_string(node_idx), type_idx)
-  // D5: Also append a triple for program-level accumulation.
-  // Vector.push works in while loops (unlike HashMap.set), so the
-  // program orchestrator can extract these after pass2.
-  let new_triples: Vector<i64> = ts.expr_triples.push(ts.tc.module_id)
-  new_triples = new_triples.push(node_idx)
-  new_triples = new_triples.push(type_idx)
-  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, new_et, ts.variant_set, new_triples)
+  // Key by (module_id, node_idx) so the per-program expr_types
+  // HashMap disambiguates nodes across modules.
+  let key: string = expr_id_key(ts.tc.module_id, node_idx)
+  let new_et: HashMap<i64> = ts.expr_types.set(key, type_idx)
+  return TS(ts.tc, ts.types, ts.type_info, ts.sym_types, ts.diags, ts.return_type, ts.loop_depth, new_et, ts.variant_set)
 
 fn vec_i64_set(v: Vector<i64>, idx: i64, val: i64): Vector<i64>
   // Extend vector if needed
@@ -144,7 +139,7 @@ fn vec_i64_get(v: Vector<i64>, idx: i64): i64
 
 fn ts_set_sym_type(ts: TS, sym_idx: i64, type_idx: i64): TS
   let new_st: Vector<i64> = vec_i64_set(ts.sym_types, sym_idx, type_idx)
-  return TS(ts.tc, ts.types, ts.type_info, new_st, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set, ts.expr_triples)
+  return TS(ts.tc, ts.types, ts.type_info, new_st, ts.diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
 fn ts_inc_loop_depth(ts: TS): TS
   return ts_set_loop_depth(ts, ts.loop_depth + 1)
@@ -209,36 +204,14 @@ fn ts_node_span(ts: TS, node_idx: i64): Span
 // Section 37: Uses map and lookup
 // =========================================================================
 
-fn build_uses_map(uses: Vector<i64>): HashMap<i64>
-  let m: HashMap<i64> = HashMap<i64>::new()
-  let i: i64 = 0
-  while i < uses.length():
-    let tok_idx: i64 = uses.get(i)
-    let sym_idx: i64 = uses.get(i + 1)
-    m = m.set(i64_to_string(tok_idx), sym_idx)
-    i = i + 2
-  return m
-
 fn lookup_use(ts: TS, tok_idx: i64): i64
-  // D4: Try the program-level triple stream first (works for
-  // multi-module). Falls back to the per-module HashMap for the
-  // single-file legacy path.
-  let triples: Vector<i64> = ts.tc.uses_triples
-  if triples.length() > 0:
-    let file_id: i64 = ts.tc.file_id
-    let i: i64 = 0
-    while i + 2 < triples.length():
-      if triples.get(i) == file_id:
-        if triples.get(i + 1) == tok_idx:
-          return triples.get(i + 2)
-      i = i + 3
-  let result: Option<i64> = ts.tc.uses_map.get(i64_to_string(tok_idx))
+  let key: string = uses_key(ts.tc.file_id, tok_idx)
+  let result: Option<i64> = ts.tc.uses_map.get(key)
   match result:
     Option.Some(sym_idx):
       return sym_idx
     Option.None:
       return to_i64(-1)
-  return to_i64(-1)
 
 // =========================================================================
 // Section 38: Builtin type registration
@@ -288,10 +261,9 @@ fn program_init_typecheck(p: Program): Program
     "",
     Vector<Symbol>::new(),
     Vector<Scope>::new(),
-    HashMap<i64>::new(),
-    Vector<i64>::new(),
+    HashMap<i64>::new(),  // uses_map
     to_i64(-1),
-    Vector<i64>::new(),  // concept_bindings: empty triples
+    HashMap<i64>::new(),  // concept_bindings
     to_i64(-1),
     ExportTables(Vector<ExportTable>::new()))
   let dummy_ts: TS = TS(
@@ -303,16 +275,14 @@ fn program_init_typecheck(p: Program): Program
     to_i64(-1),
     to_i64(0),
     HashMap<i64>::new(),
-    HashMap<i64>::new(),
-    Vector<i64>::new())
+    HashMap<i64>::new())
   let seeded: TS = register_builtins(dummy_ts)
   let td: TypeCheckData = TypeCheckData(
     true,
     seeded.types,
     seeded.type_info,
     seeded.sym_types,
-    HashMap<i64>::new(),
-    Vector<i64>::new())
+    HashMap<i64>::new())
   return Program(p.graph, p.resolve, td, p.hir, p.diags)
 
 // =========================================================================
@@ -595,7 +565,7 @@ fn tc_register_enums(ts: TS, decls: Vector<i64>): TS
           let vname: string = ts_tok_name(r, vname_tidx)
           let vkey: string = i64_to_string(tr.type_idx) + ":" + vname
           let new_vs: HashMap<i64> = r.variant_set.set(vkey, to_i64(1))
-          r = TS(r.tc, r.types, r.type_info, r.sym_types, r.diags, r.return_type, r.loop_depth, r.expr_types, new_vs, r.expr_triples)
+          r = TS(r.tc, r.types, r.type_info, r.sym_types, r.diags, r.return_type, r.loop_depth, r.expr_types, new_vs)
           let payload_count: i64 = r.type_info.get(v_offset + 1)
           v_offset = v_offset + 2 + payload_count
           vr = vr + 1
@@ -723,7 +693,7 @@ fn tc_register_functions(ts: TS, decls: Vector<i64>): TS
     if sym >= 0:
       st = vec_i64_set(st, sym, tidx)
     j = j + 1
-  return TS(r.tc, r.types, r.type_info, st, r.diags, r.return_type, r.loop_depth, r.expr_types, r.variant_set, r.expr_triples)
+  return TS(r.tc, r.types, r.type_info, st, r.diags, r.return_type, r.loop_depth, r.expr_types, r.variant_set)
 
 fn tc_register_methods(ts: TS, decls: Vector<i64>): TS
   let r: TS = ts
@@ -914,17 +884,6 @@ fn tc_register_extend_methods(ts: TS, decls: Vector<i64>): TS
 // Validate that each extend Type as Concept: provides all required
 // methods with matching signatures. Emits diagnostics for missing
 // methods and signature mismatches.
-// Look up the concept sym_idx for an extend decl in the program-level
-// concept bindings triples.  Returns -1 if no binding found.
-fn lookup_concept_sym_in_triples(triples: Vector<i64>, file_id: i64, decl_idx: i64): i64
-  let i: i64 = 0
-  while i + 2 < triples.length():
-    if triples.get(i) == file_id:
-      if triples.get(i + 1) == decl_idx:
-        return triples.get(i + 2)
-    i = i + 3
-  return to_i64(-1)
-
 fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
   let r: TS = ts
   let i: i64 = 0
@@ -934,12 +893,19 @@ fn tc_check_concept_satisfaction(ts: TS, decls: Vector<i64>): TS
     match node:
       Node.ExtendDeclD(target_type_node, concept_name_tidx, methods_lp):
         // Look up the concept type via the resolver-bound identity in
-        // TC.concept_bindings (program-level triples), NOT by scanning
-        // symbols by name.  The resolver already bound the concept name
-        // to its sym_idx during resolution.
+        // TC.concept_bindings, NOT by scanning symbols by name.
+        // The resolver already bound the concept name to its sym_idx
+        // during resolution.
         let concept_name: string = ts_tok_name(r, concept_name_tidx)
         let concept_ti: i64 = to_i64(-1)
-        let concept_sym_idx: i64 = lookup_concept_sym_in_triples(r.tc.concept_bindings, r.tc.file_id, decl_idx)
+        let cb_key: string = extend_binding_key(r.tc.file_id, decl_idx)
+        let cb_found: Option<i64> = r.tc.concept_bindings.get(cb_key)
+        let concept_sym_idx: i64 = to_i64(-1)
+        match cb_found:
+          Option.Some(sym):
+            concept_sym_idx = sym
+          Option.None:
+            concept_sym_idx = to_i64(-1)
         if concept_sym_idx >= 0:
           let cti: i64 = vec_i64_get(r.sym_types, concept_sym_idx)
           if cti >= 0:
@@ -1190,13 +1156,13 @@ fn check_qualname_expr(ts: TS, node_idx: i64, seg_lp: i64, seg_count: i64): TS
   return ts
 
 fn get_expr_type(ts: TS, node_idx: i64): i64
-  let found: Option<i64> = ts.expr_types.get(i64_to_string(node_idx))
+  let key: string = expr_id_key(ts.tc.module_id, node_idx)
+  let found: Option<i64> = ts.expr_types.get(key)
   match found:
     Option.Some(ti):
       return ti
     Option.None:
       return to_i64(-1)
-  return to_i64(-1)
 
 fn check_binary_expr(ts: TS, node_idx: i64, op_tidx: i64, left: i64, right: i64): TS
   let r: TS = check_expr(ts, left)
@@ -1949,12 +1915,11 @@ fn tc_pass2(ts: TS, file_node_idx: i64): TS
 fn build_module_tc(p: Program, mid: i64): TC
   let sf: SourceFile = program_file_of_module(p, mid)
   let po: ParseOutput = sf.parse_output
-  let um: HashMap<i64> = program_module_uses_map(p, sf.file_id)
-  return TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, um, p.resolve.uses, sf.file_id, p.resolve.extend_concept_bindings, mid, p.resolve.module_exports)
+  return TC(po.nodes, po.idx, po.toks, sf.source_text, p.resolve.symbols, p.resolve.scopes, p.resolve.uses, sf.file_id, p.resolve.extend_concept_bindings, mid, p.resolve.module_exports)
 
 // Helper: build per-module TS from accumulated program state.
-fn build_module_ts(tc: TC, types: Vector<DaoType>, type_info: Vector<i64>, sym_types: Vector<i64>, variant_set: HashMap<i64>): TS
-  return TS(tc, types, type_info, sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), variant_set, Vector<i64>::new())
+fn build_module_ts(tc: TC, types: Vector<DaoType>, type_info: Vector<i64>, sym_types: Vector<i64>, expr_types: HashMap<i64>, variant_set: HashMap<i64>): TS
+  return TS(tc, types, type_info, sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), expr_types, variant_set)
 
 
 // Run type checking over the full program in two passes:
@@ -1977,6 +1942,7 @@ fn program_run_typecheck(p: Program): Program
   let types: Vector<DaoType> = p.typecheck.types
   let type_info: Vector<i64> = p.typecheck.type_info
   let sym_types: Vector<i64> = p.typecheck.sym_types
+  let expr_types: HashMap<i64> = p.typecheck.expr_types
   let variant_set: HashMap<i64> = HashMap<i64>::new()
   // Seed diagnostics from the resolve pass only (the pre-typecheck
   // baseline), NOT from p.diags which may already include typecheck
@@ -1992,12 +1958,13 @@ fn program_run_typecheck(p: Program): Program
     let tc: TC = build_module_tc(p, mid)
     let sf: SourceFile = program_file_of_module(p, mid)
     let po: ParseOutput = sf.parse_output
-    let ts: TS = build_module_ts(tc, types, type_info, sym_types, variant_set)
+    let ts: TS = build_module_ts(tc, types, type_info, sym_types, expr_types, variant_set)
     ts = tc_pass1(ts, po.root)
     // Save accumulated state.
     types = ts.types
     type_info = ts.type_info
     sym_types = ts.sym_types
+    expr_types = ts.expr_types
     variant_set = ts.variant_set
     // Merge per-module diagnostics.
     let di: i64 = 0
@@ -2007,30 +1974,20 @@ fn program_run_typecheck(p: Program): Program
     ti = ti + 1
 
   // --- Program Pass 2: check bodies in topo order ---
-  let all_expr_triples: Vector<i64> = Vector<i64>::new()
-  let expr_td: TypeCheckData = TypeCheckData(true, types, type_info, sym_types, p.typecheck.expr_types, all_expr_triples)
   let t2i: i64 = 0
   while t2i < p.graph.topo_order.length():
     let mid: i64 = p.graph.topo_order.get(t2i)
     let tc: TC = build_module_tc(p, mid)
     let sf: SourceFile = program_file_of_module(p, mid)
     let po: ParseOutput = sf.parse_output
-    let ts: TS = build_module_ts(tc, types, type_info, sym_types, variant_set)
+    let ts: TS = build_module_ts(tc, types, type_info, sym_types, expr_types, variant_set)
     ts = tc_pass2(ts, po.root)
     // Save accumulated state (types/sym_types may grow in pass2
     // via function-body-level type inference, though rare).
     types = ts.types
     type_info = ts.type_info
     sym_types = ts.sym_types
-    // Accumulate per-module expr_type_triples from TS into the
-    // program-wide vector. Vector.push works in while loops (unlike
-    // HashMap.set), so this is the reliable accumulation path.
-    let eti: i64 = 0
-    while eti + 2 < ts.expr_triples.length():
-      all_expr_triples = all_expr_triples.push(ts.expr_triples.get(eti))
-      all_expr_triples = all_expr_triples.push(ts.expr_triples.get(eti + 1))
-      all_expr_triples = all_expr_triples.push(ts.expr_triples.get(eti + 2))
-      eti = eti + 3
+    expr_types = ts.expr_types
     // Merge diagnostics.
     let di: i64 = 0
     while di < ts.diags.length():
@@ -2038,10 +1995,7 @@ fn program_run_typecheck(p: Program): Program
       di = di + 1
     t2i = t2i + 1
 
-  // Write back to TypeCheckData with accumulated expr_type_triples.
-  // tc_get_expr_type scans these triples as a fallback when the
-  // HashMap lookup fails — this is the program-level expr_types path.
-  let td: TypeCheckData = TypeCheckData(true, types, type_info, sym_types, p.typecheck.expr_types, all_expr_triples)
+  let td: TypeCheckData = TypeCheckData(true, types, type_info, sym_types, expr_types)
   return Program(p.graph, p.resolve, td, p.hir, all_diags)
 
 // =========================================================================
@@ -2058,7 +2012,7 @@ fn typecheck(src: string): TypeCheckResult
   // per-file expr_types which the program orchestrator does not
   // accumulate into TypeCheckData. Multi-module callers should use
   // program_run_typecheck instead.
-  let wrapped: string = "module test\n" + src
+  let wrapped: string = wrap_test_module(src)
   let inputs: Vector<SourceInput> = Vector<SourceInput>::new()
   inputs = inputs.push(SourceInput("test.dao", wrapped))
   let pg: ProgramGraph = build_program(inputs)
@@ -2070,7 +2024,7 @@ fn typecheck(src: string): TypeCheckResult
   let tc: TC = build_module_tc(p, to_i64(0))
   let sf: SourceFile = program_file_of_module(p, to_i64(0))
   let po: ParseOutput = sf.parse_output
-  let ts: TS = build_module_ts(tc, p.typecheck.types, p.typecheck.type_info, p.typecheck.sym_types, HashMap<i64>::new())
+  let ts: TS = build_module_ts(tc, p.typecheck.types, p.typecheck.type_info, p.typecheck.sym_types, p.typecheck.expr_types, HashMap<i64>::new())
 
   // Collect resolve diagnostics into TS.
   let resolve_diags: Vector<Diagnostic> = Vector<Diagnostic>::new()
@@ -2078,7 +2032,7 @@ fn typecheck(src: string): TypeCheckResult
   while rdi < p.resolve.diags.length():
     resolve_diags = resolve_diags.push(p.resolve.diags.get(rdi).diag)
     rdi = rdi + 1
-  ts = TS(ts.tc, ts.types, ts.type_info, ts.sym_types, resolve_diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set, ts.expr_triples)
+  ts = TS(ts.tc, ts.types, ts.type_info, ts.sym_types, resolve_diags, ts.return_type, ts.loop_depth, ts.expr_types, ts.variant_set)
 
   ts = tc_pass1(ts, po.root)
   ts = tc_pass2(ts, po.root)
@@ -2506,10 +2460,27 @@ fn main(): i32
 
   let d3_ok: bool = true
 
-  // The binding triples should have an entry for the extend decl.
-  // Verify by checking that the triples vector is non-empty (at least
-  // one triple = 3 entries for the extend Msg as Showable:).
-  if d3_p.resolve.extend_concept_bindings.length() < 3:
+  // The binding HashMap should have an entry for the extend decl.
+  // Walk the single file's extend decls and verify at least one
+  // binding resolves via program_extend_concept_sym.
+  let d3_sf: SourceFile = program_file_of_module(d3_p, to_i64(0))
+  let d3_po: ParseOutput = d3_sf.parse_output
+  let d3_found_binding: bool = false
+  let d3_root: Node = d3_po.nodes.get(d3_po.root)
+  match d3_root:
+    Node.FileN(md3, il3, dl3):
+      let d3_decls: Vector<i64> = read_list(d3_po.idx, dl3)
+      let d3i: i64 = 0
+      while d3i < d3_decls.length():
+        let d3_didx: i64 = d3_decls.get(d3i)
+        let d3_node: Node = d3_po.nodes.get(d3_didx)
+        match d3_node:
+          Node.ExtendDeclD(t3, c3, m3):
+            let d3_sym: i64 = program_extend_concept_sym(d3_p, d3_sf.file_id, d3_didx)
+            if d3_sym >= 0:
+              d3_found_binding = true
+        d3i = d3i + 1
+  if d3_found_binding == false:
     d3_ok = false
 
   // Now run typecheck through the adapter — the extend declares
@@ -2580,19 +2551,17 @@ fn main(): i32
   let d4_main_mid: i64 = find_module_by_name(d4_p1.graph.modules, "app::main")
   let d4_sf: SourceFile = program_file_of_module(d4_p1, d4_main_mid)
   let d4_po: ParseOutput = d4_sf.parse_output
-  let d4_um: HashMap<i64> = program_module_uses_map(d4_p1, d4_sf.file_id)
-  let d4_tc: TC = TC(d4_po.nodes, d4_po.idx, d4_po.toks, d4_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_um, d4_p1.resolve.uses, d4_sf.file_id, d4_p1.resolve.extend_concept_bindings, d4_main_mid, d4_p1.resolve.module_exports)
-  let d4_ts: TS = TS(d4_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new(), Vector<i64>::new())
+  let d4_tc: TC = TC(d4_po.nodes, d4_po.idx, d4_po.toks, d4_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_p1.resolve.uses, d4_sf.file_id, d4_p1.resolve.extend_concept_bindings, d4_main_mid, d4_p1.resolve.module_exports)
+  let d4_ts: TS = TS(d4_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new())
   // Run pass1 on math first (to register the exported function type).
   let d4_math_mid: i64 = find_module_by_name(d4_p1.graph.modules, "app::math")
   let d4_math_sf: SourceFile = program_file_of_module(d4_p1, d4_math_mid)
   let d4_math_po: ParseOutput = d4_math_sf.parse_output
-  let d4_math_um: HashMap<i64> = program_module_uses_map(d4_p1, d4_math_sf.file_id)
-  let d4_math_tc: TC = TC(d4_math_po.nodes, d4_math_po.idx, d4_math_po.toks, d4_math_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_math_um, d4_p1.resolve.uses, d4_math_sf.file_id, d4_p1.resolve.extend_concept_bindings, d4_math_mid, d4_p1.resolve.module_exports)
-  let d4_math_ts: TS = TS(d4_math_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new(), Vector<i64>::new())
+  let d4_math_tc: TC = TC(d4_math_po.nodes, d4_math_po.idx, d4_math_po.toks, d4_math_sf.source_text, d4_p1.resolve.symbols, d4_p1.resolve.scopes, d4_p1.resolve.uses, d4_math_sf.file_id, d4_p1.resolve.extend_concept_bindings, d4_math_mid, d4_p1.resolve.module_exports)
+  let d4_math_ts: TS = TS(d4_math_tc, d4_p1.typecheck.types, d4_p1.typecheck.type_info, d4_p1.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new())
   d4_math_ts = tc_pass1(d4_math_ts, d4_math_po.root)
   // Now run both passes on main using math's accumulated types/sym_types.
-  d4_ts = TS(d4_tc, d4_math_ts.types, d4_math_ts.type_info, d4_math_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_math_ts.variant_set, Vector<i64>::new())
+  d4_ts = TS(d4_tc, d4_math_ts.types, d4_math_ts.type_info, d4_math_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_math_ts.variant_set)
   d4_ts = tc_pass1(d4_ts, d4_po.root)
   d4_ts = tc_pass2(d4_ts, d4_po.root)
 
@@ -2622,18 +2591,16 @@ fn main(): i32
   let d4_b_mid: i64 = find_module_by_name(d4_p2.graph.modules, "app::b")
   let d4_b_sf: SourceFile = program_file_of_module(d4_p2, d4_b_mid)
   let d4_b_po: ParseOutput = d4_b_sf.parse_output
-  let d4_b_um: HashMap<i64> = program_module_uses_map(d4_p2, d4_b_sf.file_id)
-  let d4_b_tc: TC = TC(d4_b_po.nodes, d4_b_po.idx, d4_b_po.toks, d4_b_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_b_um, d4_p2.resolve.uses, d4_b_sf.file_id, d4_p2.resolve.extend_concept_bindings, d4_b_mid, d4_p2.resolve.module_exports)
+  let d4_b_tc: TC = TC(d4_b_po.nodes, d4_b_po.idx, d4_b_po.toks, d4_b_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_p2.resolve.uses, d4_b_sf.file_id, d4_p2.resolve.extend_concept_bindings, d4_b_mid, d4_p2.resolve.module_exports)
   // Run pass1 on lib::a first.
   let d4_a_mid: i64 = find_module_by_name(d4_p2.graph.modules, "lib::a")
   let d4_a_sf: SourceFile = program_file_of_module(d4_p2, d4_a_mid)
   let d4_a_po: ParseOutput = d4_a_sf.parse_output
-  let d4_a_um: HashMap<i64> = program_module_uses_map(d4_p2, d4_a_sf.file_id)
-  let d4_a_tc: TC = TC(d4_a_po.nodes, d4_a_po.idx, d4_a_po.toks, d4_a_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_a_um, d4_p2.resolve.uses, d4_a_sf.file_id, d4_p2.resolve.extend_concept_bindings, d4_a_mid, d4_p2.resolve.module_exports)
-  let d4_a_ts: TS = TS(d4_a_tc, d4_p2.typecheck.types, d4_p2.typecheck.type_info, d4_p2.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new(), Vector<i64>::new())
+  let d4_a_tc: TC = TC(d4_a_po.nodes, d4_a_po.idx, d4_a_po.toks, d4_a_sf.source_text, d4_p2.resolve.symbols, d4_p2.resolve.scopes, d4_p2.resolve.uses, d4_a_sf.file_id, d4_p2.resolve.extend_concept_bindings, d4_a_mid, d4_p2.resolve.module_exports)
+  let d4_a_ts: TS = TS(d4_a_tc, d4_p2.typecheck.types, d4_p2.typecheck.type_info, d4_p2.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new())
   d4_a_ts = tc_pass1(d4_a_ts, d4_a_po.root)
   // Now typecheck app::b.
-  let d4_b_ts: TS = TS(d4_b_tc, d4_a_ts.types, d4_a_ts.type_info, d4_a_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_a_ts.variant_set, Vector<i64>::new())
+  let d4_b_ts: TS = TS(d4_b_tc, d4_a_ts.types, d4_a_ts.type_info, d4_a_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_a_ts.variant_set)
   d4_b_ts = tc_pass1(d4_b_ts, d4_b_po.root)
   d4_b_ts = tc_pass2(d4_b_ts, d4_b_po.root)
 
@@ -2662,17 +2629,15 @@ fn main(): i32
   let d4_c_mid: i64 = find_module_by_name(d4_p3.graph.modules, "lib::colors")
   let d4_c_sf: SourceFile = program_file_of_module(d4_p3, d4_c_mid)
   let d4_c_po: ParseOutput = d4_c_sf.parse_output
-  let d4_c_um: HashMap<i64> = program_module_uses_map(d4_p3, d4_c_sf.file_id)
-  let d4_c_tc: TC = TC(d4_c_po.nodes, d4_c_po.idx, d4_c_po.toks, d4_c_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_c_um, d4_p3.resolve.uses, d4_c_sf.file_id, d4_p3.resolve.extend_concept_bindings, d4_c_mid, d4_p3.resolve.module_exports)
-  let d4_c_ts: TS = TS(d4_c_tc, d4_p3.typecheck.types, d4_p3.typecheck.type_info, d4_p3.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new(), Vector<i64>::new())
+  let d4_c_tc: TC = TC(d4_c_po.nodes, d4_c_po.idx, d4_c_po.toks, d4_c_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_p3.resolve.uses, d4_c_sf.file_id, d4_p3.resolve.extend_concept_bindings, d4_c_mid, d4_p3.resolve.module_exports)
+  let d4_c_ts: TS = TS(d4_c_tc, d4_p3.typecheck.types, d4_p3.typecheck.type_info, d4_p3.typecheck.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), HashMap<i64>::new())
   d4_c_ts = tc_pass1(d4_c_ts, d4_c_po.root)
   // Run pass1+pass2 on app::d with colors' variant_set.
   let d4_d_mid: i64 = find_module_by_name(d4_p3.graph.modules, "app::d")
   let d4_d_sf: SourceFile = program_file_of_module(d4_p3, d4_d_mid)
   let d4_d_po: ParseOutput = d4_d_sf.parse_output
-  let d4_d_um: HashMap<i64> = program_module_uses_map(d4_p3, d4_d_sf.file_id)
-  let d4_d_tc: TC = TC(d4_d_po.nodes, d4_d_po.idx, d4_d_po.toks, d4_d_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_d_um, d4_p3.resolve.uses, d4_d_sf.file_id, d4_p3.resolve.extend_concept_bindings, d4_d_mid, d4_p3.resolve.module_exports)
-  let d4_d_ts: TS = TS(d4_d_tc, d4_c_ts.types, d4_c_ts.type_info, d4_c_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_c_ts.variant_set, Vector<i64>::new())
+  let d4_d_tc: TC = TC(d4_d_po.nodes, d4_d_po.idx, d4_d_po.toks, d4_d_sf.source_text, d4_p3.resolve.symbols, d4_p3.resolve.scopes, d4_p3.resolve.uses, d4_d_sf.file_id, d4_p3.resolve.extend_concept_bindings, d4_d_mid, d4_p3.resolve.module_exports)
+  let d4_d_ts: TS = TS(d4_d_tc, d4_c_ts.types, d4_c_ts.type_info, d4_c_ts.sym_types, Vector<Diagnostic>::new(), to_i64(-1), to_i64(0), HashMap<i64>::new(), d4_c_ts.variant_set)
   d4_d_ts = tc_pass1(d4_d_ts, d4_d_po.root)
   d4_d_ts = tc_pass2(d4_d_ts, d4_d_po.root)
   let d4_3_ok: bool = false

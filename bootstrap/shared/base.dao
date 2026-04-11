@@ -2563,10 +2563,7 @@ class TypeCheckData:
   types: Vector<DaoType>
   type_info: Vector<i64>
   sym_types: Vector<i64>
-  expr_types: HashMap<i64>       // key: expr_id_key(module_id, node_idx)
-  expr_type_triples: Vector<i64> // flat: [module_id, node_idx, type_idx, ...]
-                                 // D5: workaround for bootstrap HashMap-in-while bug;
-                                 // program_run_typecheck accumulates here via Vector.push
+  expr_types: HashMap<i64>       // key: expr_type_key(module_id, node_idx)
 
 class HirData:
   initialized: bool
@@ -2585,30 +2582,30 @@ class HirData:
 fn expr_id_key(module_id: i64, node_idx: i64): string
   return i64_to_string(module_id) + ":" + i64_to_string(node_idx)
 
+// Wrap a source string with a synthetic `module test` declaration
+// unless it already starts with one.  Used by the single-file
+// adapters (`typecheck(src)`, `lower_to_hir(src)`) so callers can
+// pass either a bare snippet OR a complete file with its own module
+// declaration.
+fn wrap_test_module(src: string): string
+  if starts_with(src, "module "):
+    return src
+  return "module test\n" + src
+
 // Read helpers for TypeCheckData.expr_types.
 
 fn tc_get_expr_type(td: TypeCheckData, module_id: i64, node_idx: i64): i64
-  // Try the HashMap first (populated by single-file path).
   let key: string = expr_id_key(module_id, node_idx)
   let found: Option<i64> = td.expr_types.get(key)
   match found:
     Option.Some(ty):
       return ty
-  // Fall back to scanning the triple stream (populated by
-  // program_run_typecheck via Vector accumulation, which works
-  // around the bootstrap HashMap-in-while codegen bug).
-  let triples: Vector<i64> = td.expr_type_triples
-  let i: i64 = 0
-  while i + 2 < triples.length():
-    if triples.get(i) == module_id:
-      if triples.get(i + 1) == node_idx:
-        return triples.get(i + 2)
-    i = i + 3
-  return to_i64(-1)
+    Option.None:
+      return to_i64(-1)
 
 fn tc_set_expr_type(td: TypeCheckData, module_id: i64, node_idx: i64, ty: i64): TypeCheckData
   let key: string = expr_id_key(module_id, node_idx)
-  return TypeCheckData(td.initialized, td.types, td.type_info, td.sym_types, td.expr_types.set(key, ty), td.expr_type_triples)
+  return TypeCheckData(td.initialized, td.types, td.type_info, td.sym_types, td.expr_types.set(key, ty))
 
 // --- Graph construction ---
 
