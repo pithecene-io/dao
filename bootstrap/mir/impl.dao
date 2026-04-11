@@ -468,7 +468,11 @@ fn mir_lower_stmt(br: BlockR, hir_node_idx: i64): BlockR
       return mir_lower_if_stmt(br, cond, then_lp, else_lp)
     HirNode.HirWhile(cond, body_lp):
       return mir_lower_while_stmt(br, cond, body_lp)
-  // Unsupported statement kind (Tier A): HirBreak, HirFor etc.
+  // Unsupported statement kind (Tier A): HirBreak, HirFor, etc.  Emit
+  // a diagnostic so downstream consumers observe the failure instead
+  // of seeing valid-looking MIR with silently-dropped control flow.
+  br.ms = ms_add_diag(br.ms, Span(to_i64(0), to_i64(1)),
+    "unsupported statement kind in Tier A MIR lowering: " + hir_node_kind(node))
   return br
 
 // Emit an effect-only instruction (e.g. Store).  Same pattern as
@@ -620,10 +624,16 @@ fn lower_function(ms: MS, hir_fn_idx: i64): MirR
         ms = dl.ms
         pi = pi + to_i64(1)
 
-      // Extern declarations have no body.
+      // Extern declarations have no body.  Still flush params into
+      // mir_idx so consumers reading (local_list_lp, local_count)
+      // get a real local list instead of indexing unrelated data.
       if is_extern_i > 0:
+        let extern_local_fl: MirFlush = mir_flush_list(ms, ms.locals)
+        ms = extern_local_fl.ms
         ms.mir_nodes = ms.mir_nodes.set(fn_idx, MirNode.MirFunction(
-          fn_sym, ret_ti, param_count, to_i64(0), param_count, to_i64(0), to_i64(0), is_extern_i))
+          fn_sym, ret_ti, param_count,
+          extern_local_fl.list_pos, ms.locals.length(),
+          to_i64(0), to_i64(0), is_extern_i))
         return MirR(ms, fn_idx)
 
       // Create the entry block and lower the body into it.  Control
