@@ -135,6 +135,10 @@ Self-hosting compiler subsystems written in Dao.
   validating type correctness; logic + tests in `impl.dao` (Task 23)
 - `hir/` — HIR lowering pass producing compiler-owned typed IR from
   the type-checked AST; logic + tests in `impl.dao` (Task 24)
+- `mir/` — Tier A MIR lowering pass producing basic-block MIR from
+  HIR: functions, locals, blocks, constants, binary/unary, let/assign,
+  calls, returns, field-access reads, and if/else + while control
+  flow; logic + tests in `impl.dao` (Task 29)
 
 ## `examples/`
 

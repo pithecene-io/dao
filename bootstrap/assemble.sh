@@ -89,4 +89,18 @@ assemble bootstrap/hir/hir.gen.dao \
   bootstrap/hir/impl.dao
 rm -f "$RESOLVER_LIB2" "$TYPECHECK_LIB"
 
-echo "done — 6 files assembled"
+# MIR: include resolver + typecheck + hir libs (before their test markers).
+RESOLVER_LIB3=$(mktemp)
+sed '/^\/\/ BEGIN_RESOLVER_TESTS/,$d' bootstrap/resolver/impl.dao > "$RESOLVER_LIB3"
+TYPECHECK_LIB2=$(mktemp)
+sed '/^\/\/ BEGIN_TYPECHECK_TESTS/,$d' bootstrap/typecheck/impl.dao > "$TYPECHECK_LIB2"
+HIR_LIB=$(mktemp)
+sed '/^\/\/ BEGIN_HIR_TESTS/,$d' bootstrap/hir/impl.dao > "$HIR_LIB"
+assemble bootstrap/mir/mir.gen.dao \
+  "$RESOLVER_LIB3" \
+  "$TYPECHECK_LIB2" \
+  "$HIR_LIB" \
+  bootstrap/mir/impl.dao
+rm -f "$RESOLVER_LIB3" "$TYPECHECK_LIB2" "$HIR_LIB"
+
+echo "done — 7 files assembled"
