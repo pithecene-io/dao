@@ -13,11 +13,22 @@ closes the bootstrap frontend-to-IR-to-text pipeline:
 
 `lex → parse → resolve → typecheck → HIR → MIR → LLVM text`
 
-The backend consumes a `MirResult` (single-file) or a `Program` with
-`HirProgram`/`MirProgram` shape and produces a textual LLVM IR
-module that can be written to a `.ll` file and consumed by an
-external toolchain (`clang`, `llc`, `opt`) outside the bootstrap
-runtime.
+The backend consumes a `MirResult` produced by Task 29's existing
+adapter `lower_to_mir(src: string): MirResult` and produces a
+textual LLVM IR module that can be written to a `.ll` file and
+consumed by an external toolchain (`clang`, `llc`, `opt`) outside
+the bootstrap runtime.
+
+`MirResult` is Task 29's output shape — it wraps a `MirModule`
+root (`MirModule(fn_list_lp, fn_count)`) and the flat `mir_nodes` /
+`mir_idx` arenas.  Task 29's `lower_to_mir(src)` already routes
+internally through `build_program → program_run_resolve →
+program_run_typecheck → program_run_hir` and walks both `HirFile`
+and `HirProgram` roots, flattening all functions from all modules
+into one `MirModule`.  Task 30 consumes that flattened
+`MirModule`; it does **not** add a new program-level MIR phase.
+See §11 for the public API and §19 for the explicit deferral of a
+`program_run_mir` / `Program.mir` symmetry pass.
 
 This task does not attempt a full LLVM backend.  It establishes the
 minimum self-contained substrate required for bootstrap to stop
@@ -209,12 +220,25 @@ does not own linking, object emission, or executable production.
   module
 * ABI coercion for aggregate parameters / returns
 * `clang` / `llc` invocation from inside bootstrap
+* **program-level MIR phase** — `program_run_mir(p: Program):
+  Program` and a `Program.mir` payload field, for symmetry with
+  `program_run_resolve` / `program_run_typecheck` / `program_run_hir`.
+  Currently Task 29's `lower_to_mir(src)` is the only MIR entry
+  point; it flattens all modules into one `MirModule`.  Adding a
+  real program-level pass is a follow-up (Task 30.5 or later) and
+  is not required for Task 30's backend work.
 
 ## 7. Input contract
 
-Task 30 consumes bootstrap **MIR only**.
+Task 30 consumes bootstrap **MIR only**, specifically a `MirResult`
+as produced by Task 29's `lower_to_mir(src: string): MirResult`
+adapter.  The root is `MirModule(fn_list_lp, fn_count)`.  There is
+no `MirProgram` wrapper and no `program_run_mir` pass — Task 29
+flattens all functions from all modules into the single `MirModule`
+before the backend runs.  Task 30 does not change that flattening
+or introduce a program-level MIR phase.
 
-It must not consume:
+The backend must not consume:
 
 * AST
 * HIR
@@ -225,11 +249,39 @@ reflected through MIR lowering decisions or carried as MIR-side type
 indices and resolver symbol identities on `MirFunction` / `MirLocal`
 / `MirFnRef`.
 
-This mirrors the host compiler contract: MIR feeds the LLVM backend.
+`MirResult` (Task 29 output shape) only carries `mir_nodes`,
+`mir_idx`, `diags`, and `root`.  It does **not** carry the resolver
+symbol table or the type universe.  Task 30 needs both to map
+`MirFunction.sym` / `MirLocal.sym` / `MirFnRef.sym` back to
+display names for mangling (§9) and to lower MIR type indices to
+LLVM textual types (§5.2).
 
-The program-pipeline adapter (§11) handles the path
-`HirProgram → MirProgram → llvm text`, but the backend itself still
-only reads from MIR + sym / type tables.
+Rather than extending `MirResult` (which would alter a Task 29
+public shape), Task 30 defines a `MirBackendInput` wrapper that
+bundles the three pieces the backend needs:
+
+```dao
+class MirBackendInput:
+  mir: MirResult
+  symbols: Vector<Symbol>
+  types: Vector<DaoType>
+```
+
+`MirBackendInput` is defined in `bootstrap/llvm/` and is the
+public input shape for the backend — callers (tests, future
+driver code) construct it and pass it into
+`lower_mir_to_llvm_text`.  This is distinct from the mini-IR
+node types (`LlModule`, `LlFunction`, `LlBlock`, `LlInst`), which
+are fully backend-private and never cross the `bootstrap/llvm/`
+boundary (see §4.2).
+
+Task 30 adds a small adapter
+`lower_to_mir_backend_input(src: string): MirBackendInput` that
+runs Task 29's `lower_to_mir(src)` internals and additionally
+exposes the `symbols` / `types` from the program pipeline, so tests
+and callers do not need to reach into `MS` internals.
+
+This mirrors the host compiler contract: MIR feeds the LLVM backend.
 
 ## 8. Mini-IR design
 
@@ -433,8 +485,14 @@ modules containing error sentinels.
 Backend entry points live in `bootstrap/llvm/impl.dao`:
 
 ```dao
-fn lower_mir_to_llvm_text(mir: MirResult): LlvmTextResult
-fn lower_program_to_llvm_text(p: Program): LlvmTextResult
+// Primary entry point — consumes a MirBackendInput wrapper (see §7)
+// so tests and callers do not reach into MS internals.
+fn lower_mir_to_llvm_text(input: MirBackendInput): LlvmTextResult
+
+// Test/fixture convenience adapter — runs lower_to_mir(src),
+// bundles the resulting MirResult with the program-pipeline's
+// symbols + types into a MirBackendInput, then runs the backend.
+fn lower_source_to_llvm_text(src: string): LlvmTextResult
 ```
 
 `LlvmTextResult`:
@@ -452,10 +510,12 @@ A helper writes text to disk:
 fn write_llvm_text(result: LlvmTextResult, path: string): bool
 ```
 
-The program-pipeline adapter mirrors `lower_to_mir`: it routes
-through `build_program → program_run_resolve → program_run_typecheck
-→ program_run_hir → program_run_mir` and then drives the backend
-over each `MirFunction` in deterministic order.
+Task 30 does not add a program-level MIR pass.  It does not add
+`program_run_mir(p: Program): Program`, it does not add a
+`Program.mir` payload field, and it does not change
+`bootstrap/mir/impl.dao`'s existing `lower_to_mir(src): MirResult`
+adapter.  The program-pipeline symmetry with `program_run_hir`
+is explicitly deferred — see §19.
 
 No existing bootstrap subsystem API changes.
 
@@ -644,6 +704,9 @@ linkage work), Task 30's scheme gets replaced wholesale.
 * target-specific machine code emission from Dao
 * `clang` / `llc` invocation from Dao
 * stable symbol mangling contract
+* **program-level MIR pass** (`program_run_mir` / `Program.mir`) —
+  symmetry with `program_run_hir` is a follow-up task.  Task 30
+  consumes the flattened `MirModule` that Task 29 already produces.
 
 ## 20. Recommended implementation order
 
