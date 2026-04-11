@@ -8,6 +8,7 @@
 #include "ir/hir/hir_context.h"
 #include "ir/mir/mir_builder.h"
 #include "ir/mir/mir_context.h"
+#include "ir/mir/mir_monomorphize.h"
 #include "ir/mir/mir_printer.h"
 #include "support/test_utils.h"
 
@@ -551,6 +552,104 @@ suite<"mir_generator"> mir_generator = [] {
     // iter_next should produce i32, not Generator<i32>
     expect(contains(dump, "iter_next")) << dump;
     expect(contains(dump, ": i32")) << dump;
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Task 28: MIR concreteness invariant
+// ---------------------------------------------------------------------------
+
+suite<"mir_concreteness"> mir_concreteness = [] {
+  // After monomorphization, module.functions must contain only
+  // type-concrete bodies.  Generic declarations live in
+  // generic_templates and are cloned+specialized on demand.
+  "monomorphization produces no concreteness diagnostics"_test = [] {
+    MirTestPipeline pipe(
+        "fn id<T>(x: T): T -> x\n"
+        "fn main(): i32\n"
+        "    let a: i32 = id<i32>(42)\n"
+        "    return a\n");
+    // Generic id<T> should be in generic_templates, not
+    // module.functions.  Only main and id$i32 (the specialization)
+    // should end up in module.functions after monomorphize.
+    auto mono = monomorphize(*pipe.module(), pipe.mir_ctx, pipe.types,
+                             pipe.mir_result.generic_templates);
+    expect(mono.diagnostics.empty())
+        << "unexpected concreteness diagnostics: "
+        << (mono.diagnostics.empty() ? ""
+                                     : mono.diagnostics[0].message);
+    // Verify no generic residue in final module.
+    for (const auto* fn : pipe.module()->functions) {
+      const bool has_generic_return =
+          fn->return_type != nullptr &&
+          fn->return_type->kind() == TypeKind::GenericParam;
+      expect(!has_generic_return)
+          << "function " << (fn->symbol != nullptr ? fn->symbol->name : "")
+          << " has generic return type";
+    }
+  };
+
+  // A program with no generics should monomorphize as a no-op
+  // with no diagnostics.
+  "no-op monomorphization"_test = [] {
+    MirTestPipeline pipe(
+        "fn add(a: i32, b: i32): i32 -> a + b\n"
+        "fn main(): i32\n"
+        "    return add(1, 2)\n");
+    auto mono = monomorphize(*pipe.module(), pipe.mir_ctx, pipe.types,
+                             pipe.mir_result.generic_templates);
+    expect(mono.diagnostics.empty());
+    expect(pipe.mir_result.generic_templates.empty());
+  };
+
+  // Regression: the invariant scan must not stack-overflow on
+  // recursive types like `class Node { next: *Node }` where
+  // following Struct fields through a Pointer pointee returns to
+  // the same Struct.
+  "concreteness check handles recursive types"_test = [] {
+    MirTestPipeline pipe(
+        "class Node:\n"
+        "    next: *Node\n"
+        "    value: i32\n"
+        "fn main(): i32\n"
+        "    return 0\n");
+    // Should complete without stack overflow and without emitting
+    // spurious concreteness diagnostics.
+    auto mono = monomorphize(*pipe.module(), pipe.mir_ctx, pipe.types,
+                             pipe.mir_result.generic_templates);
+    expect(mono.diagnostics.empty())
+        << "unexpected concreteness diagnostics on recursive type";
+  };
+
+  // Concreteness check catches synthetic residue: manually inject a
+  // generic function into module.functions and verify monomorphize
+  // emits the internal-error diagnostic.
+  "concreteness check fires on synthetic residue"_test = [] {
+    MirTestPipeline pipe(
+        "fn main(): i32\n"
+        "    return 0\n");
+    // Manually craft a MirFunction whose return type is a generic
+    // parameter (simulating a regression where a generic body slipped
+    // into module.functions).
+    auto* bad_fn = pipe.mir_ctx.alloc<MirFunction>();
+    bad_fn->return_type =
+        pipe.types.generic_param(/*binder=*/nullptr, "T", 0);
+    bad_fn->span = {};
+    bad_fn->is_extern = false;
+    pipe.module()->functions.push_back(bad_fn);
+    auto mono = monomorphize(*pipe.module(), pipe.mir_ctx, pipe.types,
+                             pipe.mir_result.generic_templates);
+    // Expect at least one error diagnostic about the invariant.
+    bool found = false;
+    for (const auto& diag : mono.diagnostics) {
+      if (diag.severity == Severity::Error &&
+          diag.message.find("MIR concreteness invariant violated") !=
+              std::string::npos) {
+        found = true;
+        break;
+      }
+    }
+    expect(found) << "expected concreteness invariant diagnostic";
   };
 };
 

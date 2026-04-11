@@ -243,9 +243,17 @@ auto run_through_mir(const std::filesystem::path& path) -> MirResult {
       monomorphize(*mir.module, mir_ctx, hir_result.frontend.types,
                    mir.generic_templates);
   if (!mono_result.diagnostics.empty()) {
-    print_error_diagnostics(filename, hir_result.frontend.parsed.source,
-                            mono_result.diagnostics,
-                            hir_result.frontend.prelude_lines);
+    bool mono_errors = print_error_diagnostics(
+        filename, hir_result.frontend.parsed.source,
+        mono_result.diagnostics, hir_result.frontend.prelude_lines);
+    // Monomorphization emits errors for MIR concreteness invariant
+    // violations (Task 28 §14.2).  These must halt the pipeline
+    // before LLVM lowering — allowing generic residue through would
+    // surface as an opaque LLVM DataLayout assertion on unsized
+    // types, obscuring the root cause.
+    if (mono_errors) {
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   return {.hir_result = std::move(hir_result),

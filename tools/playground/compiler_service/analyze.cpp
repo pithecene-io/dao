@@ -253,6 +253,25 @@ void handle_analyze(const httplib::Request& req, httplib::Response& res,
     print_mir(mir_out, *mir_result.module);
     mir_text = mir_out.str();
 
+    // Stop before LLVM lowering on any mono error, including those
+    // originating in the prelude.  MIR concreteness invariant
+    // violations (Task 28 §14.2) are internal errors that must halt
+    // unconditionally — their span reflects the offending function's
+    // source location, which may legitimately fall inside the prelude
+    // if the regression is in prelude lowering, but the LLVM
+    // DataLayout assertion would fire all the same.  MIR dump is
+    // still produced above for inspection.
+    bool mono_has_error = false;
+    for (const auto& diag : mono_result.diagnostics) {
+      if (diag.severity == Severity::Error) {
+        mono_has_error = true;
+        break;
+      }
+    }
+    if (mono_has_error) {
+      goto respond; // NOLINT(cppcoreguidelines-avoid-goto)
+    }
+
     // --- LLVM IR ---
     llvm::LLVMContext llvm_ctx;
     LlvmBackend llvm_backend(llvm_ctx);

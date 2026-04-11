@@ -191,13 +191,24 @@ void handle_run(const httplib::Request& req, httplib::Response& res,
       build_mir(*hir_result.module, mir_ctx, types);
   collect_diagnostics(diagnostics, source, mir_result.diagnostics,
                       prelude_bytes, prelude_lines);
+  bool mono_has_errors = false;
   if (mir_result.module != nullptr) {
     auto mono = monomorphize(*mir_result.module, mir_ctx, types,
                              mir_result.generic_templates);
     collect_diagnostics(diagnostics, source, mono.diagnostics,
                         prelude_bytes, prelude_lines);
+    // Halt before LLVM lowering on mono errors (e.g. MIR
+    // concreteness invariant violations — Task 28 §14.2).
+    // Allowing generic residue through surfaces as an opaque LLVM
+    // DataLayout assertion.
+    for (const auto& diag : mono.diagnostics) {
+      if (diag.severity == Severity::Error) {
+        mono_has_errors = true;
+        break;
+      }
+    }
   }
-  if (mir_result.module == nullptr) {
+  if (mir_result.module == nullptr || mono_has_errors) {
     if (diagnostics.empty()) {
       diagnostics.push_back(
           make_internal_error("MIR lowering failed (possible prelude error)"));
