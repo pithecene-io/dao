@@ -304,19 +304,22 @@ Task 22 (bootstrap resolver) is complete — two-pass name resolution
 with scope chains, symbol tables, uses map, 34 tests (including
 cross-file resolution and program wrapper tests).
 Task 23 (bootstrap type checker) is complete — expression/statement
-type checking with 37 tests (including cross-module calls, concept
+type checking with 43 tests (including cross-module calls, concept
 binding identity, variant validation, and on-disk multi-file fixtures).
 Task 24 (bootstrap HIR) is complete — typed AST lowered to
-compiler-owned HIR with 19 tests (including program-level lowering
+compiler-owned HIR with 22 tests (including program-level lowering
 and on-disk multi-file smoke test).  Shared substrate consolidated
 in `bootstrap/shared/base.dao`; assembly via `bootstrap/assemble.sh`.
+Task 29 (bootstrap MIR) is complete — HIR lowered to basic-block MIR
+with 8 tests.
 
-The Tier A bootstrap pipeline (lex → parse → resolve → typecheck →
-HIR) is complete.  Tasks 25–27 (multi-file substrate) are complete —
-the `Program` value threads through resolve → typecheck → HIR with
-canonical type identity, cross-module qualified name typing, and
-program-level HIR aggregation.  Task 28 (generic body lowering boundary)
-is complete — see below.
+The Tier A bootstrap frontend-to-IR pipeline (lex → parse → resolve
+→ typecheck → HIR → MIR) is complete.  Tasks 25–27 (multi-file
+substrate) are complete — the `Program` value threads through
+resolve → typecheck → HIR → MIR with canonical type identity,
+cross-module qualified name typing, and program-level HIR aggregation.
+Task 28 (generic body lowering boundary) is complete — see below.
+Task 29 (bootstrap MIR Tier A) is complete — see below.
 
 ### Task 25 — Bootstrap Multi-file Compilation + Imports (v1)
 
@@ -414,6 +417,64 @@ This is architectural cleanup of the host compiler, not a bootstrap
 task.  It lands before Tier B bootstrap slices because those slices
 (methods, concept dispatch, generic semantics) depend on a clean
 generic compilation pipeline.
+
+### Task 29 — Bootstrap MIR (Tier A)
+
+Status: **complete** (#249)
+
+First iteration of the bootstrap compiler's MIR layer.  HIR lowers
+to a basic-block MIR mirroring the host compiler structure
+(`compiler/ir/mir/mir.h`).  Closes the Tier A self-hosting arc for
+the frontend-to-IR pipeline: `lex → parse → resolve → typecheck →
+HIR → MIR`.
+
+- ✓ `MirNode` arena-indexed flat node graph
+- ✓ `MirModule` / `MirFunction` / `MirLocal` / `MirBlock` structural
+  nodes
+- ✓ instruction set: `MirConstInt`/`Float`/`Bool`/`String`,
+  `MirLoad`/`Store`, `MirBinary`/`Unary`, `MirFieldAccess`,
+  `MirFnRef`/`Call`, `MirReturn`/`Br`/`CondBr`, `MirErrorExpr`
+- ✓ basic-block CFG: `MS.fn_blocks` accumulates per-function blocks,
+  `BlockR.sealed` tracks terminator emission, `block_seal` rewrites
+  each `MirBlock` with its instruction list offset and count
+- ✓ `ExprR { br, value }` threading for expression lowering — Dao
+  classes are value-copied across function boundaries, so explicit
+  state threading is required
+- ✓ if/else lowering: `cond_br → then/else → br → merge` with
+  early-return detection
+- ✓ while lowering: `br → header (cond_br) → body (br header) / exit`
+- ✓ program pipeline routing: `lower_to_mir` threads through
+  `build_program → program_run_resolve → program_run_typecheck →
+  program_run_hir`, walking both `HirFile` and `HirProgram` roots
+- ✓ unsupported statement kinds emit diagnostics via `ms_add_diag`
+  instead of silently dropping control flow
+- ✓ 8 Tier A regression tests: `minimal_program`,
+  `let_binary_return`, `function_call`, `multi_function`,
+  `param_locals`, `extern_function`, `if_stmt`, `while_stmt`
+
+HIR schema improvements landed alongside:
+
+- ✓ `HirLet.sym` stores resolver symbol index (not declaration
+  token); `lower_let_stmt` resolves and stores up-front
+- ✓ `HirFunction.sym` renamed from `name`, actually populated with
+  `fn_sym` from `hir_find_sym_by_decl` (was storing a token index)
+- ✓ `HirFunction` params list stores `(sym, type_idx)` pairs
+- ✓ `BEGIN_HIR_TESTS` marker added so MIR assembly can include the
+  HIR library without pulling in test helpers
+
+Deferred to Tier B (same deferrals as the bootstrap HIR, plus):
+
+- Generators (iter init/has_next/next/destroy/yield)
+- Monomorphization / generic template separation
+- Mode/resource region enter/exit
+- Enum construction / discriminant / payload
+- Lambda / closures
+- Try operator
+- For-over-iterable
+- Index expressions
+- Break/continue
+
+See `bootstrap/mir/impl.dao` and `bootstrap/README.md`.
 
 ### Task 14 — Numeric Type Expansion
 

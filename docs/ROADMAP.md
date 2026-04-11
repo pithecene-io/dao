@@ -210,20 +210,26 @@ Exit criteria:
 
 ## Phase 7 — Bootstrap Compiler
 
-Status: **Tier A pipeline + multi-file substrate + generic lowering
-boundary complete** — Tasks 19–28 complete.  Six bootstrap subsystems
-share a consolidated substrate (`bootstrap/shared/base.dao`): lexer
-(105 tests), parser (51 tests), graph (12 tests), resolver (34 tests),
-type checker (37 tests), and HIR lowering (19 tests).  The Tier A
-pipeline (lex → parse → resolve → typecheck → HIR) operates at both
-single-file and program level.  The `Program` value threads through
-all passes with canonical type identity, resolver-bound concept
-identity, module-scoped extend methods, cross-module qualified name
-typing, and program-level HIR aggregation (`HirProgram`/`HirModule`).
-On-disk multi-file test fixtures exercise the full pipeline
-end-to-end.  Task 28 (generic body lowering boundary) enforces clean
-separation of generic templates from monomorphic functions at the
-HIR → MIR boundary.  Next: Tier B bootstrap feature slices.
+Status: **Tier A frontend-to-IR pipeline complete** — Tasks 19–29
+complete.  Seven bootstrap subsystems share a consolidated substrate
+(`bootstrap/shared/base.dao`): lexer (105 tests), parser (51 tests),
+graph (12 tests), resolver (34 tests), type checker (43 tests),
+HIR lowering (22 tests), and MIR lowering (8 tests) — 275 bootstrap
+tests total.  The Tier A pipeline (lex → parse → resolve → typecheck
+→ HIR → MIR) operates at both single-file and program level.  The
+`Program` value threads through all passes with canonical type
+identity, resolver-bound concept identity, module-scoped extend
+methods, cross-module qualified name typing, and program-level HIR
+aggregation (`HirProgram`/`HirModule`).  On-disk multi-file test
+fixtures exercise the full pipeline end-to-end.  Task 28 (generic
+body lowering boundary) enforces clean separation of generic
+templates from monomorphic functions at the HIR → MIR boundary in
+the host compiler.  Task 29 (bootstrap MIR) lowers HIR to a
+basic-block MIR mirroring the host compiler structure with full
+control flow (if/else, while) and diagnostic-emitting unsupported-
+kind handling.  Next: bootstrap LLVM backend (Task 30) to close the
+self-hosting loop at the native object emission level, followed by
+Tier B bootstrap feature slices.
 
 Goals:
 - begin implementing non-trivial compiler subsystems in Dao itself
