@@ -126,8 +126,8 @@ class MS:
   // Per-function state.
   file_id: i64              // file id for uses_map lookups (-1 in single-file)
   current_fn: i64           // index into mir_nodes of current MirFunction (−1 none)
-  current_block: i64        // index of current basic block (−1 none)
   locals: Vector<i64>       // list of MirLocal node indices for current fn
+  fn_blocks: Vector<i64>    // list of MirBlock node indices for current fn
   sym_to_local: HashMap<i64> // resolver sym_idx (as string) → local slot index
   next_block_id: i64        // for block.id numbering
 
@@ -204,8 +204,8 @@ fn ms_get_hir_type(ms: MS, hir_node: HirNode): i64
 
 fn ms_reset_fn_state(ms: MS): MS
   ms.current_fn = to_i64(-1)
-  ms.current_block = to_i64(-1)
   ms.locals = Vector<i64>::new()
+  ms.fn_blocks = Vector<i64>::new()
   ms.sym_to_local = HashMap<i64>::new()
   ms.next_block_id = to_i64(0)
   return ms
@@ -246,13 +246,13 @@ fn ms_tok_to_sym(ms: MS, tok_idx: i64): i64
     Option.None:
       return to_i64(-1)
 
-// Create a new basic block and make it current.  Returns the block's
-// position in the current function's block list.
+// Create a new basic block, append it to the current function's
+// block list, and return its node index.
 fn ms_new_block(ms: MS): MirR
   let bid: i64 = ms.next_block_id
   ms.next_block_id = bid + 1
   let r: MirR = ms_add_node(ms, MirNode.MirBlock(bid, to_i64(0), to_i64(0)))
-  r.ms.current_block = r.mir
+  r.ms.fn_blocks = r.ms.fn_blocks.push(r.mir)
   return r
 
 // Append an instruction to the current block.  Because MirBlock stores
@@ -266,10 +266,12 @@ fn ms_new_block(ms: MS): MirR
 
 class BlockR:
   ms: MS
-  insts: Vector<i64>   // instruction node indices for current block
+  block_idx: i64       // MirBlock node index this BlockR is emitting into
+  insts: Vector<i64>   // instruction node indices accumulated for this block
+  sealed: i64          // 1 if a terminator has been emitted, 0 otherwise
 
-fn block_open(ms: MS): BlockR
-  return BlockR(ms, Vector<i64>::new())
+fn block_open(ms: MS, block_idx: i64): BlockR
+  return BlockR(ms, block_idx, Vector<i64>::new(), to_i64(0))
 
 fn block_emit(br: BlockR, inst_idx: i64): BlockR
   br.insts = br.insts.push(inst_idx)
@@ -277,110 +279,106 @@ fn block_emit(br: BlockR, inst_idx: i64): BlockR
 
 // Seal the block: flush instructions into mir_idx, rewrite the
 // MirBlock node with the list offset and count.
-fn block_seal(br: BlockR, block_node_idx: i64): MS
+fn block_seal(br: BlockR): MS
   let fl: MirFlush = mir_flush_list(br.ms, br.insts)
-  let blk: MirNode = fl.ms.mir_nodes.get(block_node_idx)
+  let blk: MirNode = fl.ms.mir_nodes.get(br.block_idx)
   match blk:
     MirNode.MirBlock(bid, old_lp, old_count):
-      fl.ms.mir_nodes = fl.ms.mir_nodes.set(block_node_idx, MirNode.MirBlock(bid, fl.list_pos, br.insts.length()))
+      fl.ms.mir_nodes = fl.ms.mir_nodes.set(br.block_idx, MirNode.MirBlock(bid, fl.list_pos, br.insts.length()))
   return fl.ms
+
+// Mark the current block sealed (terminator emitted).
+fn block_mark_sealed(br: BlockR): BlockR
+  br.sealed = to_i64(1)
+  return br
+
+// Seal current block, create a new one, and return a fresh BlockR
+// positioned at the new block.  Used by if/while to advance the CFG.
+fn block_advance(br: BlockR): BlockR
+  let ms: MS = block_seal(br)
+  let nr: MirR = ms_new_block(ms)
+  return block_open(nr.ms, nr.mir)
 
 // =========================================================================
 // Section 64: Expression lowering
 // =========================================================================
 
-// Result of lowering an expression: the new MS, the block accumulator,
-// and the value id of the resulting MirInst (or −1 on error).
+// Result of lowering an expression: updated BlockR + produced value id.
+// BlockR must be threaded explicitly through returns because Dao passes
+// classes by value across function boundaries — in-function mutations
+// to `br.ms` and `br.insts` do not propagate back to the caller.
 class ExprR:
-  ms: MS
   br: BlockR
-  val: i64
+  value: i64
 
-fn lower_expr_value(ms: MS, br: BlockR, hir_node_idx: i64): ExprR
+// Emit a MirNode as a value instruction into `br`'s current block.
+// Returns the updated BlockR and the new value id.
+fn br_emit_value(br: BlockR, node: MirNode): ExprR
+  let r: MirR = ms_add_node(br.ms, node)
+  br.ms = r.ms
+  br.insts = br.insts.push(r.mir)
+  return ExprR(br, r.mir)
+
+// Emit a terminator (br / cond_br / return).  Marks the block as sealed.
+fn br_emit_terminator(br: BlockR, node: MirNode): BlockR
+  let r: MirR = ms_add_node(br.ms, node)
+  br.ms = r.ms
+  br.insts = br.insts.push(r.mir)
+  br.sealed = to_i64(1)
+  return br
+
+// Lower an expression.  Returns an ExprR containing the updated BlockR
+// (accumulated MIR state + current block insts) and the produced value id.
+fn lower_expr_value(br: BlockR, hir_node_idx: i64): ExprR
   if hir_node_idx < 0:
-    let r: MirR = ms_add_node(ms, MirNode.MirErrorExpr(to_i64(0)))
-    let br2: BlockR = BlockR(r.ms, br.insts)
-    return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
-  let node: HirNode = ms.hir_nodes.get(hir_node_idx)
-  let ti: i64 = ms_get_hir_type(ms, node)
+    return br_emit_value(br, MirNode.MirErrorExpr(to_i64(0)))
+  let node: HirNode = br.ms.hir_nodes.get(hir_node_idx)
   match node:
     HirNode.HirIntLit(tok, type_idx):
-      // Parse the token text as i64.
-      let tk: Token = ms.toks.get(tok)
-      let lex: string = substring(ms.src, tk.offset, tk.len)
-      let val: i64 = parse_i64_literal(lex)
-      let r: MirR = ms_add_node(ms, MirNode.MirConstInt(val, type_idx))
-      let br2: BlockR = BlockR(r.ms, br.insts)
-      return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
+      let tk: Token = br.ms.toks.get(tok)
+      let lex: string = substring(br.ms.src, tk.offset, tk.len)
+      return br_emit_value(br, MirNode.MirConstInt(parse_i64_literal(lex), type_idx))
     HirNode.HirBoolLit(tok, type_idx):
-      let tk: Token = ms.toks.get(tok)
-      let lex: string = substring(ms.src, tk.offset, tk.len)
+      let tk: Token = br.ms.toks.get(tok)
+      let lex: string = substring(br.ms.src, tk.offset, tk.len)
       let v: i64 = to_i64(0)
       if lex == "true":
         v = to_i64(1)
-      let r: MirR = ms_add_node(ms, MirNode.MirConstBool(v, type_idx))
-      let br2: BlockR = BlockR(r.ms, br.insts)
-      return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
+      return br_emit_value(br, MirNode.MirConstBool(v, type_idx))
     HirNode.HirFloatLit(tok, type_idx):
-      let r: MirR = ms_add_node(ms, MirNode.MirConstFloat(tok, type_idx))
-      let br2: BlockR = BlockR(r.ms, br.insts)
-      return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
+      return br_emit_value(br, MirNode.MirConstFloat(tok, type_idx))
     HirNode.HirStringLit(tok, type_idx):
-      let r: MirR = ms_add_node(ms, MirNode.MirConstString(tok, type_idx))
-      let br2: BlockR = BlockR(r.ms, br.insts)
-      return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
+      return br_emit_value(br, MirNode.MirConstString(tok, type_idx))
     HirNode.HirIdent(sym, type_idx, tok):
-      // If the identifier resolves to a local, emit a load.
-      // Otherwise treat it as a function reference.
-      let slot: i64 = ms_lookup_local(ms, sym)
+      let slot: i64 = ms_lookup_local(br.ms, sym)
       if slot >= 0:
-        let r: MirR = ms_add_node(ms, MirNode.MirLoad(slot, type_idx))
-        let br2: BlockR = BlockR(r.ms, br.insts)
-        return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
-      let r: MirR = ms_add_node(ms, MirNode.MirFnRef(sym, type_idx))
-      let br2: BlockR = BlockR(r.ms, br.insts)
-      return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
+        return br_emit_value(br, MirNode.MirLoad(slot, type_idx))
+      return br_emit_value(br, MirNode.MirFnRef(sym, type_idx))
     HirNode.HirBinary(op_tok, left, right, type_idx):
-      let lr: ExprR = lower_expr_value(ms, br, left)
-      let rr: ExprR = lower_expr_value(lr.ms, lr.br, right)
-      let r: MirR = ms_add_node(rr.ms, MirNode.MirBinary(op_tok, lr.val, rr.val, type_idx))
-      let br2: BlockR = BlockR(r.ms, rr.br.insts)
-      return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
+      let lhs_r: ExprR = lower_expr_value(br, left)
+      let rhs_r: ExprR = lower_expr_value(lhs_r.br, right)
+      return br_emit_value(rhs_r.br, MirNode.MirBinary(op_tok, lhs_r.value, rhs_r.value, type_idx))
     HirNode.HirUnary(op_tok, operand, type_idx):
-      let ur: ExprR = lower_expr_value(ms, br, operand)
-      let r: MirR = ms_add_node(ur.ms, MirNode.MirUnary(op_tok, ur.val, type_idx))
-      let br2: BlockR = BlockR(r.ms, ur.br.insts)
-      return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
+      let operand_r: ExprR = lower_expr_value(br, operand)
+      return br_emit_value(operand_r.br, MirNode.MirUnary(op_tok, operand_r.value, type_idx))
     HirNode.HirCall(callee, args_lp, arg_count, type_idx):
-      let cr: ExprR = lower_expr_value(ms, br, callee)
-      // Lower each argument in order.
-      let cur_br: BlockR = cr.br
-      let cur_ms: MS = cr.ms
+      let callee_r: ExprR = lower_expr_value(br, callee)
+      let cur_br: BlockR = callee_r.br
+      let args: Vector<i64> = read_hir_list(cur_br.ms.hir_idx, args_lp)
       let arg_vals: Vector<i64> = Vector<i64>::new()
-      let ai: i64 = 0
-      while ai < arg_count:
-        let arg_idx: i64 = cur_ms.hir_idx.get(args_lp + ai)
-        let ar: ExprR = lower_expr_value(cur_ms, cur_br, arg_idx)
-        cur_ms = ar.ms
-        cur_br = ar.br
-        arg_vals = arg_vals.push(ar.val)
-        ai = ai + 1
-      let fl: MirFlush = mir_flush_list(cur_ms, arg_vals)
-      let r: MirR = ms_add_node(fl.ms, MirNode.MirCall(cr.val, fl.list_pos, arg_count, type_idx))
-      let br2: BlockR = BlockR(r.ms, cur_br.insts)
-      return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
+      let ai: i64 = to_i64(0)
+      while ai < args.length():
+        let arg_r: ExprR = lower_expr_value(cur_br, args.get(ai))
+        cur_br = arg_r.br
+        arg_vals = arg_vals.push(arg_r.value)
+        ai = ai + to_i64(1)
+      let fl: MirFlush = mir_flush_list(cur_br.ms, arg_vals)
+      cur_br.ms = fl.ms
+      return br_emit_value(cur_br, MirNode.MirCall(callee_r.value, fl.list_pos, arg_count, type_idx))
     HirNode.HirFieldAccess(obj, field_tok, type_idx):
-      let obj_r: ExprR = lower_expr_value(ms, br, obj)
-      // Tier A: do not resolve field index; leave as −1 (backend
-      // would need resolution, but the bootstrap MIR tier doesn't
-      // feed a backend yet).
-      let r: MirR = ms_add_node(obj_r.ms, MirNode.MirFieldAccess(obj_r.val, field_tok, to_i64(-1), type_idx))
-      let br2: BlockR = BlockR(r.ms, obj_r.br.insts)
-      return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
-  // Unsupported HIR node — emit error sentinel.
-  let r: MirR = ms_add_node(ms, MirNode.MirErrorExpr(to_i64(0)))
-  let br2: BlockR = BlockR(r.ms, br.insts)
-  return ExprR(br2.ms, block_emit(br2, r.mir), r.mir)
+      let obj_r: ExprR = lower_expr_value(br, obj)
+      return br_emit_value(obj_r.br, MirNode.MirFieldAccess(obj_r.value, field_tok, to_i64(-1), type_idx))
+  return br_emit_value(br, MirNode.MirErrorExpr(to_i64(0)))
 
 // Parse an i64 literal (base 10, optional leading minus).
 fn parse_i64_literal(lex: string): i64
@@ -430,53 +428,144 @@ fn char_to_digit(ch: string): i64
 // Section 65: Statement lowering
 // =========================================================================
 
-// Lower a statement into the current block.  Returns updated state.
-// May create new blocks (for if/while) and thread through as current.
-fn lower_stmt(ms: MS, br: BlockR, hir_node_idx: i64): BlockR
+// Lower a single statement into `br`'s current block.  May seal the
+// block and create new ones (if/while), in which case the returned
+// BlockR positions on a different block than the input.
+fn mir_lower_stmt(br: BlockR, hir_node_idx: i64): BlockR
   if hir_node_idx < 0:
     return br
-  let node: HirNode = ms.hir_nodes.get(hir_node_idx)
+  let node: HirNode = br.ms.hir_nodes.get(hir_node_idx)
   match node:
     HirNode.HirLet(let_sym, type_idx, init):
-      // HIR already resolved the declaration symbol (stored on HirLet).
-      let dl: MirR = ms_declare_local(ms, let_sym, type_idx, false)
+      let dl: MirR = ms_declare_local(br.ms, let_sym, type_idx, false)
+      br.ms = dl.ms
       let slot: i64 = dl.mir
       if init >= 0:
-        let er: ExprR = lower_expr_value(dl.ms, br, init)
-        let r: MirR = ms_add_node(er.ms, MirNode.MirStore(slot, er.val))
-        let br2: BlockR = BlockR(r.ms, er.br.insts)
-        return block_emit(br2, r.mir)
-      return BlockR(dl.ms, br.insts)
+        let init_r: ExprR = lower_expr_value(br, init)
+        return emit_effect(init_r.br, MirNode.MirStore(slot, init_r.value))
+      return br
     HirNode.HirAssign(target, value):
-      // Tier A: only IdentE targets supported.
-      let tgt_node: HirNode = ms.hir_nodes.get(target)
+      let tgt_node: HirNode = br.ms.hir_nodes.get(target)
       match tgt_node:
         HirNode.HirIdent(sym, ti, tok):
-          let slot: i64 = ms_lookup_local(ms, sym)
+          let slot: i64 = ms_lookup_local(br.ms, sym)
           if slot >= 0:
-            let er: ExprR = lower_expr_value(ms, br, value)
-            let r: MirR = ms_add_node(er.ms, MirNode.MirStore(slot, er.val))
-            let br2: BlockR = BlockR(r.ms, er.br.insts)
-            return block_emit(br2, r.mir)
-      let diagged: MS = ms_add_diag(ms, Span(to_i64(0), to_i64(1)), "unsupported assignment target")
-      return BlockR(diagged, br.insts)
+            let val_r: ExprR = lower_expr_value(br, value)
+            return emit_effect(val_r.br, MirNode.MirStore(slot, val_r.value))
+      br.ms = ms_add_diag(br.ms, Span(to_i64(0), to_i64(1)), "unsupported assignment target")
+      return br
     HirNode.HirReturn(value):
       if value >= 0:
-        let er: ExprR = lower_expr_value(ms, br, value)
-        let r: MirR = ms_add_node(er.ms, MirNode.MirReturn(er.val, to_i64(1)))
-        let br2: BlockR = BlockR(r.ms, er.br.insts)
-        return block_emit(br2, r.mir)
-      let r: MirR = ms_add_node(ms, MirNode.MirReturn(to_i64(-1), to_i64(0)))
-      let br2: BlockR = BlockR(r.ms, br.insts)
-      return block_emit(br2, r.mir)
+        let val_r: ExprR = lower_expr_value(br, value)
+        return br_emit_terminator(val_r.br, MirNode.MirReturn(val_r.value, to_i64(1)))
+      return br_emit_terminator(br, MirNode.MirReturn(to_i64(-1), to_i64(0)))
     HirNode.HirExprStmt(expr):
-      let er: ExprR = lower_expr_value(ms, br, expr)
-      return er.br
+      let expr_r: ExprR = lower_expr_value(br, expr)
+      return expr_r.br
     HirNode.HirErrorStmt(t):
       return br
-  // Unsupported statement kind (Tier A): If/While/For/Break all
-  // defer.  We accept parsing but skip lowering.
+    HirNode.HirIf(cond, then_lp, else_lp):
+      return mir_lower_if_stmt(br, cond, then_lp, else_lp)
+    HirNode.HirWhile(cond, body_lp):
+      return mir_lower_while_stmt(br, cond, body_lp)
+  // Unsupported statement kind (Tier A): HirBreak, HirFor etc.
   return br
+
+// Emit an effect-only instruction (e.g. Store).  Same pattern as
+// br_emit_value but discards the value id.
+fn emit_effect(br: BlockR, node: MirNode): BlockR
+  let r: MirR = ms_add_node(br.ms, node)
+  br.ms = r.ms
+  br.insts = br.insts.push(r.mir)
+  return br
+
+// Lower a list of statements into `br`.  If any statement seals
+// the block (returns/break/etc.), subsequent statements are
+// appended to whatever new block that statement switched to.
+fn lower_stmt_list(br: BlockR, list_pos: i64): BlockR
+  let stmts: Vector<i64> = read_hir_list(br.ms.hir_idx, list_pos)
+  let i: i64 = to_i64(0)
+  while i < stmts.length():
+    br = mir_lower_stmt(br, stmts.get(i))
+    i = i + to_i64(1)
+  return br
+
+// Lower an if/else statement.  Control flow:
+//   [current] --cond_br--> [then] --br--> [merge]
+//                      \-> [else] --br--> [merge]
+// The returned BlockR is positioned on [merge].  If both branches
+// returned / unconditionally exited, [merge] may end up empty —
+// lower_function will still emit an implicit return to terminate it.
+fn mir_lower_if_stmt(br: BlockR, cond: i64, then_lp: i64, else_lp: i64): BlockR
+  let cond_r: ExprR = lower_expr_value(br, cond)
+  br = cond_r.br
+  let cond_val: i64 = cond_r.value
+
+  // Allocate then/else/merge blocks up front so we have their IDs
+  // for the cond_br before sealing the predecessor.
+  let then_r: MirR = ms_new_block(br.ms)
+  br.ms = then_r.ms
+  let else_r: MirR = ms_new_block(br.ms)
+  br.ms = else_r.ms
+  let merge_r: MirR = ms_new_block(br.ms)
+  br.ms = merge_r.ms
+
+  // Terminate the predecessor with cond_br.
+  br = br_emit_terminator(br, MirNode.MirCondBr(cond_val, then_r.mir, else_r.mir))
+  br.ms = block_seal(br)
+
+  // Lower the then branch.
+  let then_br: BlockR = block_open(br.ms, then_r.mir)
+  let then_after: BlockR = lower_stmt_list(then_br, then_lp)
+  let then_final: BlockR = then_after
+  if then_final.sealed == to_i64(0):
+    then_final = br_emit_terminator(then_final, MirNode.MirBr(merge_r.mir))
+  let ms_after_then: MS = block_seal(then_final)
+
+  // Lower the else branch (may be empty).
+  let else_br: BlockR = block_open(ms_after_then, else_r.mir)
+  let else_after: BlockR = else_br
+  if else_lp >= 0:
+    else_after = lower_stmt_list(else_br, else_lp)
+  let else_final: BlockR = else_after
+  if else_final.sealed == to_i64(0):
+    else_final = br_emit_terminator(else_final, MirNode.MirBr(merge_r.mir))
+  let ms_after_else: MS = block_seal(else_final)
+
+  // Continue on the merge block.
+  return block_open(ms_after_else, merge_r.mir)
+
+// Lower a while loop.  Control flow:
+//   [current] --br--> [header] --cond_br--> [body] --br--> [header]
+//                                      \-> [exit]
+fn mir_lower_while_stmt(br: BlockR, cond: i64, body_lp: i64): BlockR
+  let header_r: MirR = ms_new_block(br.ms)
+  br.ms = header_r.ms
+  let body_r: MirR = ms_new_block(br.ms)
+  br.ms = body_r.ms
+  let exit_r: MirR = ms_new_block(br.ms)
+  br.ms = exit_r.ms
+
+  // Jump from predecessor into the loop header.
+  br = br_emit_terminator(br, MirNode.MirBr(header_r.mir))
+  br.ms = block_seal(br)
+
+  // Header: evaluate condition and cond_br into body or exit.
+  let header_br: BlockR = block_open(br.ms, header_r.mir)
+  let cond_r: ExprR = lower_expr_value(header_br, cond)
+  let header_term: BlockR = br_emit_terminator(cond_r.br, MirNode.MirCondBr(cond_r.value, body_r.mir, exit_r.mir))
+  let ms_after_header: MS = block_seal(header_term)
+
+  // Body: lower statements, then unconditional br back to header.
+  let body_br: BlockR = block_open(ms_after_header, body_r.mir)
+  let body_after: BlockR = lower_stmt_list(body_br, body_lp)
+  let body_final: BlockR = body_after
+  if body_final.sealed == to_i64(0):
+    body_final = br_emit_terminator(body_final, MirNode.MirBr(header_r.mir))
+  let ms_after_body: MS = block_seal(body_final)
+
+  // Continue on the exit block.
+  return block_open(ms_after_body, exit_r.mir)
 
 // =========================================================================
 // Section 66: Function lowering
@@ -509,84 +598,58 @@ fn read_hir_list_count(hir_idx: Vector<i64>, list_pos: i64): i64
 fn lower_function(ms: MS, hir_fn_idx: i64): MirR
   let node: HirNode = ms.hir_nodes.get(hir_fn_idx)
   match node:
-    HirNode.HirFunction(name_sym, tparams, params_lp, ret_ti, body_lp, is_extern_i, class_owner):
-      // Reset per-function scratch state.
+    HirNode.HirFunction(fn_sym, tparams, params_lp, ret_ti, body_lp, is_extern_i, class_owner):
       ms = ms_reset_fn_state(ms)
 
       // Placeholder MirFunction — fields updated after lowering.
       let fn_r: MirR = ms_add_node(ms, MirNode.MirFunction(
-        name_sym, ret_ti, to_i64(0), to_i64(0), to_i64(0), to_i64(0), to_i64(0), is_extern_i))
+        fn_sym, ret_ti, to_i64(0), to_i64(0), to_i64(0), to_i64(0), to_i64(0), is_extern_i))
       let fn_idx: i64 = fn_r.mir
-      let ms2: MS = fn_r.ms
-      ms2.current_fn = fn_idx
+      ms = fn_r.ms
+      ms.current_fn = fn_idx
 
-      // HIR stores params_lp as a flat list of (sym, type_idx)
-      // pairs (hir_flush_pairs stores count = pair_count, not the
-      // flat item length, so the count in mir_idx is half the true
-      // items length).
-      let param_count: i64 = read_hir_list_count(ms2.hir_idx, params_lp)
+      // Params are (sym, type_idx) pairs stored via hir_flush_pairs
+      // (count = pair_count, not flat item count).
+      let param_count: i64 = read_hir_list_count(ms.hir_idx, params_lp)
       let params_start: i64 = params_lp - (param_count * to_i64(2))
-      let ms_decl: MS = ms2
       let pi: i64 = to_i64(0)
       while pi < param_count:
-        let psym: i64 = ms_decl.hir_idx.get(params_start + pi * to_i64(2))
-        let pti: i64 = ms_decl.hir_idx.get(params_start + pi * to_i64(2) + to_i64(1))
-        let dl: MirR = ms_declare_local(ms_decl, psym, pti, true)
-        ms_decl = dl.ms
+        let psym: i64 = ms.hir_idx.get(params_start + pi * to_i64(2))
+        let pti: i64 = ms.hir_idx.get(params_start + pi * to_i64(2) + to_i64(1))
+        let dl: MirR = ms_declare_local(ms, psym, pti, true)
+        ms = dl.ms
         pi = pi + to_i64(1)
 
-      // Extern declarations have no body to lower.
+      // Extern declarations have no body.
       if is_extern_i > 0:
-        ms_decl.mir_nodes = ms_decl.mir_nodes.set(fn_idx, MirNode.MirFunction(
-          name_sym, ret_ti, param_count, to_i64(0), param_count, to_i64(0), to_i64(0), is_extern_i))
-        return MirR(ms_decl, fn_idx)
+        ms.mir_nodes = ms.mir_nodes.set(fn_idx, MirNode.MirFunction(
+          fn_sym, ret_ti, param_count, to_i64(0), param_count, to_i64(0), to_i64(0), is_extern_i))
+        return MirR(ms, fn_idx)
 
-      // Create the entry block and lower statements into it.
-      let blk_r: MirR = ms_new_block(ms_decl)
-      let blk_idx: i64 = blk_r.mir
-      let ms_body: MS = blk_r.ms
-      let br: BlockR = block_open(ms_body)
-      let stmts: Vector<i64> = read_hir_list(ms_body.hir_idx, body_lp)
+      // Create the entry block and lower the body into it.  Control
+      // flow statements (if/while) may seal the entry block and
+      // advance br to a different block.
+      let entry_r: MirR = ms_new_block(ms)
+      let entry_br: BlockR = block_open(entry_r.ms, entry_r.mir)
+      let final_br: BlockR = lower_stmt_list(entry_br, body_lp)
 
-      let si: i64 = 0
-      let cur_br: BlockR = br
-      while si < stmts.length():
-        cur_br = lower_stmt(cur_br.ms, cur_br, stmts.get(si))
-        si = si + 1
+      // If the final block is not sealed (no terminator emitted),
+      // emit an implicit return-void.
+      let closed_br: BlockR = final_br
+      if closed_br.sealed == to_i64(0):
+        closed_br = br_emit_terminator(closed_br, MirNode.MirReturn(to_i64(-1), to_i64(0)))
+      ms = block_seal(closed_br)
 
-      // Emit implicit `return` terminator if last inst is not already
-      // a terminator.  For Tier A we always emit a return-void.
-      let needs_ret: bool = true
-      if cur_br.insts.length() > to_i64(0):
-        let last_idx: i64 = cur_br.insts.get(cur_br.insts.length() - to_i64(1))
-        let last_node: MirNode = cur_br.ms.mir_nodes.get(last_idx)
-        match last_node:
-          MirNode.MirReturn(v, hv):
-            needs_ret = false
-          MirNode.MirBr(tb):
-            needs_ret = false
-          MirNode.MirCondBr(c, tb, eb):
-            needs_ret = false
-      if needs_ret:
-        let r: MirR = ms_add_node(cur_br.ms, MirNode.MirReturn(to_i64(-1), to_i64(0)))
-        cur_br = BlockR(r.ms, cur_br.insts)
-        cur_br = block_emit(cur_br, r.mir)
+      // Flush locals and per-function block list.
+      let local_fl: MirFlush = mir_flush_list(ms, ms.locals)
+      ms = local_fl.ms
+      let block_fl: MirFlush = mir_flush_list(ms, ms.fn_blocks)
+      ms = block_fl.ms
 
-      // Seal the block.
-      let sealed: MS = block_seal(cur_br, blk_idx)
-
-      // Flush the local list and block list into mir_idx.
-      let local_fl: MirFlush = mir_flush_list(sealed, sealed.locals)
-      let blocks_vec: Vector<i64> = Vector<i64>::new()
-      blocks_vec = blocks_vec.push(blk_idx)
-      let block_fl: MirFlush = mir_flush_list(local_fl.ms, blocks_vec)
-
-      // Rewrite the MirFunction with final offsets.
-      block_fl.ms.mir_nodes = block_fl.ms.mir_nodes.set(fn_idx, MirNode.MirFunction(
-        name_sym, ret_ti, param_count, local_fl.list_pos, sealed.locals.length(),
-        block_fl.list_pos, blocks_vec.length(), is_extern_i))
-      return MirR(block_fl.ms, fn_idx)
-  // Non-function decl: no MIR to produce.
+      ms.mir_nodes = ms.mir_nodes.set(fn_idx, MirNode.MirFunction(
+        fn_sym, ret_ti, param_count, local_fl.list_pos, ms.locals.length(),
+        block_fl.list_pos, ms.fn_blocks.length(), is_extern_i))
+      return MirR(ms, fn_idx)
   return MirR(ms, to_i64(-1))
 
 // =========================================================================
@@ -628,7 +691,7 @@ fn lower_to_mir(src: string): MirResult
     Vector<Diagnostic>::new(),
     sf.file_id,
     to_i64(-1),
-    to_i64(-1),
+    Vector<i64>::new(),
     Vector<i64>::new(),
     HashMap<i64>::new(),
     to_i64(0))
@@ -758,7 +821,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 6
+  let total: i32 = 8
 
   // -----------------------------------------------------------------
   // Test 1: minimal program produces MirModule + MirFunction
@@ -873,6 +936,45 @@ fn main(): i32
     pass_count = pass_count + 1
   else:
     print("FAIL extern_function: no extern MirFunction with zero blocks")
+
+  // -----------------------------------------------------------------
+  // Test 7: if/else lowers to MirCondBr with multiple blocks + MirBr
+  // -----------------------------------------------------------------
+  let src7: string = "fn f(x: i32): i32\n  if x > 0\n    return 1\n  else\n    return 2\n"
+  let r7: MirResult = lower_to_mir(src7)
+  let has_condbr: bool = mir_contains_kind(r7, "MirCondBr")
+  // Count MirBlock nodes in the MirFunction for `f`: should be >= 3
+  // (entry, then, else) — merge may or may not exist depending on
+  // whether both branches terminate.
+  let block_count_7: i64 = mir_count_kind(r7, "MirBlock")
+  if has_condbr:
+    if block_count_7 >= to_i64(3):
+      print("PASS if_stmt")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL if_stmt: expected >= 3 MirBlock, got " + i64_to_string(block_count_7))
+  else:
+    print("FAIL if_stmt: no MirCondBr")
+
+  // -----------------------------------------------------------------
+  // Test 8: while loop lowers to header/body/exit with MirCondBr + MirBr
+  // -----------------------------------------------------------------
+  let src8: string = "fn f(n: i32): i32\n  let i: i32 = 0\n  while i < n\n    i = i + 1\n  return i\n"
+  let r8: MirResult = lower_to_mir(src8)
+  let has_condbr_8: bool = mir_contains_kind(r8, "MirCondBr")
+  let has_br_8: bool = mir_contains_kind(r8, "MirBr")
+  let block_count_8: i64 = mir_count_kind(r8, "MirBlock")
+  if has_condbr_8:
+    if has_br_8:
+      if block_count_8 >= to_i64(4):
+        print("PASS while_stmt")
+        pass_count = pass_count + 1
+      else:
+        print("FAIL while_stmt: expected >= 4 MirBlock, got " + i64_to_string(block_count_8))
+    else:
+      print("FAIL while_stmt: no MirBr")
+  else:
+    print("FAIL while_stmt: no MirCondBr")
 
   // -----------------------------------------------------------------
   // Summary
