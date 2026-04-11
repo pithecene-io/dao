@@ -300,14 +300,19 @@ For the current supported hook slice:
    one `__dao_mem_resource_exit` call. The compiler inserts exit
    calls on both normal and early-return paths.
 
-6. **String concat results are heap-allocated.**
-   `__dao_str_concat` returns a `dao_string` whose `ptr` points to
-   a freshly `malloc`-allocated buffer owned by the caller. Unlike
-   scalar-to-string conversion hooks, concat cannot use transient
-   storage because concat composes with itself (e.g.
-   `concat("a", concat("b", "c"))`). In the current runtime these
-   allocations are not automatically freed — they leak until process
-   exit. Future arena or GC integration will reclaim them.
+6. **String-producing runtime hooks return heap-allocated buffers.**
+   Both `__dao_str_concat` and all `__dao_conv_*_to_string` hooks
+   return a `dao_string` whose `ptr` points to a freshly
+   `malloc`-allocated buffer owned by the caller.  Earlier versions
+   of the scalar-to-string hooks returned pointers to thread-local
+   static buffers, which silently corrupted any data structure that
+   stored the returned string: the next conversion call overwrote
+   the previous contents in place (observable via
+   `HashMap<V>.set(i64_to_string(i), v)` in a loop, where keys
+   collided because every returned string pointed at the same
+   buffer).  In the current runtime these allocations are not
+   automatically freed — they leak until process exit.  Future arena
+   or GC integration will reclaim them.
 
 ## Stability
 

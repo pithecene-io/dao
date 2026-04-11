@@ -3,7 +3,17 @@
 // Implements: scalar-to-string, numeric type conversions
 // Authority:  docs/contracts/CONTRACT_RUNTIME_ABI.md
 //
-// String conversion results use thread-local transient buffers.
+// String conversion results are heap-allocated via malloc.  The caller
+// owns the memory; in the current runtime there is no automatic
+// deallocation — these allocations leak until process exit.  Future
+// arena/GC integration will reclaim them.  Matches the convention used
+// by __dao_str_concat in string.c.
+//
+// Earlier versions returned pointers to thread-local static buffers,
+// which silently corrupted any data structure (e.g. HashMap keys) that
+// stored the returned string: the next conversion call overwrote the
+// previous contents in place.
+//
 // Numeric conversions trap (abort) on out-of-range or invalid inputs.
 
 #include "dao_abi.h"
@@ -11,65 +21,82 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+// Helper: format into a stack buffer of known size, then duplicate
+// into a fresh heap allocation sized to the actual length.  Returns
+// an empty string on OOM rather than crashing (same posture as
+// __dao_str_concat).
+static struct dao_string conv_str_dup(const char *buf, int len) {
+  if (len <= 0) {
+    return (struct dao_string){.ptr = NULL, .len = 0};
+  }
+  char *heap = (char *)malloc((size_t)len);
+  if (heap == NULL) {
+    return (struct dao_string){.ptr = NULL, .len = 0};
+  }
+  memcpy(heap, buf, (size_t)len);
+  return (struct dao_string){.ptr = heap, .len = len};
+}
 
 struct dao_string __dao_conv_i8_to_string(int8_t x) {
-  static _Thread_local char buf[8];
+  char buf[8];
   int len = snprintf(buf, sizeof(buf), "%d", (int)x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_i16_to_string(int16_t x) {
-  static _Thread_local char buf[8];
+  char buf[8];
   int len = snprintf(buf, sizeof(buf), "%d", (int)x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_i32_to_string(int32_t x) {
-  static _Thread_local char buf[32];
+  char buf[32];
   int len = snprintf(buf, sizeof(buf), "%d", x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_i64_to_string(int64_t x) {
-  static _Thread_local char buf[32];
+  char buf[32];
   int len = snprintf(buf, sizeof(buf), "%lld", (long long)x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_u8_to_string(uint8_t x) {
-  static _Thread_local char buf[8];
+  char buf[8];
   int len = snprintf(buf, sizeof(buf), "%u", (unsigned)x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_u16_to_string(uint16_t x) {
-  static _Thread_local char buf[8];
+  char buf[8];
   int len = snprintf(buf, sizeof(buf), "%u", (unsigned)x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_u32_to_string(uint32_t x) {
-  static _Thread_local char buf[16];
+  char buf[16];
   int len = snprintf(buf, sizeof(buf), "%u", x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_u64_to_string(uint64_t x) {
-  static _Thread_local char buf[32];
+  char buf[32];
   int len = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_f32_to_string(float x) {
-  static _Thread_local char buf[64];
+  char buf[64];
   int len = snprintf(buf, sizeof(buf), "%g", (double)x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_f64_to_string(double x) {
-  static _Thread_local char buf[64];
+  char buf[64];
   int len = snprintf(buf, sizeof(buf), "%g", x);
-  return (struct dao_string){.ptr = buf, .len = len};
+  return conv_str_dup(buf, len);
 }
 
 struct dao_string __dao_conv_bool_to_string(bool x) {
