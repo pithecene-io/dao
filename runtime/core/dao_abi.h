@@ -77,10 +77,16 @@ bool __dao_eq_string(const struct dao_string *a, const struct dao_string *b);
 // ---------------------------------------------------------------------------
 
 // Scalar-to-string conversions return a dao_string by value.
-// The returned ptr points to thread-local transient storage that is
-// valid until the next call to the same conversion hook on the same
-// thread. Callers must consume or copy the result before the next
-// conversion call.
+// The returned ptr points to a freshly malloc-allocated buffer owned
+// by the caller; successive calls return distinct buffers, so the
+// result may be stored in long-lived data structures (e.g. HashMap
+// keys) without copying.  Matches the convention used by
+// __dao_str_concat.  In the current runtime these allocations are
+// not automatically freed — they leak until process exit.
+//
+// __dao_conv_bool_to_string is a documented exception: it returns a
+// pointer to a static string literal ("true" or "false"), which is
+// safe because the value set has exactly two entries.
 struct dao_string __dao_conv_i8_to_string(int8_t x);
 struct dao_string __dao_conv_i16_to_string(int16_t x);
 struct dao_string __dao_conv_i32_to_string(int32_t x);

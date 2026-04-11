@@ -41,5 +41,24 @@ target_include_directories(overflow_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+add_executable(convert_test
+  convert_test.cpp
+)
+
+set_target_properties(convert_test PROPERTIES
+  LINKER_LANGUAGE CXX
+)
+
+target_link_libraries(convert_test
+  PRIVATE
+    dao_runtime
+    Boost::ut
+)
+
+target_include_directories(convert_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
 include(CTest)
 add_test(NAME overflow_test COMMAND overflow_test)
+add_test(NAME convert_test COMMAND convert_test)
