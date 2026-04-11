@@ -203,6 +203,45 @@ fn/extern fn/class/enum/type alias declarations
 bash bootstrap/assemble.sh && daoc build bootstrap/hir/hir.gen.dao && ./bootstrap/hir/hir.gen
 ```
 
+### `mir/`
+
+Tier A MIR lowering pass producing basic-block MIR from HIR, mirroring
+the host compiler's structure (`compiler/ir/mir/mir.h`).
+
+**Status**: implemented (Task 29).
+
+**What it does**:
+
+- Lowers typed HIR → flat `MirNode` arena with `MirModule` root
+- `MirFunction` owns a list of `MirLocal` slots (params first) and a
+  list of `MirBlock` nodes (entry first); per-function state is
+  accumulated on `MS.fn_blocks` / `MS.locals` and flushed on seal
+- `BlockR` threads block-local instruction buffers and a `sealed`
+  flag through statement lowering; `block_seal` rewrites each
+  `MirBlock` with its instruction list offset and count
+- `ExprR { br, value }` threads expression-level state back to the
+  caller because Dao classes are value-copied across function
+  boundaries
+- if/else lowers to `cond_br → then/else → br → merge` with
+  early-return detection
+- while lowers to `br → header (cond_br) → body (br header) / exit`
+
+**Tier A coverage**: functions, extern functions, params/locals,
+constants (int/float/bool/string), binary/unary ops, let/assign,
+calls (with `MirFnRef` callees), returns, field-access reads,
+if/else, while.
+
+**Tier B deferrals**: generators, monomorphization, mode/resource
+region enter/exit, enum construction/discriminant/payload, lambda
+/ closures, try operator, for-over-iterable, index expressions,
+break/continue.
+
+**How to run tests**:
+
+```sh
+bash bootstrap/assemble.sh && daoc build bootstrap/mir/mir.gen.dao && ./bootstrap/mir/mir.gen
+```
+
 ## Relationship to probes
 
 The `examples/bootstrap_probe/` directory contains earlier experimental
@@ -218,6 +257,6 @@ probe. The probe is retained as a historical artifact.
 ## What comes next
 
 - Tier B expansion (generics, concepts, extend, mode/resource)
-- Bootstrap HIR/MIR lowering
+- LLVM backend lowering from bootstrap MIR
 - Diagnostic formatting integration
 - Multi-file compilation (eliminate assembly workaround)
