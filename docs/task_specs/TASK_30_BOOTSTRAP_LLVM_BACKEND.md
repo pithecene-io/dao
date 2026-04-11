@@ -140,6 +140,13 @@ Every emitted LLVM block must end in exactly one terminator.
 ### 5.4 Locals and memory
 
 * `alloca` for every `MirLocal` in the function prologue
+* **parameter seeding**: immediately after the param allocas, the
+  prologue must `store` each incoming LLVM function argument into
+  its corresponding parameter slot.  Task 29 MIR lowers
+  `HirIdent` param reads to `MirLoad(slot)` on a `MirLocal` with
+  `is_param=1`, so omitting the seeding stores would cause every
+  param use to read uninitialized memory.  The seeding is a hard
+  requirement, not an optimization.
 * `store` for `MirStore`
 * `load` for `MirLoad`
 
@@ -417,6 +424,30 @@ Becomes an `LlInst::Alloca` in the entry block prologue.  Params get
 their alloca first, in declaration order; then non-param locals in
 declaration order.
 
+**Parameter seeding is mandatory** (see §5.4): immediately after
+the param `alloca`s and before any user-visible MIR instruction is
+lowered, the prologue must emit one `store <ty> %argN, ptr
+%slotN` per `MirLocal` with `is_param=1`.  The argument operand
+comes from the LLVM function's parameter list in the same order
+as `MirFunction.params`.  This is what makes `MirLoad` of a param
+well-defined in the alloca-everything Tier A strategy.
+
+Prologue shape for a two-param function:
+
+```llvm
+entry:
+  %0 = alloca i32    ; param x slot
+  %1 = alloca i32    ; param y slot
+  %2 = alloca i32    ; local z slot (if any)
+  store i32 %x, ptr %0
+  store i32 %y, ptr %1
+  ; ... lowered MIR body begins here ...
+```
+
+The lowering pass tracks a per-function map from `MirLocal` index
+to LLVM slot pointer so subsequent `MirLoad` / `MirStore`
+instructions resolve to the correct `alloca` result.
+
 ### 10.4 Constants
 
 | MIR node        | LlInst emission                                |
@@ -590,6 +621,10 @@ addition and must not require changes to the Task 30 surface.
 * `float_comparison` — `a < b` lowers to `fcmp olt`
 * `let_store_load` — `let x = 1; return x` emits `alloca` + `store`
   + `load` + `ret`
+* `param_seeding` — `fn f(x: i32): i32 -> x` emits a param `alloca`
+  followed by `store i32 %x, ptr %0` in the prologue, so the
+  subsequent `MirLoad` reads the passed-in argument rather than
+  uninitialized memory
 * `if_else_cfg` — emits `br i1 ... label %bb1, label %bb2` with
   `bb1:` / `bb2:` / merge block
 * `while_cfg` — emits header / body / exit blocks with back-edge
@@ -637,7 +672,10 @@ a golden `.ll` string.
 1. Bootstrap MIR can be lowered to textual LLVM IR for the Tier A
    supported surface.
 2. Extern functions emit `declare`; normal functions emit `define`.
-3. Locals lower through deterministic `alloca` / `store` / `load`.
+3. Locals lower through deterministic `alloca` / `store` / `load`,
+   and function parameters are seeded in the entry-block prologue
+   by storing each incoming LLVM argument into its param alloca
+   before any MIR-body instruction is lowered.
 4. Arithmetic and comparison ops choose correct integer vs float
    LLVM instructions based on MIR type, not text.
 5. Calls lower correctly for `MirFnRef` callees; extern `declare`
