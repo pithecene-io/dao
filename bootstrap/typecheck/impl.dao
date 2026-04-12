@@ -603,6 +603,15 @@ fn tc_register_fn_sig_core(ts: TS, decl_idx: i64, name_tidx: i64, params_lp: i64
     let pt_r: TypeR = resolve_ast_type(r, p_type_node)
     r = pt_r.ts
     r = ts_push_type_info(r, pt_r.type_idx)
+    // Set the param symbol's declared type here so extern fns (which
+    // have no body-check pass) still propagate their param types into
+    // sym_types.  For non-extern fns, this runs before body checking
+    // and writes the same type the body-check pass would write, so
+    // it is safe to run unconditionally.
+    let p_name: string = ts_tok_name(r, p_tidx)
+    let p_sym: i64 = find_param_sym(r, decl_idx, p_name)
+    if p_sym >= 0:
+      r.sym_types = vec_i64_set(r.sym_types, p_sym, pt_r.type_idx)
     param_count = param_count + 1
     pi = pi + 2
   let ret_r: TypeR = resolve_ast_type(r, ret_type_node)

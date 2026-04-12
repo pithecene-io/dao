@@ -242,6 +242,48 @@ break/continue.
 bash bootstrap/assemble.sh && daoc build bootstrap/mir/mir.gen.dao && ./bootstrap/mir/mir.gen
 ```
 
+### `llvm/`
+
+Tier A LLVM backend: lowers bootstrap MIR to deterministic textual
+LLVM IR via a backend-private Dao-side LLVM mini-IR and text
+serializer.
+
+**Status**: implemented (Task 30).
+
+**What it does**:
+
+- Lowers `MirResult` (Task 29 output) to textual LLVM IR as a string
+- Backend-private mini-IR (`LlModule` / `LlFunction` / `LlBlock` /
+  `LlInst`) separates semantic lowering from text serialization
+- `MirBackendInput` bundles MIR + resolver symbols + type universe +
+  tokens + source for the backend's needs
+- Alloca-everything SSA strategy with mandatory param seeding in the
+  entry block prologue
+- Integer arithmetic (`add/sub/mul/sdiv/srem`) and float arithmetic
+  (`fadd/fsub/fmul/fdiv`), integer/float comparisons
+- Function calls with extern `declare` / non-extern `define`
+- String literals as private module-global constants + GEP
+  materialization at use site
+- if/else → `cond_br` + then/else/merge blocks;
+  while → header/body/exit blocks with back-edge
+- Fail-closed: `MirFieldAccess`, `MirErrorExpr`, anonymous symbols,
+  and unsupported types produce explicit diagnostics
+
+**Tier A coverage**: functions, extern functions, params/locals,
+constants (int/float/bool/string), binary/unary ops, let/assign,
+calls, returns, if/else, while.
+
+**Tier B deferrals**: struct layout / field access, enum payloads,
+monomorphization, generators, mode/resource hooks, lambdas,
+try, for-over-iterable, index expressions, break/continue,
+LLVM C API integration, `llc`/`clang` validation in CI.
+
+**How to run tests**:
+
+```sh
+bash bootstrap/assemble.sh && daoc build bootstrap/llvm/llvm.gen.dao && ./bootstrap/llvm/llvm.gen
+```
+
 ## Relationship to probes
 
 The `examples/bootstrap_probe/` directory contains earlier experimental
@@ -257,6 +299,6 @@ probe. The probe is retained as a historical artifact.
 ## What comes next
 
 - Tier B expansion (generics, concepts, extend, mode/resource)
-- LLVM backend lowering from bootstrap MIR
+- `llc`/`clang` validation of emitted LLVM IR (Task 30.5)
 - Diagnostic formatting integration
 - Multi-file compilation (eliminate assembly workaround)
