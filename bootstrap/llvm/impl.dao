@@ -971,6 +971,17 @@ fn decode_string_literal(raw: string): StrDecode
   // +1 for trailing NUL.
   return StrDecode(out, bytes + to_i64(1))
 
+// Check whether an LlInst is a terminator (ret / br / cond_br).
+fn ll_inst_is_terminator(inst: LlInst): bool
+  match inst.kind:
+    LlInstKind.LlRet(v, t, h):
+      return true
+    LlInstKind.LlBr(target):
+      return true
+    LlInstKind.LlCondBr(c, tl, el):
+      return true
+  return false
+
 // =========================================================================
 // Section 89: Function lowering (prologue + blocks)
 // =========================================================================
@@ -1096,7 +1107,14 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
               bs = step.bs
               this_insts = step.insts
               ii = ii + to_i64(1)
+            // Validate that the block ends with a terminator (TASK_30 §13).
             let label: string = bs_get_block_label(bs, block_node_idx)
+            if this_insts.length() == to_i64(0):
+              bs = bs_error(bs, "bootstrap llvm backend expected block terminator in block " + label)
+            else:
+              let last: LlInst = this_insts.get(this_insts.length() - to_i64(1))
+              if ll_inst_is_terminator(last) == false:
+                bs = bs_error(bs, "bootstrap llvm backend expected block terminator in block " + label)
             ll_blocks = ll_blocks.push(LlBlock(label, this_insts))
         block_i = block_i + to_i64(1)
 
@@ -1109,18 +1127,26 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
 // Section 89b: Top-level module lowering
 // =========================================================================
 
-fn lower_mir_to_ll_module(bs: BS): BS
-  let root: i64 = bs.mir_nodes.length()  // placeholder
-  // Find the MirModule root from the input.  MirResult.root carries
-  // its index; we walk via bs on the caller's side.  Here we just
-  // iterate every node and lower each MirFunction in index order.
-  let i: i64 = to_i64(0)
-  while i < bs.mir_nodes.length():
-    let n: MirNode = bs.mir_nodes.get(i)
-    match n:
-      MirNode.MirFunction(fs, rt, pc, llp, lc, blp, bcnt, ie):
-        bs = bs_lower_function(bs, i)
-    i = i + to_i64(1)
+fn lower_mir_to_ll_module(bs: BS, root: i64): BS
+  // Honor the MIR root contract: MirResult.root points at a
+  // MirModule(fn_list_lp, fn_count) node.  Walk its function list
+  // in deterministic order rather than scanning the entire arena.
+  if root < 0:
+    bs = bs_error(bs, "bootstrap llvm backend: MirResult.root is negative")
+    return bs
+  if root >= bs.mir_nodes.length():
+    bs = bs_error(bs, "bootstrap llvm backend: MirResult.root out of bounds")
+    return bs
+  let root_node: MirNode = bs.mir_nodes.get(root)
+  match root_node:
+    MirNode.MirModule(fn_list_lp, fn_count):
+      let fn_indices: Vector<i64> = read_mir_list(bs.mir_idx, fn_list_lp)
+      let i: i64 = to_i64(0)
+      while i < fn_indices.length():
+        bs = bs_lower_function(bs, fn_indices.get(i))
+        i = i + to_i64(1)
+      return bs
+  bs = bs_error(bs, "bootstrap llvm backend: MirResult.root is not a MirModule node")
   return bs
 
 // =========================================================================
@@ -1273,7 +1299,7 @@ fn serialize_module(bs: BS): string
 
 fn lower_mir_to_llvm_text(input: MirBackendInput): LlvmTextResult
   let bs: BS = bs_new(input)
-  bs = lower_mir_to_ll_module(bs)
+  bs = lower_mir_to_ll_module(bs, input.mir.root)
   let text: string = serialize_module(bs)
   let ok: bool = true
   if bs.had_error > to_i64(0):
