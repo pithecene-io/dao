@@ -1576,24 +1576,29 @@ fn main(): i32
       print("FAIL field_access_rejected: expected diagnostic mentioning MirFieldAccess")
 
   // -----------------------------------------------------------------
-  // Test 13: e2e_write_ll — lower → write .ll file to disk
+  // Test 13: write_ll_artifact — lower source → write .ll artifact to disk
   // -----------------------------------------------------------------
-  // Produces /tmp/dao_e2e_test.ll that can be compiled with:
+  // This test verifies the bootstrap pipeline can lower Dao source to
+  // LLVM IR text and write the artifact to a .ll file.  It does NOT
+  // invoke clang or verify native execution — that is a manual step
+  // (or a future CI task per Task 30.5).
+  //
+  // Manual verification after this test passes:
   //   clang /tmp/dao_e2e_test.ll -o /tmp/dao_e2e_test && /tmp/dao_e2e_test; echo $?
-  // Expected exit code: 42.
+  //   expected exit code: 42
   let e2e_src: string = "fn main(): i32\n  return 42\n"
   let e2e_r: LlvmTextResult = lower_source_to_llvm_text(e2e_src)
   if e2e_r.ok:
     let wrote: bool = write_llvm_text(e2e_r, "/tmp/dao_e2e_test.ll")
     if wrote:
-      print("PASS e2e_write_ll (wrote /tmp/dao_e2e_test.ll)")
-      print("  verify: clang /tmp/dao_e2e_test.ll -o /tmp/dao_e2e_test && /tmp/dao_e2e_test; echo $?")
+      print("PASS write_ll_artifact (wrote /tmp/dao_e2e_test.ll)")
+      print("  manual verify: clang /tmp/dao_e2e_test.ll -o /tmp/dao_e2e_test && /tmp/dao_e2e_test; echo $?")
       print("  expected exit code: 42")
       pass_count = pass_count + 1
     else:
-      print("FAIL e2e_write_ll: write_llvm_text returned false")
+      print("FAIL write_ll_artifact: write_llvm_text returned false")
   else:
-    print("FAIL e2e_write_ll: ok=false")
+    print("FAIL write_ll_artifact: ok=false")
 
   // -----------------------------------------------------------------
   // Summary
