@@ -207,18 +207,30 @@ fn ll_type_is_int(ty: LlType): bool
 
 fn mangle_symbol_name(raw: string): string
   // "app::math::add" → "@app_math_add"
+  // Per TASK_30 §9: replace each "::" pair with a single "_".
   let out: string = "@"
   let i: i64 = to_i64(0)
   let n: i64 = length(raw)
   while i < n:
     let ch: string = substring(raw, i, to_i64(1))
     if ch == ":":
-      // Replace each ":" with "_"; the two colons of "::" collapse
-      // to "__" which is fine — still deterministic and grep-able.
-      out = out + "_"
+      // Peek ahead — if the next char is also ":", consume both and
+      // emit a single "_".  Otherwise emit the lone ":" literally
+      // (shouldn't appear in well-formed qualified names but safe).
+      if i + to_i64(1) < n:
+        let next: string = substring(raw, i + to_i64(1), to_i64(1))
+        if next == ":":
+          out = out + "_"
+          i = i + to_i64(2)
+        else:
+          out = out + ch
+          i = i + to_i64(1)
+      else:
+        out = out + ch
+        i = i + to_i64(1)
     else:
       out = out + ch
-    i = i + to_i64(1)
+      i = i + to_i64(1)
   return out
 
 fn mangle_function_sym(symbols: Vector<Symbol>, sym_idx: i64): string
@@ -587,13 +599,12 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
     MirNode.MirConstString(tok, type_idx):
       // Emit a module-global and materialize via GEP.
       let raw: string = bs_tok_lex(bs, tok)
-      // Strip surrounding quotes.  Tier A lexer gives us the
-      // full literal including quotes.
-      let stripped: string = str_strip_quotes(raw)
-      let nbytes: i64 = length(stripped) + to_i64(1)  // include NUL
+      // Decode Dao escapes and re-escape for LLVM IR c"..." form.
+      let decoded: StrDecode = decode_string_literal(raw)
+      let nbytes: i64 = decoded.byte_count  // includes trailing NUL
       let gname: string = "@.str." + i64_to_string(bs.next_global)
       bs.next_global = bs.next_global + to_i64(1)
-      bs.globals = bs.globals.push(LlGlobal(gname, stripped, nbytes))
+      bs.globals = bs.globals.push(LlGlobal(gname, decoded.llvm_payload, nbytes))
       let result: string = bs_fresh_value(bs)
       let inst: LlInst = LlInst(
         LlInstKind.LlGepString(gname, nbytes),
@@ -850,18 +861,98 @@ class CallArgs:
   arg_texts: Vector<string>
   arg_tys: Vector<LlType>
 
-// Strip the surrounding double quotes from a string literal token.
-// Tier A assumes the lexer emits `"hello"` — this returns `hello`.
-fn str_strip_quotes(raw: string): string
+// Decode a Dao string literal token (with surrounding quotes) into:
+//   (1) the LLVM IR c"..." payload (with LLVM-style hex escapes for
+//       non-printable bytes and literal backslashes / quotes), and
+//   (2) the decoded byte count (for the [N x i8] array length,
+//       including the trailing NUL).
+//
+// Dao escape sequences per spec/grammar/dao.lex and
+// compiler/frontend/lexer/lexer_test.cpp:
+//   \\  →  backslash    (1 byte)
+//   \"  →  double quote (1 byte)
+//   \n  →  newline      (1 byte)
+//   \t  →  tab          (1 byte)
+//   \r  →  carriage ret (1 byte)
+//   \0  →  NUL          (1 byte)
+//
+// LLVM IR c"..." escaping: non-printable bytes use \XX hex;
+// literal backslash is \5C; literal double-quote is \22.
+
+class StrDecode:
+  llvm_payload: string    // ready for c"...\00" wrapping
+  byte_count: i64         // decoded byte count INCLUDING trailing NUL
+
+fn decode_string_literal(raw: string): StrDecode
   let n: i64 = length(raw)
-  if n < to_i64(2):
-    return raw
-  let first: string = substring(raw, to_i64(0), to_i64(1))
-  let last: string = substring(raw, n - to_i64(1), to_i64(1))
-  if first == "\"":
-    if last == "\"":
-      return substring(raw, to_i64(1), n - to_i64(2))
-  return raw
+  // Strip surrounding quotes.
+  let start: i64 = to_i64(0)
+  let end: i64 = n
+  if n >= to_i64(2):
+    if substring(raw, to_i64(0), to_i64(1)) == "\"":
+      if substring(raw, n - to_i64(1), to_i64(1)) == "\"":
+        start = to_i64(1)
+        end = n - to_i64(1)
+  let out: string = ""
+  let bytes: i64 = to_i64(0)
+  let i: i64 = start
+  while i < end:
+    let ch: string = substring(raw, i, to_i64(1))
+    if ch == "\\":
+      // Escape sequence — peek at next char.
+      if i + to_i64(1) < end:
+        let esc: string = substring(raw, i + to_i64(1), to_i64(1))
+        if esc == "\\":
+          out = out + "\\5C"
+          bytes = bytes + to_i64(1)
+          i = i + to_i64(2)
+        else:
+          if esc == "\"":
+            out = out + "\\22"
+            bytes = bytes + to_i64(1)
+            i = i + to_i64(2)
+          else:
+            if esc == "n":
+              out = out + "\\0A"
+              bytes = bytes + to_i64(1)
+              i = i + to_i64(2)
+            else:
+              if esc == "t":
+                out = out + "\\09"
+                bytes = bytes + to_i64(1)
+                i = i + to_i64(2)
+              else:
+                if esc == "r":
+                  out = out + "\\0D"
+                  bytes = bytes + to_i64(1)
+                  i = i + to_i64(2)
+                else:
+                  if esc == "0":
+                    out = out + "\\00"
+                    bytes = bytes + to_i64(1)
+                    i = i + to_i64(2)
+                  else:
+                    // Unknown escape — emit literal backslash + char.
+                    out = out + "\\5C" + esc
+                    bytes = bytes + to_i64(2)
+                    i = i + to_i64(2)
+      else:
+        // Trailing lone backslash — emit as hex.
+        out = out + "\\5C"
+        bytes = bytes + to_i64(1)
+        i = i + to_i64(1)
+    else:
+      if ch == "\"":
+        // Unescaped quote inside — hex-escape for LLVM.
+        out = out + "\\22"
+        bytes = bytes + to_i64(1)
+        i = i + to_i64(1)
+      else:
+        out = out + ch
+        bytes = bytes + to_i64(1)
+        i = i + to_i64(1)
+  // +1 for trailing NUL.
+  return StrDecode(out, bytes + to_i64(1))
 
 // =========================================================================
 // Section 89: Function lowering (prologue + blocks)
@@ -1195,11 +1286,7 @@ fn lower_source_to_llvm_text(src: string): LlvmTextResult
   return lower_mir_to_llvm_text(input)
 
 fn write_llvm_text(result: LlvmTextResult, path: string): bool
-  // Stub for Tier A: bootstrap Dao currently has no standard file
-  // IO API wired through.  Tests compare against the returned
-  // string directly.  A later follow-up wires this to a real
-  // `fs_write` call.
-  return false
+  return write_file(path, result.text)
 
 // BEGIN_LLVM_TESTS
 // =========================================================================
