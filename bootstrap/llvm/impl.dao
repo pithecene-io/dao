@@ -1367,7 +1367,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 12
+  let total: i32 = 13
 
   // -----------------------------------------------------------------
   // Test 1: minimal_define — fn main(): i32 -> 0 emits define + entry + ret
@@ -1574,6 +1574,26 @@ fn main(): i32
       pass_count = pass_count + 1
     else:
       print("FAIL field_access_rejected: expected diagnostic mentioning MirFieldAccess")
+
+  // -----------------------------------------------------------------
+  // Test 13: e2e_write_ll — lower → write .ll file to disk
+  // -----------------------------------------------------------------
+  // Produces /tmp/dao_e2e_test.ll that can be compiled with:
+  //   clang /tmp/dao_e2e_test.ll -o /tmp/dao_e2e_test && /tmp/dao_e2e_test; echo $?
+  // Expected exit code: 42.
+  let e2e_src: string = "fn main(): i32\n  return 42\n"
+  let e2e_r: LlvmTextResult = lower_source_to_llvm_text(e2e_src)
+  if e2e_r.ok:
+    let wrote: bool = write_llvm_text(e2e_r, "/tmp/dao_e2e_test.ll")
+    if wrote:
+      print("PASS e2e_write_ll (wrote /tmp/dao_e2e_test.ll)")
+      print("  verify: clang /tmp/dao_e2e_test.ll -o /tmp/dao_e2e_test && /tmp/dao_e2e_test; echo $?")
+      print("  expected exit code: 42")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL e2e_write_ll: write_llvm_text returned false")
+  else:
+    print("FAIL e2e_write_ll: ok=false")
 
   // -----------------------------------------------------------------
   // Summary
