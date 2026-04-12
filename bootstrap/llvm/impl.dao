@@ -1,0 +1,1454 @@
+module bootstrap::llvm::impl
+// bootstrap/llvm/impl.dao — Tier A bootstrap LLVM backend.
+//
+// Lowers bootstrap MIR (Task 29) into deterministic textual LLVM IR
+// via a minimal, backend-private Dao-side LLVM mini-IR and text
+// serializer.  Closes the Tier A frontend-to-IR-to-text pipeline:
+//
+//   lex → parse → resolve → typecheck → HIR → MIR → LLVM text
+//
+// See docs/task_specs/TASK_30_BOOTSTRAP_LLVM_BACKEND.md for the
+// authoritative spec.  Everything in this file is Tier A:
+// alloca-everything SSA strategy (no mem2reg), no struct layout,
+// no monomorphization, no generators, no runtime hooks.
+
+// =========================================================================
+// Section 80: LLVM mini-IR node model
+// =========================================================================
+
+// Tier A LLVM primitive type.  Strictly the set in TASK_30 §5.2.
+enum LlType:
+  LlI32
+  LlI64
+  LlF32
+  LlF64
+  LlI1
+  LlVoid
+  LlPtr              // opaque pointer (Tier A string model — §8.4)
+  LlUnsupported      // fail-closed sentinel
+
+// Instruction payload variants.  Strictly what Task 29 MIR demands.
+enum class LlInstKind:
+  // Memory
+  LlAlloca(ty: LlType)
+  LlStore(ptr_name: string, value_text: string, value_ty: LlType)
+  LlLoad(ptr_name: string, ty: LlType)
+
+  // Integer / float arithmetic.  `op` is already the LLVM mnemonic
+  // ("add", "sub", "mul", "sdiv", "srem", "fadd", ...).
+  LlBinOp(op: string, lhs_text: string, rhs_text: string, ty: LlType)
+
+  // Integer unary negation → sub 0, x (emitted via LlBinOp with
+  // op="sub", lhs_text="0").  Float unary negation uses LlFNeg.
+  LlFNeg(operand_text: string, ty: LlType)
+
+  // i1 logical not → xor %x, true (op="xor", rhs_text="true", ty=LlI1).
+  // No dedicated variant; reuses LlBinOp.
+
+  // Comparisons.  `pred` is the LLVM predicate ("eq", "slt", "oeq", ...).
+  LlICmp(pred: string, lhs_text: string, rhs_text: string, operand_ty: LlType)
+  LlFCmp(pred: string, lhs_text: string, rhs_text: string, operand_ty: LlType)
+
+  // Direct function call.  `callee` is the textual "@name" form.
+  // args are stored as (text, type) pairs via arg_list_lp in LlInst.
+  LlCall(callee: string, arg_list_lp: i64, arg_count: i64, ret_ty: LlType)
+
+  // String global materialization: getelementptr into a [N x i8]
+  // private global, yielding ptr.
+  LlGepString(global_name: string, length: i64)
+
+  // Terminators
+  LlRet(value_text: string, value_ty: LlType, has_value: i64)
+  LlBr(target_label: string)
+  LlCondBr(cond_text: string, then_label: string, else_label: string)
+
+// A single instruction.  `result_name` is "%N" for value-producing
+// instructions, empty string for effect-only or terminators.
+class LlInst:
+  kind: LlInstKind
+  result_name: string
+  result_ty: LlType
+
+// A basic block.
+class LlBlock:
+  label: string         // "entry", "bb1", ...
+  insts: Vector<LlInst>
+
+// Function param info.
+class LlParam:
+  name: string          // "%arg0", "%arg1", ...
+  ty: LlType
+
+// A function definition or extern declaration.
+class LlFunction:
+  name: string          // mangled, with leading "@"
+  ret_ty: LlType
+  params: Vector<LlParam>
+  blocks: Vector<LlBlock>
+  is_extern: i64        // 1 = declare, 0 = define
+
+// A module-level global.  Tier A only uses these for string literals.
+class LlGlobal:
+  name: string          // e.g. "@.str.0"
+  bytes: string         // raw UTF-8 payload (without trailing NUL)
+  length: i64           // byte length including trailing NUL
+
+// Root node for an LLVM module.
+class LlModule:
+  globals: Vector<LlGlobal>
+  functions: Vector<LlFunction>
+  extern_decls: Vector<LlFunction>  // emitted before define's
+
+// =========================================================================
+// Section 81: Backend result / input shapes
+// =========================================================================
+
+class LlvmTextResult:
+  text: string
+  diags: Vector<Diagnostic>
+  ok: bool
+
+// Backend public input shape (see TASK_30 §7).  Bundles the MIR
+// arenas with the resolver symbol table, the program-level type
+// universe, and the token/source buffer needed to decode MirBinary
+// op tokens and extract MirConstFloat / MirConstString lexemes.
+// `MirResult` alone does not carry any of these.
+class MirBackendInput:
+  mir: MirResult
+  symbols: Vector<Symbol>
+  types: Vector<DaoType>
+  toks: Vector<Token>
+  src: string
+
+// =========================================================================
+// Section 82: Type lowering (MIR type_idx → LlType → textual form)
+// =========================================================================
+//
+// Tier A primitive set per TASK_30 §5.2:
+//   i32 → i32, i64 → i64, f32 → float, f64 → double,
+//   bool → i1, void → void, string → ptr
+//
+// Everything else (i8, i16, u8..u64, struct, enum, pointer, fn,
+// generic param, concept) is fail-closed: the caller receives
+// LlUnsupported and must surface a diagnostic.
+
+fn ll_type_from_mir(types: Vector<DaoType>, type_idx: i64): LlType
+  if type_idx < 0:
+    return LlType.LlVoid
+  if type_idx >= types.length():
+    return LlType.LlUnsupported
+  let t: DaoType = types.get(type_idx)
+  match t.kind:
+    TypeKind.TVoid:
+      return LlType.LlVoid
+    TypeKind.TString:
+      return LlType.LlPtr
+    TypeKind.TBuiltin:
+      // See register_builtins in typecheck/impl.dao for the canonical
+      // builtin_id → name mapping: i32=2, i64=3, f32=8, f64=9, bool=10.
+      if t.builtin_id == to_i64(2):
+        return LlType.LlI32
+      if t.builtin_id == to_i64(3):
+        return LlType.LlI64
+      if t.builtin_id == to_i64(8):
+        return LlType.LlF32
+      if t.builtin_id == to_i64(9):
+        return LlType.LlF64
+      if t.builtin_id == to_i64(10):
+        return LlType.LlI1
+      return LlType.LlUnsupported
+  return LlType.LlUnsupported
+
+fn ll_type_text(ty: LlType): string
+  match ty:
+    LlType.LlI32:
+      return "i32"
+    LlType.LlI64:
+      return "i64"
+    LlType.LlF32:
+      return "float"
+    LlType.LlF64:
+      return "double"
+    LlType.LlI1:
+      return "i1"
+    LlType.LlVoid:
+      return "void"
+    LlType.LlPtr:
+      return "ptr"
+    LlType.LlUnsupported:
+      return "<unsupported>"
+  return "<unsupported>"
+
+fn ll_type_is_float(ty: LlType): bool
+  match ty:
+    LlType.LlF32:
+      return true
+    LlType.LlF64:
+      return true
+  return false
+
+fn ll_type_is_int(ty: LlType): bool
+  match ty:
+    LlType.LlI32:
+      return true
+    LlType.LlI64:
+      return true
+    LlType.LlI1:
+      return true
+  return false
+
+// =========================================================================
+// Section 83: Symbol mangling (placeholder — TASK_30 §9)
+// =========================================================================
+//
+// Tier A mangling: replace "::" in a qualified symbol name with "_"
+// and prefix with "@".  NOT stable; NOT an ABI.  Will be replaced
+// wholesale when a real mangling contract lands.
+
+fn mangle_symbol_name(raw: string): string
+  // "app::math::add" → "@app_math_add"
+  let out: string = "@"
+  let i: i64 = to_i64(0)
+  let n: i64 = length(raw)
+  while i < n:
+    let ch: string = substring(raw, i, to_i64(1))
+    if ch == ":":
+      // Replace each ":" with "_"; the two colons of "::" collapse
+      // to "__" which is fine — still deterministic and grep-able.
+      out = out + "_"
+    else:
+      out = out + ch
+    i = i + to_i64(1)
+  return out
+
+fn mangle_function_sym(symbols: Vector<Symbol>, sym_idx: i64): string
+  if sym_idx < 0:
+    return ""
+  if sym_idx >= symbols.length():
+    return ""
+  let s: Symbol = symbols.get(sym_idx)
+  return mangle_symbol_name(s.name)
+
+// =========================================================================
+// Section 84: Backend lowering state
+// =========================================================================
+//
+// `BS` threads the read-only MIR/symbol/type/token inputs plus the
+// mutable mini-IR output.  Mutating-field style per the post-#248
+// bootstrap convention.
+//
+// Bootstrap Dao's HashMap is HashMap<i64> only, so string-valued
+// lookups (MIR node idx → "%N" text, etc.) use parallel Vector
+// side tables with linear scan.  Functions are small; this is
+// fine for Tier A.
+
+class BS:
+  // Inputs (read-only).
+  mir_nodes: Vector<MirNode>
+  mir_idx: Vector<i64>
+  symbols: Vector<Symbol>
+  types: Vector<DaoType>
+  toks: Vector<Token>
+  src: string
+
+  // Output.
+  globals: Vector<LlGlobal>
+  functions: Vector<LlFunction>
+  extern_decls: Vector<LlFunction>
+  diags: Vector<Diagnostic>
+
+  // Per-function lowering state (reset between functions).
+  // Value side table: maps MirInst node idx → result text (either
+  // "%N" for LLVM-instruction results, or an inline constant text
+  // like "42" / "1.500000e+00" / "true" for folded constants) and
+  // its LLVM type text.  Linear-scan lookup via `bs_get_value_*`.
+  val_keys: Vector<i64>
+  val_texts: Vector<string>
+  val_tys: Vector<string>
+
+  // MirLocal node idx → alloca slot name ("%slot0", etc.) + slot type text.
+  slot_keys: Vector<i64>
+  slot_names: Vector<string>
+  slot_tys: Vector<string>
+
+  // MirBlock node idx → textual label ("entry" / "bb1" / ...).
+  block_keys: Vector<i64>
+  block_labels: Vector<string>
+
+  // Next value counter (per function) — "%0", "%1", ...
+  next_value: i64
+
+  // Globals counter — "@.str.0", "@.str.1", ...
+  next_global: i64
+
+  // Extern-declare dedup: list of mangled names already emitted.
+  extern_emitted: Vector<string>
+
+  // Call arg bundles — LlInstKind.LlCall stores an index into this
+  // list rather than carrying Vector<string>/Vector<LlType> inline
+  // (enum-class variants over vectors are expensive to thread).
+  call_arg_bundles: Vector<CallArgs>
+
+  // Flag: set when lowering has emitted a diagnostic that makes
+  // the whole backend result `ok = false`.
+  had_error: i64
+
+fn bs_new(input: MirBackendInput): BS
+  return BS(
+    input.mir.mir_nodes,
+    input.mir.mir_idx,
+    input.symbols,
+    input.types,
+    input.toks,
+    input.src,
+    Vector<LlGlobal>::new(),
+    Vector<LlFunction>::new(),
+    Vector<LlFunction>::new(),
+    Vector<Diagnostic>::new(),
+    Vector<i64>::new(),
+    Vector<string>::new(),
+    Vector<string>::new(),
+    Vector<i64>::new(),
+    Vector<string>::new(),
+    Vector<string>::new(),
+    Vector<i64>::new(),
+    Vector<string>::new(),
+    to_i64(0),
+    to_i64(0),
+    Vector<string>::new(),
+    Vector<CallArgs>::new(),
+    to_i64(0))
+
+fn bs_reset_fn_state(bs: BS): BS
+  bs.val_keys = Vector<i64>::new()
+  bs.val_texts = Vector<string>::new()
+  bs.val_tys = Vector<string>::new()
+  bs.slot_keys = Vector<i64>::new()
+  bs.slot_names = Vector<string>::new()
+  bs.slot_tys = Vector<string>::new()
+  bs.block_keys = Vector<i64>::new()
+  bs.block_labels = Vector<string>::new()
+  bs.next_value = to_i64(0)
+  return bs
+
+fn bs_fresh_value(bs: BS): string
+  let n: i64 = bs.next_value
+  bs.next_value = n + to_i64(1)
+  return "%" + i64_to_string(n)
+
+fn bs_error(bs: BS, msg: string): BS
+  bs.diags = bs.diags.push(make_error(Span(to_i64(0), to_i64(1)), msg))
+  bs.had_error = to_i64(1)
+  return bs
+
+// Value side-table helpers.
+fn bs_set_value(bs: BS, mir_idx: i64, text: string, ty_text: string): BS
+  bs.val_keys = bs.val_keys.push(mir_idx)
+  bs.val_texts = bs.val_texts.push(text)
+  bs.val_tys = bs.val_tys.push(ty_text)
+  return bs
+
+fn bs_get_value_text(bs: BS, mir_idx: i64): string
+  let i: i64 = to_i64(0)
+  while i < bs.val_keys.length():
+    if bs.val_keys.get(i) == mir_idx:
+      return bs.val_texts.get(i)
+    i = i + to_i64(1)
+  return ""
+
+fn bs_get_value_ty(bs: BS, mir_idx: i64): string
+  let i: i64 = to_i64(0)
+  while i < bs.val_keys.length():
+    if bs.val_keys.get(i) == mir_idx:
+      return bs.val_tys.get(i)
+    i = i + to_i64(1)
+  return ""
+
+// Slot side-table helpers (MirLocal node idx → alloca name + ty text).
+fn bs_set_slot(bs: BS, local_node_idx: i64, slot_name: string, ty_text: string): BS
+  bs.slot_keys = bs.slot_keys.push(local_node_idx)
+  bs.slot_names = bs.slot_names.push(slot_name)
+  bs.slot_tys = bs.slot_tys.push(ty_text)
+  return bs
+
+fn bs_get_slot_name(bs: BS, local_node_idx: i64): string
+  let i: i64 = to_i64(0)
+  while i < bs.slot_keys.length():
+    if bs.slot_keys.get(i) == local_node_idx:
+      return bs.slot_names.get(i)
+    i = i + to_i64(1)
+  return ""
+
+fn bs_get_slot_ty(bs: BS, local_node_idx: i64): string
+  let i: i64 = to_i64(0)
+  while i < bs.slot_keys.length():
+    if bs.slot_keys.get(i) == local_node_idx:
+      return bs.slot_tys.get(i)
+    i = i + to_i64(1)
+  return ""
+
+// Slot position-indexed lookup for MirLocal local_slot_index.  Task 29
+// MirLoad/MirStore reference locals by slot index (0..param_count..locals.length()),
+// NOT by node index.  We keep the slot list in declaration order so
+// the index into slot_names matches the MirLocal slot index.
+fn bs_slot_name_by_index(bs: BS, slot_idx: i64): string
+  if slot_idx < 0:
+    return ""
+  if slot_idx >= bs.slot_names.length():
+    return ""
+  return bs.slot_names.get(slot_idx)
+
+fn bs_slot_ty_by_index(bs: BS, slot_idx: i64): string
+  if slot_idx < 0:
+    return ""
+  if slot_idx >= bs.slot_tys.length():
+    return ""
+  return bs.slot_tys.get(slot_idx)
+
+// Block label side-table helpers (MirBlock node idx → label text).
+fn bs_set_block_label(bs: BS, block_node_idx: i64, label: string): BS
+  bs.block_keys = bs.block_keys.push(block_node_idx)
+  bs.block_labels = bs.block_labels.push(label)
+  return bs
+
+fn bs_get_block_label(bs: BS, block_node_idx: i64): string
+  let i: i64 = to_i64(0)
+  while i < bs.block_keys.length():
+    if bs.block_keys.get(i) == block_node_idx:
+      return bs.block_labels.get(i)
+    i = i + to_i64(1)
+  return ""
+
+// Extern-declare dedup.
+fn bs_has_extern(bs: BS, name: string): bool
+  let i: i64 = to_i64(0)
+  while i < bs.extern_emitted.length():
+    if bs.extern_emitted.get(i) == name:
+      return true
+    i = i + to_i64(1)
+  return false
+
+fn bs_mark_extern(bs: BS, name: string): BS
+  bs.extern_emitted = bs.extern_emitted.push(name)
+  return bs
+
+// =========================================================================
+// Section 86: MIR list helpers
+// =========================================================================
+//
+// Task 29 MIR uses the same list convention as HIR (items first,
+// count at list_pos, items at [list_pos - count, list_pos)).
+
+fn read_mir_list(mir_idx: Vector<i64>, list_pos: i64): Vector<i64>
+  let result: Vector<i64> = Vector<i64>::new()
+  if list_pos < to_i64(0):
+    return result
+  if list_pos >= mir_idx.length():
+    return result
+  let count: i64 = mir_idx.get(list_pos)
+  let start: i64 = list_pos - count
+  let i: i64 = to_i64(0)
+  while i < count:
+    result = result.push(mir_idx.get(start + i))
+    i = i + to_i64(1)
+  return result
+
+// Read a token lexeme from the source buffer.
+fn bs_tok_lex(bs: BS, tok_idx: i64): string
+  if tok_idx < 0:
+    return ""
+  if tok_idx >= bs.toks.length():
+    return ""
+  let t: Token = bs.toks.get(tok_idx)
+  return substring(bs.src, t.offset, t.len)
+
+// =========================================================================
+// Section 87: Op-token → LLVM mnemonic dispatch
+// =========================================================================
+//
+// MirBinary carries an op_tok pointing at the original binary
+// operator token.  Task 30 dispatches off that token kind, plus the
+// already-resolved operand type, to pick the correct LLVM op.
+
+fn ll_bin_op_int(tk: TK): string
+  if tk_name(tk) == "Plus":
+    return "add"
+  if tk_name(tk) == "Minus":
+    return "sub"
+  if tk_name(tk) == "Star":
+    return "mul"
+  if tk_name(tk) == "Slash":
+    return "sdiv"
+  if tk_name(tk) == "Percent":
+    return "srem"
+  return ""
+
+fn ll_bin_op_float(tk: TK): string
+  if tk_name(tk) == "Plus":
+    return "fadd"
+  if tk_name(tk) == "Minus":
+    return "fsub"
+  if tk_name(tk) == "Star":
+    return "fmul"
+  if tk_name(tk) == "Slash":
+    return "fdiv"
+  return ""
+
+fn ll_icmp_pred(tk: TK): string
+  if tk_name(tk) == "EqEq":
+    return "eq"
+  if tk_name(tk) == "BangEq":
+    return "ne"
+  if tk_name(tk) == "Lt":
+    return "slt"
+  if tk_name(tk) == "LtEq":
+    return "sle"
+  if tk_name(tk) == "Gt":
+    return "sgt"
+  if tk_name(tk) == "GtEq":
+    return "sge"
+  return ""
+
+fn ll_fcmp_pred(tk: TK): string
+  if tk_name(tk) == "EqEq":
+    return "oeq"
+  if tk_name(tk) == "BangEq":
+    return "one"
+  if tk_name(tk) == "Lt":
+    return "olt"
+  if tk_name(tk) == "LtEq":
+    return "ole"
+  if tk_name(tk) == "Gt":
+    return "ogt"
+  if tk_name(tk) == "GtEq":
+    return "oge"
+  return ""
+
+fn is_comparison_op(tk: TK): bool
+  let n: string = tk_name(tk)
+  if n == "EqEq":
+    return true
+  if n == "BangEq":
+    return true
+  if n == "Lt":
+    return true
+  if n == "LtEq":
+    return true
+  if n == "Gt":
+    return true
+  if n == "GtEq":
+    return true
+  return false
+
+// =========================================================================
+// Section 88: MIR → LlInst lowering
+// =========================================================================
+
+// Lower a MirFunction parameter list into ordered LlParam list.
+fn bs_lower_params(bs: BS, params_raw: Vector<i64>, param_count: i64): Vector<LlParam>
+  let out: Vector<LlParam> = Vector<LlParam>::new()
+  let i: i64 = to_i64(0)
+  while i < param_count:
+    let local_node_idx: i64 = params_raw.get(i)
+    let node: MirNode = bs.mir_nodes.get(local_node_idx)
+    match node:
+      MirNode.MirLocal(sym, type_idx, is_param):
+        let ty: LlType = ll_type_from_mir(bs.types, type_idx)
+        out = out.push(LlParam("%arg" + i64_to_string(i), ty))
+    i = i + to_i64(1)
+  return out
+
+// Lower a single MirNode instruction into the current LlBlock's
+// inst list.  Returns the updated BS and updated inst list.
+
+class LowerStepR:
+  bs: BS
+  insts: Vector<LlInst>
+
+fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
+  let node: MirNode = bs.mir_nodes.get(mir_node_idx)
+  match node:
+    // ---------- constants (inlined as operand text) ----------
+    MirNode.MirConstInt(value, type_idx):
+      let ty: LlType = ll_type_from_mir(bs.types, type_idx)
+      bs = bs_set_value(bs, mir_node_idx, i64_to_string(value), ll_type_text(ty))
+      return LowerStepR(bs, insts)
+    MirNode.MirConstBool(value, type_idx):
+      let v: string = "false"
+      if value > 0:
+        v = "true"
+      bs = bs_set_value(bs, mir_node_idx, v, "i1")
+      return LowerStepR(bs, insts)
+    MirNode.MirConstFloat(tok, type_idx):
+      let lex: string = bs_tok_lex(bs, tok)
+      let ty: LlType = ll_type_from_mir(bs.types, type_idx)
+      bs = bs_set_value(bs, mir_node_idx, lex, ll_type_text(ty))
+      return LowerStepR(bs, insts)
+    MirNode.MirConstString(tok, type_idx):
+      // Emit a module-global and materialize via GEP.
+      let raw: string = bs_tok_lex(bs, tok)
+      // Strip surrounding quotes.  Tier A lexer gives us the
+      // full literal including quotes.
+      let stripped: string = str_strip_quotes(raw)
+      let nbytes: i64 = length(stripped) + to_i64(1)  // include NUL
+      let gname: string = "@.str." + i64_to_string(bs.next_global)
+      bs.next_global = bs.next_global + to_i64(1)
+      bs.globals = bs.globals.push(LlGlobal(gname, stripped, nbytes))
+      let result: string = bs_fresh_value(bs)
+      let inst: LlInst = LlInst(
+        LlInstKind.LlGepString(gname, nbytes),
+        result,
+        LlType.LlPtr)
+      insts = insts.push(inst)
+      bs = bs_set_value(bs, mir_node_idx, result, "ptr")
+      return LowerStepR(bs, insts)
+
+    // ---------- memory ----------
+    MirNode.MirLoad(local_idx, type_idx):
+      let slot_name: string = bs_slot_name_by_index(bs, local_idx)
+      let slot_ty: string = bs_slot_ty_by_index(bs, local_idx)
+      if slot_name == "":
+        bs = bs_error(bs, "bootstrap llvm backend: MirLoad references unknown local slot " + i64_to_string(local_idx))
+        return LowerStepR(bs, insts)
+      let ty: LlType = ll_type_from_mir(bs.types, type_idx)
+      let result: string = bs_fresh_value(bs)
+      let inst: LlInst = LlInst(
+        LlInstKind.LlLoad(slot_name, ty),
+        result,
+        ty)
+      insts = insts.push(inst)
+      bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(ty))
+      return LowerStepR(bs, insts)
+
+    MirNode.MirStore(local_idx, value_node):
+      let slot_name: string = bs_slot_name_by_index(bs, local_idx)
+      let slot_ty_text: string = bs_slot_ty_by_index(bs, local_idx)
+      if slot_name == "":
+        bs = bs_error(bs, "bootstrap llvm backend: MirStore references unknown local slot " + i64_to_string(local_idx))
+        return LowerStepR(bs, insts)
+      let val_text: string = bs_get_value_text(bs, value_node)
+      let val_ty_text: string = bs_get_value_ty(bs, value_node)
+      // Store uses the slot's type (which matches the MirLocal's declared type).
+      let slot_ty: LlType = ll_type_text_to_lltype(slot_ty_text)
+      let inst: LlInst = LlInst(
+        LlInstKind.LlStore(slot_name, val_text, slot_ty),
+        "",
+        LlType.LlVoid)
+      insts = insts.push(inst)
+      return LowerStepR(bs, insts)
+
+    // ---------- binary / unary ----------
+    MirNode.MirBinary(op_tok, lhs, rhs, type_idx):
+      let tk: Token = bs.toks.get(op_tok)
+      let lhs_text: string = bs_get_value_text(bs, lhs)
+      let rhs_text: string = bs_get_value_text(bs, rhs)
+      let result_ty: LlType = ll_type_from_mir(bs.types, type_idx)
+      // Operand type comes from the LHS (MIR ensures lhs/rhs agree).
+      let operand_ty_text: string = bs_get_value_ty(bs, lhs)
+      let operand_ty: LlType = ll_type_text_to_lltype(operand_ty_text)
+
+      if is_comparison_op(tk.kind):
+        let result: string = bs_fresh_value(bs)
+        if ll_type_is_float(operand_ty):
+          let pred: string = ll_fcmp_pred(tk.kind)
+          let inst: LlInst = LlInst(
+            LlInstKind.LlFCmp(pred, lhs_text, rhs_text, operand_ty),
+            result,
+            LlType.LlI1)
+          insts = insts.push(inst)
+        else:
+          let pred: string = ll_icmp_pred(tk.kind)
+          let inst: LlInst = LlInst(
+            LlInstKind.LlICmp(pred, lhs_text, rhs_text, operand_ty),
+            result,
+            LlType.LlI1)
+          insts = insts.push(inst)
+        bs = bs_set_value(bs, mir_node_idx, result, "i1")
+        return LowerStepR(bs, insts)
+
+      // Arithmetic.
+      let result: string = bs_fresh_value(bs)
+      let op: string = ""
+      if ll_type_is_float(operand_ty):
+        op = ll_bin_op_float(tk.kind)
+      else:
+        op = ll_bin_op_int(tk.kind)
+      if op == "":
+        bs = bs_error(bs, "bootstrap llvm backend: unsupported binary op " + tk_name(tk.kind))
+        return LowerStepR(bs, insts)
+      let inst: LlInst = LlInst(
+        LlInstKind.LlBinOp(op, lhs_text, rhs_text, operand_ty),
+        result,
+        operand_ty)
+      insts = insts.push(inst)
+      bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(operand_ty))
+      return LowerStepR(bs, insts)
+
+    MirNode.MirUnary(op_tok, operand, type_idx):
+      let tk: Token = bs.toks.get(op_tok)
+      let operand_text: string = bs_get_value_text(bs, operand)
+      let ty: LlType = ll_type_from_mir(bs.types, type_idx)
+      let result: string = bs_fresh_value(bs)
+      if tk_name(tk.kind) == "Minus":
+        if ll_type_is_float(ty):
+          let inst: LlInst = LlInst(
+            LlInstKind.LlFNeg(operand_text, ty),
+            result,
+            ty)
+          insts = insts.push(inst)
+        else:
+          // sub 0, x
+          let inst: LlInst = LlInst(
+            LlInstKind.LlBinOp("sub", "0", operand_text, ty),
+            result,
+            ty)
+          insts = insts.push(inst)
+        bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(ty))
+        return LowerStepR(bs, insts)
+      if tk_name(tk.kind) == "Bang":
+        // xor %x, true  (on i1)
+        let inst: LlInst = LlInst(
+          LlInstKind.LlBinOp("xor", operand_text, "true", LlType.LlI1),
+          result,
+          LlType.LlI1)
+        insts = insts.push(inst)
+        bs = bs_set_value(bs, mir_node_idx, result, "i1")
+        return LowerStepR(bs, insts)
+      bs = bs_error(bs, "bootstrap llvm backend: unsupported unary op " + tk_name(tk.kind))
+      return LowerStepR(bs, insts)
+
+    // ---------- calls ----------
+    MirNode.MirFnRef(sym, type_idx):
+      // Not a real LLVM instruction — the callee is materialized
+      // inline as the mangled name.  Record the mapping so the
+      // subsequent MirCall picks it up via bs_get_value_text.
+      let name: string = mangle_function_sym(bs.symbols, sym)
+      if name == "":
+        bs = bs_error(bs, "bootstrap llvm backend cannot mangle anonymous symbol")
+        return LowerStepR(bs, insts)
+      bs = bs_set_value(bs, mir_node_idx, name, "ptr")
+      return LowerStepR(bs, insts)
+
+    MirNode.MirCall(callee, arg_list_lp, arg_count, type_idx):
+      let callee_text: string = bs_get_value_text(bs, callee)
+      if callee_text == "":
+        bs = bs_error(bs, "bootstrap llvm backend: MirCall callee has no mangled name (expected MirFnRef)")
+        return LowerStepR(bs, insts)
+      let ret_ty: LlType = ll_type_from_mir(bs.types, type_idx)
+      // Read the arg list from mir_idx and resolve each arg to (text, type_text).
+      let args_raw: Vector<i64> = read_mir_list(bs.mir_idx, arg_list_lp)
+      // Push arg texts into a flat side-list the serializer reads back.
+      // We encode arg pairs as consecutive entries in bs.mir_idx-shaped
+      // form — but since we are building the LlInst directly, we use
+      // a new arg side-list on BS (not shown) ... simpler: flatten
+      // into the instruction payload via a string-list wrapper class.
+      let arg_entry: CallArgs = CallArgs(Vector<string>::new(), Vector<LlType>::new())
+      let ai: i64 = to_i64(0)
+      while ai < args_raw.length():
+        let a_idx: i64 = args_raw.get(ai)
+        let a_text: string = bs_get_value_text(bs, a_idx)
+        let a_ty_text: string = bs_get_value_ty(bs, a_idx)
+        arg_entry.arg_texts = arg_entry.arg_texts.push(a_text)
+        arg_entry.arg_tys = arg_entry.arg_tys.push(ll_type_text_to_lltype(a_ty_text))
+        ai = ai + to_i64(1)
+      // Stash the call arg bundle in the side list and remember its index.
+      let bundle_idx: i64 = bs.call_arg_bundles.length()
+      bs.call_arg_bundles = bs.call_arg_bundles.push(arg_entry)
+
+      let result: string = ""
+      let needs_result: bool = true
+      match ret_ty:
+        LlType.LlVoid:
+          needs_result = false
+      if needs_result:
+        result = bs_fresh_value(bs)
+      let inst: LlInst = LlInst(
+        LlInstKind.LlCall(callee_text, bundle_idx, args_raw.length(), ret_ty),
+        result,
+        ret_ty)
+      insts = insts.push(inst)
+      if result != "":
+        bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(ret_ty))
+      return LowerStepR(bs, insts)
+
+    MirNode.MirFieldAccess(obj, field_tok, field_index, type_idx):
+      bs = bs_error(bs, "bootstrap llvm backend does not support MirFieldAccess in Tier A")
+      return LowerStepR(bs, insts)
+
+    MirNode.MirErrorExpr(tok):
+      bs = bs_error(bs, "bootstrap llvm backend rejects MirErrorExpr sentinel")
+      return LowerStepR(bs, insts)
+
+    // ---------- terminators ----------
+    MirNode.MirReturn(value, has_value):
+      if has_value > 0:
+        let val_text: string = bs_get_value_text(bs, value)
+        let val_ty_text: string = bs_get_value_ty(bs, value)
+        let ty: LlType = ll_type_text_to_lltype(val_ty_text)
+        let inst: LlInst = LlInst(
+          LlInstKind.LlRet(val_text, ty, to_i64(1)),
+          "",
+          LlType.LlVoid)
+        insts = insts.push(inst)
+      else:
+        let inst: LlInst = LlInst(
+          LlInstKind.LlRet("", LlType.LlVoid, to_i64(0)),
+          "",
+          LlType.LlVoid)
+        insts = insts.push(inst)
+      return LowerStepR(bs, insts)
+
+    MirNode.MirBr(target_block):
+      let label: string = bs_get_block_label(bs, target_block)
+      let inst: LlInst = LlInst(
+        LlInstKind.LlBr(label),
+        "",
+        LlType.LlVoid)
+      insts = insts.push(inst)
+      return LowerStepR(bs, insts)
+
+    MirNode.MirCondBr(cond, then_block, else_block):
+      let cond_text: string = bs_get_value_text(bs, cond)
+      let then_label: string = bs_get_block_label(bs, then_block)
+      let else_label: string = bs_get_block_label(bs, else_block)
+      let inst: LlInst = LlInst(
+        LlInstKind.LlCondBr(cond_text, then_label, else_label),
+        "",
+        LlType.LlVoid)
+      insts = insts.push(inst)
+      return LowerStepR(bs, insts)
+  return LowerStepR(bs, insts)
+
+// =========================================================================
+// Section 88b: Helpers pulled out of instruction lowering
+// =========================================================================
+
+// Reverse of ll_type_text — used when we've stashed a type as text
+// and need to resolve back to LlType for a new instruction.
+fn ll_type_text_to_lltype(t: string): LlType
+  if t == "i32":
+    return LlType.LlI32
+  if t == "i64":
+    return LlType.LlI64
+  if t == "float":
+    return LlType.LlF32
+  if t == "double":
+    return LlType.LlF64
+  if t == "i1":
+    return LlType.LlI1
+  if t == "void":
+    return LlType.LlVoid
+  if t == "ptr":
+    return LlType.LlPtr
+  return LlType.LlUnsupported
+
+// Call argument bundles live in a side table on BS because
+// LlInstKind.LlCall stores only an index into the bundle list,
+// and Dao's enum-class variants cannot hold Vector<string> directly
+// without additional boxing overhead.  Indexing is deterministic.
+class CallArgs:
+  arg_texts: Vector<string>
+  arg_tys: Vector<LlType>
+
+// Strip the surrounding double quotes from a string literal token.
+// Tier A assumes the lexer emits `"hello"` — this returns `hello`.
+fn str_strip_quotes(raw: string): string
+  let n: i64 = length(raw)
+  if n < to_i64(2):
+    return raw
+  let first: string = substring(raw, to_i64(0), to_i64(1))
+  let last: string = substring(raw, n - to_i64(1), to_i64(1))
+  if first == "\"":
+    if last == "\"":
+      return substring(raw, to_i64(1), n - to_i64(2))
+  return raw
+
+// =========================================================================
+// Section 89: Function lowering (prologue + blocks)
+// =========================================================================
+
+fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
+  let node: MirNode = bs.mir_nodes.get(mir_fn_idx)
+  match node:
+    MirNode.MirFunction(fn_sym, ret_type, param_count, local_list_lp, local_count, block_list_lp, block_count, is_extern_i):
+      bs = bs_reset_fn_state(bs)
+
+      let name: string = mangle_function_sym(bs.symbols, fn_sym)
+      if name == "":
+        bs = bs_error(bs, "bootstrap llvm backend cannot mangle anonymous symbol")
+        return bs
+
+      let ret_ty: LlType = ll_type_from_mir(bs.types, ret_type)
+
+      // Read the local node list.  First `param_count` are params.
+      let locals_raw: Vector<i64> = read_mir_list(bs.mir_idx, local_list_lp)
+
+      // Declare param LlParams for the LlFunction signature.
+      let params: Vector<LlParam> = bs_lower_params(bs, locals_raw, param_count)
+
+      // Extern declarations: no body, no blocks.
+      if is_extern_i > to_i64(0):
+        if bs_has_extern(bs, name):
+          return bs
+        let llfn: LlFunction = LlFunction(
+          name, ret_ty, params, Vector<LlBlock>::new(), to_i64(1))
+        bs.extern_decls = bs.extern_decls.push(llfn)
+        bs = bs_mark_extern(bs, name)
+        return bs
+
+      // ----- normal function body -----
+
+      // Pre-assign slot names for every MirLocal in declaration order
+      // so MirLoad/MirStore (which reference slot *indices*, not node
+      // indices) resolve deterministically.  Slot index `i` maps to
+      // `%slotI` with the local's declared type.
+      let li: i64 = to_i64(0)
+      while li < locals_raw.length():
+        let local_node_idx: i64 = locals_raw.get(li)
+        let ln: MirNode = bs.mir_nodes.get(local_node_idx)
+        match ln:
+          MirNode.MirLocal(lsym, ltype_idx, lis_param):
+            let slot_name: string = "%slot" + i64_to_string(li)
+            let slot_ty: LlType = ll_type_from_mir(bs.types, ltype_idx)
+            let slot_ty_text: string = ll_type_text(slot_ty)
+            bs = bs_set_slot(bs, local_node_idx, slot_name, slot_ty_text)
+        li = li + to_i64(1)
+
+      // Pre-assign block labels (MirBlock node idx → "entry"/"bbN").
+      let blocks_raw: Vector<i64> = read_mir_list(bs.mir_idx, block_list_lp)
+      let bi: i64 = to_i64(0)
+      while bi < blocks_raw.length():
+        let block_node_idx: i64 = blocks_raw.get(bi)
+        let label: string = "entry"
+        if bi > to_i64(0):
+          label = "bb" + i64_to_string(bi)
+        bs = bs_set_block_label(bs, block_node_idx, label)
+        bi = bi + to_i64(1)
+
+      // ----- entry block prologue -----
+      //
+      // Alloca every local, in declaration order.  Then seed every
+      // param slot from its incoming LLVM argument.  This is
+      // TASK_30 §5.4 / §10.3 — the seeding is mandatory because
+      // Task 29 lowers param reads to MirLoad(slot).
+      let entry_insts: Vector<LlInst> = Vector<LlInst>::new()
+
+      let ai: i64 = to_i64(0)
+      while ai < locals_raw.length():
+        let local_node_idx: i64 = locals_raw.get(ai)
+        let slot_name: string = bs_slot_name_by_index(bs, ai)
+        let slot_ty_text: string = bs_slot_ty_by_index(bs, ai)
+        let slot_ty: LlType = ll_type_text_to_lltype(slot_ty_text)
+        let alloca_inst: LlInst = LlInst(
+          LlInstKind.LlAlloca(slot_ty),
+          slot_name,
+          LlType.LlPtr)
+        entry_insts = entry_insts.push(alloca_inst)
+        ai = ai + to_i64(1)
+
+      // Param seeding: for each MirLocal with is_param=1 (first
+      // param_count slots), store the incoming %argN into %slotN.
+      let pi: i64 = to_i64(0)
+      while pi < param_count:
+        let slot_name: string = bs_slot_name_by_index(bs, pi)
+        let slot_ty_text: string = bs_slot_ty_by_index(bs, pi)
+        let slot_ty: LlType = ll_type_text_to_lltype(slot_ty_text)
+        let arg_name: string = "%arg" + i64_to_string(pi)
+        let store_inst: LlInst = LlInst(
+          LlInstKind.LlStore(slot_name, arg_name, slot_ty),
+          "",
+          LlType.LlVoid)
+        entry_insts = entry_insts.push(store_inst)
+        pi = pi + to_i64(1)
+
+      // ----- lower MIR blocks -----
+      //
+      // First block's instructions are appended to entry_insts (so
+      // the prologue lives with the body).  Subsequent blocks get
+      // their own fresh LlBlock.
+      let ll_blocks: Vector<LlBlock> = Vector<LlBlock>::new()
+      let block_i: i64 = to_i64(0)
+      while block_i < blocks_raw.length():
+        let block_node_idx: i64 = blocks_raw.get(block_i)
+        let mb: MirNode = bs.mir_nodes.get(block_node_idx)
+        match mb:
+          MirNode.MirBlock(block_id, inst_list_lp, inst_count):
+            let insts_raw: Vector<i64> = read_mir_list(bs.mir_idx, inst_list_lp)
+            let this_insts: Vector<LlInst> = Vector<LlInst>::new()
+            if block_i == to_i64(0):
+              this_insts = entry_insts
+            let ii: i64 = to_i64(0)
+            while ii < insts_raw.length():
+              let mir_inst_idx: i64 = insts_raw.get(ii)
+              let step: LowerStepR = bs_lower_inst(bs, this_insts, mir_inst_idx)
+              bs = step.bs
+              this_insts = step.insts
+              ii = ii + to_i64(1)
+            let label: string = bs_get_block_label(bs, block_node_idx)
+            ll_blocks = ll_blocks.push(LlBlock(label, this_insts))
+        block_i = block_i + to_i64(1)
+
+      let llfn: LlFunction = LlFunction(name, ret_ty, params, ll_blocks, to_i64(0))
+      bs.functions = bs.functions.push(llfn)
+      return bs
+  return bs
+
+// =========================================================================
+// Section 89b: Top-level module lowering
+// =========================================================================
+
+fn lower_mir_to_ll_module(bs: BS): BS
+  let root: i64 = bs.mir_nodes.length()  // placeholder
+  // Find the MirModule root from the input.  MirResult.root carries
+  // its index; we walk via bs on the caller's side.  Here we just
+  // iterate every node and lower each MirFunction in index order.
+  let i: i64 = to_i64(0)
+  while i < bs.mir_nodes.length():
+    let n: MirNode = bs.mir_nodes.get(i)
+    match n:
+      MirNode.MirFunction(fs, rt, pc, llp, lc, blp, bcnt, ie):
+        bs = bs_lower_function(bs, i)
+    i = i + to_i64(1)
+  return bs
+
+// =========================================================================
+// Section 90: LlModule → textual LLVM IR serialization
+// =========================================================================
+
+fn serialize_ll_type(ty: LlType): string
+  return ll_type_text(ty)
+
+fn serialize_alloca(ty: LlType): string
+  return "alloca " + serialize_ll_type(ty)
+
+fn serialize_store(ptr: string, value_text: string, ty: LlType): string
+  return "store " + serialize_ll_type(ty) + " " + value_text + ", ptr " + ptr
+
+fn serialize_load(ptr: string, ty: LlType): string
+  return "load " + serialize_ll_type(ty) + ", ptr " + ptr
+
+fn serialize_binop(op: string, lhs: string, rhs: string, ty: LlType): string
+  return op + " " + serialize_ll_type(ty) + " " + lhs + ", " + rhs
+
+fn serialize_fneg(operand: string, ty: LlType): string
+  return "fneg " + serialize_ll_type(ty) + " " + operand
+
+fn serialize_icmp(pred: string, lhs: string, rhs: string, ty: LlType): string
+  return "icmp " + pred + " " + serialize_ll_type(ty) + " " + lhs + ", " + rhs
+
+fn serialize_fcmp(pred: string, lhs: string, rhs: string, ty: LlType): string
+  return "fcmp " + pred + " " + serialize_ll_type(ty) + " " + lhs + ", " + rhs
+
+fn serialize_call(callee: string, args: CallArgs, ret_ty: LlType): string
+  let out: string = "call " + serialize_ll_type(ret_ty) + " " + callee + "("
+  let i: i64 = to_i64(0)
+  while i < args.arg_texts.length():
+    if i > to_i64(0):
+      out = out + ", "
+    out = out + ll_type_text(args.arg_tys.get(i)) + " " + args.arg_texts.get(i)
+    i = i + to_i64(1)
+  out = out + ")"
+  return out
+
+fn serialize_gep_string(gname: string, length_incl_nul: i64): string
+  return "getelementptr inbounds [" + i64_to_string(length_incl_nul) + " x i8], ptr " + gname + ", i64 0, i64 0"
+
+fn serialize_ret(value_text: string, ty: LlType, has_value: i64): string
+  if has_value > to_i64(0):
+    return "ret " + serialize_ll_type(ty) + " " + value_text
+  return "ret void"
+
+fn serialize_br(target: string): string
+  return "br label %" + target
+
+fn serialize_cond_br(cond: string, then_label: string, else_label: string): string
+  return "br i1 " + cond + ", label %" + then_label + ", label %" + else_label
+
+fn serialize_inst(bs: BS, inst: LlInst): string
+  let rhs: string = ""
+  match inst.kind:
+    LlInstKind.LlAlloca(ty):
+      rhs = serialize_alloca(ty)
+    LlInstKind.LlStore(ptr, value_text, value_ty):
+      rhs = serialize_store(ptr, value_text, value_ty)
+    LlInstKind.LlLoad(ptr, ty):
+      rhs = serialize_load(ptr, ty)
+    LlInstKind.LlBinOp(op, lhs, rhs_text, ty):
+      rhs = serialize_binop(op, lhs, rhs_text, ty)
+    LlInstKind.LlFNeg(operand, ty):
+      rhs = serialize_fneg(operand, ty)
+    LlInstKind.LlICmp(pred, lhs, rhs_text, op_ty):
+      rhs = serialize_icmp(pred, lhs, rhs_text, op_ty)
+    LlInstKind.LlFCmp(pred, lhs, rhs_text, op_ty):
+      rhs = serialize_fcmp(pred, lhs, rhs_text, op_ty)
+    LlInstKind.LlCall(callee, bundle_idx, arg_count, ret_ty):
+      let args: CallArgs = bs.call_arg_bundles.get(bundle_idx)
+      rhs = serialize_call(callee, args, ret_ty)
+    LlInstKind.LlGepString(gname, len):
+      rhs = serialize_gep_string(gname, len)
+    LlInstKind.LlRet(value_text, ty, has_value):
+      rhs = serialize_ret(value_text, ty, has_value)
+    LlInstKind.LlBr(target):
+      rhs = serialize_br(target)
+    LlInstKind.LlCondBr(cond, then_label, else_label):
+      rhs = serialize_cond_br(cond, then_label, else_label)
+  if inst.result_name != "":
+    return "  " + inst.result_name + " = " + rhs
+  return "  " + rhs
+
+fn serialize_block(bs: BS, blk: LlBlock): string
+  let out: string = blk.label + ":\n"
+  let i: i64 = to_i64(0)
+  while i < blk.insts.length():
+    out = out + serialize_inst(bs, blk.insts.get(i)) + "\n"
+    i = i + to_i64(1)
+  return out
+
+fn serialize_params(params: Vector<LlParam>): string
+  let out: string = ""
+  let i: i64 = to_i64(0)
+  while i < params.length():
+    if i > to_i64(0):
+      out = out + ", "
+    let p: LlParam = params.get(i)
+    out = out + ll_type_text(p.ty) + " " + p.name
+    i = i + to_i64(1)
+  return out
+
+fn serialize_function(bs: BS, llfn: LlFunction): string
+  if llfn.is_extern > to_i64(0):
+    return "declare " + ll_type_text(llfn.ret_ty) + " " + llfn.name + "(" + serialize_params(llfn.params) + ")\n"
+  let out: string = "define " + ll_type_text(llfn.ret_ty) + " " + llfn.name + "(" + serialize_params(llfn.params) + ") {\n"
+  let i: i64 = to_i64(0)
+  while i < llfn.blocks.length():
+    out = out + serialize_block(bs, llfn.blocks.get(i))
+    i = i + to_i64(1)
+  out = out + "}\n"
+  return out
+
+fn serialize_global(g: LlGlobal): string
+  // Emit as: @.str.N = private unnamed_addr constant [LEN x i8] c"bytes\00"
+  return g.name + " = private unnamed_addr constant [" + i64_to_string(g.length) + " x i8] c\"" + g.bytes + "\\00\"\n"
+
+fn serialize_module(bs: BS): string
+  let out: string = ""
+  // Globals first.
+  let gi: i64 = to_i64(0)
+  while gi < bs.globals.length():
+    out = out + serialize_global(bs.globals.get(gi))
+    gi = gi + to_i64(1)
+  if bs.globals.length() > to_i64(0):
+    out = out + "\n"
+  // Extern declares next.
+  let ei: i64 = to_i64(0)
+  while ei < bs.extern_decls.length():
+    out = out + serialize_function(bs, bs.extern_decls.get(ei))
+    ei = ei + to_i64(1)
+  if bs.extern_decls.length() > to_i64(0):
+    out = out + "\n"
+  // Function definitions last.
+  let fi: i64 = to_i64(0)
+  while fi < bs.functions.length():
+    out = out + serialize_function(bs, bs.functions.get(fi))
+    if fi + to_i64(1) < bs.functions.length():
+      out = out + "\n"
+    fi = fi + to_i64(1)
+  return out
+
+// =========================================================================
+// Section 91: Public API
+// =========================================================================
+
+fn lower_mir_to_llvm_text(input: MirBackendInput): LlvmTextResult
+  let bs: BS = bs_new(input)
+  bs = lower_mir_to_ll_module(bs)
+  let text: string = serialize_module(bs)
+  let ok: bool = true
+  if bs.had_error > to_i64(0):
+    ok = false
+  return LlvmTextResult(text, bs.diags, ok)
+
+// Convenience adapter: run the bootstrap pipeline on a bare snippet
+// (same wrap/run-pipeline path as Task 29's lower_to_mir, but keep
+// symbols/types/tokens/src for the backend) and then lower to LLVM
+// text.  Used by tests.
+fn lower_to_mir_backend_input(src: string): MirBackendInput
+  let wrapped: string = wrap_test_module(src)
+  let inputs: Vector<SourceInput> = Vector<SourceInput>::new()
+  inputs = inputs.push(SourceInput("test.dao", wrapped))
+  let pg: ProgramGraph = build_program(inputs)
+  let p: Program = program_from_graph(pg)
+  p = program_run_resolve(p)
+  p = program_run_typecheck(p)
+  p = program_run_hir(p)
+
+  // lower_to_mir runs its own pipeline internally (wasted work, but
+  // fine for tests).  We take its MirResult and pair with p's symbols
+  // + types plus the single source file's tokens/source text.
+  let mir: MirResult = lower_to_mir(src)
+  let sf: SourceFile = program_file_of_module(p, to_i64(0))
+  let po: ParseOutput = sf.parse_output
+  return MirBackendInput(mir, p.resolve.symbols, p.typecheck.types, po.toks, sf.source_text)
+
+fn lower_source_to_llvm_text(src: string): LlvmTextResult
+  let input: MirBackendInput = lower_to_mir_backend_input(src)
+  return lower_mir_to_llvm_text(input)
+
+fn write_llvm_text(result: LlvmTextResult, path: string): bool
+  // Stub for Tier A: bootstrap Dao currently has no standard file
+  // IO API wired through.  Tests compare against the returned
+  // string directly.  A later follow-up wires this to a real
+  // `fs_write` call.
+  return false
+
+// BEGIN_LLVM_TESTS
+// =========================================================================
+// Section 99: Tests
+// =========================================================================
+
+// Substring match helper.
+fn contains_substring(haystack: string, needle: string): bool
+  let nlen: i64 = length(needle)
+  let hlen: i64 = length(haystack)
+  if nlen > hlen:
+    return false
+  let i: i64 = to_i64(0)
+  while i + nlen <= hlen:
+    if substring(haystack, i, nlen) == needle:
+      return true
+    i = i + to_i64(1)
+  return false
+
+fn check_contains(result: LlvmTextResult, needle: string, test_name: string): bool
+  if contains_substring(result.text, needle):
+    return true
+  print("FAIL " + test_name + ": expected substring '" + needle + "' not found")
+  print("--- emitted text ---")
+  print(result.text)
+  print("--- end ---")
+  return false
+
+fn main(): i32
+  print("=== bootstrap/llvm: Tier A LLVM backend ===")
+  print("")
+
+  let pass_count: i32 = 0
+  let total: i32 = 12
+
+  // -----------------------------------------------------------------
+  // Test 1: minimal_define — fn main(): i32 -> 0 emits define + entry + ret
+  // -----------------------------------------------------------------
+  let src1: string = "fn main(): i32\n  return 0\n"
+  let r1: LlvmTextResult = lower_source_to_llvm_text(src1)
+  if r1.ok:
+    let a: bool = check_contains(r1, "define i32 @main", "minimal_define")
+    let b: bool = check_contains(r1, "entry:", "minimal_define")
+    let c: bool = check_contains(r1, "ret i32 0", "minimal_define")
+    if a:
+      if b:
+        if c:
+          print("PASS minimal_define")
+          pass_count = pass_count + 1
+  else:
+    print("FAIL minimal_define: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 2: let_store_load — let x = 1; return x
+  // -----------------------------------------------------------------
+  let src2: string = "fn main(): i32\n  let x: i32 = 1\n  return x\n"
+  let r2: LlvmTextResult = lower_source_to_llvm_text(src2)
+  if r2.ok:
+    let a: bool = check_contains(r2, "alloca i32", "let_store_load")
+    let b: bool = check_contains(r2, "store i32 1", "let_store_load")
+    let c: bool = check_contains(r2, "load i32", "let_store_load")
+    let d: bool = check_contains(r2, "ret i32", "let_store_load")
+    if a:
+      if b:
+        if c:
+          if d:
+            print("PASS let_store_load")
+            pass_count = pass_count + 1
+  else:
+    print("FAIL let_store_load: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 3: int_arithmetic — let x = 1 + 2 * 3
+  // -----------------------------------------------------------------
+  let src3: string = "fn main(): i32\n  let x: i32 = 1 + 2 * 3\n  return x\n"
+  let r3: LlvmTextResult = lower_source_to_llvm_text(src3)
+  if r3.ok:
+    let a: bool = check_contains(r3, "mul i32 2, 3", "int_arithmetic")
+    let b: bool = check_contains(r3, "add i32 1,", "int_arithmetic")
+    if a:
+      if b:
+        print("PASS int_arithmetic")
+        pass_count = pass_count + 1
+  else:
+    print("FAIL int_arithmetic: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 4: int_comparison — let b = x < 5
+  // -----------------------------------------------------------------
+  let src4: string = "fn f(x: i32): bool\n  return x < 5\n"
+  let r4: LlvmTextResult = lower_source_to_llvm_text(src4)
+  if r4.ok:
+    let a: bool = check_contains(r4, "icmp slt i32", "int_comparison")
+    let b: bool = check_contains(r4, "ret i1", "int_comparison")
+    if a:
+      if b:
+        print("PASS int_comparison")
+        pass_count = pass_count + 1
+  else:
+    print("FAIL int_comparison: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 5: param_seeding — fn f(x: i32): i32 -> x must seed param slot
+  // -----------------------------------------------------------------
+  let src5: string = "fn f(x: i32): i32\n  return x\n"
+  let r5: LlvmTextResult = lower_source_to_llvm_text(src5)
+  if r5.ok:
+    let a: bool = check_contains(r5, "define i32 @f(i32 %arg0)", "param_seeding")
+    let b: bool = check_contains(r5, "%slot0 = alloca i32", "param_seeding")
+    let c: bool = check_contains(r5, "store i32 %arg0, ptr %slot0", "param_seeding")
+    let d: bool = check_contains(r5, "load i32, ptr %slot0", "param_seeding")
+    if a:
+      if b:
+        if c:
+          if d:
+            print("PASS param_seeding")
+            pass_count = pass_count + 1
+  else:
+    print("FAIL param_seeding: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 6: extern_declare — extern fn puts emits declare
+  // -----------------------------------------------------------------
+  let src6: string = "extern fn puts(s: string): i32\n\nfn main(): i32\n  return 0\n"
+  let r6: LlvmTextResult = lower_source_to_llvm_text(src6)
+  if r6.ok:
+    let a: bool = check_contains(r6, "declare i32 @puts(ptr %arg0)", "extern_declare")
+    let b: bool = check_contains(r6, "define i32 @main()", "extern_declare")
+    if a:
+      if b:
+        print("PASS extern_declare")
+        pass_count = pass_count + 1
+  else:
+    print("FAIL extern_declare: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 7: call_extern — call to a user function
+  // -----------------------------------------------------------------
+  let src7: string = "fn add(a: i32, b: i32): i32\n  return a + b\n\nfn main(): i32\n  return add(1, 2)\n"
+  let r7: LlvmTextResult = lower_source_to_llvm_text(src7)
+  if r7.ok:
+    let a: bool = check_contains(r7, "define i32 @add(i32 %arg0, i32 %arg1)", "call_extern")
+    let b: bool = check_contains(r7, "call i32 @add(", "call_extern")
+    if a:
+      if b:
+        print("PASS call_extern")
+        pass_count = pass_count + 1
+  else:
+    print("FAIL call_extern: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 8: if_else_cfg — conditional branch emits cond_br + then/else/merge
+  // -----------------------------------------------------------------
+  let src8: string = "fn f(x: i32): i32\n  if x > 0\n    return 1\n  else\n    return 2\n"
+  let r8: LlvmTextResult = lower_source_to_llvm_text(src8)
+  if r8.ok:
+    let a: bool = check_contains(r8, "icmp sgt i32", "if_else_cfg")
+    let b: bool = check_contains(r8, "br i1 ", "if_else_cfg")
+    let c: bool = check_contains(r8, "bb1:", "if_else_cfg")
+    let d: bool = check_contains(r8, "bb2:", "if_else_cfg")
+    if a:
+      if b:
+        if c:
+          if d:
+            print("PASS if_else_cfg")
+            pass_count = pass_count + 1
+  else:
+    print("FAIL if_else_cfg: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 9: while_cfg — while loop emits header/body/exit + back-edge
+  // -----------------------------------------------------------------
+  let src9: string = "fn f(n: i32): i32\n  let i: i32 = 0\n  while i < n\n    i = i + 1\n  return i\n"
+  let r9: LlvmTextResult = lower_source_to_llvm_text(src9)
+  if r9.ok:
+    let a: bool = check_contains(r9, "br label %bb", "while_cfg")
+    let b: bool = check_contains(r9, "icmp slt i32", "while_cfg")
+    let c: bool = check_contains(r9, "br i1 ", "while_cfg")
+    if a:
+      if b:
+        if c:
+          print("PASS while_cfg")
+          pass_count = pass_count + 1
+  else:
+    print("FAIL while_cfg: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 10: string_global — string literal emits private global + GEP
+  // -----------------------------------------------------------------
+  let src10: string = "extern fn puts(s: string): i32\n\nfn main(): i32\n  return puts(\"hi\")\n"
+  let r10: LlvmTextResult = lower_source_to_llvm_text(src10)
+  if r10.ok:
+    let a: bool = check_contains(r10, "@.str.0 = private unnamed_addr constant", "string_global")
+    let b: bool = check_contains(r10, "c\"hi\\00\"", "string_global")
+    let c: bool = check_contains(r10, "getelementptr inbounds", "string_global")
+    if a:
+      if b:
+        if c:
+          print("PASS string_global")
+          pass_count = pass_count + 1
+  else:
+    print("FAIL string_global: ok=false")
+
+  // -----------------------------------------------------------------
+  // Test 11: deterministic_repeat — byte-identical across runs
+  // -----------------------------------------------------------------
+  let src11: string = "fn main(): i32\n  let x: i32 = 1 + 2\n  return x\n"
+  let r11a: LlvmTextResult = lower_source_to_llvm_text(src11)
+  let r11b: LlvmTextResult = lower_source_to_llvm_text(src11)
+  if r11a.text == r11b.text:
+    print("PASS deterministic_repeat")
+    pass_count = pass_count + 1
+  else:
+    print("FAIL deterministic_repeat: byte drift across runs")
+
+  // -----------------------------------------------------------------
+  // Test 12: field_access_rejected — MirFieldAccess produces diagnostic
+  // -----------------------------------------------------------------
+  // The bootstrap's Tier A MIR only emits field reads when source
+  // code references a struct field.  Use a minimal struct+field
+  // example to drive one through the pipeline.
+  let src12: string = "struct P\n  x: i32\n\nfn f(p: P): i32\n  return p.x\n"
+  let r12: LlvmTextResult = lower_source_to_llvm_text(src12)
+  if r12.ok:
+    // If the backend accepted it, that's wrong.
+    print("FAIL field_access_rejected: expected ok=false, got ok=true")
+  else:
+    // Check that the diagnostic is the expected one.
+    let found: bool = false
+    let i: i64 = to_i64(0)
+    while i < r12.diags.length():
+      let d: Diagnostic = r12.diags.get(i)
+      if contains_substring(d.message, "MirFieldAccess"):
+        found = true
+      i = i + to_i64(1)
+    if found:
+      print("PASS field_access_rejected")
+      pass_count = pass_count + 1
+    else:
+      print("FAIL field_access_rejected: expected diagnostic mentioning MirFieldAccess")
+
+  // -----------------------------------------------------------------
+  // Summary
+  // -----------------------------------------------------------------
+  print("")
+  print(i32_to_string(pass_count) + " / " + i32_to_string(total) + " tests passed")
+  if pass_count == total:
+    print("ALL TESTS PASSED")
+  else:
+    print("SOME TESTS FAILED")
+  return 0
+

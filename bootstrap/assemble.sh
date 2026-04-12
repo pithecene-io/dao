@@ -103,4 +103,21 @@ assemble bootstrap/mir/mir.gen.dao \
   bootstrap/mir/impl.dao
 rm -f "$RESOLVER_LIB3" "$TYPECHECK_LIB2" "$HIR_LIB"
 
-echo "done — 7 files assembled"
+# LLVM backend: include resolver + typecheck + hir + mir libs (before test markers).
+RESOLVER_LIB4=$(mktemp)
+sed '/^\/\/ BEGIN_RESOLVER_TESTS/,$d' bootstrap/resolver/impl.dao > "$RESOLVER_LIB4"
+TYPECHECK_LIB3=$(mktemp)
+sed '/^\/\/ BEGIN_TYPECHECK_TESTS/,$d' bootstrap/typecheck/impl.dao > "$TYPECHECK_LIB3"
+HIR_LIB2=$(mktemp)
+sed '/^\/\/ BEGIN_HIR_TESTS/,$d' bootstrap/hir/impl.dao > "$HIR_LIB2"
+MIR_LIB=$(mktemp)
+sed '/^\/\/ BEGIN_MIR_TESTS/,$d' bootstrap/mir/impl.dao > "$MIR_LIB"
+assemble bootstrap/llvm/llvm.gen.dao \
+  "$RESOLVER_LIB4" \
+  "$TYPECHECK_LIB3" \
+  "$HIR_LIB2" \
+  "$MIR_LIB" \
+  bootstrap/llvm/impl.dao
+rm -f "$RESOLVER_LIB4" "$TYPECHECK_LIB3" "$HIR_LIB2" "$MIR_LIB"
+
+echo "done — 8 files assembled"
