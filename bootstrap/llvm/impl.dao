@@ -132,6 +132,10 @@ class MirBackendInput:
 // generic param, concept) is fail-closed: the caller receives
 // LlUnsupported and must surface a diagnostic.
 
+// Returns the LlType for a MIR type index.  Returns LlUnsupported
+// for any type not in the Tier A primitive set.  Callers MUST check
+// for LlUnsupported and emit a diagnostic via `bs_check_supported_type`
+// to satisfy the fail-closed contract (TASK_30 §9.2 / §13).
 fn ll_type_from_mir(types: Vector<DaoType>, type_idx: i64): LlType
   if type_idx < 0:
     return LlType.LlVoid
@@ -341,6 +345,14 @@ fn bs_reset_fn_state(bs: BS): BS
   bs.block_keys = Vector<i64>::new()
   bs.block_labels = Vector<string>::new()
   bs.next_value = to_i64(0)
+  return bs
+
+// Fail-closed type check: if ty is LlUnsupported, emit a diagnostic
+// and set had_error.  Returns the updated BS.
+fn bs_check_supported_type(bs: BS, ty: LlType, context: string): BS
+  match ty:
+    LlType.LlUnsupported:
+      bs = bs_error(bs, "bootstrap llvm backend encountered unsupported type kind in " + context)
   return bs
 
 fn bs_fresh_value(bs: BS): string
@@ -557,7 +569,11 @@ fn is_comparison_op(tk: TK): bool
 // =========================================================================
 
 // Lower a MirFunction parameter list into ordered LlParam list.
-fn bs_lower_params(bs: BS, params_raw: Vector<i64>, param_count: i64): Vector<LlParam>
+class ParamsR:
+  bs: BS
+  params: Vector<LlParam>
+
+fn bs_lower_params(bs: BS, params_raw: Vector<i64>, param_count: i64): ParamsR
   let out: Vector<LlParam> = Vector<LlParam>::new()
   let i: i64 = to_i64(0)
   while i < param_count:
@@ -566,9 +582,10 @@ fn bs_lower_params(bs: BS, params_raw: Vector<i64>, param_count: i64): Vector<Ll
     match node:
       MirNode.MirLocal(sym, type_idx, is_param):
         let ty: LlType = ll_type_from_mir(bs.types, type_idx)
+        bs = bs_check_supported_type(bs, ty, "function parameter")
         out = out.push(LlParam("%arg" + i64_to_string(i), ty))
     i = i + to_i64(1)
-  return out
+  return ParamsR(bs, out)
 
 // Lower a single MirNode instruction into the current LlBlock's
 // inst list.  Returns the updated BS and updated inst list.
@@ -970,12 +987,15 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
         return bs
 
       let ret_ty: LlType = ll_type_from_mir(bs.types, ret_type)
+      bs = bs_check_supported_type(bs, ret_ty, "function return type")
 
       // Read the local node list.  First `param_count` are params.
       let locals_raw: Vector<i64> = read_mir_list(bs.mir_idx, local_list_lp)
 
       // Declare param LlParams for the LlFunction signature.
-      let params: Vector<LlParam> = bs_lower_params(bs, locals_raw, param_count)
+      let params_r: ParamsR = bs_lower_params(bs, locals_raw, param_count)
+      bs = params_r.bs
+      let params: Vector<LlParam> = params_r.params
 
       // Extern declarations: no body, no blocks.
       if is_extern_i > to_i64(0):
@@ -1001,6 +1021,7 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
           MirNode.MirLocal(lsym, ltype_idx, lis_param):
             let slot_name: string = "%slot" + i64_to_string(li)
             let slot_ty: LlType = ll_type_from_mir(bs.types, ltype_idx)
+            bs = bs_check_supported_type(bs, slot_ty, "local slot")
             let slot_ty_text: string = ll_type_text(slot_ty)
             bs = bs_set_slot(bs, local_node_idx, slot_name, slot_ty_text)
         li = li + to_i64(1)
