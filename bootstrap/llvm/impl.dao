@@ -1367,7 +1367,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 12
+  let total: i32 = 13
 
   // -----------------------------------------------------------------
   // Test 1: minimal_define — fn main(): i32 -> 0 emits define + entry + ret
@@ -1574,6 +1574,35 @@ fn main(): i32
       pass_count = pass_count + 1
     else:
       print("FAIL field_access_rejected: expected diagnostic mentioning MirFieldAccess")
+
+  // -----------------------------------------------------------------
+  // Test 13: write_ll_artifact — lower source → write .ll artifact to disk
+  // -----------------------------------------------------------------
+  // This test verifies the bootstrap pipeline can lower Dao source to
+  // LLVM IR text.  The write to disk is best-effort — a fixed /tmp
+  // path is used because bootstrap Dao has no mktemp/getenv.  If the
+  // write fails (permissions, missing /tmp, etc.), the test still
+  // passes on the lowering assertion alone; the write failure is
+  // logged as a warning, not a suite failure.
+  //
+  // Manual verification after this test passes:
+  //   clang /tmp/dao_e2e_test.ll -o /tmp/dao_e2e_test && /tmp/dao_e2e_test; echo $?
+  //   expected exit code: 42
+  let e2e_src: string = "fn main(): i32\n  return 42\n"
+  let e2e_r: LlvmTextResult = lower_source_to_llvm_text(e2e_src)
+  if e2e_r.ok:
+    print("PASS write_ll_artifact (lowering ok)")
+    pass_count = pass_count + 1
+    // Best-effort write — not counted toward pass/fail.
+    let wrote: bool = write_llvm_text(e2e_r, "/tmp/dao_e2e_test.ll")
+    if wrote:
+      print("  artifact written to /tmp/dao_e2e_test.ll")
+      print("  manual verify: clang /tmp/dao_e2e_test.ll -o /tmp/dao_e2e_test && /tmp/dao_e2e_test; echo $?")
+      print("  expected exit code: 42")
+    else:
+      print("  warning: write_llvm_text failed (non-hermetic /tmp path); lowering still passed")
+  else:
+    print("FAIL write_ll_artifact: ok=false")
 
   // -----------------------------------------------------------------
   // Summary
