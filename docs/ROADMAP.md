@@ -216,9 +216,10 @@ substrate (`bootstrap/shared/base.dao`): lexer (105 tests), parser
 (51 tests), graph (12 tests), resolver (34 tests), type checker
 (43 tests), HIR lowering (22 tests), MIR lowering (8 tests), and
 LLVM backend (12 tests) — 287 bootstrap tests total.  The Tier A
-pipeline (lex → parse → resolve → typecheck → HIR → MIR → LLVM
-text) operates at both single-file and program level.  The
-`Program` value threads through all passes with canonical type
+pipeline covers lex → parse → resolve → typecheck → HIR → MIR →
+LLVM text.  The `Program` value threads through resolve →
+typecheck → HIR at both single-file and program level with canonical
+type
 identity, resolver-bound concept identity, module-scoped extend
 methods, cross-module qualified name typing, and program-level HIR
 aggregation (`HirProgram`/`HirModule`).  On-disk multi-file test
