@@ -827,18 +827,63 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       return LowerStepR(bs, insts)
 
     MirNode.MirCall(callee, arg_list_lp, arg_count, type_idx):
+      // Check if this is a struct constructor call (callee is a
+      // MirFnRef pointing to a SymbolKind.Type symbol).
+      let is_struct_ctor: bool = false
+      let callee_node: MirNode = bs.mir_nodes.get(callee)
+      match callee_node:
+        MirNode.MirFnRef(callee_sym, callee_ti):
+          if callee_sym >= 0:
+            if callee_sym < bs.symbols.length():
+              let sym: Symbol = bs.symbols.get(callee_sym)
+              match sym.kind:
+                SymbolKind.Type:
+                  is_struct_ctor = true
+
+      if is_struct_ctor:
+        // Struct constructor: allocate a temp struct on the stack,
+        // GEP-store each field, then load the whole struct as the
+        // result value.
+        let struct_ty_text: string = bs_type_text(bs.types, type_idx)
+        bs = bs_ensure_struct_def(bs, type_idx)
+        let args_raw: Vector<i64> = read_mir_list(bs.mir_idx, arg_list_lp)
+        // Alloca for the temp struct.
+        let tmp_name: string = bs_fresh_value(bs)
+        let alloca_inst: LlInst = LlInst(
+          LlInstKind.LlAlloca(struct_ty_text), tmp_name, LlType.LlPtr)
+        insts = insts.push(alloca_inst)
+        // GEP + store each field.
+        let fi: i64 = to_i64(0)
+        while fi < args_raw.length():
+          let arg_idx: i64 = args_raw.get(fi)
+          let arg_text: string = bs_get_value_text(bs, arg_idx)
+          let arg_ty_text: string = bs_get_value_ty(bs, arg_idx)
+          let gep_name: string = bs_fresh_value(bs)
+          let gep_inst: LlInst = LlInst(
+            LlInstKind.LlGepField(tmp_name, struct_ty_text, fi),
+            gep_name, LlType.LlPtr)
+          insts = insts.push(gep_inst)
+          let store_inst: LlInst = LlInst(
+            LlInstKind.LlStore(gep_name, arg_text, arg_ty_text),
+            "", LlType.LlVoid)
+          insts = insts.push(store_inst)
+          fi = fi + to_i64(1)
+        // Load the complete struct value.
+        let load_name: string = bs_fresh_value(bs)
+        let load_inst: LlInst = LlInst(
+          LlInstKind.LlLoad(tmp_name, struct_ty_text),
+          load_name, LlType.LlStruct)
+        insts = insts.push(load_inst)
+        bs = bs_set_value(bs, mir_node_idx, load_name, struct_ty_text)
+        return LowerStepR(bs, insts)
+
+      // Normal function call.
       let callee_text: string = bs_get_value_text(bs, callee)
       if callee_text == "":
         bs = bs_error(bs, "bootstrap llvm backend: MirCall callee has no mangled name (expected MirFnRef)")
         return LowerStepR(bs, insts)
       let ret_ty: LlType = ll_type_from_mir(bs.types, type_idx)
-      // Read the arg list from mir_idx and resolve each arg to (text, type_text).
       let args_raw: Vector<i64> = read_mir_list(bs.mir_idx, arg_list_lp)
-      // Push arg texts into a flat side-list the serializer reads back.
-      // We encode arg pairs as consecutive entries in bs.mir_idx-shaped
-      // form — but since we are building the LlInst directly, we use
-      // a new arg side-list on BS (not shown) ... simpler: flatten
-      // into the instruction payload via a string-list wrapper class.
       let arg_entry: CallArgs = CallArgs(Vector<string>::new(), Vector<LlType>::new())
       let ai: i64 = to_i64(0)
       while ai < args_raw.length():
@@ -848,7 +893,6 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         arg_entry.arg_texts = arg_entry.arg_texts.push(a_text)
         arg_entry.arg_tys = arg_entry.arg_tys.push(ll_type_text_to_lltype(a_ty_text))
         ai = ai + to_i64(1)
-      // Stash the call arg bundle in the side list and remember its index.
       let bundle_idx: i64 = bs.call_arg_bundles.length()
       bs.call_arg_bundles = bs.call_arg_bundles.push(arg_entry)
 
@@ -865,7 +909,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         ret_ty)
       insts = insts.push(inst)
       if result != "":
-        bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(ret_ty))
+        bs = bs_set_value(bs, mir_node_idx, result, bs_type_text(bs.types, type_idx))
       return LowerStepR(bs, insts)
 
     MirNode.MirFieldAccess(obj, field_tok, field_index, type_idx):
@@ -1481,7 +1525,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 13
+  let total: i32 = 14
 
   // -----------------------------------------------------------------
   // Test 1: minimal_define — fn main(): i32 -> 0 emits define + entry + ret
@@ -1664,30 +1708,50 @@ fn main(): i32
     print("FAIL deterministic_repeat: byte drift across runs")
 
   // -----------------------------------------------------------------
-  // Test 12: field_access_rejected — MirFieldAccess produces diagnostic
+  // Test 12: struct_field_read — struct field access emits GEP + load
   // -----------------------------------------------------------------
-  // The bootstrap's Tier A MIR only emits field reads when source
-  // code references a struct field.  Use a minimal struct+field
-  // example to drive one through the pipeline.
-  let src12: string = "struct P\n  x: i32\n\nfn f(p: P): i32\n  return p.x\n"
+  let src12: string = "class P:\n  x: i32\n  y: i32\n\nfn get_x(p: P): i32\n  return p.x\n"
   let r12: LlvmTextResult = lower_source_to_llvm_text(src12)
   if r12.ok:
-    // If the backend accepted it, that's wrong.
-    print("FAIL field_access_rejected: expected ok=false, got ok=true")
+    let a: bool = check_contains(r12, "%struct.P = type { i32, i32 }", "struct_field_read")
+    let b: bool = check_contains(r12, "getelementptr inbounds %struct.P", "struct_field_read")
+    let c: bool = check_contains(r12, "load i32", "struct_field_read")
+    let d: bool = check_contains(r12, "ret i32", "struct_field_read")
+    if a:
+      if b:
+        if c:
+          if d:
+            print("PASS struct_field_read")
+            pass_count = pass_count + 1
   else:
-    // Check that the diagnostic is the expected one.
-    let found: bool = false
-    let i: i64 = to_i64(0)
-    while i < r12.diags.length():
-      let d: Diagnostic = r12.diags.get(i)
-      if contains_substring(d.message, "MirFieldAccess"):
-        found = true
-      i = i + to_i64(1)
-    if found:
-      print("PASS field_access_rejected")
-      pass_count = pass_count + 1
-    else:
-      print("FAIL field_access_rejected: expected diagnostic mentioning MirFieldAccess")
+    print("FAIL struct_field_read: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r12.diags.length():
+      print("  diag: " + r12.diags.get(di).message)
+      di = di + to_i64(1)
+
+  // -----------------------------------------------------------------
+  // Test 13: struct_construction — P(1, 2) emits alloca + GEP stores
+  // -----------------------------------------------------------------
+  let src13: string = "class P:\n  x: i32\n  y: i32\n\nfn main(): i32\n  let p: P = P(1, 2)\n  return p.x\n"
+  let r13: LlvmTextResult = lower_source_to_llvm_text(src13)
+  if r13.ok:
+    let a: bool = check_contains(r13, "%struct.P = type { i32, i32 }", "struct_construction")
+    let b: bool = check_contains(r13, "getelementptr inbounds %struct.P", "struct_construction")
+    let c: bool = check_contains(r13, "store i32 1", "struct_construction")
+    let d: bool = check_contains(r13, "store i32 2", "struct_construction")
+    if a:
+      if b:
+        if c:
+          if d:
+            print("PASS struct_construction")
+            pass_count = pass_count + 1
+  else:
+    print("FAIL struct_construction: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r13.diags.length():
+      print("  diag: " + r13.diags.get(di).message)
+      di = di + to_i64(1)
 
   // -----------------------------------------------------------------
   // Test 13: write_ll_artifact — lower source → write .ll artifact to disk
