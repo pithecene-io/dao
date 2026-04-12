@@ -210,14 +210,16 @@ Exit criteria:
 
 ## Phase 7 — Bootstrap Compiler
 
-Status: **Tier A frontend-to-IR pipeline complete** — Tasks 19–29
-complete.  Seven bootstrap subsystems share a consolidated substrate
-(`bootstrap/shared/base.dao`): lexer (105 tests), parser (51 tests),
-graph (12 tests), resolver (34 tests), type checker (43 tests),
-HIR lowering (22 tests), and MIR lowering (8 tests) — 275 bootstrap
-tests total.  The Tier A pipeline (lex → parse → resolve → typecheck
-→ HIR → MIR) operates at both single-file and program level.  The
-`Program` value threads through all passes with canonical type
+Status: **Tier A frontend-to-IR-to-text pipeline complete** — Tasks
+19–30 complete.  Eight bootstrap subsystems share a consolidated
+substrate (`bootstrap/shared/base.dao`): lexer (105 tests), parser
+(51 tests), graph (12 tests), resolver (34 tests), type checker
+(43 tests), HIR lowering (22 tests), MIR lowering (8 tests), and
+LLVM backend (12 tests) — 287 bootstrap tests total.  The Tier A
+pipeline covers lex → parse → resolve → typecheck → HIR → MIR →
+LLVM text.  The `Program` value threads through resolve →
+typecheck → HIR at both single-file and program level with canonical
+type
 identity, resolver-bound concept identity, module-scoped extend
 methods, cross-module qualified name typing, and program-level HIR
 aggregation (`HirProgram`/`HirModule`).  On-disk multi-file test
@@ -227,9 +229,12 @@ templates from monomorphic functions at the HIR → MIR boundary in
 the host compiler.  Task 29 (bootstrap MIR) lowers HIR to a
 basic-block MIR mirroring the host compiler structure with full
 control flow (if/else, while) and diagnostic-emitting unsupported-
-kind handling.  Next: bootstrap LLVM backend (Task 30) to close the
-self-hosting loop at the native object emission level, followed by
-Tier B bootstrap feature slices.
+kind handling.  Task 30 (bootstrap LLVM backend) lowers MIR to
+deterministic textual LLVM IR via a backend-private mini-IR and
+text serializer, with alloca-everything SSA, param seeding, fail-
+closed type/terminator validation, and correct string-literal
+escape handling.  Next: `llc`/`clang` validation of emitted IR
+(Task 30.5), then Tier B bootstrap feature slices.
 
 Goals:
 - begin implementing non-trivial compiler subsystems in Dao itself

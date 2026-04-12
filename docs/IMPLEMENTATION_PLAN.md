@@ -312,14 +312,18 @@ and on-disk multi-file smoke test).  Shared substrate consolidated
 in `bootstrap/shared/base.dao`; assembly via `bootstrap/assemble.sh`.
 Task 29 (bootstrap MIR) is complete — HIR lowered to basic-block MIR
 with 8 tests.
+Task 30 (bootstrap LLVM backend) is complete — MIR lowered to
+deterministic textual LLVM IR with 12 tests.
 
-The Tier A bootstrap frontend-to-IR pipeline (lex → parse → resolve
-→ typecheck → HIR → MIR) is complete.  Tasks 25–27 (multi-file
-substrate) are complete — the `Program` value threads through
-resolve → typecheck → HIR → MIR with canonical type identity,
-cross-module qualified name typing, and program-level HIR aggregation.
-Task 28 (generic body lowering boundary) is complete — see below.
-Task 29 (bootstrap MIR Tier A) is complete — see below.
+The Tier A bootstrap frontend-to-IR-to-text pipeline (lex → parse →
+resolve → typecheck → HIR → MIR → LLVM text) is complete.
+Tasks 25–27 (multi-file substrate) are complete — the `Program`
+value threads through resolve → typecheck → HIR → MIR with
+canonical type identity, cross-module qualified name typing, and
+program-level HIR aggregation.  Task 28 (generic body lowering
+boundary) is complete — see below.  Task 29 (bootstrap MIR Tier A)
+is complete — see below.  Task 30 (bootstrap LLVM backend Tier A)
+is complete — see below.
 
 ### Task 25 — Bootstrap Multi-file Compilation + Imports (v1)
 
@@ -475,6 +479,43 @@ Deferred to Tier B (same deferrals as the bootstrap HIR, plus):
 - Break/continue
 
 See `bootstrap/mir/impl.dao` and `bootstrap/README.md`.
+
+### Task 30 — Bootstrap LLVM Backend (Tier A)
+
+Status: **complete** (#252)
+
+First iteration of the bootstrap LLVM backend.  Lowers Task 29
+bootstrap MIR to deterministic textual LLVM IR via a backend-private
+Dao-side mini-IR and text serializer.  Closes the Tier A
+frontend-to-IR-to-text pipeline: `lex → parse → resolve → typecheck
+→ HIR → MIR → LLVM text`.
+
+- ✓ Backend-private mini-IR: `LlModule` / `LlFunction` / `LlBlock` /
+  `LlInst` / `LlInstKind` / `LlType` / `LlGlobal` / `LlParam`
+- ✓ `MirBackendInput` bundles `MirResult` + symbols + types + tokens
+  + source, preserving Task 29's `MirResult` contract
+- ✓ Type lowering centralized in `ll_type_from_mir` for Tier A
+  primitives (i32, i64, f32, f64, bool→i1, void, string→ptr)
+- ✓ Alloca-everything SSA with mandatory param seeding (§5.4/§10.3)
+- ✓ Type-dispatched arithmetic (add/sub/mul/sdiv/srem, fadd/fsub/
+  fmul/fdiv), comparisons (icmp/fcmp), calls, terminators
+- ✓ String literals → private module-global `[N x i8]` + GEP with
+  correct escape decoding/re-encoding
+- ✓ Fail-closed: `MirFieldAccess`, `MirErrorExpr`, anonymous syms,
+  unsupported types, unterminated blocks all produce diagnostics
+- ✓ Deterministic output (byte-identical across runs)
+- ✓ MirModule root contract honored (`MirResult.root` → fn_list walk)
+- ✓ `write_llvm_text` wired to stdlib `write_file`
+- ✓ 12 Tier A regression tests
+
+Narrow upstream fix landed alongside:
+
+- ✓ `tc_register_fn_sig_core` writes `sym_types` for each param
+  during function-signature registration (fixes extern fn param
+  types being -1)
+
+See `docs/task_specs/TASK_30_BOOTSTRAP_LLVM_BACKEND.md` and
+`bootstrap/llvm/impl.dao`.
 
 ### Task 14 — Numeric Type Expansion
 
