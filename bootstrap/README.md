@@ -244,11 +244,11 @@ bash bootstrap/assemble.sh && daoc build bootstrap/mir/mir.gen.dao && ./bootstra
 
 ### `llvm/`
 
-Tier A LLVM backend: lowers bootstrap MIR to deterministic textual
-LLVM IR via a backend-private Dao-side LLVM mini-IR and text
-serializer.
+LLVM backend: lowers bootstrap MIR to deterministic textual LLVM IR
+via a backend-private Dao-side LLVM mini-IR and text serializer.
 
-**Status**: implemented (Task 30).
+**Status**: Tier A implemented (Task 30); first Tier B slice
+(struct field access + construction) implemented.
 
 **What it does**:
 
@@ -256,7 +256,7 @@ serializer.
 - Backend-private mini-IR (`LlModule` / `LlFunction` / `LlBlock` /
   `LlInst`) separates semantic lowering from text serialization
 - `MirBackendInput` bundles MIR + resolver symbols + type universe +
-  tokens + source for the backend's needs
+  type_info + tokens + source for the backend's needs
 - Alloca-everything SSA strategy with mandatory param seeding in the
   entry block prologue
 - Integer arithmetic (`add/sub/mul/sdiv/srem`) and float arithmetic
@@ -266,17 +266,26 @@ serializer.
   materialization at use site
 - if/else → `cond_br` + then/else/merge blocks;
   while → header/body/exit blocks with back-edge
-- Fail-closed: `MirFieldAccess`, `MirErrorExpr`, anonymous symbols,
-  and unsupported types produce explicit diagnostics
+- Struct types: `%struct.Name = type { ... }` definitions emitted
+  at module top; struct construction (`P(1, 2)`) via alloca +
+  per-field GEP stores + load; struct field reads (`p.x`) via
+  `extractvalue` on SSA struct values; struct-typed function
+  parameters and return values serialized with correct
+  `%struct.Name` type text at call and return edges
+- Fail-closed: `MirErrorExpr`, anonymous symbols, unresolved
+  `field_index`, and unsupported types produce explicit diagnostics
 
 **Tier A coverage**: functions, extern functions, params/locals,
 constants (int/float/bool/string), binary/unary ops, let/assign,
 calls, returns, if/else, while.
 
-**Tier B deferrals**: struct layout / field access, enum payloads,
-monomorphization, generators, mode/resource hooks, lambdas,
-try, for-over-iterable, index expressions, break/continue,
-LLVM C API integration, `llc`/`clang` validation in CI.
+**Tier B coverage (added)**: struct layout and field access
+(construction, field reads, struct-typed params and returns).
+
+**Tier B deferrals**: enum payloads, monomorphization, generators,
+mode/resource hooks, lambdas, try, for-over-iterable, index
+expressions, break/continue, LLVM C API integration,
+`llc`/`clang` validation in CI.
 
 **How to run tests**:
 
