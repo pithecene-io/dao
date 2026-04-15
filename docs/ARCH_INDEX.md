@@ -139,9 +139,14 @@ Self-hosting compiler subsystems written in Dao.
   HIR: functions, locals, blocks, constants, binary/unary, let/assign,
   calls, returns, field-access reads, and if/else + while control
   flow; logic + tests in `impl.dao` (Task 29)
-- `llvm/` — Tier A LLVM backend: lowers bootstrap MIR to deterministic
+- `llvm/` — LLVM backend: lowers bootstrap MIR to deterministic
   textual LLVM IR via a backend-private Dao-side LLVM mini-IR and text
-  serializer; logic + tests in `impl.dao` (Task 30)
+  serializer.  Tier A covers functions, locals, constants,
+  binary/unary, calls, returns, if/else, while, and string literals.
+  First Tier B slice adds struct type definitions, struct construction
+  via alloca + per-field GEP stores, struct field reads via
+  `extractvalue`, and struct-typed call/return edges.  Logic + tests
+  in `impl.dao` (Task 30 + struct field access slice).
 
 ## `examples/`
 

@@ -300,6 +300,37 @@ fn block_advance(br: BlockR): BlockR
   return block_open(nr.ms, nr.mir)
 
 // =========================================================================
+// Section 63b: Field index resolution (Tier B)
+// =========================================================================
+//
+// Resolve a field name token to its positional index within a struct's
+// type_info field list.  Used by MirFieldAccess lowering.
+// type_info stores pairs of (name_tidx, field_type_idx) starting at
+// DaoType.info_lp with DaoType.info_count pairs.
+
+fn mir_resolve_field_index(ms: MS, struct_type_idx: i64, field_tok: i64): i64
+  if struct_type_idx < 0:
+    return to_i64(-1)
+  if struct_type_idx >= ms.types.length():
+    return to_i64(-1)
+  let t: DaoType = ms.types.get(struct_type_idx)
+  match t.kind:
+    TypeKind.TStruct:
+      // Extract the field name from the field_tok.
+      let ft: Token = ms.toks.get(field_tok)
+      let field_name: string = substring(ms.src, ft.offset, ft.len)
+      // Walk the struct's field pairs in type_info.
+      let i: i64 = to_i64(0)
+      while i < t.info_count:
+        let name_tidx: i64 = ms.type_info.get(t.info_lp + i * to_i64(2))
+        let ntok: Token = ms.toks.get(name_tidx)
+        let fname: string = substring(ms.src, ntok.offset, ntok.len)
+        if fname == field_name:
+          return i
+        i = i + to_i64(1)
+  return to_i64(-1)
+
+// =========================================================================
 // Section 64: Expression lowering
 // =========================================================================
 
@@ -377,7 +408,11 @@ fn lower_expr_value(br: BlockR, hir_node_idx: i64): ExprR
       return br_emit_value(cur_br, MirNode.MirCall(callee_r.value, fl.list_pos, arg_count, type_idx))
     HirNode.HirFieldAccess(obj, field_tok, type_idx):
       let obj_r: ExprR = lower_expr_value(br, obj)
-      return br_emit_value(obj_r.br, MirNode.MirFieldAccess(obj_r.value, field_tok, to_i64(-1), type_idx))
+      // Resolve field_index from the object's struct type (Tier B).
+      let obj_hir: HirNode = obj_r.br.ms.hir_nodes.get(obj)
+      let obj_ti: i64 = ms_get_hir_type(obj_r.br.ms, obj_hir)
+      let fidx: i64 = mir_resolve_field_index(obj_r.br.ms, obj_ti, field_tok)
+      return br_emit_value(obj_r.br, MirNode.MirFieldAccess(obj_r.value, field_tok, fidx, type_idx))
   return br_emit_value(br, MirNode.MirErrorExpr(to_i64(0)))
 
 // Parse an i64 literal (base 10, optional leading minus).

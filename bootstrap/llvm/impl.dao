@@ -1,5 +1,5 @@
 module bootstrap::llvm::impl
-// bootstrap/llvm/impl.dao — Tier A bootstrap LLVM backend.
+// bootstrap/llvm/impl.dao — bootstrap LLVM backend.
 //
 // Lowers bootstrap MIR (Task 29) into deterministic textual LLVM IR
 // via a minimal, backend-private Dao-side LLVM mini-IR and text
@@ -8,15 +8,27 @@ module bootstrap::llvm::impl
 //   lex → parse → resolve → typecheck → HIR → MIR → LLVM text
 //
 // See docs/task_specs/TASK_30_BOOTSTRAP_LLVM_BACKEND.md for the
-// authoritative spec.  Everything in this file is Tier A:
-// alloca-everything SSA strategy (no mem2reg), no struct layout,
-// no monomorphization, no generators, no runtime hooks.
+// authoritative Tier A spec.
+//
+// Tier A (Task 30):
+//   alloca-everything SSA strategy (no mem2reg), primitive scalar
+//   types only, extern/define functions, calls, control flow
+//   (if/else, while), string literals as private globals.
+//
+// Tier B slices landed in this file:
+//   - struct layout + field access: `%struct.Name` type defs,
+//     struct construction via alloca+GEP stores, field reads via
+//     `extractvalue`, struct-typed call and return edges.
+//
+// Still deferred: enum payloads, monomorphization, generators,
+// mode/resource hooks, lambdas, try, for-over-iterable, index,
+// break/continue, LLVM C API, llc/clang CI validation.
 
 // =========================================================================
 // Section 80: LLVM mini-IR node model
 // =========================================================================
 
-// Tier A LLVM primitive type.  Strictly the set in TASK_30 §5.2.
+// LLVM type.  Tier A primitives (TASK_30 §5.2) + Tier B struct.
 enum LlType:
   LlI32
   LlI64
@@ -25,14 +37,15 @@ enum LlType:
   LlI1
   LlVoid
   LlPtr              // opaque pointer (Tier A string model — §8.4)
+  LlStruct           // struct type — name resolved from BS side table
   LlUnsupported      // fail-closed sentinel
 
 // Instruction payload variants.  Strictly what Task 29 MIR demands.
 enum class LlInstKind:
   // Memory
-  LlAlloca(ty: LlType)
-  LlStore(ptr_name: string, value_text: string, value_ty: LlType)
-  LlLoad(ptr_name: string, ty: LlType)
+  LlAlloca(ty_text: string)
+  LlStore(ptr_name: string, value_text: string, value_ty_text: string)
+  LlLoad(ptr_name: string, ty_text: string)
 
   // Integer / float arithmetic.  `op` is already the LLVM mnemonic
   // ("add", "sub", "mul", "sdiv", "srem", "fadd", ...).
@@ -51,38 +64,50 @@ enum class LlInstKind:
 
   // Direct function call.  `callee` is the textual "@name" form.
   // args are stored as (text, type) pairs via arg_list_lp in LlInst.
-  LlCall(callee: string, arg_list_lp: i64, arg_count: i64, ret_ty: LlType)
+  LlCall(callee: string, arg_list_lp: i64, arg_count: i64, ret_ty_text: string)
 
   // String global materialization: getelementptr into a [N x i8]
   // private global, yielding ptr.
   LlGepString(global_name: string, length: i64)
 
+  // Struct field access (Tier B): GEP into a struct pointer at
+  // field_index (used by struct constructor path to get field addrs).
+  LlGepField(ptr_text: string, struct_ty_text: string, field_index: i64)
+
+  // Struct field read from a SSA struct value (Tier B): extractvalue
+  // works directly on loaded / constructed / returned struct values.
+  LlExtractValue(agg_text: string, agg_ty_text: string, field_index: i64)
+
   // Terminators
-  LlRet(value_text: string, value_ty: LlType, has_value: i64)
+  LlRet(value_text: string, value_ty_text: string, has_value: i64)
   LlBr(target_label: string)
   LlCondBr(cond_text: string, then_label: string, else_label: string)
 
 // A single instruction.  `result_name` is "%N" for value-producing
 // instructions, empty string for effect-only or terminators.
+// Type information lives in the LlInstKind payload (text form),
+// which is the single source of truth for serialization.
 class LlInst:
   kind: LlInstKind
   result_name: string
-  result_ty: LlType
 
 // A basic block.
 class LlBlock:
   label: string         // "entry", "bb1", ...
   insts: Vector<LlInst>
 
-// Function param info.
+// Function param info.  `ty_text` is the struct-aware LLVM type
+// text (e.g. "i32" or "%struct.P") — the single source of truth
+// for serialization.
 class LlParam:
   name: string          // "%arg0", "%arg1", ...
-  ty: LlType
+  ty_text: string
 
-// A function definition or extern declaration.
+// A function definition or extern declaration.  `ret_ty_text` is
+// the struct-aware LLVM return type text.
 class LlFunction:
   name: string          // mangled, with leading "@"
-  ret_ty: LlType
+  ret_ty_text: string
   params: Vector<LlParam>
   blocks: Vector<LlBlock>
   is_extern: i64        // 1 = declare, 0 = define
@@ -117,6 +142,7 @@ class MirBackendInput:
   mir: MirResult
   symbols: Vector<Symbol>
   types: Vector<DaoType>
+  type_info: Vector<i64>
   toks: Vector<Token>
   src: string
 
@@ -147,6 +173,8 @@ fn ll_type_from_mir(types: Vector<DaoType>, type_idx: i64): LlType
       return LlType.LlVoid
     TypeKind.TString:
       return LlType.LlPtr
+    TypeKind.TStruct:
+      return LlType.LlStruct
     TypeKind.TBuiltin:
       // See register_builtins in typecheck/impl.dao for the canonical
       // builtin_id → name mapping: i32=2, i64=3, f32=8, f64=9, bool=10.
@@ -163,6 +191,13 @@ fn ll_type_from_mir(types: Vector<DaoType>, type_idx: i64): LlType
       return LlType.LlUnsupported
   return LlType.LlUnsupported
 
+// Serialize an LlType to its textual LLVM form.  Primitive-only
+// by construction: callers must use `bs_type_text(types, type_idx)`
+// for any type_idx that might be a struct, because `LlStruct`
+// carries no name of its own.  The `LlStruct` / `LlUnsupported`
+// arms return a loud placeholder so any accidental caller shows
+// up immediately in emitted IR rather than producing subtly
+// wrong text downstream.
 fn ll_type_text(ty: LlType): string
   match ty:
     LlType.LlI32:
@@ -179,6 +214,10 @@ fn ll_type_text(ty: LlType): string
       return "void"
     LlType.LlPtr:
       return "ptr"
+    LlType.LlStruct:
+      // Caller bug — use bs_type_text instead.  Left as a loud
+      // marker because silent <struct> would leak into IR.
+      return "<bug:ll_type_text-of-LlStruct-use-bs_type_text>"
     LlType.LlUnsupported:
       return "<unsupported>"
   return "<unsupported>"
@@ -200,6 +239,31 @@ fn ll_type_is_int(ty: LlType): bool
     LlType.LlI1:
       return true
   return false
+
+// =========================================================================
+// Section 82b: Struct type definitions (Tier B)
+// =========================================================================
+
+// Tracked struct type definition for LLVM emission.
+class LlStructDef:
+  name: string              // Dao class name, e.g. "P"
+  ll_name: string           // LLVM name, e.g. "%struct.P"
+  field_ty_texts: Vector<string>  // LLVM type text per field
+  mir_type_idx: i64         // key for dedup
+
+// Return the LLVM type text for a MIR type_idx, including struct
+// names.  For primitives, delegates to ll_type_text.  For structs,
+// returns "%struct.Name".
+fn bs_type_text(types: Vector<DaoType>, type_idx: i64): string
+  if type_idx < 0:
+    return "void"
+  if type_idx >= types.length():
+    return "<unsupported>"
+  let t: DaoType = types.get(type_idx)
+  match t.kind:
+    TypeKind.TStruct:
+      return "%struct." + t.name
+  return ll_type_text(ll_type_from_mir(types, type_idx))
 
 // =========================================================================
 // Section 83: Symbol mangling (placeholder — TASK_30 §9)
@@ -264,6 +328,7 @@ class BS:
   mir_idx: Vector<i64>
   symbols: Vector<Symbol>
   types: Vector<DaoType>
+  type_info: Vector<i64>
   toks: Vector<Token>
   src: string
 
@@ -305,6 +370,9 @@ class BS:
   // (enum-class variants over vectors are expensive to thread).
   call_arg_bundles: Vector<CallArgs>
 
+  // Struct type definitions — module-level, populated on first use.
+  struct_defs: Vector<LlStructDef>
+
   // Flag: set when lowering has emitted a diagnostic that makes
   // the whole backend result `ok = false`.
   had_error: i64
@@ -315,6 +383,7 @@ fn bs_new(input: MirBackendInput): BS
     input.mir.mir_idx,
     input.symbols,
     input.types,
+    input.type_info,
     input.toks,
     input.src,
     Vector<LlGlobal>::new(),
@@ -333,6 +402,7 @@ fn bs_new(input: MirBackendInput): BS
     to_i64(0),
     Vector<string>::new(),
     Vector<CallArgs>::new(),
+    Vector<LlStructDef>::new(),
     to_i64(0))
 
 fn bs_reset_fn_state(bs: BS): BS
@@ -355,10 +425,20 @@ fn bs_check_supported_type(bs: BS, ty: LlType, context: string): BS
       bs = bs_error(bs, "bootstrap llvm backend encountered unsupported type kind in " + context)
   return bs
 
-fn bs_fresh_value(bs: BS): string
+class FreshR:
+  bs: BS
+  name: string
+
+// Returns both the updated BS (with incremented counter) and the
+// new SSA name.  Must be called as:
+//   let fr: FreshR = bs_fresh_value(bs); bs = fr.bs; let n = fr.name
+// because Dao class field mutation does not persist across function
+// call boundaries — the counter update only takes effect when the
+// caller re-binds `bs` from the returned FreshR.
+fn bs_fresh_value(bs: BS): FreshR
   let n: i64 = bs.next_value
   bs.next_value = n + to_i64(1)
-  return "%" + i64_to_string(n)
+  return FreshR(bs, "%" + i64_to_string(n))
 
 fn bs_error(bs: BS, msg: string): BS
   bs.diags = bs.diags.push(make_error(Span(to_i64(0), to_i64(1)), msg))
@@ -454,6 +534,47 @@ fn bs_has_extern(bs: BS, name: string): bool
 
 fn bs_mark_extern(bs: BS, name: string): BS
   bs.extern_emitted = bs.extern_emitted.push(name)
+  return bs
+
+// Ensure a struct type definition is registered for the given MIR
+// type_idx.  Returns the LLVM struct name (e.g. "%struct.P").
+// Idempotent — checks dedup before adding.
+fn bs_ensure_struct_def(bs: BS, type_idx: i64): BS
+  // Already registered?  (Dedup check runs first so cyclic /
+  // mutually-referential struct graphs terminate — we push a
+  // placeholder before recursing into field types.)
+  let i: i64 = to_i64(0)
+  while i < bs.struct_defs.length():
+    if bs.struct_defs.get(i).mir_type_idx == type_idx:
+      return bs
+    i = i + to_i64(1)
+  // Push a placeholder entry first so that recursive struct field
+  // registration sees this type as already present and doesn't
+  // recurse back into it.
+  let t: DaoType = bs.types.get(type_idx)
+  let ll_name: string = "%struct." + t.name
+  let slot_idx: i64 = bs.struct_defs.length()
+  bs.struct_defs = bs.struct_defs.push(LlStructDef(t.name, ll_name, Vector<string>::new(), type_idx))
+  // Walk the struct's field type pairs.  For every field whose
+  // type is another struct, recursively register that struct def
+  // too — otherwise module serialization can emit a reference to
+  // an undefined named type (invalid IR).
+  let field_tys: Vector<string> = Vector<string>::new()
+  let fi: i64 = to_i64(0)
+  while fi < t.info_count:
+    let field_type_idx: i64 = bs.type_info.get(t.info_lp + fi * to_i64(2) + to_i64(1))
+    let field_kind: LlType = ll_type_from_mir(bs.types, field_type_idx)
+    match field_kind:
+      LlType.LlStruct:
+        bs = bs_ensure_struct_def(bs, field_type_idx)
+    field_tys = field_tys.push(bs_type_text(bs.types, field_type_idx))
+    fi = fi + to_i64(1)
+  // Re-read the placeholder entry and update its field_tys.  The
+  // placeholder may have moved if a recursive call pushed more
+  // entries, but slot_idx is stable (append-only vector).
+  let existing: LlStructDef = bs.struct_defs.get(slot_idx)
+  existing.field_ty_texts = field_tys
+  bs.struct_defs = bs.struct_defs.set(slot_idx, existing)
   return bs
 
 // =========================================================================
@@ -583,12 +704,91 @@ fn bs_lower_params(bs: BS, params_raw: Vector<i64>, param_count: i64): ParamsR
       MirNode.MirLocal(sym, type_idx, is_param):
         let ty: LlType = ll_type_from_mir(bs.types, type_idx)
         bs = bs_check_supported_type(bs, ty, "function parameter")
-        out = out.push(LlParam("%arg" + i64_to_string(i), ty))
+        let ty_txt: string = bs_type_text(bs.types, type_idx)
+        match ty:
+          LlType.LlStruct:
+            bs = bs_ensure_struct_def(bs, type_idx)
+        out = out.push(LlParam("%arg" + i64_to_string(i), ty_txt))
     i = i + to_i64(1)
   return ParamsR(bs, out)
 
 // Lower a single MirNode instruction into the current LlBlock's
 // inst list.  Returns the updated BS and updated inst list.
+
+// =========================================================================
+// Section 87b: Aggregate (struct) lowering helpers
+// =========================================================================
+//
+// Keep aggregate-specific lowering policy out of the main
+// bs_lower_inst match so future aggregate features (nested
+// structs, enum payloads, etc.) have a dedicated seam.
+
+// Lower a struct constructor call: emit alloca + per-field GEP
+// stores + load of the complete struct value.  Returns the updated
+// BS, the updated inst list, and the SSA name of the loaded struct
+// value (which the caller registers in the value side table).
+class StructCtorR:
+  bs: BS
+  insts: Vector<LlInst>
+  value_name: string
+  ty_text: string
+
+fn bs_lower_struct_ctor(bs: BS, insts: Vector<LlInst>, type_idx: i64, arg_list_lp: i64): StructCtorR
+  let struct_ty_text: string = bs_type_text(bs.types, type_idx)
+  bs = bs_ensure_struct_def(bs, type_idx)
+  let args_raw: Vector<i64> = read_mir_list(bs.mir_idx, arg_list_lp)
+  // Alloca for the temp struct.
+  let fr_tmp: FreshR = bs_fresh_value(bs)
+  bs = fr_tmp.bs
+  let tmp_name: string = fr_tmp.name
+  let alloca_inst: LlInst = LlInst(
+    LlInstKind.LlAlloca(struct_ty_text), tmp_name)
+  insts = insts.push(alloca_inst)
+  // GEP + store each field.
+  let fi: i64 = to_i64(0)
+  while fi < args_raw.length():
+    let arg_idx: i64 = args_raw.get(fi)
+    let arg_text: string = bs_get_value_text(bs, arg_idx)
+    let arg_ty_text: string = bs_get_value_ty(bs, arg_idx)
+    let fr_gep: FreshR = bs_fresh_value(bs)
+    bs = fr_gep.bs
+    let gep_name: string = fr_gep.name
+    let gep_inst: LlInst = LlInst(
+      LlInstKind.LlGepField(tmp_name, struct_ty_text, fi),
+      gep_name)
+    insts = insts.push(gep_inst)
+    let store_inst: LlInst = LlInst(
+      LlInstKind.LlStore(gep_name, arg_text, arg_ty_text),
+      "")
+    insts = insts.push(store_inst)
+    fi = fi + to_i64(1)
+  // Load the complete struct value.
+  let fr_load: FreshR = bs_fresh_value(bs)
+  bs = fr_load.bs
+  let load_name: string = fr_load.name
+  let load_inst: LlInst = LlInst(
+    LlInstKind.LlLoad(tmp_name, struct_ty_text),
+    load_name)
+  insts = insts.push(load_inst)
+  return StructCtorR(bs, insts, load_name, struct_ty_text)
+
+// Classify a MirCall's callee as a struct constructor (the callee
+// is a MirFnRef to a SymbolKind.Type symbol).  Returns true iff
+// the call should be lowered via bs_lower_struct_ctor rather than
+// the normal `call` instruction.
+fn bs_call_is_struct_ctor(bs: BS, callee_mir_idx: i64): bool
+  let callee_node: MirNode = bs.mir_nodes.get(callee_mir_idx)
+  match callee_node:
+    MirNode.MirFnRef(callee_sym, callee_ti):
+      if callee_sym < 0:
+        return false
+      if callee_sym >= bs.symbols.length():
+        return false
+      let sym: Symbol = bs.symbols.get(callee_sym)
+      match sym.kind:
+        SymbolKind.Type:
+          return true
+  return false
 
 class LowerStepR:
   bs: BS
@@ -622,11 +822,12 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let gname: string = "@.str." + i64_to_string(bs.next_global)
       bs.next_global = bs.next_global + to_i64(1)
       bs.globals = bs.globals.push(LlGlobal(gname, decoded.llvm_payload, nbytes))
-      let result: string = bs_fresh_value(bs)
+      let fr_gs: FreshR = bs_fresh_value(bs)
+      bs = fr_gs.bs
+      let result: string = fr_gs.name
       let inst: LlInst = LlInst(
         LlInstKind.LlGepString(gname, nbytes),
-        result,
-        LlType.LlPtr)
+        result)
       insts = insts.push(inst)
       bs = bs_set_value(bs, mir_node_idx, result, "ptr")
       return LowerStepR(bs, insts)
@@ -639,13 +840,15 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         bs = bs_error(bs, "bootstrap llvm backend: MirLoad references unknown local slot " + i64_to_string(local_idx))
         return LowerStepR(bs, insts)
       let ty: LlType = ll_type_from_mir(bs.types, type_idx)
-      let result: string = bs_fresh_value(bs)
+      let ty_text: string = bs_type_text(bs.types, type_idx)
+      let fr_ld: FreshR = bs_fresh_value(bs)
+      bs = fr_ld.bs
+      let result: string = fr_ld.name
       let inst: LlInst = LlInst(
-        LlInstKind.LlLoad(slot_name, ty),
-        result,
-        ty)
+        LlInstKind.LlLoad(slot_name, ty_text),
+        result)
       insts = insts.push(inst)
-      bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(ty))
+      bs = bs_set_value(bs, mir_node_idx, result, ty_text)
       return LowerStepR(bs, insts)
 
     MirNode.MirStore(local_idx, value_node):
@@ -655,13 +858,10 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         bs = bs_error(bs, "bootstrap llvm backend: MirStore references unknown local slot " + i64_to_string(local_idx))
         return LowerStepR(bs, insts)
       let val_text: string = bs_get_value_text(bs, value_node)
-      let val_ty_text: string = bs_get_value_ty(bs, value_node)
-      // Store uses the slot's type (which matches the MirLocal's declared type).
-      let slot_ty: LlType = ll_type_text_to_lltype(slot_ty_text)
+      // Store uses the slot's type text (already struct-aware).
       let inst: LlInst = LlInst(
-        LlInstKind.LlStore(slot_name, val_text, slot_ty),
-        "",
-        LlType.LlVoid)
+        LlInstKind.LlStore(slot_name, val_text, slot_ty_text),
+        "")
       insts = insts.push(inst)
       return LowerStepR(bs, insts)
 
@@ -670,32 +870,33 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let tk: Token = bs.toks.get(op_tok)
       let lhs_text: string = bs_get_value_text(bs, lhs)
       let rhs_text: string = bs_get_value_text(bs, rhs)
-      let result_ty: LlType = ll_type_from_mir(bs.types, type_idx)
       // Operand type comes from the LHS (MIR ensures lhs/rhs agree).
       let operand_ty_text: string = bs_get_value_ty(bs, lhs)
       let operand_ty: LlType = ll_type_text_to_lltype(operand_ty_text)
 
       if is_comparison_op(tk.kind):
-        let result: string = bs_fresh_value(bs)
+        let fr_cmp: FreshR = bs_fresh_value(bs)
+        bs = fr_cmp.bs
+        let result: string = fr_cmp.name
         if ll_type_is_float(operand_ty):
           let pred: string = ll_fcmp_pred(tk.kind)
           let inst: LlInst = LlInst(
             LlInstKind.LlFCmp(pred, lhs_text, rhs_text, operand_ty),
-            result,
-            LlType.LlI1)
+            result)
           insts = insts.push(inst)
         else:
           let pred: string = ll_icmp_pred(tk.kind)
           let inst: LlInst = LlInst(
             LlInstKind.LlICmp(pred, lhs_text, rhs_text, operand_ty),
-            result,
-            LlType.LlI1)
+            result)
           insts = insts.push(inst)
         bs = bs_set_value(bs, mir_node_idx, result, "i1")
         return LowerStepR(bs, insts)
 
       // Arithmetic.
-      let result: string = bs_fresh_value(bs)
+      let fr_bin: FreshR = bs_fresh_value(bs)
+      bs = fr_bin.bs
+      let result: string = fr_bin.name
       let op: string = ""
       if ll_type_is_float(operand_ty):
         op = ll_bin_op_float(tk.kind)
@@ -706,8 +907,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         return LowerStepR(bs, insts)
       let inst: LlInst = LlInst(
         LlInstKind.LlBinOp(op, lhs_text, rhs_text, operand_ty),
-        result,
-        operand_ty)
+        result)
       insts = insts.push(inst)
       bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(operand_ty))
       return LowerStepR(bs, insts)
@@ -716,20 +916,20 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let tk: Token = bs.toks.get(op_tok)
       let operand_text: string = bs_get_value_text(bs, operand)
       let ty: LlType = ll_type_from_mir(bs.types, type_idx)
-      let result: string = bs_fresh_value(bs)
+      let fr_un: FreshR = bs_fresh_value(bs)
+      bs = fr_un.bs
+      let result: string = fr_un.name
       if tk_name(tk.kind) == "Minus":
         if ll_type_is_float(ty):
           let inst: LlInst = LlInst(
             LlInstKind.LlFNeg(operand_text, ty),
-            result,
-            ty)
+            result)
           insts = insts.push(inst)
         else:
           // sub 0, x
           let inst: LlInst = LlInst(
             LlInstKind.LlBinOp("sub", "0", operand_text, ty),
-            result,
-            ty)
+            result)
           insts = insts.push(inst)
         bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(ty))
         return LowerStepR(bs, insts)
@@ -737,8 +937,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         // xor %x, true  (on i1)
         let inst: LlInst = LlInst(
           LlInstKind.LlBinOp("xor", operand_text, "true", LlType.LlI1),
-          result,
-          LlType.LlI1)
+          result)
         insts = insts.push(inst)
         bs = bs_set_value(bs, mir_node_idx, result, "i1")
         return LowerStepR(bs, insts)
@@ -758,28 +957,32 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       return LowerStepR(bs, insts)
 
     MirNode.MirCall(callee, arg_list_lp, arg_count, type_idx):
+      // Struct constructor calls route to a dedicated aggregate
+      // helper rather than the normal `call` path.
+      if bs_call_is_struct_ctor(bs, callee):
+        let cr: StructCtorR = bs_lower_struct_ctor(bs, insts, type_idx, arg_list_lp)
+        bs = cr.bs
+        insts = cr.insts
+        bs = bs_set_value(bs, mir_node_idx, cr.value_name, cr.ty_text)
+        return LowerStepR(bs, insts)
+
+      // Normal function call.
       let callee_text: string = bs_get_value_text(bs, callee)
       if callee_text == "":
         bs = bs_error(bs, "bootstrap llvm backend: MirCall callee has no mangled name (expected MirFnRef)")
         return LowerStepR(bs, insts)
       let ret_ty: LlType = ll_type_from_mir(bs.types, type_idx)
-      // Read the arg list from mir_idx and resolve each arg to (text, type_text).
+      let ret_ty_text: string = bs_type_text(bs.types, type_idx)
       let args_raw: Vector<i64> = read_mir_list(bs.mir_idx, arg_list_lp)
-      // Push arg texts into a flat side-list the serializer reads back.
-      // We encode arg pairs as consecutive entries in bs.mir_idx-shaped
-      // form — but since we are building the LlInst directly, we use
-      // a new arg side-list on BS (not shown) ... simpler: flatten
-      // into the instruction payload via a string-list wrapper class.
-      let arg_entry: CallArgs = CallArgs(Vector<string>::new(), Vector<LlType>::new())
+      let arg_entry: CallArgs = CallArgs(Vector<string>::new(), Vector<string>::new())
       let ai: i64 = to_i64(0)
       while ai < args_raw.length():
         let a_idx: i64 = args_raw.get(ai)
         let a_text: string = bs_get_value_text(bs, a_idx)
         let a_ty_text: string = bs_get_value_ty(bs, a_idx)
         arg_entry.arg_texts = arg_entry.arg_texts.push(a_text)
-        arg_entry.arg_tys = arg_entry.arg_tys.push(ll_type_text_to_lltype(a_ty_text))
+        arg_entry.arg_ty_texts = arg_entry.arg_ty_texts.push(a_ty_text)
         ai = ai + to_i64(1)
-      // Stash the call arg bundle in the side list and remember its index.
       let bundle_idx: i64 = bs.call_arg_bundles.length()
       bs.call_arg_bundles = bs.call_arg_bundles.push(arg_entry)
 
@@ -789,18 +992,39 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         LlType.LlVoid:
           needs_result = false
       if needs_result:
-        result = bs_fresh_value(bs)
+        let fr_call: FreshR = bs_fresh_value(bs)
+        bs = fr_call.bs
+        result = fr_call.name
       let inst: LlInst = LlInst(
-        LlInstKind.LlCall(callee_text, bundle_idx, args_raw.length(), ret_ty),
-        result,
-        ret_ty)
+        LlInstKind.LlCall(callee_text, bundle_idx, args_raw.length(), ret_ty_text),
+        result)
       insts = insts.push(inst)
       if result != "":
-        bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(ret_ty))
+        bs = bs_set_value(bs, mir_node_idx, result, ret_ty_text)
       return LowerStepR(bs, insts)
 
     MirNode.MirFieldAccess(obj, field_tok, field_index, type_idx):
-      bs = bs_error(bs, "bootstrap llvm backend does not support MirFieldAccess in Tier A")
+      if field_index < 0:
+        bs = bs_error(bs, "bootstrap llvm backend: MirFieldAccess has unresolved field_index (-1)")
+        return LowerStepR(bs, insts)
+      // `obj` is an SSA struct VALUE (from MirLoad, from a struct
+      // constructor call, or from a returning-struct call).  Use
+      // `extractvalue` rather than GEP — GEP requires a pointer,
+      // which we don't have here.  Task 29 MIR lowers identifier
+      // reads to MirLoad, so obj is always a loaded struct value
+      // at this point.
+      let obj_text: string = bs_get_value_text(bs, obj)
+      let obj_ty_text: string = bs_get_value_ty(bs, obj)
+      let field_ty: LlType = ll_type_from_mir(bs.types, type_idx)
+      let field_ty_text: string = bs_type_text(bs.types, type_idx)
+      let fr_ev: FreshR = bs_fresh_value(bs)
+      bs = fr_ev.bs
+      let result: string = fr_ev.name
+      let inst: LlInst = LlInst(
+        LlInstKind.LlExtractValue(obj_text, obj_ty_text, field_index),
+        result)
+      insts = insts.push(inst)
+      bs = bs_set_value(bs, mir_node_idx, result, field_ty_text)
       return LowerStepR(bs, insts)
 
     MirNode.MirErrorExpr(tok):
@@ -812,17 +1036,14 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       if has_value > 0:
         let val_text: string = bs_get_value_text(bs, value)
         let val_ty_text: string = bs_get_value_ty(bs, value)
-        let ty: LlType = ll_type_text_to_lltype(val_ty_text)
         let inst: LlInst = LlInst(
-          LlInstKind.LlRet(val_text, ty, to_i64(1)),
-          "",
-          LlType.LlVoid)
+          LlInstKind.LlRet(val_text, val_ty_text, to_i64(1)),
+          "")
         insts = insts.push(inst)
       else:
         let inst: LlInst = LlInst(
-          LlInstKind.LlRet("", LlType.LlVoid, to_i64(0)),
-          "",
-          LlType.LlVoid)
+          LlInstKind.LlRet("", "void", to_i64(0)),
+          "")
         insts = insts.push(inst)
       return LowerStepR(bs, insts)
 
@@ -830,8 +1051,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let label: string = bs_get_block_label(bs, target_block)
       let inst: LlInst = LlInst(
         LlInstKind.LlBr(label),
-        "",
-        LlType.LlVoid)
+        "")
       insts = insts.push(inst)
       return LowerStepR(bs, insts)
 
@@ -841,8 +1061,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let else_label: string = bs_get_block_label(bs, else_block)
       let inst: LlInst = LlInst(
         LlInstKind.LlCondBr(cond_text, then_label, else_label),
-        "",
-        LlType.LlVoid)
+        "")
       insts = insts.push(inst)
       return LowerStepR(bs, insts)
   return LowerStepR(bs, insts)
@@ -876,7 +1095,7 @@ fn ll_type_text_to_lltype(t: string): LlType
 // without additional boxing overhead.  Indexing is deterministic.
 class CallArgs:
   arg_texts: Vector<string>
-  arg_tys: Vector<LlType>
+  arg_ty_texts: Vector<string>
 
 // Decode a Dao string literal token (with surrounding quotes) into:
 //   (1) the LLVM IR c"..." payload (with LLVM-style hex escapes for
@@ -999,6 +1218,11 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
 
       let ret_ty: LlType = ll_type_from_mir(bs.types, ret_type)
       bs = bs_check_supported_type(bs, ret_ty, "function return type")
+      let ret_ty_text: string = bs_type_text(bs.types, ret_type)
+      // Register struct def if the return type is a struct.
+      match ret_ty:
+        LlType.LlStruct:
+          bs = bs_ensure_struct_def(bs, ret_type)
 
       // Read the local node list.  First `param_count` are params.
       let locals_raw: Vector<i64> = read_mir_list(bs.mir_idx, local_list_lp)
@@ -1013,7 +1237,7 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
         if bs_has_extern(bs, name):
           return bs
         let llfn: LlFunction = LlFunction(
-          name, ret_ty, params, Vector<LlBlock>::new(), to_i64(1))
+          name, ret_ty_text, params, Vector<LlBlock>::new(), to_i64(1))
         bs.extern_decls = bs.extern_decls.push(llfn)
         bs = bs_mark_extern(bs, name)
         return bs
@@ -1033,7 +1257,12 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
             let slot_name: string = "%slot" + i64_to_string(li)
             let slot_ty: LlType = ll_type_from_mir(bs.types, ltype_idx)
             bs = bs_check_supported_type(bs, slot_ty, "local slot")
-            let slot_ty_text: string = ll_type_text(slot_ty)
+            // Use bs_type_text for struct-aware type names.
+            let slot_ty_text: string = bs_type_text(bs.types, ltype_idx)
+            // Register struct defs for struct-typed locals.
+            match slot_ty:
+              LlType.LlStruct:
+                bs = bs_ensure_struct_def(bs, ltype_idx)
             bs = bs_set_slot(bs, local_node_idx, slot_name, slot_ty_text)
         li = li + to_i64(1)
 
@@ -1063,9 +1292,8 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
         let slot_ty_text: string = bs_slot_ty_by_index(bs, ai)
         let slot_ty: LlType = ll_type_text_to_lltype(slot_ty_text)
         let alloca_inst: LlInst = LlInst(
-          LlInstKind.LlAlloca(slot_ty),
-          slot_name,
-          LlType.LlPtr)
+          LlInstKind.LlAlloca(slot_ty_text),
+          slot_name)
         entry_insts = entry_insts.push(alloca_inst)
         ai = ai + to_i64(1)
 
@@ -1075,12 +1303,10 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
       while pi < param_count:
         let slot_name: string = bs_slot_name_by_index(bs, pi)
         let slot_ty_text: string = bs_slot_ty_by_index(bs, pi)
-        let slot_ty: LlType = ll_type_text_to_lltype(slot_ty_text)
         let arg_name: string = "%arg" + i64_to_string(pi)
         let store_inst: LlInst = LlInst(
-          LlInstKind.LlStore(slot_name, arg_name, slot_ty),
-          "",
-          LlType.LlVoid)
+          LlInstKind.LlStore(slot_name, arg_name, slot_ty_text),
+          "")
         entry_insts = entry_insts.push(store_inst)
         pi = pi + to_i64(1)
 
@@ -1118,7 +1344,7 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
             ll_blocks = ll_blocks.push(LlBlock(label, this_insts))
         block_i = block_i + to_i64(1)
 
-      let llfn: LlFunction = LlFunction(name, ret_ty, params, ll_blocks, to_i64(0))
+      let llfn: LlFunction = LlFunction(name, ret_ty_text, params, ll_blocks, to_i64(0))
       bs.functions = bs.functions.push(llfn)
       return bs
   return bs
@@ -1156,14 +1382,14 @@ fn lower_mir_to_ll_module(bs: BS, root: i64): BS
 fn serialize_ll_type(ty: LlType): string
   return ll_type_text(ty)
 
-fn serialize_alloca(ty: LlType): string
-  return "alloca " + serialize_ll_type(ty)
+fn serialize_alloca(ty_text: string): string
+  return "alloca " + ty_text
 
-fn serialize_store(ptr: string, value_text: string, ty: LlType): string
-  return "store " + serialize_ll_type(ty) + " " + value_text + ", ptr " + ptr
+fn serialize_store(ptr: string, value_text: string, ty_text: string): string
+  return "store " + ty_text + " " + value_text + ", ptr " + ptr
 
-fn serialize_load(ptr: string, ty: LlType): string
-  return "load " + serialize_ll_type(ty) + ", ptr " + ptr
+fn serialize_load(ptr: string, ty_text: string): string
+  return "load " + ty_text + ", ptr " + ptr
 
 fn serialize_binop(op: string, lhs: string, rhs: string, ty: LlType): string
   return op + " " + serialize_ll_type(ty) + " " + lhs + ", " + rhs
@@ -1177,13 +1403,13 @@ fn serialize_icmp(pred: string, lhs: string, rhs: string, ty: LlType): string
 fn serialize_fcmp(pred: string, lhs: string, rhs: string, ty: LlType): string
   return "fcmp " + pred + " " + serialize_ll_type(ty) + " " + lhs + ", " + rhs
 
-fn serialize_call(callee: string, args: CallArgs, ret_ty: LlType): string
-  let out: string = "call " + serialize_ll_type(ret_ty) + " " + callee + "("
+fn serialize_call(callee: string, args: CallArgs, ret_ty_text: string): string
+  let out: string = "call " + ret_ty_text + " " + callee + "("
   let i: i64 = to_i64(0)
   while i < args.arg_texts.length():
     if i > to_i64(0):
       out = out + ", "
-    out = out + ll_type_text(args.arg_tys.get(i)) + " " + args.arg_texts.get(i)
+    out = out + args.arg_ty_texts.get(i) + " " + args.arg_texts.get(i)
     i = i + to_i64(1)
   out = out + ")"
   return out
@@ -1191,9 +1417,9 @@ fn serialize_call(callee: string, args: CallArgs, ret_ty: LlType): string
 fn serialize_gep_string(gname: string, length_incl_nul: i64): string
   return "getelementptr inbounds [" + i64_to_string(length_incl_nul) + " x i8], ptr " + gname + ", i64 0, i64 0"
 
-fn serialize_ret(value_text: string, ty: LlType, has_value: i64): string
+fn serialize_ret(value_text: string, ty_text: string, has_value: i64): string
   if has_value > to_i64(0):
-    return "ret " + serialize_ll_type(ty) + " " + value_text
+    return "ret " + ty_text + " " + value_text
   return "ret void"
 
 fn serialize_br(target: string): string
@@ -1205,12 +1431,12 @@ fn serialize_cond_br(cond: string, then_label: string, else_label: string): stri
 fn serialize_inst(bs: BS, inst: LlInst): string
   let rhs: string = ""
   match inst.kind:
-    LlInstKind.LlAlloca(ty):
-      rhs = serialize_alloca(ty)
-    LlInstKind.LlStore(ptr, value_text, value_ty):
-      rhs = serialize_store(ptr, value_text, value_ty)
-    LlInstKind.LlLoad(ptr, ty):
-      rhs = serialize_load(ptr, ty)
+    LlInstKind.LlAlloca(ty_text):
+      rhs = serialize_alloca(ty_text)
+    LlInstKind.LlStore(ptr, value_text, value_ty_text):
+      rhs = serialize_store(ptr, value_text, value_ty_text)
+    LlInstKind.LlLoad(ptr, ty_text):
+      rhs = serialize_load(ptr, ty_text)
     LlInstKind.LlBinOp(op, lhs, rhs_text, ty):
       rhs = serialize_binop(op, lhs, rhs_text, ty)
     LlInstKind.LlFNeg(operand, ty):
@@ -1219,13 +1445,17 @@ fn serialize_inst(bs: BS, inst: LlInst): string
       rhs = serialize_icmp(pred, lhs, rhs_text, op_ty)
     LlInstKind.LlFCmp(pred, lhs, rhs_text, op_ty):
       rhs = serialize_fcmp(pred, lhs, rhs_text, op_ty)
-    LlInstKind.LlCall(callee, bundle_idx, arg_count, ret_ty):
+    LlInstKind.LlCall(callee, bundle_idx, arg_count, ret_ty_text):
       let args: CallArgs = bs.call_arg_bundles.get(bundle_idx)
-      rhs = serialize_call(callee, args, ret_ty)
+      rhs = serialize_call(callee, args, ret_ty_text)
     LlInstKind.LlGepString(gname, len):
       rhs = serialize_gep_string(gname, len)
-    LlInstKind.LlRet(value_text, ty, has_value):
-      rhs = serialize_ret(value_text, ty, has_value)
+    LlInstKind.LlGepField(ptr_text, struct_ty_text, fidx):
+      rhs = "getelementptr inbounds " + struct_ty_text + ", ptr " + ptr_text + ", i32 0, i32 " + i64_to_string(fidx)
+    LlInstKind.LlExtractValue(agg_text, agg_ty_text, fidx):
+      rhs = "extractvalue " + agg_ty_text + " " + agg_text + ", " + i64_to_string(fidx)
+    LlInstKind.LlRet(value_text, ty_text, has_value):
+      rhs = serialize_ret(value_text, ty_text, has_value)
     LlInstKind.LlBr(target):
       rhs = serialize_br(target)
     LlInstKind.LlCondBr(cond, then_label, else_label):
@@ -1249,14 +1479,14 @@ fn serialize_params(params: Vector<LlParam>): string
     if i > to_i64(0):
       out = out + ", "
     let p: LlParam = params.get(i)
-    out = out + ll_type_text(p.ty) + " " + p.name
+    out = out + p.ty_text + " " + p.name
     i = i + to_i64(1)
   return out
 
 fn serialize_function(bs: BS, llfn: LlFunction): string
   if llfn.is_extern > to_i64(0):
-    return "declare " + ll_type_text(llfn.ret_ty) + " " + llfn.name + "(" + serialize_params(llfn.params) + ")\n"
-  let out: string = "define " + ll_type_text(llfn.ret_ty) + " " + llfn.name + "(" + serialize_params(llfn.params) + ") {\n"
+    return "declare " + llfn.ret_ty_text + " " + llfn.name + "(" + serialize_params(llfn.params) + ")\n"
+  let out: string = "define " + llfn.ret_ty_text + " " + llfn.name + "(" + serialize_params(llfn.params) + ") {\n"
   let i: i64 = to_i64(0)
   while i < llfn.blocks.length():
     out = out + serialize_block(bs, llfn.blocks.get(i))
@@ -1270,7 +1500,22 @@ fn serialize_global(g: LlGlobal): string
 
 fn serialize_module(bs: BS): string
   let out: string = ""
-  // Globals first.
+  // Struct type definitions first.
+  let si: i64 = to_i64(0)
+  while si < bs.struct_defs.length():
+    let sd: LlStructDef = bs.struct_defs.get(si)
+    out = out + sd.ll_name + " = type { "
+    let fi: i64 = to_i64(0)
+    while fi < sd.field_ty_texts.length():
+      if fi > to_i64(0):
+        out = out + ", "
+      out = out + sd.field_ty_texts.get(fi)
+      fi = fi + to_i64(1)
+    out = out + " }\n"
+    si = si + to_i64(1)
+  if bs.struct_defs.length() > to_i64(0):
+    out = out + "\n"
+  // Globals next.
   let gi: i64 = to_i64(0)
   while gi < bs.globals.length():
     out = out + serialize_global(bs.globals.get(gi))
@@ -1326,7 +1571,7 @@ fn lower_to_mir_backend_input(src: string): MirBackendInput
   let mir: MirResult = lower_to_mir(src)
   let sf: SourceFile = program_file_of_module(p, to_i64(0))
   let po: ParseOutput = sf.parse_output
-  return MirBackendInput(mir, p.resolve.symbols, p.typecheck.types, po.toks, sf.source_text)
+  return MirBackendInput(mir, p.resolve.symbols, p.typecheck.types, p.typecheck.type_info, po.toks, sf.source_text)
 
 fn lower_source_to_llvm_text(src: string): LlvmTextResult
   let input: MirBackendInput = lower_to_mir_backend_input(src)
@@ -1367,7 +1612,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 13
+  let total: i32 = 17
 
   // -----------------------------------------------------------------
   // Test 1: minimal_define — fn main(): i32 -> 0 emits define + entry + ret
@@ -1550,33 +1795,138 @@ fn main(): i32
     print("FAIL deterministic_repeat: byte drift across runs")
 
   // -----------------------------------------------------------------
-  // Test 12: field_access_rejected — MirFieldAccess produces diagnostic
+  // Test 12: struct_field_read — struct field access emits GEP + load
   // -----------------------------------------------------------------
-  // The bootstrap's Tier A MIR only emits field reads when source
-  // code references a struct field.  Use a minimal struct+field
-  // example to drive one through the pipeline.
-  let src12: string = "struct P\n  x: i32\n\nfn f(p: P): i32\n  return p.x\n"
+  let src12: string = "class P:\n  x: i32\n  y: i32\n\nfn get_x(p: P): i32\n  return p.x\n"
   let r12: LlvmTextResult = lower_source_to_llvm_text(src12)
   if r12.ok:
-    // If the backend accepted it, that's wrong.
-    print("FAIL field_access_rejected: expected ok=false, got ok=true")
+    let a: bool = check_contains(r12, "%struct.P = type { i32, i32 }", "struct_field_read")
+    // Field read on an SSA struct value → extractvalue (NOT GEP —
+    // GEP needs a pointer, but MIR gives us a loaded struct value).
+    let b: bool = check_contains(r12, "extractvalue %struct.P", "struct_field_read")
+    let c: bool = check_contains(r12, "ret i32", "struct_field_read")
+    let d: bool = true
+    if a:
+      if b:
+        if c:
+          if d:
+            print("PASS struct_field_read")
+            pass_count = pass_count + 1
   else:
-    // Check that the diagnostic is the expected one.
-    let found: bool = false
-    let i: i64 = to_i64(0)
-    while i < r12.diags.length():
-      let d: Diagnostic = r12.diags.get(i)
-      if contains_substring(d.message, "MirFieldAccess"):
-        found = true
-      i = i + to_i64(1)
-    if found:
-      print("PASS field_access_rejected")
-      pass_count = pass_count + 1
-    else:
-      print("FAIL field_access_rejected: expected diagnostic mentioning MirFieldAccess")
+    print("FAIL struct_field_read: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r12.diags.length():
+      print("  diag: " + r12.diags.get(di).message)
+      di = di + to_i64(1)
 
   // -----------------------------------------------------------------
-  // Test 13: write_ll_artifact — lower source → write .ll artifact to disk
+  // Test 13: struct_construction — P(1, 2) emits alloca + GEP stores
+  // -----------------------------------------------------------------
+  let src13: string = "class P:\n  x: i32\n  y: i32\n\nfn main(): i32\n  let p: P = P(1, 2)\n  return p.x\n"
+  let r13: LlvmTextResult = lower_source_to_llvm_text(src13)
+  if r13.ok:
+    let a: bool = check_contains(r13, "%struct.P = type { i32, i32 }", "struct_construction")
+    let b: bool = check_contains(r13, "getelementptr inbounds %struct.P", "struct_construction")
+    let c: bool = check_contains(r13, "store i32 1", "struct_construction")
+    let d: bool = check_contains(r13, "store i32 2", "struct_construction")
+    if a:
+      if b:
+        if c:
+          if d:
+            print("PASS struct_construction")
+            pass_count = pass_count + 1
+  else:
+    print("FAIL struct_construction: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r13.diags.length():
+      print("  diag: " + r13.diags.get(di).message)
+      di = di + to_i64(1)
+
+  // -----------------------------------------------------------------
+  // Test 14: struct_call_arg — passing a struct to a function call
+  // -----------------------------------------------------------------
+  // Exercises the struct-typed call-edge path: the argument type in
+  // the emitted `call` must be `%struct.P`, NOT `<unsupported>`.
+  let src14: string = "class P:\n  x: i32\n  y: i32\n\nfn take(p: P): i32\n  return p.x\n\nfn main(): i32\n  let p: P = P(3, 4)\n  return take(p)\n"
+  let r14: LlvmTextResult = lower_source_to_llvm_text(src14)
+  if r14.ok:
+    let a: bool = check_contains(r14, "define i32 @take(%struct.P", "struct_call_arg")
+    let b: bool = check_contains(r14, "call i32 @take(%struct.P", "struct_call_arg")
+    let c: bool = true
+    if contains_substring(r14.text, "<unsupported>"):
+      c = false
+      print("FAIL struct_call_arg: emitted IR contains <unsupported> marker")
+    if a:
+      if b:
+        if c:
+          print("PASS struct_call_arg")
+          pass_count = pass_count + 1
+  else:
+    print("FAIL struct_call_arg: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r14.diags.length():
+      print("  diag: " + r14.diags.get(di).message)
+      di = di + to_i64(1)
+
+  // -----------------------------------------------------------------
+  // Test 15: struct_return — returning a struct from a function
+  // -----------------------------------------------------------------
+  // Exercises the struct-typed return-edge path: the function
+  // signature and `ret` must use `%struct.P`, NOT `<unsupported>`.
+  let src15: string = "class P:\n  x: i32\n  y: i32\n\nfn make(): P\n  return P(5, 6)\n\nfn main(): i32\n  let p: P = make()\n  return p.x\n"
+  let r15: LlvmTextResult = lower_source_to_llvm_text(src15)
+  if r15.ok:
+    let a: bool = check_contains(r15, "define %struct.P @make()", "struct_return")
+    let b: bool = check_contains(r15, "ret %struct.P", "struct_return")
+    let c: bool = check_contains(r15, "call %struct.P @make()", "struct_return")
+    let d: bool = true
+    if contains_substring(r15.text, "<unsupported>"):
+      d = false
+      print("FAIL struct_return: emitted IR contains <unsupported> marker")
+    if a:
+      if b:
+        if c:
+          if d:
+            print("PASS struct_return")
+            pass_count = pass_count + 1
+  else:
+    print("FAIL struct_return: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r15.diags.length():
+      print("  diag: " + r15.diags.get(di).message)
+      di = di + to_i64(1)
+
+  // -----------------------------------------------------------------
+  // Test 16: nested_struct_registration — a struct containing another
+  // -----------------------------------------------------------------
+  // Exercises recursive `bs_ensure_struct_def` — when the outer
+  // struct is registered, the inner struct must be registered too.
+  // Otherwise module serialization emits `%struct.Outer = type
+  // { %struct.Inner }` without defining `%struct.Inner`, producing
+  // invalid IR.
+  let src16: string = "class Inner:\n  v: i32\n\nclass Outer:\n  inner: Inner\n\nfn main(): i32\n  let o: Outer = Outer(Inner(42))\n  return 0\n"
+  let r16: LlvmTextResult = lower_source_to_llvm_text(src16)
+  if r16.ok:
+    let a: bool = check_contains(r16, "%struct.Inner = type { i32 }", "nested_struct_registration")
+    let b: bool = check_contains(r16, "%struct.Outer = type { %struct.Inner }", "nested_struct_registration")
+    let c: bool = true
+    if contains_substring(r16.text, "<bug:"):
+      c = false
+      print("FAIL nested_struct_registration: emitted IR contains <bug:...> marker")
+    if a:
+      if b:
+        if c:
+          print("PASS nested_struct_registration")
+          pass_count = pass_count + 1
+  else:
+    print("FAIL nested_struct_registration: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r16.diags.length():
+      print("  diag: " + r16.diags.get(di).message)
+      di = di + to_i64(1)
+
+  // -----------------------------------------------------------------
+  // Test 17: write_ll_artifact — lower source → write .ll artifact to disk
   // -----------------------------------------------------------------
   // This test verifies the bootstrap pipeline can lower Dao source to
   // LLVM IR text.  The write to disk is best-effort — a fixed /tmp
