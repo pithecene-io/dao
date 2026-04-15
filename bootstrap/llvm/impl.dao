@@ -52,17 +52,22 @@ enum class LlInstKind:
 
   // Direct function call.  `callee` is the textual "@name" form.
   // args are stored as (text, type) pairs via arg_list_lp in LlInst.
-  LlCall(callee: string, arg_list_lp: i64, arg_count: i64, ret_ty: LlType)
+  LlCall(callee: string, arg_list_lp: i64, arg_count: i64, ret_ty_text: string)
 
   // String global materialization: getelementptr into a [N x i8]
   // private global, yielding ptr.
   LlGepString(global_name: string, length: i64)
 
-  // Struct field access (Tier B): GEP into a struct pointer at field_index.
+  // Struct field access (Tier B): GEP into a struct pointer at
+  // field_index (used by struct constructor path to get field addrs).
   LlGepField(ptr_text: string, struct_ty_text: string, field_index: i64)
 
+  // Struct field read from a SSA struct value (Tier B): extractvalue
+  // works directly on loaded / constructed / returned struct values.
+  LlExtractValue(agg_text: string, agg_ty_text: string, field_index: i64)
+
   // Terminators
-  LlRet(value_text: string, value_ty: LlType, has_value: i64)
+  LlRet(value_text: string, value_ty_text: string, has_value: i64)
   LlBr(target_label: string)
   LlCondBr(cond_text: string, then_label: string, else_label: string)
 
@@ -88,6 +93,7 @@ class LlParam:
 class LlFunction:
   name: string          // mangled, with leading "@"
   ret_ty: LlType
+  ret_ty_text: string   // struct-aware return type text
   params: Vector<LlParam>
   blocks: Vector<LlBlock>
   is_extern: i64        // 1 = declare, 0 = define
@@ -397,10 +403,20 @@ fn bs_check_supported_type(bs: BS, ty: LlType, context: string): BS
       bs = bs_error(bs, "bootstrap llvm backend encountered unsupported type kind in " + context)
   return bs
 
-fn bs_fresh_value(bs: BS): string
+class FreshR:
+  bs: BS
+  name: string
+
+// Returns both the updated BS (with incremented counter) and the
+// new SSA name.  Must be called as:
+//   let fr: FreshR = bs_fresh_value(bs); bs = fr.bs; let n = fr.name
+// because Dao class field mutation does not persist across function
+// call boundaries — the counter update only takes effect when the
+// caller re-binds `bs` from the returned FreshR.
+fn bs_fresh_value(bs: BS): FreshR
   let n: i64 = bs.next_value
   bs.next_value = n + to_i64(1)
-  return "%" + i64_to_string(n)
+  return FreshR(bs, "%" + i64_to_string(n))
 
 fn bs_error(bs: BS, msg: string): BS
   bs.diags = bs.diags.push(make_error(Span(to_i64(0), to_i64(1)), msg))
@@ -692,7 +708,9 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let gname: string = "@.str." + i64_to_string(bs.next_global)
       bs.next_global = bs.next_global + to_i64(1)
       bs.globals = bs.globals.push(LlGlobal(gname, decoded.llvm_payload, nbytes))
-      let result: string = bs_fresh_value(bs)
+      let fr_gs: FreshR = bs_fresh_value(bs)
+      bs = fr_gs.bs
+      let result: string = fr_gs.name
       let inst: LlInst = LlInst(
         LlInstKind.LlGepString(gname, nbytes),
         result,
@@ -710,7 +728,9 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         return LowerStepR(bs, insts)
       let ty: LlType = ll_type_from_mir(bs.types, type_idx)
       let ty_text: string = bs_type_text(bs.types, type_idx)
-      let result: string = bs_fresh_value(bs)
+      let fr_ld: FreshR = bs_fresh_value(bs)
+      bs = fr_ld.bs
+      let result: string = fr_ld.name
       let inst: LlInst = LlInst(
         LlInstKind.LlLoad(slot_name, ty_text),
         result,
@@ -745,7 +765,9 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let operand_ty: LlType = ll_type_text_to_lltype(operand_ty_text)
 
       if is_comparison_op(tk.kind):
-        let result: string = bs_fresh_value(bs)
+        let fr_cmp: FreshR = bs_fresh_value(bs)
+        bs = fr_cmp.bs
+        let result: string = fr_cmp.name
         if ll_type_is_float(operand_ty):
           let pred: string = ll_fcmp_pred(tk.kind)
           let inst: LlInst = LlInst(
@@ -764,7 +786,9 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         return LowerStepR(bs, insts)
 
       // Arithmetic.
-      let result: string = bs_fresh_value(bs)
+      let fr_bin: FreshR = bs_fresh_value(bs)
+      bs = fr_bin.bs
+      let result: string = fr_bin.name
       let op: string = ""
       if ll_type_is_float(operand_ty):
         op = ll_bin_op_float(tk.kind)
@@ -785,7 +809,9 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let tk: Token = bs.toks.get(op_tok)
       let operand_text: string = bs_get_value_text(bs, operand)
       let ty: LlType = ll_type_from_mir(bs.types, type_idx)
-      let result: string = bs_fresh_value(bs)
+      let fr_un: FreshR = bs_fresh_value(bs)
+      bs = fr_un.bs
+      let result: string = fr_un.name
       if tk_name(tk.kind) == "Minus":
         if ll_type_is_float(ty):
           let inst: LlInst = LlInst(
@@ -848,7 +874,9 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         bs = bs_ensure_struct_def(bs, type_idx)
         let args_raw: Vector<i64> = read_mir_list(bs.mir_idx, arg_list_lp)
         // Alloca for the temp struct.
-        let tmp_name: string = bs_fresh_value(bs)
+        let fr_tmp: FreshR = bs_fresh_value(bs)
+        bs = fr_tmp.bs
+        let tmp_name: string = fr_tmp.name
         let alloca_inst: LlInst = LlInst(
           LlInstKind.LlAlloca(struct_ty_text), tmp_name, LlType.LlPtr)
         insts = insts.push(alloca_inst)
@@ -858,7 +886,9 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
           let arg_idx: i64 = args_raw.get(fi)
           let arg_text: string = bs_get_value_text(bs, arg_idx)
           let arg_ty_text: string = bs_get_value_ty(bs, arg_idx)
-          let gep_name: string = bs_fresh_value(bs)
+          let fr_gep: FreshR = bs_fresh_value(bs)
+          bs = fr_gep.bs
+          let gep_name: string = fr_gep.name
           let gep_inst: LlInst = LlInst(
             LlInstKind.LlGepField(tmp_name, struct_ty_text, fi),
             gep_name, LlType.LlPtr)
@@ -869,7 +899,9 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
           insts = insts.push(store_inst)
           fi = fi + to_i64(1)
         // Load the complete struct value.
-        let load_name: string = bs_fresh_value(bs)
+        let fr_load: FreshR = bs_fresh_value(bs)
+        bs = fr_load.bs
+        let load_name: string = fr_load.name
         let load_inst: LlInst = LlInst(
           LlInstKind.LlLoad(tmp_name, struct_ty_text),
           load_name, LlType.LlStruct)
@@ -883,15 +915,16 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         bs = bs_error(bs, "bootstrap llvm backend: MirCall callee has no mangled name (expected MirFnRef)")
         return LowerStepR(bs, insts)
       let ret_ty: LlType = ll_type_from_mir(bs.types, type_idx)
+      let ret_ty_text: string = bs_type_text(bs.types, type_idx)
       let args_raw: Vector<i64> = read_mir_list(bs.mir_idx, arg_list_lp)
-      let arg_entry: CallArgs = CallArgs(Vector<string>::new(), Vector<LlType>::new())
+      let arg_entry: CallArgs = CallArgs(Vector<string>::new(), Vector<string>::new())
       let ai: i64 = to_i64(0)
       while ai < args_raw.length():
         let a_idx: i64 = args_raw.get(ai)
         let a_text: string = bs_get_value_text(bs, a_idx)
         let a_ty_text: string = bs_get_value_ty(bs, a_idx)
         arg_entry.arg_texts = arg_entry.arg_texts.push(a_text)
-        arg_entry.arg_tys = arg_entry.arg_tys.push(ll_type_text_to_lltype(a_ty_text))
+        arg_entry.arg_ty_texts = arg_entry.arg_ty_texts.push(a_ty_text)
         ai = ai + to_i64(1)
       let bundle_idx: i64 = bs.call_arg_bundles.length()
       bs.call_arg_bundles = bs.call_arg_bundles.push(arg_entry)
@@ -902,42 +935,41 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         LlType.LlVoid:
           needs_result = false
       if needs_result:
-        result = bs_fresh_value(bs)
+        let fr_call: FreshR = bs_fresh_value(bs)
+        bs = fr_call.bs
+        result = fr_call.name
       let inst: LlInst = LlInst(
-        LlInstKind.LlCall(callee_text, bundle_idx, args_raw.length(), ret_ty),
+        LlInstKind.LlCall(callee_text, bundle_idx, args_raw.length(), ret_ty_text),
         result,
         ret_ty)
       insts = insts.push(inst)
       if result != "":
-        bs = bs_set_value(bs, mir_node_idx, result, bs_type_text(bs.types, type_idx))
+        bs = bs_set_value(bs, mir_node_idx, result, ret_ty_text)
       return LowerStepR(bs, insts)
 
     MirNode.MirFieldAccess(obj, field_tok, field_index, type_idx):
       if field_index < 0:
         bs = bs_error(bs, "bootstrap llvm backend: MirFieldAccess has unresolved field_index (-1)")
         return LowerStepR(bs, insts)
-      // Get the object's type to resolve the struct name.
-      let obj_ty_text: string = bs_get_value_ty(bs, obj)
+      // `obj` is an SSA struct VALUE (from MirLoad, from a struct
+      // constructor call, or from a returning-struct call).  Use
+      // `extractvalue` rather than GEP — GEP requires a pointer,
+      // which we don't have here.  Task 29 MIR lowers identifier
+      // reads to MirLoad, so obj is always a loaded struct value
+      // at this point.
       let obj_text: string = bs_get_value_text(bs, obj)
-      // obj is a pointer to the struct (alloca'd).  GEP into the
-      // field at field_index, then load the field value.
-      let gep_result: string = bs_fresh_value(bs)
+      let obj_ty_text: string = bs_get_value_ty(bs, obj)
       let field_ty: LlType = ll_type_from_mir(bs.types, type_idx)
       let field_ty_text: string = bs_type_text(bs.types, type_idx)
-      // Emit: %gep = getelementptr <struct_ty>, ptr <obj>, i32 0, i32 <field_index>
-      let gep_inst: LlInst = LlInst(
-        LlInstKind.LlGepField(obj_text, obj_ty_text, field_index),
-        gep_result,
-        LlType.LlPtr)
-      insts = insts.push(gep_inst)
-      // Emit: %val = load <field_ty>, ptr %gep
-      let load_result: string = bs_fresh_value(bs)
-      let load_inst: LlInst = LlInst(
-        LlInstKind.LlLoad(gep_result, field_ty_text),
-        load_result,
+      let fr_ev: FreshR = bs_fresh_value(bs)
+      bs = fr_ev.bs
+      let result: string = fr_ev.name
+      let inst: LlInst = LlInst(
+        LlInstKind.LlExtractValue(obj_text, obj_ty_text, field_index),
+        result,
         field_ty)
-      insts = insts.push(load_inst)
-      bs = bs_set_value(bs, mir_node_idx, load_result, field_ty_text)
+      insts = insts.push(inst)
+      bs = bs_set_value(bs, mir_node_idx, result, field_ty_text)
       return LowerStepR(bs, insts)
 
     MirNode.MirErrorExpr(tok):
@@ -949,15 +981,14 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       if has_value > 0:
         let val_text: string = bs_get_value_text(bs, value)
         let val_ty_text: string = bs_get_value_ty(bs, value)
-        let ty: LlType = ll_type_text_to_lltype(val_ty_text)
         let inst: LlInst = LlInst(
-          LlInstKind.LlRet(val_text, ty, to_i64(1)),
+          LlInstKind.LlRet(val_text, val_ty_text, to_i64(1)),
           "",
           LlType.LlVoid)
         insts = insts.push(inst)
       else:
         let inst: LlInst = LlInst(
-          LlInstKind.LlRet("", LlType.LlVoid, to_i64(0)),
+          LlInstKind.LlRet("", "void", to_i64(0)),
           "",
           LlType.LlVoid)
         insts = insts.push(inst)
@@ -1013,7 +1044,7 @@ fn ll_type_text_to_lltype(t: string): LlType
 // without additional boxing overhead.  Indexing is deterministic.
 class CallArgs:
   arg_texts: Vector<string>
-  arg_tys: Vector<LlType>
+  arg_ty_texts: Vector<string>
 
 // Decode a Dao string literal token (with surrounding quotes) into:
 //   (1) the LLVM IR c"..." payload (with LLVM-style hex escapes for
@@ -1136,6 +1167,11 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
 
       let ret_ty: LlType = ll_type_from_mir(bs.types, ret_type)
       bs = bs_check_supported_type(bs, ret_ty, "function return type")
+      let ret_ty_text: string = bs_type_text(bs.types, ret_type)
+      // Register struct def if the return type is a struct.
+      match ret_ty:
+        LlType.LlStruct:
+          bs = bs_ensure_struct_def(bs, ret_type)
 
       // Read the local node list.  First `param_count` are params.
       let locals_raw: Vector<i64> = read_mir_list(bs.mir_idx, local_list_lp)
@@ -1150,7 +1186,7 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
         if bs_has_extern(bs, name):
           return bs
         let llfn: LlFunction = LlFunction(
-          name, ret_ty, params, Vector<LlBlock>::new(), to_i64(1))
+          name, ret_ty, ret_ty_text, params, Vector<LlBlock>::new(), to_i64(1))
         bs.extern_decls = bs.extern_decls.push(llfn)
         bs = bs_mark_extern(bs, name)
         return bs
@@ -1259,7 +1295,7 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
             ll_blocks = ll_blocks.push(LlBlock(label, this_insts))
         block_i = block_i + to_i64(1)
 
-      let llfn: LlFunction = LlFunction(name, ret_ty, params, ll_blocks, to_i64(0))
+      let llfn: LlFunction = LlFunction(name, ret_ty, ret_ty_text, params, ll_blocks, to_i64(0))
       bs.functions = bs.functions.push(llfn)
       return bs
   return bs
@@ -1318,13 +1354,13 @@ fn serialize_icmp(pred: string, lhs: string, rhs: string, ty: LlType): string
 fn serialize_fcmp(pred: string, lhs: string, rhs: string, ty: LlType): string
   return "fcmp " + pred + " " + serialize_ll_type(ty) + " " + lhs + ", " + rhs
 
-fn serialize_call(callee: string, args: CallArgs, ret_ty: LlType): string
-  let out: string = "call " + serialize_ll_type(ret_ty) + " " + callee + "("
+fn serialize_call(callee: string, args: CallArgs, ret_ty_text: string): string
+  let out: string = "call " + ret_ty_text + " " + callee + "("
   let i: i64 = to_i64(0)
   while i < args.arg_texts.length():
     if i > to_i64(0):
       out = out + ", "
-    out = out + ll_type_text(args.arg_tys.get(i)) + " " + args.arg_texts.get(i)
+    out = out + args.arg_ty_texts.get(i) + " " + args.arg_texts.get(i)
     i = i + to_i64(1)
   out = out + ")"
   return out
@@ -1332,9 +1368,9 @@ fn serialize_call(callee: string, args: CallArgs, ret_ty: LlType): string
 fn serialize_gep_string(gname: string, length_incl_nul: i64): string
   return "getelementptr inbounds [" + i64_to_string(length_incl_nul) + " x i8], ptr " + gname + ", i64 0, i64 0"
 
-fn serialize_ret(value_text: string, ty: LlType, has_value: i64): string
+fn serialize_ret(value_text: string, ty_text: string, has_value: i64): string
   if has_value > to_i64(0):
-    return "ret " + serialize_ll_type(ty) + " " + value_text
+    return "ret " + ty_text + " " + value_text
   return "ret void"
 
 fn serialize_br(target: string): string
@@ -1360,15 +1396,17 @@ fn serialize_inst(bs: BS, inst: LlInst): string
       rhs = serialize_icmp(pred, lhs, rhs_text, op_ty)
     LlInstKind.LlFCmp(pred, lhs, rhs_text, op_ty):
       rhs = serialize_fcmp(pred, lhs, rhs_text, op_ty)
-    LlInstKind.LlCall(callee, bundle_idx, arg_count, ret_ty):
+    LlInstKind.LlCall(callee, bundle_idx, arg_count, ret_ty_text):
       let args: CallArgs = bs.call_arg_bundles.get(bundle_idx)
-      rhs = serialize_call(callee, args, ret_ty)
+      rhs = serialize_call(callee, args, ret_ty_text)
     LlInstKind.LlGepString(gname, len):
       rhs = serialize_gep_string(gname, len)
     LlInstKind.LlGepField(ptr_text, struct_ty_text, fidx):
       rhs = "getelementptr inbounds " + struct_ty_text + ", ptr " + ptr_text + ", i32 0, i32 " + i64_to_string(fidx)
-    LlInstKind.LlRet(value_text, ty, has_value):
-      rhs = serialize_ret(value_text, ty, has_value)
+    LlInstKind.LlExtractValue(agg_text, agg_ty_text, fidx):
+      rhs = "extractvalue " + agg_ty_text + " " + agg_text + ", " + i64_to_string(fidx)
+    LlInstKind.LlRet(value_text, ty_text, has_value):
+      rhs = serialize_ret(value_text, ty_text, has_value)
     LlInstKind.LlBr(target):
       rhs = serialize_br(target)
     LlInstKind.LlCondBr(cond, then_label, else_label):
@@ -1398,8 +1436,8 @@ fn serialize_params(params: Vector<LlParam>): string
 
 fn serialize_function(bs: BS, llfn: LlFunction): string
   if llfn.is_extern > to_i64(0):
-    return "declare " + ll_type_text(llfn.ret_ty) + " " + llfn.name + "(" + serialize_params(llfn.params) + ")\n"
-  let out: string = "define " + ll_type_text(llfn.ret_ty) + " " + llfn.name + "(" + serialize_params(llfn.params) + ") {\n"
+    return "declare " + llfn.ret_ty_text + " " + llfn.name + "(" + serialize_params(llfn.params) + ")\n"
+  let out: string = "define " + llfn.ret_ty_text + " " + llfn.name + "(" + serialize_params(llfn.params) + ") {\n"
   let i: i64 = to_i64(0)
   while i < llfn.blocks.length():
     out = out + serialize_block(bs, llfn.blocks.get(i))
@@ -1525,7 +1563,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 14
+  let total: i32 = 16
 
   // -----------------------------------------------------------------
   // Test 1: minimal_define — fn main(): i32 -> 0 emits define + entry + ret
@@ -1714,9 +1752,11 @@ fn main(): i32
   let r12: LlvmTextResult = lower_source_to_llvm_text(src12)
   if r12.ok:
     let a: bool = check_contains(r12, "%struct.P = type { i32, i32 }", "struct_field_read")
-    let b: bool = check_contains(r12, "getelementptr inbounds %struct.P", "struct_field_read")
-    let c: bool = check_contains(r12, "load i32", "struct_field_read")
-    let d: bool = check_contains(r12, "ret i32", "struct_field_read")
+    // Field read on an SSA struct value → extractvalue (NOT GEP —
+    // GEP needs a pointer, but MIR gives us a loaded struct value).
+    let b: bool = check_contains(r12, "extractvalue %struct.P", "struct_field_read")
+    let c: bool = check_contains(r12, "ret i32", "struct_field_read")
+    let d: bool = true
     if a:
       if b:
         if c:
@@ -1754,7 +1794,61 @@ fn main(): i32
       di = di + to_i64(1)
 
   // -----------------------------------------------------------------
-  // Test 13: write_ll_artifact — lower source → write .ll artifact to disk
+  // Test 14: struct_call_arg — passing a struct to a function call
+  // -----------------------------------------------------------------
+  // Exercises the struct-typed call-edge path: the argument type in
+  // the emitted `call` must be `%struct.P`, NOT `<unsupported>`.
+  let src14: string = "class P:\n  x: i32\n  y: i32\n\nfn take(p: P): i32\n  return p.x\n\nfn main(): i32\n  let p: P = P(3, 4)\n  return take(p)\n"
+  let r14: LlvmTextResult = lower_source_to_llvm_text(src14)
+  if r14.ok:
+    let a: bool = check_contains(r14, "define i32 @take(%struct.P", "struct_call_arg")
+    let b: bool = check_contains(r14, "call i32 @take(%struct.P", "struct_call_arg")
+    let c: bool = true
+    if contains_substring(r14.text, "<unsupported>"):
+      c = false
+      print("FAIL struct_call_arg: emitted IR contains <unsupported> marker")
+    if a:
+      if b:
+        if c:
+          print("PASS struct_call_arg")
+          pass_count = pass_count + 1
+  else:
+    print("FAIL struct_call_arg: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r14.diags.length():
+      print("  diag: " + r14.diags.get(di).message)
+      di = di + to_i64(1)
+
+  // -----------------------------------------------------------------
+  // Test 15: struct_return — returning a struct from a function
+  // -----------------------------------------------------------------
+  // Exercises the struct-typed return-edge path: the function
+  // signature and `ret` must use `%struct.P`, NOT `<unsupported>`.
+  let src15: string = "class P:\n  x: i32\n  y: i32\n\nfn make(): P\n  return P(5, 6)\n\nfn main(): i32\n  let p: P = make()\n  return p.x\n"
+  let r15: LlvmTextResult = lower_source_to_llvm_text(src15)
+  if r15.ok:
+    let a: bool = check_contains(r15, "define %struct.P @make()", "struct_return")
+    let b: bool = check_contains(r15, "ret %struct.P", "struct_return")
+    let c: bool = check_contains(r15, "call %struct.P @make()", "struct_return")
+    let d: bool = true
+    if contains_substring(r15.text, "<unsupported>"):
+      d = false
+      print("FAIL struct_return: emitted IR contains <unsupported> marker")
+    if a:
+      if b:
+        if c:
+          if d:
+            print("PASS struct_return")
+            pass_count = pass_count + 1
+  else:
+    print("FAIL struct_return: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r15.diags.length():
+      print("  diag: " + r15.diags.get(di).message)
+      di = di + to_i64(1)
+
+  // -----------------------------------------------------------------
+  // Test 16: write_ll_artifact — lower source → write .ll artifact to disk
   // -----------------------------------------------------------------
   // This test verifies the bootstrap pipeline can lower Dao source to
   // LLVM IR text.  The write to disk is best-effort — a fixed /tmp
