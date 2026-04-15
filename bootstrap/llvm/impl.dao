@@ -1,5 +1,5 @@
 module bootstrap::llvm::impl
-// bootstrap/llvm/impl.dao — Tier A bootstrap LLVM backend.
+// bootstrap/llvm/impl.dao — bootstrap LLVM backend.
 //
 // Lowers bootstrap MIR (Task 29) into deterministic textual LLVM IR
 // via a minimal, backend-private Dao-side LLVM mini-IR and text
@@ -8,9 +8,21 @@ module bootstrap::llvm::impl
 //   lex → parse → resolve → typecheck → HIR → MIR → LLVM text
 //
 // See docs/task_specs/TASK_30_BOOTSTRAP_LLVM_BACKEND.md for the
-// authoritative spec.  Everything in this file is Tier A:
-// alloca-everything SSA strategy (no mem2reg), no struct layout,
-// no monomorphization, no generators, no runtime hooks.
+// authoritative Tier A spec.
+//
+// Tier A (Task 30):
+//   alloca-everything SSA strategy (no mem2reg), primitive scalar
+//   types only, extern/define functions, calls, control flow
+//   (if/else, while), string literals as private globals.
+//
+// Tier B slices landed in this file:
+//   - struct layout + field access: `%struct.Name` type defs,
+//     struct construction via alloca+GEP stores, field reads via
+//     `extractvalue`, struct-typed call and return edges.
+//
+// Still deferred: enum payloads, monomorphization, generators,
+// mode/resource hooks, lambdas, try, for-over-iterable, index,
+// break/continue, LLVM C API, llc/clang CI validation.
 
 // =========================================================================
 // Section 80: LLVM mini-IR node model
@@ -73,27 +85,29 @@ enum class LlInstKind:
 
 // A single instruction.  `result_name` is "%N" for value-producing
 // instructions, empty string for effect-only or terminators.
+// Type information lives in the LlInstKind payload (text form),
+// which is the single source of truth for serialization.
 class LlInst:
   kind: LlInstKind
   result_name: string
-  result_ty: LlType
 
 // A basic block.
 class LlBlock:
   label: string         // "entry", "bb1", ...
   insts: Vector<LlInst>
 
-// Function param info.
+// Function param info.  `ty_text` is the struct-aware LLVM type
+// text (e.g. "i32" or "%struct.P") — the single source of truth
+// for serialization.
 class LlParam:
   name: string          // "%arg0", "%arg1", ...
-  ty: LlType
-  ty_text: string       // struct-aware type text
+  ty_text: string
 
-// A function definition or extern declaration.
+// A function definition or extern declaration.  `ret_ty_text` is
+// the struct-aware LLVM return type text.
 class LlFunction:
   name: string          // mangled, with leading "@"
-  ret_ty: LlType
-  ret_ty_text: string   // struct-aware return type text
+  ret_ty_text: string
   params: Vector<LlParam>
   blocks: Vector<LlBlock>
   is_extern: i64        // 1 = declare, 0 = define
@@ -669,12 +683,87 @@ fn bs_lower_params(bs: BS, params_raw: Vector<i64>, param_count: i64): ParamsR
         match ty:
           LlType.LlStruct:
             bs = bs_ensure_struct_def(bs, type_idx)
-        out = out.push(LlParam("%arg" + i64_to_string(i), ty, ty_txt))
+        out = out.push(LlParam("%arg" + i64_to_string(i), ty_txt))
     i = i + to_i64(1)
   return ParamsR(bs, out)
 
 // Lower a single MirNode instruction into the current LlBlock's
 // inst list.  Returns the updated BS and updated inst list.
+
+// =========================================================================
+// Section 87b: Aggregate (struct) lowering helpers
+// =========================================================================
+//
+// Keep aggregate-specific lowering policy out of the main
+// bs_lower_inst match so future aggregate features (nested
+// structs, enum payloads, etc.) have a dedicated seam.
+
+// Lower a struct constructor call: emit alloca + per-field GEP
+// stores + load of the complete struct value.  Returns the updated
+// BS, the updated inst list, and the SSA name of the loaded struct
+// value (which the caller registers in the value side table).
+class StructCtorR:
+  bs: BS
+  insts: Vector<LlInst>
+  value_name: string
+  ty_text: string
+
+fn bs_lower_struct_ctor(bs: BS, insts: Vector<LlInst>, type_idx: i64, arg_list_lp: i64): StructCtorR
+  let struct_ty_text: string = bs_type_text(bs.types, type_idx)
+  bs = bs_ensure_struct_def(bs, type_idx)
+  let args_raw: Vector<i64> = read_mir_list(bs.mir_idx, arg_list_lp)
+  // Alloca for the temp struct.
+  let fr_tmp: FreshR = bs_fresh_value(bs)
+  bs = fr_tmp.bs
+  let tmp_name: string = fr_tmp.name
+  let alloca_inst: LlInst = LlInst(
+    LlInstKind.LlAlloca(struct_ty_text), tmp_name)
+  insts = insts.push(alloca_inst)
+  // GEP + store each field.
+  let fi: i64 = to_i64(0)
+  while fi < args_raw.length():
+    let arg_idx: i64 = args_raw.get(fi)
+    let arg_text: string = bs_get_value_text(bs, arg_idx)
+    let arg_ty_text: string = bs_get_value_ty(bs, arg_idx)
+    let fr_gep: FreshR = bs_fresh_value(bs)
+    bs = fr_gep.bs
+    let gep_name: string = fr_gep.name
+    let gep_inst: LlInst = LlInst(
+      LlInstKind.LlGepField(tmp_name, struct_ty_text, fi),
+      gep_name)
+    insts = insts.push(gep_inst)
+    let store_inst: LlInst = LlInst(
+      LlInstKind.LlStore(gep_name, arg_text, arg_ty_text),
+      "")
+    insts = insts.push(store_inst)
+    fi = fi + to_i64(1)
+  // Load the complete struct value.
+  let fr_load: FreshR = bs_fresh_value(bs)
+  bs = fr_load.bs
+  let load_name: string = fr_load.name
+  let load_inst: LlInst = LlInst(
+    LlInstKind.LlLoad(tmp_name, struct_ty_text),
+    load_name)
+  insts = insts.push(load_inst)
+  return StructCtorR(bs, insts, load_name, struct_ty_text)
+
+// Classify a MirCall's callee as a struct constructor (the callee
+// is a MirFnRef to a SymbolKind.Type symbol).  Returns true iff
+// the call should be lowered via bs_lower_struct_ctor rather than
+// the normal `call` instruction.
+fn bs_call_is_struct_ctor(bs: BS, callee_mir_idx: i64): bool
+  let callee_node: MirNode = bs.mir_nodes.get(callee_mir_idx)
+  match callee_node:
+    MirNode.MirFnRef(callee_sym, callee_ti):
+      if callee_sym < 0:
+        return false
+      if callee_sym >= bs.symbols.length():
+        return false
+      let sym: Symbol = bs.symbols.get(callee_sym)
+      match sym.kind:
+        SymbolKind.Type:
+          return true
+  return false
 
 class LowerStepR:
   bs: BS
@@ -713,8 +802,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let result: string = fr_gs.name
       let inst: LlInst = LlInst(
         LlInstKind.LlGepString(gname, nbytes),
-        result,
-        LlType.LlPtr)
+        result)
       insts = insts.push(inst)
       bs = bs_set_value(bs, mir_node_idx, result, "ptr")
       return LowerStepR(bs, insts)
@@ -733,8 +821,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let result: string = fr_ld.name
       let inst: LlInst = LlInst(
         LlInstKind.LlLoad(slot_name, ty_text),
-        result,
-        ty)
+        result)
       insts = insts.push(inst)
       bs = bs_set_value(bs, mir_node_idx, result, ty_text)
       return LowerStepR(bs, insts)
@@ -749,8 +836,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       // Store uses the slot's type text (already struct-aware).
       let inst: LlInst = LlInst(
         LlInstKind.LlStore(slot_name, val_text, slot_ty_text),
-        "",
-        LlType.LlVoid)
+        "")
       insts = insts.push(inst)
       return LowerStepR(bs, insts)
 
@@ -759,7 +845,6 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let tk: Token = bs.toks.get(op_tok)
       let lhs_text: string = bs_get_value_text(bs, lhs)
       let rhs_text: string = bs_get_value_text(bs, rhs)
-      let result_ty: LlType = ll_type_from_mir(bs.types, type_idx)
       // Operand type comes from the LHS (MIR ensures lhs/rhs agree).
       let operand_ty_text: string = bs_get_value_ty(bs, lhs)
       let operand_ty: LlType = ll_type_text_to_lltype(operand_ty_text)
@@ -772,15 +857,13 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
           let pred: string = ll_fcmp_pred(tk.kind)
           let inst: LlInst = LlInst(
             LlInstKind.LlFCmp(pred, lhs_text, rhs_text, operand_ty),
-            result,
-            LlType.LlI1)
+            result)
           insts = insts.push(inst)
         else:
           let pred: string = ll_icmp_pred(tk.kind)
           let inst: LlInst = LlInst(
             LlInstKind.LlICmp(pred, lhs_text, rhs_text, operand_ty),
-            result,
-            LlType.LlI1)
+            result)
           insts = insts.push(inst)
         bs = bs_set_value(bs, mir_node_idx, result, "i1")
         return LowerStepR(bs, insts)
@@ -799,8 +882,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         return LowerStepR(bs, insts)
       let inst: LlInst = LlInst(
         LlInstKind.LlBinOp(op, lhs_text, rhs_text, operand_ty),
-        result,
-        operand_ty)
+        result)
       insts = insts.push(inst)
       bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(operand_ty))
       return LowerStepR(bs, insts)
@@ -816,15 +898,13 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         if ll_type_is_float(ty):
           let inst: LlInst = LlInst(
             LlInstKind.LlFNeg(operand_text, ty),
-            result,
-            ty)
+            result)
           insts = insts.push(inst)
         else:
           // sub 0, x
           let inst: LlInst = LlInst(
             LlInstKind.LlBinOp("sub", "0", operand_text, ty),
-            result,
-            ty)
+            result)
           insts = insts.push(inst)
         bs = bs_set_value(bs, mir_node_idx, result, ll_type_text(ty))
         return LowerStepR(bs, insts)
@@ -832,8 +912,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         // xor %x, true  (on i1)
         let inst: LlInst = LlInst(
           LlInstKind.LlBinOp("xor", operand_text, "true", LlType.LlI1),
-          result,
-          LlType.LlI1)
+          result)
         insts = insts.push(inst)
         bs = bs_set_value(bs, mir_node_idx, result, "i1")
         return LowerStepR(bs, insts)
@@ -853,60 +932,13 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       return LowerStepR(bs, insts)
 
     MirNode.MirCall(callee, arg_list_lp, arg_count, type_idx):
-      // Check if this is a struct constructor call (callee is a
-      // MirFnRef pointing to a SymbolKind.Type symbol).
-      let is_struct_ctor: bool = false
-      let callee_node: MirNode = bs.mir_nodes.get(callee)
-      match callee_node:
-        MirNode.MirFnRef(callee_sym, callee_ti):
-          if callee_sym >= 0:
-            if callee_sym < bs.symbols.length():
-              let sym: Symbol = bs.symbols.get(callee_sym)
-              match sym.kind:
-                SymbolKind.Type:
-                  is_struct_ctor = true
-
-      if is_struct_ctor:
-        // Struct constructor: allocate a temp struct on the stack,
-        // GEP-store each field, then load the whole struct as the
-        // result value.
-        let struct_ty_text: string = bs_type_text(bs.types, type_idx)
-        bs = bs_ensure_struct_def(bs, type_idx)
-        let args_raw: Vector<i64> = read_mir_list(bs.mir_idx, arg_list_lp)
-        // Alloca for the temp struct.
-        let fr_tmp: FreshR = bs_fresh_value(bs)
-        bs = fr_tmp.bs
-        let tmp_name: string = fr_tmp.name
-        let alloca_inst: LlInst = LlInst(
-          LlInstKind.LlAlloca(struct_ty_text), tmp_name, LlType.LlPtr)
-        insts = insts.push(alloca_inst)
-        // GEP + store each field.
-        let fi: i64 = to_i64(0)
-        while fi < args_raw.length():
-          let arg_idx: i64 = args_raw.get(fi)
-          let arg_text: string = bs_get_value_text(bs, arg_idx)
-          let arg_ty_text: string = bs_get_value_ty(bs, arg_idx)
-          let fr_gep: FreshR = bs_fresh_value(bs)
-          bs = fr_gep.bs
-          let gep_name: string = fr_gep.name
-          let gep_inst: LlInst = LlInst(
-            LlInstKind.LlGepField(tmp_name, struct_ty_text, fi),
-            gep_name, LlType.LlPtr)
-          insts = insts.push(gep_inst)
-          let store_inst: LlInst = LlInst(
-            LlInstKind.LlStore(gep_name, arg_text, arg_ty_text),
-            "", LlType.LlVoid)
-          insts = insts.push(store_inst)
-          fi = fi + to_i64(1)
-        // Load the complete struct value.
-        let fr_load: FreshR = bs_fresh_value(bs)
-        bs = fr_load.bs
-        let load_name: string = fr_load.name
-        let load_inst: LlInst = LlInst(
-          LlInstKind.LlLoad(tmp_name, struct_ty_text),
-          load_name, LlType.LlStruct)
-        insts = insts.push(load_inst)
-        bs = bs_set_value(bs, mir_node_idx, load_name, struct_ty_text)
+      // Struct constructor calls route to a dedicated aggregate
+      // helper rather than the normal `call` path.
+      if bs_call_is_struct_ctor(bs, callee):
+        let cr: StructCtorR = bs_lower_struct_ctor(bs, insts, type_idx, arg_list_lp)
+        bs = cr.bs
+        insts = cr.insts
+        bs = bs_set_value(bs, mir_node_idx, cr.value_name, cr.ty_text)
         return LowerStepR(bs, insts)
 
       // Normal function call.
@@ -940,8 +972,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         result = fr_call.name
       let inst: LlInst = LlInst(
         LlInstKind.LlCall(callee_text, bundle_idx, args_raw.length(), ret_ty_text),
-        result,
-        ret_ty)
+        result)
       insts = insts.push(inst)
       if result != "":
         bs = bs_set_value(bs, mir_node_idx, result, ret_ty_text)
@@ -966,8 +997,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let result: string = fr_ev.name
       let inst: LlInst = LlInst(
         LlInstKind.LlExtractValue(obj_text, obj_ty_text, field_index),
-        result,
-        field_ty)
+        result)
       insts = insts.push(inst)
       bs = bs_set_value(bs, mir_node_idx, result, field_ty_text)
       return LowerStepR(bs, insts)
@@ -983,14 +1013,12 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
         let val_ty_text: string = bs_get_value_ty(bs, value)
         let inst: LlInst = LlInst(
           LlInstKind.LlRet(val_text, val_ty_text, to_i64(1)),
-          "",
-          LlType.LlVoid)
+          "")
         insts = insts.push(inst)
       else:
         let inst: LlInst = LlInst(
           LlInstKind.LlRet("", "void", to_i64(0)),
-          "",
-          LlType.LlVoid)
+          "")
         insts = insts.push(inst)
       return LowerStepR(bs, insts)
 
@@ -998,8 +1026,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let label: string = bs_get_block_label(bs, target_block)
       let inst: LlInst = LlInst(
         LlInstKind.LlBr(label),
-        "",
-        LlType.LlVoid)
+        "")
       insts = insts.push(inst)
       return LowerStepR(bs, insts)
 
@@ -1009,8 +1036,7 @@ fn bs_lower_inst(bs: BS, insts: Vector<LlInst>, mir_node_idx: i64): LowerStepR
       let else_label: string = bs_get_block_label(bs, else_block)
       let inst: LlInst = LlInst(
         LlInstKind.LlCondBr(cond_text, then_label, else_label),
-        "",
-        LlType.LlVoid)
+        "")
       insts = insts.push(inst)
       return LowerStepR(bs, insts)
   return LowerStepR(bs, insts)
@@ -1186,7 +1212,7 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
         if bs_has_extern(bs, name):
           return bs
         let llfn: LlFunction = LlFunction(
-          name, ret_ty, ret_ty_text, params, Vector<LlBlock>::new(), to_i64(1))
+          name, ret_ty_text, params, Vector<LlBlock>::new(), to_i64(1))
         bs.extern_decls = bs.extern_decls.push(llfn)
         bs = bs_mark_extern(bs, name)
         return bs
@@ -1242,8 +1268,7 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
         let slot_ty: LlType = ll_type_text_to_lltype(slot_ty_text)
         let alloca_inst: LlInst = LlInst(
           LlInstKind.LlAlloca(slot_ty_text),
-          slot_name,
-          LlType.LlPtr)
+          slot_name)
         entry_insts = entry_insts.push(alloca_inst)
         ai = ai + to_i64(1)
 
@@ -1256,8 +1281,7 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
         let arg_name: string = "%arg" + i64_to_string(pi)
         let store_inst: LlInst = LlInst(
           LlInstKind.LlStore(slot_name, arg_name, slot_ty_text),
-          "",
-          LlType.LlVoid)
+          "")
         entry_insts = entry_insts.push(store_inst)
         pi = pi + to_i64(1)
 
@@ -1295,7 +1319,7 @@ fn bs_lower_function(bs: BS, mir_fn_idx: i64): BS
             ll_blocks = ll_blocks.push(LlBlock(label, this_insts))
         block_i = block_i + to_i64(1)
 
-      let llfn: LlFunction = LlFunction(name, ret_ty, ret_ty_text, params, ll_blocks, to_i64(0))
+      let llfn: LlFunction = LlFunction(name, ret_ty_text, params, ll_blocks, to_i64(0))
       bs.functions = bs.functions.push(llfn)
       return bs
   return bs
