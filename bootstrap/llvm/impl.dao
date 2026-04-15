@@ -191,6 +191,13 @@ fn ll_type_from_mir(types: Vector<DaoType>, type_idx: i64): LlType
       return LlType.LlUnsupported
   return LlType.LlUnsupported
 
+// Serialize an LlType to its textual LLVM form.  Primitive-only
+// by construction: callers must use `bs_type_text(types, type_idx)`
+// for any type_idx that might be a struct, because `LlStruct`
+// carries no name of its own.  The `LlStruct` / `LlUnsupported`
+// arms return a loud placeholder so any accidental caller shows
+// up immediately in emitted IR rather than producing subtly
+// wrong text downstream.
 fn ll_type_text(ty: LlType): string
   match ty:
     LlType.LlI32:
@@ -208,8 +215,9 @@ fn ll_type_text(ty: LlType): string
     LlType.LlPtr:
       return "ptr"
     LlType.LlStruct:
-      // Struct name requires the type_idx → use bs_type_text instead.
-      return "<struct>"
+      // Caller bug — use bs_type_text instead.  Left as a loud
+      // marker because silent <struct> would leak into IR.
+      return "<bug:ll_type_text-of-LlStruct-use-bs_type_text>"
     LlType.LlUnsupported:
       return "<unsupported>"
   return "<unsupported>"
@@ -532,24 +540,41 @@ fn bs_mark_extern(bs: BS, name: string): BS
 // type_idx.  Returns the LLVM struct name (e.g. "%struct.P").
 // Idempotent — checks dedup before adding.
 fn bs_ensure_struct_def(bs: BS, type_idx: i64): BS
-  // Already registered?
+  // Already registered?  (Dedup check runs first so cyclic /
+  // mutually-referential struct graphs terminate — we push a
+  // placeholder before recursing into field types.)
   let i: i64 = to_i64(0)
   while i < bs.struct_defs.length():
     if bs.struct_defs.get(i).mir_type_idx == type_idx:
       return bs
     i = i + to_i64(1)
-  // Build the struct def from the DaoType's field info.
+  // Push a placeholder entry first so that recursive struct field
+  // registration sees this type as already present and doesn't
+  // recurse back into it.
   let t: DaoType = bs.types.get(type_idx)
   let ll_name: string = "%struct." + t.name
+  let slot_idx: i64 = bs.struct_defs.length()
+  bs.struct_defs = bs.struct_defs.push(LlStructDef(t.name, ll_name, Vector<string>::new(), type_idx))
+  // Walk the struct's field type pairs.  For every field whose
+  // type is another struct, recursively register that struct def
+  // too — otherwise module serialization can emit a reference to
+  // an undefined named type (invalid IR).
   let field_tys: Vector<string> = Vector<string>::new()
   let fi: i64 = to_i64(0)
   while fi < t.info_count:
-    // type_info stores (name_tidx, field_type_idx) pairs starting
-    // at t.info_lp with t.info_count pairs.
     let field_type_idx: i64 = bs.type_info.get(t.info_lp + fi * to_i64(2) + to_i64(1))
+    let field_kind: LlType = ll_type_from_mir(bs.types, field_type_idx)
+    match field_kind:
+      LlType.LlStruct:
+        bs = bs_ensure_struct_def(bs, field_type_idx)
     field_tys = field_tys.push(bs_type_text(bs.types, field_type_idx))
     fi = fi + to_i64(1)
-  bs.struct_defs = bs.struct_defs.push(LlStructDef(t.name, ll_name, field_tys, type_idx))
+  // Re-read the placeholder entry and update its field_tys.  The
+  // placeholder may have moved if a recursive call pushed more
+  // entries, but slot_idx is stable (append-only vector).
+  let existing: LlStructDef = bs.struct_defs.get(slot_idx)
+  existing.field_ty_texts = field_tys
+  bs.struct_defs = bs.struct_defs.set(slot_idx, existing)
   return bs
 
 // =========================================================================
@@ -1587,7 +1612,7 @@ fn main(): i32
   print("")
 
   let pass_count: i32 = 0
-  let total: i32 = 16
+  let total: i32 = 17
 
   // -----------------------------------------------------------------
   // Test 1: minimal_define — fn main(): i32 -> 0 emits define + entry + ret
@@ -1872,7 +1897,36 @@ fn main(): i32
       di = di + to_i64(1)
 
   // -----------------------------------------------------------------
-  // Test 16: write_ll_artifact — lower source → write .ll artifact to disk
+  // Test 16: nested_struct_registration — a struct containing another
+  // -----------------------------------------------------------------
+  // Exercises recursive `bs_ensure_struct_def` — when the outer
+  // struct is registered, the inner struct must be registered too.
+  // Otherwise module serialization emits `%struct.Outer = type
+  // { %struct.Inner }` without defining `%struct.Inner`, producing
+  // invalid IR.
+  let src16: string = "class Inner:\n  v: i32\n\nclass Outer:\n  inner: Inner\n\nfn main(): i32\n  let o: Outer = Outer(Inner(42))\n  return 0\n"
+  let r16: LlvmTextResult = lower_source_to_llvm_text(src16)
+  if r16.ok:
+    let a: bool = check_contains(r16, "%struct.Inner = type { i32 }", "nested_struct_registration")
+    let b: bool = check_contains(r16, "%struct.Outer = type { %struct.Inner }", "nested_struct_registration")
+    let c: bool = true
+    if contains_substring(r16.text, "<bug:"):
+      c = false
+      print("FAIL nested_struct_registration: emitted IR contains <bug:...> marker")
+    if a:
+      if b:
+        if c:
+          print("PASS nested_struct_registration")
+          pass_count = pass_count + 1
+  else:
+    print("FAIL nested_struct_registration: ok=false")
+    let di: i64 = to_i64(0)
+    while di < r16.diags.length():
+      print("  diag: " + r16.diags.get(di).message)
+      di = di + to_i64(1)
+
+  // -----------------------------------------------------------------
+  // Test 17: write_ll_artifact — lower source → write .ll artifact to disk
   // -----------------------------------------------------------------
   // This test verifies the bootstrap pipeline can lower Dao source to
   // LLVM IR text.  The write to disk is best-effort — a fixed /tmp
